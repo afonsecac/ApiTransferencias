@@ -1,0 +1,30 @@
+api_platform:
+    title: Api de Transferencias
+    version: 1.0.0
+#    servers: ['https://api-transferencias.sendmundo.com']
+    swagger:
+        api_keys:
+           Token:
+                name: X-AUTH-TOKEN
+                type: header
+#        servers:
+#            - url: https://api-tx.sendmundo.com
+    formats:
+        json: ['application/json']
+        jsonld: ['application/ld+json']
+    docs_formats:
+        json: ['application/json']
+        jsonld: ['application/ld+json']
+        jsonopenapi: ['application/vnd.openapi+json']
+        html: ['text/html']
+    defaults:
+        stateless: true
+        servers: 'https://api-transferencias.sendmundo.com'
+        cache_headers:
+            vary: ['Content-Type', 'Authorization', 'Origin', 'X-AUTH-TOKEN']
+        extra_properties:
+            standard_put: true
+            rfc_7807_compliant_errors: true
+    event_listeners_backward_compatibility_layer: false
+    keep_legacy_inflector: false
+#    enable_entrypoint: https://api-tx.sendmundo.com
