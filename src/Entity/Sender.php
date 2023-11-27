@@ -111,11 +111,12 @@ class Sender
 
     #[ORM\Column(length: 50)]
     #[ApiProperty(
-        default: 'Passport',
+        default: 'NI',
         openapiContext: [
             'type' => 'string',
-            'enum' => ['Passport', 'National Identification', 'Driver License'],
-            'example' => 'Passport',
+            'enum' => ['P', 'NI', 'DL'],
+            'description' => 'P=Passport, NI=National Identification, DL=Driver License',
+            'example' => 'NI',
         ]
     )]
     #[Assert\NotBlank()]
@@ -138,11 +139,7 @@ class Sender
 
     #[ORM\Column(type: Types::DATE_MUTABLE, nullable: true)]
     #[Groups(['sender:read', 'sender:write'])]
-    #[ApiProperty(example: "2000-01-01", types: ["https://schema.org/date"])]
-    #[Assert\Date]
-    #[Context(
-        normalizationContext: [DateTimeNormalizer::FORMAT_KEY => 'Y-m-d']
-    )]
+    #[ApiProperty(types: ["https://schema.org/date"])]
     private ?DateTimeInterface $dateOfBirth = null;
 
     #[ORM\Column]

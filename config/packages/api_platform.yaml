@@ -24,7 +24,7 @@ api_platform:
             email: "support@sendmundo.com"
             url: "https://sendmundo.com/contact"
     defaults:
-        stateless: true
+        stateless: false
         servers: 'https://api-transferencias.sendmundo.com'
         cache_headers:
             vary: ['Content-Type', 'Authorization', 'Origin', 'X-AUTH-TOKEN']

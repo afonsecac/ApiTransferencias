@@ -43,12 +43,12 @@ class ApiTokenAuthenticator extends AbstractAuthenticator
             throw new CustomUserMessageAuthenticationException('No API token provided');
         }
 
-        $userIdentifier = $this->permission->findOneBy([
+        $permission = $this->permission->findOneBy([
             'accessToken' => $apiToken,
             'isActive' => true
         ]);
 
-        return new SelfValidatingPassport(new UserBadge($userIdentifier));
+        return new SelfValidatingPassport(new UserBadge($permission->getUserIdentifier()));
     }
 
     /**
