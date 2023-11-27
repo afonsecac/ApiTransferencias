@@ -98,6 +98,7 @@ class CreateSenderProcessor implements ProcessorInterface
                 $object = (object) $response->toArray();
 
                 $data->setRebusSenderId($object->id);
+                $data->setTenant($accessToken);
                 $this->em->persist($data);
 
                 $this->em->flush();
