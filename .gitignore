@@ -15,3 +15,4 @@ composer.lock
 .idea/*
 /.idea
 ###< symfony/framework-bundle ###
+!/composer.lock
