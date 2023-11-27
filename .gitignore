@@ -7,10 +7,10 @@
 /public/bundles/
 /var/
 /vendor/
-###< symfony/framework-bundle ###
-
 
 /.idea/*
 /.idea/
 .idea/
 .idea/*
+/.idea
+###< symfony/framework-bundle ###
