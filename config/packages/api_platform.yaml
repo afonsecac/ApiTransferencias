@@ -17,6 +17,12 @@ api_platform:
         jsonld: ['application/ld+json']
         jsonopenapi: ['application/vnd.openapi+json']
         html: ['text/html']
+    openapi:
+        termsOfService: "https://sendmundo.com/term-conditions"
+        contact:
+            name: "Soporte Tecnico"
+            email: "support@sendmundo.com"
+            url: "https://sendmundo.com/contact"
     defaults:
         stateless: true
         servers: 'https://api-transferencias.sendmundo.com'

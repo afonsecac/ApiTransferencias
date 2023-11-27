@@ -16,14 +16,11 @@ use Symfony\Component\Security\Http\Authenticator\Passport\SelfValidatingPasspor
 
 class ApiTokenAuthenticator extends AbstractAuthenticator
 {
-    private PermissionRepository $permissionRepo;
+    private PermissionRepository $permission;
 
-    /**
-     * @param PermissionRepository $permissionRepo
-     */
     public function __construct(PermissionRepository $permissionRepo)
     {
-        $this->permissionRepo = $permissionRepo;
+        $this->permission = $permissionRepo;
     }
 
     /**
@@ -46,10 +43,9 @@ class ApiTokenAuthenticator extends AbstractAuthenticator
             throw new CustomUserMessageAuthenticationException('No API token provided');
         }
 
-        $userIdentifier = $this->permissionRepo->findOneBy([
-            'tokenId' => $apiToken,
-            'isActive' => true,
-            'removedAt' => null
+        $userIdentifier = $this->permission->findOneBy([
+            'accessToken' => $apiToken,
+            'isActive' => true
         ]);
 
         return new SelfValidatingPassport(new UserBadge($userIdentifier));

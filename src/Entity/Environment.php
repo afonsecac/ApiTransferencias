@@ -3,137 +3,245 @@
 namespace App\Entity;
 
 use App\Repository\EnvironmentRepository;
+use DateTimeImmutable;
 use Doctrine\ORM\Mapping as ORM;
+use Symfony\Bridge\Doctrine\Types\UlidType;
+use Symfony\Component\Uid\Ulid;
 
 #[ORM\Entity(repositoryClass: EnvironmentRepository::class)]
+#[ORM\HasLifecycleCallbacks]
 #[ORM\UniqueConstraint(
-    name: "uniqueTxEnvironment",
-    fields: ["environment", "urlPath"]
+    name: "unique_Provider_Info",fields: ["type", "providerName"]
 )]
 #[ORM\Index(
-    fields: ["environment"],
-    name: "indexTxEnvironment"
+    fields: ["type"], name: "index_type_environment"
 )]
 #[ORM\Index(
-    fields: ["urlPath"],
-    name: "indexTxEnvironmentUrlPath"
+    fields: ["providerName"], name: "index_provider_name"
 )]
-#[ORM\HasLifecycleCallbacks()]
 class Environment
 {
     #[ORM\Id]
-    #[ORM\GeneratedValue]
-    #[ORM\Column]
-    private ?int $id = null;
+    #[ORM\GeneratedValue(strategy: 'CUSTOM')]
+    #[ORM\Column(type: UlidType::NAME, unique: true)]
+    #[ORM\CustomIdGenerator(class: 'doctrine.ulid_generator')]
+    private ?Ulid $id = null;
 
     #[ORM\Column(length: 10)]
-    private ?string $environment = null;
+    private ?string $type = null;
+
+    #[ORM\Column(length: 255)]
+    private ?string $basePath = null;
+
+    #[ORM\Column(length: 255, nullable: true)]
+    private ?string $scope = null;
+
+    #[ORM\Column(length: 255, nullable: true)]
+    private ?string $tenantId = null;
+
+    #[ORM\Column(length: 255)]
+    private ?string $providerName = null;
+
+    #[ORM\Column(length: 255)]
+    private ?string $clientSecret = null;
+
+    #[ORM\Column(length: 255)]
+    private ?string $clientId = null;
 
     #[ORM\Column]
-    private ?\DateTimeImmutable $createdAt = null;
+    private ?DateTimeImmutable $createdAt = null;
+
+    #[ORM\Column]
+    private ?DateTimeImmutable $updatedAt = null;
 
     #[ORM\Column(nullable: true)]
-    private ?\DateTimeImmutable $updatedAt = null;
+    private ?bool $isActive = null;
 
     #[ORM\Column(nullable: true)]
-    private ?\DateTimeImmutable $removedAt = null;
+    private ?DateTimeImmutable $isActiveAt = null;
 
-    #[ORM\Column(length: 255)]
-    private ?string $urlPath = null;
+    #[ORM\Column]
+    private ?float $discount = null;
 
-    #[ORM\Column(length: 255)]
-    private ?string $apiKey = null;
+    #[ORM\Column(length: 3)]
+    private ?string $discountType = null;
 
-    public function getId(): ?int
+    public function __construct()
+    {
+        $this->discount = 0;
+        $this->discountType = "%";
+    }
+
+    public function getId(): ?Ulid
     {
         return $this->id;
     }
 
-    public function getEnvironment(): ?string
+    public function getType(): ?string
     {
-        return $this->environment;
+        return $this->type;
     }
 
-    public function setEnvironment(string $environment): static
+    public function setType(string $type): static
     {
-        $this->environment = $environment;
+        $this->type = $type;
 
         return $this;
     }
 
-    public function getCreatedAt(): ?\DateTimeImmutable
+    public function getBasePath(): ?string
+    {
+        return $this->basePath;
+    }
+
+    public function setBasePath(string $basePath): static
+    {
+        $this->basePath = $basePath;
+
+        return $this;
+    }
+
+    public function getScope(): ?string
+    {
+        return $this->scope;
+    }
+
+    public function setScope(?string $scope): static
+    {
+        $this->scope = $scope;
+
+        return $this;
+    }
+
+    public function getTenantId(): ?string
+    {
+        return $this->tenantId;
+    }
+
+    public function setTenantId(?string $tenantId): static
+    {
+        $this->tenantId = $tenantId;
+
+        return $this;
+    }
+
+    public function getProviderName(): ?string
+    {
+        return $this->providerName;
+    }
+
+    public function setProviderName(string $providerName): static
+    {
+        $this->providerName = $providerName;
+
+        return $this;
+    }
+
+    public function getClientSecret(): ?string
+    {
+        return $this->clientSecret;
+    }
+
+    public function setClientSecret(string $clientSecret): static
+    {
+        $this->clientSecret = $clientSecret;
+
+        return $this;
+    }
+
+    public function getClientId(): ?string
+    {
+        return $this->clientId;
+    }
+
+    public function setClientId(string $clientId): static
+    {
+        $this->clientId = $clientId;
+
+        return $this;
+    }
+
+    public function getCreatedAt(): ?DateTimeImmutable
     {
         return $this->createdAt;
     }
 
-    public function setCreatedAt(\DateTimeImmutable $createdAt): static
+    public function setCreatedAt(DateTimeImmutable $createdAt): static
     {
         $this->createdAt = $createdAt;
 
         return $this;
     }
 
-    public function getUpdatedAt(): ?\DateTimeImmutable
+    public function getUpdatedAt(): ?DateTimeImmutable
     {
         return $this->updatedAt;
     }
 
-    public function setUpdatedAt(?\DateTimeImmutable $updatedAt): static
+    public function setUpdatedAt(DateTimeImmutable $updatedAt): static
     {
         $this->updatedAt = $updatedAt;
 
         return $this;
     }
 
-    public function getRemovedAt(): ?\DateTimeImmutable
+    public function isIsActive(): ?bool
     {
-        return $this->removedAt;
+        return $this->isActive;
     }
 
-    public function setRemovedAt(?\DateTimeImmutable $removedAt): static
+    public function setIsActive(?bool $isActive): static
     {
-        $this->removedAt = $removedAt;
+        $this->isActive = $isActive;
 
         return $this;
     }
 
-    public function getUrlPath(): ?string
+    public function getIsActiveAt(): ?DateTimeImmutable
     {
-        return $this->urlPath;
+        return $this->isActiveAt;
     }
 
-    public function setUrlPath(string $urlPath): static
+    public function setIsActiveAt(?DateTimeImmutable $isActiveAt): static
     {
-        $this->urlPath = $urlPath;
+        $this->isActiveAt = $isActiveAt;
+
+        return $this;
+    }
+
+    public function getDiscount(): ?float
+    {
+        return $this->discount;
+    }
+
+    public function setDiscount(float $discount): static
+    {
+        $this->discount = $discount;
+
+        return $this;
+    }
+
+    public function getDiscountType(): ?string
+    {
+        return $this->discountType;
+    }
+
+    public function setDiscountType(string $discountType): static
+    {
+        $this->discountType = $discountType;
 
         return $this;
     }
 
     #[ORM\PrePersist]
     public function setCreated(): void {
-        $this->createdAt = new \DateTimeImmutable('now');
+        $this->createdAt = new DateTimeImmutable('now');
     }
 
-    #[ORM\PreUpdate]
+    #[ORM\PostPersist]
+    #[ORM\PostUpdate]
     #[ORM\PreFlush]
     public function setUpdated(): void {
-        $this->updatedAt = new \DateTimeImmutable('now');
-    }
-
-    #[ORM\PreRemove]
-    public function setRemoved(): void {
-        $this->removedAt = new \DateTimeImmutable('now');
-    }
-
-    public function getApiKey(): ?string
-    {
-        return $this->apiKey;
-    }
-
-    public function setApiKey(string $apiKey): static
-    {
-        $this->apiKey = $apiKey;
-
-        return $this;
+        $this->updatedAt = new DateTimeImmutable('now');
     }
 }

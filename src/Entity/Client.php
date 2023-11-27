@@ -3,128 +3,78 @@
 namespace App\Entity;
 
 use App\Repository\ClientRepository;
+use DateTimeImmutable;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
-use Symfony\Component\Security\Core\User\UserInterface;
+use Symfony\Bridge\Doctrine\Types\UlidType;
+use Symfony\Component\Uid\Ulid;
 
 #[ORM\Entity(repositoryClass: ClientRepository::class)]
-class Client implements UserInterface
+#[ORM\HasLifecycleCallbacks]
+#[ORM\Index(
+    fields: ["companyIdentification", "companyIdentificationType"], name: "index_company_identification"
+)]
+#[ORM\UniqueConstraint(
+    name: "unique_company_information", fields: ["companyCountry", "companyIdentification", "companyIdentificationType"]
+)]
+class Client
 {
     #[ORM\Id]
-    #[ORM\GeneratedValue]
-    #[ORM\Column]
-    private ?int $id = null;
-
-    #[ORM\Column(length: 180, unique: true)]
-    private ?string $uuid = null;
-
-    #[ORM\Column]
-    private array $roles = [];
+    #[ORM\GeneratedValue(strategy: 'CUSTOM')]
+    #[ORM\Column(type: UlidType::NAME, unique: true)]
+    #[ORM\CustomIdGenerator(class: 'doctrine.ulid_generator')]
+    private ?Ulid $id = null;
 
     #[ORM\Column(length: 255)]
     private ?string $companyName = null;
 
-    #[ORM\Column(length: 120, unique: true)]
+    #[ORM\Column(type: Types::TEXT, nullable: true)]
+    private ?string $companyAddress = null;
+
+    #[ORM\Column(length: 3)]
+    private ?string $companyCountry = null;
+
+    #[ORM\Column(length: 12, nullable: true)]
+    private ?string $companyZipCode = null;
+
+    #[ORM\Column(length: 120)]
     private ?string $companyEmail = null;
 
     #[ORM\Column(length: 20)]
-    private ?string $companyPhone = null;
-
-    #[ORM\Column(length: 20)]
-    private ?string $companyTel = null;
-
-    #[ORM\Column(length: 100)]
-    private ?string $companySite = null;
-
-    #[ORM\Column(type: Types::TEXT)]
-    private ?string $companyDescription = null;
-
-    #[ORM\Column(length: 255)]
-    private ?string $companyLegalRepresentative = null;
+    private ?string $companyPhoneNumber = null;
 
     #[ORM\Column]
-    private ?\DateTimeImmutable $createdAt = null;
+    private ?DateTimeImmutable $createdAt = null;
 
     #[ORM\Column]
+    private ?DateTimeImmutable $updatedAt = null;
+
+    #[ORM\Column(nullable: true)]
+    private ?DateTimeImmutable $removeAt = null;
+
+    #[ORM\Column(nullable: true)]
     private ?bool $isActive = null;
 
     #[ORM\Column(nullable: true)]
-    private ?\DateTimeImmutable $removedAt = null;
-
-    #[ORM\Column(nullable: true)]
-    private ?\DateTimeImmutable $inactiveAt = null;
+    private ?DateTimeImmutable $isActiveAt = null;
 
     #[ORM\Column]
-    private ?bool $isAcceptedPolitics = null;
-
-    #[ORM\Column(nullable: true)]
-    private ?\DateTimeImmutable $acceptedAt = null;
-
-    #[ORM\Column]
-    private ?bool $isAcceptedOffer = null;
-
-    #[ORM\Column]
-    private ?\DateTimeImmutable $acceptedOfferAt = null;
+    private ?float $discountOfClient = null;
 
     #[ORM\Column(length: 255)]
-    private ?string $password = null;
+    private ?string $companyIdentification = null;
 
     #[ORM\Column(length: 255)]
-    private ?string $origins = null;
+    private ?string $companyIdentificationType = null;
 
-    public function getId(): ?int
+    public function __construct()
+    {
+        $this->isActive = false;
+    }
+
+    public function getId(): ?Ulid
     {
         return $this->id;
-    }
-
-    public function getUuid(): ?string
-    {
-        return $this->uuid;
-    }
-
-    public function setUuid(string $uuid): static
-    {
-        $this->uuid = $uuid;
-
-        return $this;
-    }
-
-    /**
-     * A visual identifier that represents this user.
-     *
-     * @see UserInterface
-     */
-    public function getUserIdentifier(): string
-    {
-        return (string) $this->companyEmail;
-    }
-
-    /**
-     * @see UserInterface
-     */
-    public function getRoles(): array
-    {
-        $roles = $this->roles;
-        // guarantee every user at least has ROLE_USER
-        $roles[] = 'ROLE_USER';
-
-        return array_unique($roles);
-    }
-
-    public function setRoles(array $roles): static
-    {
-        $this->roles = $roles;
-
-        return $this;
-    }
-
-    /**
-     * @see UserInterface
-     */
-    public function eraseCredentials(): void
-    {
-        // If you store any temporary, sensitive data on the user, clear it here
-        // $this->plainPassword = null;
     }
 
     public function getCompanyName(): ?string
@@ -135,6 +85,42 @@ class Client implements UserInterface
     public function setCompanyName(string $companyName): static
     {
         $this->companyName = $companyName;
+
+        return $this;
+    }
+
+    public function getCompanyAddress(): ?string
+    {
+        return $this->companyAddress;
+    }
+
+    public function setCompanyAddress(?string $companyAddress): static
+    {
+        $this->companyAddress = $companyAddress;
+
+        return $this;
+    }
+
+    public function getCompanyCountry(): ?string
+    {
+        return $this->companyCountry;
+    }
+
+    public function setCompanyCountry(string $companyCountry): static
+    {
+        $this->companyCountry = $companyCountry;
+
+        return $this;
+    }
+
+    public function getCompanyZipCode(): ?string
+    {
+        return $this->companyZipCode;
+    }
+
+    public function setCompanyZipCode(?string $companyZipCode): static
+    {
+        $this->companyZipCode = $companyZipCode;
 
         return $this;
     }
@@ -151,74 +137,50 @@ class Client implements UserInterface
         return $this;
     }
 
-    public function getCompanyPhone(): ?string
+    public function getCompanyPhoneNumber(): ?string
     {
-        return $this->companyPhone;
+        return $this->companyPhoneNumber;
     }
 
-    public function setCompanyPhone(string $companyPhone): static
+    public function setCompanyPhoneNumber(string $companyPhoneNumber): static
     {
-        $this->companyPhone = $companyPhone;
+        $this->companyPhoneNumber = $companyPhoneNumber;
 
         return $this;
     }
 
-    public function getCompanyTel(): ?string
-    {
-        return $this->companyTel;
-    }
-
-    public function setCompanyTel(string $companyTel): static
-    {
-        $this->companyTel = $companyTel;
-
-        return $this;
-    }
-
-    public function getCompanySite(): ?string
-    {
-        return $this->companySite;
-    }
-
-    public function setCompanySite(string $companySite): static
-    {
-        $this->companySite = $companySite;
-
-        return $this;
-    }
-
-    public function getCompanyDescription(): ?string
-    {
-        return $this->companyDescription;
-    }
-
-    public function setCompanyDescription(string $companyDescription): static
-    {
-        $this->companyDescription = $companyDescription;
-
-        return $this;
-    }
-
-    public function getCompanyLegalRepresentative(): ?string
-    {
-        return $this->companyLegalRepresentative;
-    }
-
-    public function setCompanyLegalRepresentative(string $companyLegalRepresentative): static
-    {
-        $this->companyLegalRepresentative = $companyLegalRepresentative;
-
-        return $this;
-    }
-
-    public function getCreatedAt(): ?\DateTimeImmutable
+    public function getCreatedAt(): ?DateTimeImmutable
     {
         return $this->createdAt;
     }
 
-    public function setCreatedAt(\DateTimeImmutable $createdAt): static
+    public function setCreatedAt(DateTimeImmutable $createdAt): static
     {
         $this->createdAt = $createdAt;
+
+        return $this;
+    }
+
+    public function getUpdatedAt(): ?DateTimeImmutable
+    {
+        return $this->updatedAt;
+    }
+
+    public function setUpdatedAt(DateTimeImmutable $updatedAt): static
+    {
+        $this->updatedAt = $updatedAt;
+
+        return $this;
+    }
+
+    public function getRemoveAt(): ?DateTimeImmutable
+    {
+        return $this->removeAt;
+    }
+
+    public function setRemoveAt(?DateTimeImmutable $removeAt): static
+    {
+        $this->removeAt = $removeAt;
 
         return $this;
     }
@@ -228,106 +190,71 @@ class Client implements UserInterface
         return $this->isActive;
     }
 
-    public function setIsActive(bool $isActive): static
+    public function setIsActive(?bool $isActive): static
     {
         $this->isActive = $isActive;
 
         return $this;
     }
 
-    public function getRemovedAt(): ?\DateTimeImmutable
+    public function getIsActiveAt(): ?DateTimeImmutable
     {
-        return $this->removedAt;
+        return $this->isActiveAt;
     }
 
-    public function setRemovedAt(?\DateTimeImmutable $removedAt): static
+    public function setIsActiveAt(?DateTimeImmutable $isActiveAt): static
     {
-        $this->removedAt = $removedAt;
+        $this->isActiveAt = $isActiveAt;
 
         return $this;
     }
 
-    public function getInactiveAt(): ?\DateTimeImmutable
+    public function getDiscountOfClient(): ?float
     {
-        return $this->inactiveAt;
+        return $this->discountOfClient;
     }
 
-    public function setInactiveAt(?\DateTimeImmutable $inactiveAt): static
+    public function setDiscountOfClient(float $discountOfClient): static
     {
-        $this->inactiveAt = $inactiveAt;
+        $this->discountOfClient = $discountOfClient;
 
         return $this;
     }
 
-    public function isIsAceptedPolitics(): ?bool
+    public function getCompanyIdentification(): ?string
     {
-        return $this->isAcceptedPolitics;
+        return $this->companyIdentification;
     }
 
-    public function setIsAcceptedPolitics(bool $isAcceptedPolitics): static
+    public function setCompanyIdentification(string $companyIdentification): static
     {
-        $this->isAcceptedPolitics = $isAcceptedPolitics;
+        $this->companyIdentification = $companyIdentification;
 
         return $this;
     }
 
-    public function getAcceptedAt(): ?\DateTimeImmutable
+    public function getCompanyIdentificationType(): ?string
     {
-        return $this->acceptedAt;
+        return $this->companyIdentificationType;
     }
 
-    public function setAcceptedAt(?\DateTimeImmutable $acceptedAt): static
+    public function setCompanyIdentificationType(string $companyIdentificationType): static
     {
-        $this->acceptedAt = $acceptedAt;
+        $this->companyIdentificationType = $companyIdentificationType;
 
         return $this;
     }
 
-    public function isIsAceptedOffer(): ?bool
-    {
-        return $this->isAcceptedOffer;
+    #[ORM\PrePersist]
+    public function setCreated(): void {
+        $this->createdAt = new DateTimeImmutable('now');
     }
 
-    public function setIsAcceptedOffer(bool $isAcceptedOffer): static
-    {
-        $this->isAcceptedOffer = $isAcceptedOffer;
-
-        return $this;
-    }
-
-    public function getAcceptedOfferAt(): ?\DateTimeImmutable
-    {
-        return $this->acceptedOfferAt;
-    }
-
-    public function setAcceptedOfferAt(\DateTimeImmutable $acceptedOfferAt): static
-    {
-        $this->acceptedOfferAt = $acceptedOfferAt;
-
-        return $this;
-    }
-
-    public function getPassword(): ?string
-    {
-        return $this->password;
-    }
-
-    public function setPassword(string $password): static
-    {
-        $this->password = $password;
-
-        return $this;
-    }
-
-    public function getOrigins(): ?string
-    {
-        return $this->origins;
-    }
-
-    public function setOrigins(string $origins): static
-    {
-        $this->origins = $origins;
-
-        return $this;
+    #[ORM\PostPersist]
+    #[ORM\PostUpdate]
+    #[ORM\PostRemove]
+    #[ORM\PreFlush]
+    public function setUpdated(): void {
+        $this->updatedAt = new DateTimeImmutable('now');
     }
 }
