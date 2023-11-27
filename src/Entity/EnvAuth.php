@@ -19,7 +19,7 @@ class EnvAuth
     #[ORM\CustomIdGenerator(class: 'doctrine.ulid_generator')]
     private ?Ulid $id = null;
 
-    #[ORM\Column(type: Types::TEXT)]
+    #[ORM\Column(type: Types::TEXT, unique: true)]
     private ?string $tokenAuth = null;
 
     #[ORM\ManyToOne]

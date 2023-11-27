@@ -4,10 +4,8 @@
 # Put parameters here that don't need to change on each machine where the app is deployed
 # https://symfony.com/doc/current/best_practices.html#use-parameters-for-application-configuration
 parameters:
-    app:
-        email:
-            support: '%env(MAILER_DSN)%'
-        microsoft: '%env(MICROSOFT_URL)%'
+    app.email.support: '%env(MAILER_DSN)%'
+    app.microsoft.url: '%env(MICROSOFT_URL)%'
 
 services:
     # default configuration for services in *this* file
