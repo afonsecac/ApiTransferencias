@@ -85,8 +85,7 @@
         }
     },
     "require-dev": {
-        "roave/security-advisories": "dev-latest"
-        ,
+        "roave/security-advisories": "dev-latest",
         "symfony/maker-bundle": "^1.51"
     }
 }
