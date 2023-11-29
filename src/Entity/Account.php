@@ -2,30 +2,24 @@
 
 namespace App\Entity;
 
-use App\Repository\PermissionRepository;
+use App\Repository\AccountRepository;
 use DateTimeImmutable;
 use Doctrine\ORM\Mapping as ORM;
-use Symfony\Bridge\Doctrine\Types\UlidType;
 use Symfony\Bridge\Doctrine\Types\UuidType;
 use Symfony\Component\Security\Core\User\UserInterface;
-use Symfony\Component\Uid\Ulid;
 use Symfony\Component\Uid\Uuid;
 
-#[ORM\Entity(repositoryClass: PermissionRepository::class)]
+#[ORM\Entity(repositoryClass: AccountRepository::class)]
 #[ORM\HasLifecycleCallbacks]
 #[ORM\UniqueConstraint(
-    name: "unique_environment_by_client",fields: ["environment", "client"]
+    name: "unique_environment_by_client", fields: ["environment", "client"]
 )]
-class Permission implements UserInterface
+class Account implements UserInterface
 {
     #[ORM\Id]
-    #[ORM\GeneratedValue(strategy: 'CUSTOM')]
-    #[ORM\Column(type: UlidType::NAME, unique: true)]
-    #[ORM\CustomIdGenerator(class: 'doctrine.ulid_generator')]
-    private ?Ulid $id = null;
-
-    #[ORM\Column(length: 180, unique: true)]
-    private ?string $uuid = null;
+    #[ORM\GeneratedValue]
+    #[ORM\Column]
+    private ?int $id = null;
 
     #[ORM\Column]
     private array $roles = [];
@@ -65,6 +59,12 @@ class Permission implements UserInterface
     #[ORM\Column(length: 255)]
     private ?string $origin = null;
 
+    #[ORM\Column(nullable: true)]
+    private ?int $accountId = null;
+
+    #[ORM\Column(length: 255)]
+    private ?string $environmentName = null;
+
     public function __construct()
     {
         $this->discount = 0;
@@ -72,21 +72,9 @@ class Permission implements UserInterface
         $this->commission = 0;
     }
 
-    public function getId(): ?Ulid
+    public function getId(): ?int
     {
         return $this->id;
-    }
-
-    public function getUuid(): ?string
-    {
-        return $this->uuid;
-    }
-
-    public function setUuid(string $uuid): static
-    {
-        $this->uuid = $uuid;
-
-        return $this;
     }
 
     /**
@@ -96,7 +84,7 @@ class Permission implements UserInterface
      */
     public function getUserIdentifier(): string
     {
-        return (string) $this->accessToken;
+        return (string)$this->accessToken;
     }
 
     /**
@@ -248,7 +236,8 @@ class Permission implements UserInterface
     }
 
     #[ORM\PrePersist]
-    public function setCreated(): void {
+    public function setCreated(): void
+    {
         $this->uuid = Uuid::v4();
         $this->accessToken = Uuid::v7();
         $this->createdAt = new DateTimeImmutable('now');
@@ -257,7 +246,8 @@ class Permission implements UserInterface
     #[ORM\PostPersist]
     #[ORM\PostUpdate]
     #[ORM\PreFlush]
-    public function setUpdated(): void {
+    public function setUpdated(): void
+    {
         $this->updatedAt = new DateTimeImmutable('now');
     }
 
@@ -269,6 +259,30 @@ class Permission implements UserInterface
     public function setOrigin(string $origin): static
     {
         $this->origin = $origin;
+
+        return $this;
+    }
+
+    public function getAccountId(): ?int
+    {
+        return $this->accountId;
+    }
+
+    public function setAccountId(?int $accountId): static
+    {
+        $this->accountId = $accountId;
+
+        return $this;
+    }
+
+    public function getEnvironmentName(): ?string
+    {
+        return $this->environmentName;
+    }
+
+    public function setEnvironmentName(string $environmentName): static
+    {
+        $this->environmentName = $environmentName;
 
         return $this;
     }

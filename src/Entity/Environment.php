@@ -5,13 +5,13 @@ namespace App\Entity;
 use App\Repository\EnvironmentRepository;
 use DateTimeImmutable;
 use Doctrine\ORM\Mapping as ORM;
-use Symfony\Bridge\Doctrine\Types\UlidType;
-use Symfony\Component\Uid\Ulid;
+use Symfony\Bridge\Doctrine\Types\UuidType;
+use Symfony\Component\Uid\Uuid;
 
 #[ORM\Entity(repositoryClass: EnvironmentRepository::class)]
 #[ORM\HasLifecycleCallbacks]
 #[ORM\UniqueConstraint(
-    name: "unique_Provider_Info",fields: ["type", "providerName"]
+    name: "unique_Provider_Info", fields: ["type", "providerName"]
 )]
 #[ORM\Index(
     fields: ["type"], name: "index_type_environment"
@@ -22,10 +22,9 @@ use Symfony\Component\Uid\Ulid;
 class Environment
 {
     #[ORM\Id]
-    #[ORM\GeneratedValue(strategy: 'CUSTOM')]
-    #[ORM\Column(type: UlidType::NAME, unique: true)]
-    #[ORM\CustomIdGenerator(class: 'doctrine.ulid_generator')]
-    private ?Ulid $id = null;
+    #[ORM\GeneratedValue]
+    #[ORM\Column]
+    private ?int $id = null;
 
     #[ORM\Column(length: 10)]
     private ?string $type = null;
@@ -72,7 +71,7 @@ class Environment
         $this->discountType = "%";
     }
 
-    public function getId(): ?Ulid
+    public function getId(): ?int
     {
         return $this->id;
     }
@@ -234,14 +233,16 @@ class Environment
     }
 
     #[ORM\PrePersist]
-    public function setCreated(): void {
+    public function setCreated(): void
+    {
         $this->createdAt = new DateTimeImmutable('now');
     }
 
     #[ORM\PostPersist]
     #[ORM\PostUpdate]
     #[ORM\PreFlush]
-    public function setUpdated(): void {
+    public function setUpdated(): void
+    {
         $this->updatedAt = new DateTimeImmutable('now');
     }
 }

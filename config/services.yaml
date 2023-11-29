@@ -8,6 +8,13 @@ parameters:
     app.microsoft.url: '%env(MICROSOFT_URL)%'
 
 services:
+#    App\State\CreateBeneficiaryCardProcessor:
+#         bind:
+#             $persistProcessor: '@api_platform.doctrine.orm.state.persist_processor'
+    'App\Doctrine\CurrentUserExtension':
+        tags:
+            - { name: 'api_platform.doctrine.orm.query_extension.collection' }
+            - { name: 'api_platform.doctrine.orm.query_extension.item' }
     # default configuration for services in *this* file
     _defaults:
         autowire: true      # Automatically injects dependencies in your services.

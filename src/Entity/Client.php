@@ -6,8 +6,8 @@ use App\Repository\ClientRepository;
 use DateTimeImmutable;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
-use Symfony\Bridge\Doctrine\Types\UlidType;
-use Symfony\Component\Uid\Ulid;
+use Symfony\Bridge\Doctrine\Types\UuidType;
+use Symfony\Component\Uid\Uuid;
 
 #[ORM\Entity(repositoryClass: ClientRepository::class)]
 #[ORM\HasLifecycleCallbacks]
@@ -20,10 +20,9 @@ use Symfony\Component\Uid\Ulid;
 class Client
 {
     #[ORM\Id]
-    #[ORM\GeneratedValue(strategy: 'CUSTOM')]
-    #[ORM\Column(type: UlidType::NAME, unique: true)]
-    #[ORM\CustomIdGenerator(class: 'doctrine.ulid_generator')]
-    private ?Ulid $id = null;
+    #[ORM\GeneratedValue]
+    #[ORM\Column]
+    private ?int $id = null;
 
     #[ORM\Column(length: 255)]
     private ?string $companyName = null;
@@ -72,7 +71,7 @@ class Client
         $this->isActive = false;
     }
 
-    public function getId(): ?Ulid
+    public function getId(): ?int
     {
         return $this->id;
     }
@@ -246,7 +245,8 @@ class Client
     }
 
     #[ORM\PrePersist]
-    public function setCreated(): void {
+    public function setCreated(): void
+    {
         $this->createdAt = new DateTimeImmutable('now');
     }
 
@@ -254,7 +254,8 @@ class Client
     #[ORM\PostUpdate]
     #[ORM\PostRemove]
     #[ORM\PreFlush]
-    public function setUpdated(): void {
+    public function setUpdated(): void
+    {
         $this->updatedAt = new DateTimeImmutable('now');
     }
 }

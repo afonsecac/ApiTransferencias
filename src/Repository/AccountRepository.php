@@ -2,27 +2,27 @@
 
 namespace App\Repository;
 
-use App\Entity\Permission;
+use App\Entity\Account;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
 
 /**
- * @extends ServiceEntityRepository<Permission>
+ * @extends ServiceEntityRepository<Account>
  *
- * @method Permission|null find($id, $lockMode = null, $lockVersion = null)
- * @method Permission|null findOneBy(array $criteria, array $orderBy = null)
- * @method Permission[]    findAll()
- * @method Permission[]    findBy(array $criteria, array $orderBy = null, $limit = null, $offset = null)
+ * @method Account|null find($id, $lockMode = null, $lockVersion = null)
+ * @method Account|null findOneBy(array $criteria, array $orderBy = null)
+ * @method Account[]    findAll()
+ * @method Account[]    findBy(array $criteria, array $orderBy = null, $limit = null, $offset = null)
  */
-class PermissionRepository extends ServiceEntityRepository
+class AccountRepository extends ServiceEntityRepository
 {
     public function __construct(ManagerRegistry $registry)
     {
-        parent::__construct($registry, Permission::class);
+        parent::__construct($registry, Account::class);
     }
 
 //    /**
-//     * @return Permission[] Returns an array of Permission objects
+//     * @return Account[] Returns an array of Account objects
 //     */
 //    public function findByExampleField($value): array
 //    {
@@ -36,7 +36,7 @@ class PermissionRepository extends ServiceEntityRepository
 //        ;
 //    }
 
-//    public function findOneBySomeField($value): ?Permission
+//    public function findOneBySomeField($value): ?Account
 //    {
 //        return $this->createQueryBuilder('p')
 //            ->andWhere('p.exampleField = :val')

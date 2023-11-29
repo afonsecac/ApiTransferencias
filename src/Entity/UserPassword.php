@@ -4,18 +4,17 @@ namespace App\Entity;
 
 use App\Repository\UserPasswordRepository;
 use Doctrine\ORM\Mapping as ORM;
-use Symfony\Bridge\Doctrine\Types\UlidType;
-use Symfony\Component\Uid\Ulid;
+use Symfony\Bridge\Doctrine\Types\UuidType;
+use Symfony\Component\Uid\Uuid;
 
 #[ORM\Entity(repositoryClass: UserPasswordRepository::class)]
 #[ORM\HasLifecycleCallbacks]
 class UserPassword
 {
     #[ORM\Id]
-    #[ORM\GeneratedValue(strategy: 'CUSTOM')]
-    #[ORM\Column(type: UlidType::NAME, unique: true)]
-    #[ORM\CustomIdGenerator(class: 'doctrine.ulid_generator')]
-    private ?Ulid $id = null;
+    #[ORM\GeneratedValue]
+    #[ORM\Column]
+    private ?int $id = null;
 
     #[ORM\ManyToOne(inversedBy: 'historicPasswords')]
     private ?User $userHistoric = null;
@@ -26,7 +25,7 @@ class UserPassword
     #[ORM\Column(length: 255)]
     private ?string $historicPassword = null;
 
-    public function getId(): ?Ulid
+    public function getId(): ?int
     {
         return $this->id;
     }
@@ -68,7 +67,8 @@ class UserPassword
     }
 
     #[ORM\PrePersist]
-    public function setCreated(): void {
+    public function setCreated(): void
+    {
         $this->createdAt = new \DateTimeImmutable('now');
         $this->historicPassword = $this->getUserHistoric()?->getPassword() ?? '';
     }

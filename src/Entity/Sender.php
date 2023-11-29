@@ -2,6 +2,10 @@
 
 namespace App\Entity;
 
+use ApiPlatform\Doctrine\Orm\Filter\DateFilter;
+use ApiPlatform\Doctrine\Orm\Filter\OrderFilter;
+use ApiPlatform\Doctrine\Orm\Filter\SearchFilter;
+use ApiPlatform\Metadata\ApiFilter;
 use ApiPlatform\Metadata\ApiProperty;
 use ApiPlatform\Metadata\ApiResource;
 use ApiPlatform\Metadata\Delete;
@@ -9,16 +13,12 @@ use ApiPlatform\Metadata\Get;
 use ApiPlatform\Metadata\GetCollection;
 use ApiPlatform\Metadata\Patch;
 use ApiPlatform\Metadata\Post;
-use App\Processor\CreateSenderProcessor;
 use App\Repository\SenderRepository;
+use App\State\CreateSenderProcessor;
 use DateTimeInterface;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
-use Symfony\Bridge\Doctrine\Types\UlidType;
-use Symfony\Component\Serializer\Annotation\Context;
 use Symfony\Component\Serializer\Annotation\Groups;
-use Symfony\Component\Serializer\Normalizer\DateTimeNormalizer;
-use Symfony\Component\Uid\Ulid;
 use Symfony\Component\Validator\Constraints as Assert;
 
 #[ORM\Entity(repositoryClass: SenderRepository::class)]
@@ -33,8 +33,20 @@ use Symfony\Component\Validator\Constraints as Assert;
         new Delete(),
     ],
     normalizationContext: ['groups' => ['sender:read']],
-    denormalizationContext: ['groups' => ['sender:write']]
+    denormalizationContext: ['groups' => ['sender:write']],
 )]
+#[ApiFilter(DateFilter::class, properties: ['dateOfBirth'])]
+#[ApiFilter(SearchFilter::class, properties: [
+    'identification' => 'partial',
+    'firstName' => 'partial',
+    'lastName' => 'partial',
+])]
+#[ApiFilter(OrderFilter::class, properties: [
+    'firstName' => 'ASC',
+    'lastName' => 'ASC',
+    'identification' => 'ASC',
+    'dateOfBirth' => 'DESC',
+])]
 #[ORM\UniqueConstraint(
     name: "unique_identification_sender",
     fields: ["identificationType", "identification"]
@@ -51,12 +63,11 @@ use Symfony\Component\Validator\Constraints as Assert;
 class Sender
 {
     #[ORM\Id]
-    #[ORM\GeneratedValue(strategy: 'CUSTOM')]
-    #[ORM\Column(type: UlidType::NAME, unique: true)]
-    #[ORM\CustomIdGenerator(class: 'doctrine.ulid_generator')]
+    #[ORM\GeneratedValue]
+    #[ORM\Column]
     #[Groups(['sender:read'])]
     #[ApiProperty(identifier: true)]
-    private ?Ulid $id = null;
+    private ?int $id = null;
 
     #[ORM\Column(length: 60)]
     #[Assert\NotNull()]
@@ -121,6 +132,7 @@ class Sender
     )]
     #[Assert\NotBlank()]
     #[Groups(['sender:read', 'sender:write'])]
+    #[Assert\Choice(choices: ['P', 'NI', 'DL'])]
     private ?string $identificationType = null;
 
     #[ORM\Column(length: 255)]
@@ -135,11 +147,11 @@ class Sender
 
     #[ORM\ManyToOne]
     #[ORM\JoinColumn(nullable: false)]
-    private ?Permission $tenant = null;
+    private ?Account $tenant = null;
 
     #[ORM\Column(type: Types::DATE_MUTABLE, nullable: true)]
     #[Groups(['sender:read', 'sender:write'])]
-    #[ApiProperty(types: ["https://schema.org/date"])]
+    #[ApiProperty(types: ["https://schema.org/Date"])]
     private ?DateTimeInterface $dateOfBirth = null;
 
     #[ORM\Column]
@@ -148,7 +160,7 @@ class Sender
     #[ORM\Column]
     private ?\DateTimeImmutable $updatedAt = null;
 
-    public function getId(): ?Ulid
+    public function getId(): int
     {
         return $this->id;
     }
@@ -273,12 +285,12 @@ class Sender
         return $this;
     }
 
-    public function getTenant(): ?Permission
+    public function getTenant(): ?Account
     {
         return $this->tenant;
     }
 
-    public function setTenant(?Permission $tenant): static
+    public function setTenant(?Account $tenant): static
     {
         $this->tenant = $tenant;
 

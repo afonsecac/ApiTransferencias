@@ -6,25 +6,22 @@ use App\Repository\EnvAuthRepository;
 use DateTimeImmutable;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
-use Symfony\Bridge\Doctrine\Types\UlidType;
-use Symfony\Component\Uid\Ulid;
 
 #[ORM\Entity(repositoryClass: EnvAuthRepository::class)]
 #[ORM\HasLifecycleCallbacks]
 class EnvAuth
 {
     #[ORM\Id]
-    #[ORM\GeneratedValue(strategy: 'CUSTOM')]
-    #[ORM\Column(type: UlidType::NAME, unique: true)]
-    #[ORM\CustomIdGenerator(class: 'doctrine.ulid_generator')]
-    private ?Ulid $id = null;
+    #[ORM\GeneratedValue]
+    #[ORM\Column]
+    private ?int $id = null;
 
     #[ORM\Column(type: Types::TEXT, unique: true)]
     private ?string $tokenAuth = null;
 
     #[ORM\ManyToOne]
     #[ORM\JoinColumn(nullable: false)]
-    private ?Permission $permission = null;
+    private ?Account $permission = null;
 
     #[ORM\Column]
     private ?DateTimeImmutable $createdAt = null;
@@ -32,7 +29,7 @@ class EnvAuth
     #[ORM\Column(nullable: true)]
     private ?DateTimeImmutable $closedAt = null;
 
-    public function getId(): ?Ulid
+    public function getId(): ?int
     {
         return $this->id;
     }
@@ -49,12 +46,12 @@ class EnvAuth
         return $this;
     }
 
-    public function getPermission(): ?Permission
+    public function getPermission(): ?Account
     {
         return $this->permission;
     }
 
-    public function setPermission(?Permission $permission): static
+    public function setPermission(?Account $permission): static
     {
         $this->permission = $permission;
 

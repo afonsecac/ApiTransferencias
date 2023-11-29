@@ -2,32 +2,22 @@
 
 namespace App\Entity;
 
+use ApiPlatform\Doctrine\Orm\State\Options;
 use ApiPlatform\Metadata\ApiProperty;
 use ApiPlatform\Metadata\ApiResource;
 use ApiPlatform\Metadata\GetCollection;
 use ApiPlatform\Metadata\Link;
 use App\Repository\ProvinceRepository;
 use Doctrine\ORM\Mapping as ORM;
-use Symfony\Bridge\Doctrine\Types\UlidType;
+use Symfony\Bridge\Doctrine\Types\UuidType;
 use Symfony\Component\Serializer\Annotation\Groups;
-use Symfony\Component\Uid\Ulid;
-use ApiPlatform\Doctrine\Orm\State\Options;
+use Symfony\Component\Uid\Uuid;
 use Symfony\Component\Validator\Constraints as Assert;
 
 #[ORM\Entity(repositoryClass: ProvinceRepository::class)]
 #[ApiResource(
     operations: [
         new GetCollection(),
-        new GetCollection(
-            uriTemplate: "/countries/{countryId}/provinces",
-            uriVariables: [
-                "countryId" => new Link(
-                    fromProperty: "country",
-                    fromClass: Country::class
-                )
-            ],
-            stateOptions: new Options(handleLinks: [Province::class, 'handleLinks'])
-        )
     ],
     normalizationContext: ['groups' => ['province:read']],
     denormalizationContext: ['groups' => ['province:write']]
@@ -35,12 +25,11 @@ use Symfony\Component\Validator\Constraints as Assert;
 class Province
 {
     #[ORM\Id]
-    #[ORM\GeneratedValue(strategy: 'CUSTOM')]
-    #[ORM\Column(type: UlidType::NAME, unique: true)]
-    #[ORM\CustomIdGenerator(class: 'doctrine.ulid_generator')]
+    #[ORM\GeneratedValue]
+    #[ORM\Column]
     #[Groups(['province:read'])]
     #[ApiProperty(identifier: true)]
-    private ?Ulid $id = null;
+    private ?int $id = null;
 
     #[ORM\Column(length: 255)]
     #[Groups(['province:read'])]
@@ -62,7 +51,11 @@ class Province
     #[ORM\JoinColumn(nullable: false)]
     private ?Country $country = null;
 
-    public function getId(): ?Ulid
+    #[ORM\ManyToOne]
+    #[ORM\JoinColumn(nullable: false)]
+    private ?Environment $environment = null;
+
+    public function getId(): ?int
     {
         return $this->id;
     }
@@ -123,6 +116,18 @@ class Province
     public function setCountry(?Country $country): static
     {
         $this->country = $country;
+
+        return $this;
+    }
+
+    public function getEnvironment(): ?Environment
+    {
+        return $this->environment;
+    }
+
+    public function setEnvironment(?Environment $environment): static
+    {
+        $this->environment = $environment;
 
         return $this;
     }

@@ -26,6 +26,7 @@ class AzTokenController extends AbstractController
     {
         $params = $request->attributes->all();
 
+//        $this->commonService->onCreatedAdmin();
 //        $this->commonService->onCreateCompany();
 
         return $this->json([

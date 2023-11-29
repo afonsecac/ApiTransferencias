@@ -1,8 +1,7 @@
 <?php
 
-namespace App\Processor;
+namespace App\State;
 
-use ApiPlatform\Metadata\DeleteOperationInterface;
 use ApiPlatform\Metadata\Operation;
 use ApiPlatform\State\ProcessorInterface;
 use App\Entity\Sender;
@@ -25,11 +24,12 @@ use Symfony\Contracts\HttpClient\HttpClientInterface;
 class CreateSenderProcessor implements ProcessorInterface
 {
     private Serializer $serializer;
+
     public function __construct(
-        private AuthService $authService,
-        private EnvAuthRepository $authRepository,
-        private HttpClientInterface $httpClient,
-        private EntityManagerInterface $em
+        private readonly AuthService $authService,
+        private readonly EnvAuthRepository $authRepository,
+        private readonly HttpClientInterface $httpClient,
+        private readonly EntityManagerInterface $em
     ) {
         $encoders = [new XmlEncoder(), new JsonEncoder()];
         $normalizer = [new DateTimeNormalizer(), new DateIntervalNormalizer(), new ObjectNormalizer()];
@@ -48,24 +48,26 @@ class CreateSenderProcessor implements ProcessorInterface
      * @throws ServerExceptionInterface
      * @throws TransportExceptionInterface
      */
-    public function process(mixed $data, Operation $operation, array $uriVariables = [], array $context = []): void
+    public function process(mixed $data, Operation $operation, array $uriVariables = [], array $context = [])
     {
         $accessToken = null;
         $accessTokens = $this->authRepository->findBy([
-            'closedAt' => null
+            'closedAt' => null,
         ], [
-            'createdAt' => 'DESC'
+            'createdAt' => 'DESC',
         ]);
         if (is_null($accessTokens) || count($accessTokens) === 0) {
             $token = $this->authService->start();
             $accessToken = $this->authRepository->findOneBy([
-                'tokenAuth' => $token
+                'tokenAuth' => $token,
             ]);
         } else {
             $accessToken = $accessTokens[0];
             $token = $accessToken->getTokenAuth();
         }
         if ($data instanceof Sender) {
+            $data->setTenant($accessToken->getPermission());
+            $this->em->persist($data);
             $url = $accessToken->getPermission()?->getEnvironment()?->getBasePath()."/api/Senders";
             $tokenIn = 'Bearer '.$accessToken->getTokenAuth();
             $response = $this->httpClient->request(
@@ -75,19 +77,28 @@ class CreateSenderProcessor implements ProcessorInterface
                     'headers' => [
                         'Content-Type' => 'application/json',
                         'Accept' => 'application/json',
-                        'Authorization' => $tokenIn
+                        'Authorization' => $tokenIn,
                     ],
                     'body' => $this->serializer->serialize(
                         [
                             'email' => $data->getEmail(),
                             'phone' => trim($data->getPhone()),
-                            'name' => sprintf("%s%s %s", $data->getFirstName(), is_null($data->getMiddleName()) ? "" : " ".$data->getMiddleName(), $data->getLastName()),
-                            'firstName' => sprintf("%s%s", $data->getFirstName(), is_null($data->getMiddleName()) ? "" : " ".$data->getMiddleName()),
+                            'name' => sprintf(
+                                "%s%s %s",
+                                $data->getFirstName(),
+                                is_null($data->getMiddleName()) ? "" : " ".$data->getMiddleName(),
+                                $data->getLastName()
+                            ),
+                            'firstName' => sprintf(
+                                "%s%s",
+                                $data->getFirstName(),
+                                is_null($data->getMiddleName()) ? "" : " ".$data->getMiddleName()
+                            ),
                             'lastName' => $data->getLastName(),
                             'address' => $data->getAddress(),
-                            'identification' => $data->getIdentification()
+                            'identification' => $data->getIdentification(),
                         ], 'json', []
-                    )
+                    ),
                 ]
             );
 
@@ -95,22 +106,21 @@ class CreateSenderProcessor implements ProcessorInterface
             try {
                 $content = $response->getContent();
 
-                $object = (object) $response->toArray();
-
+                $object = (object)$response->toArray();
                 $data->setRebusSenderId($object->id);
-                $data->setTenant($accessToken->getPermission());
-                $this->em->persist($data);
 
                 $this->em->flush();
             } catch (RedirectionExceptionInterface|ServerExceptionInterface|TransportExceptionInterface|ClientExceptionInterface $ex) {
                 if ($ex->getCode() === 401) {
                     $accessToken->setClosedAt(new \DateTimeImmutable('now'));
                     $this->em->flush();
-                    $this->process($data, $operation, $uriVariables, $context);
-                    return;
+
+
+                    return $this->process($data, $operation, $uriVariables, $context);
                 }
                 throw $ex;
             }
         }
+        return $data;
     }
 }

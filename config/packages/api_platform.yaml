@@ -1,8 +1,10 @@
 api_platform:
     title: Api de Transferencias
     version: 1.0.0
-#    servers: ['https://api-transferencias.sendmundo.com']
+#    servers: ['https://api-tx.sendmundo.com']
     swagger:
+        swagger_ui_extra_configuration:
+            filter: true
         api_keys:
            Token:
                 name: X-AUTH-TOKEN
@@ -24,13 +26,21 @@ api_platform:
             email: "support@sendmundo.com"
             url: "https://sendmundo.com/contact"
     defaults:
+        pagination_client_enabled: true
+        pagination_items_per_page: 10
+        pagination_maximum_items_per_page: 100
+        pagination_client_partial: true
+        pagination_client_items_per_page: true
+        collection:
+            pagination:
+                items_per_page_parameter_name: itemsPerPage
         stateless: false
-        servers: 'https://api-transferencias.sendmundo.com'
+        servers: 'https://api-tx.sendmundo.com'
         cache_headers:
             vary: ['Content-Type', 'Authorization', 'Origin', 'X-AUTH-TOKEN']
         extra_properties:
             standard_put: true
-            rfc_7807_compliant_errors: true
+            rfc_7807_compliant_errors: false
     event_listeners_backward_compatibility_layer: false
     keep_legacy_inflector: false
 #    enable_entrypoint: https://api-tx.sendmundo.com

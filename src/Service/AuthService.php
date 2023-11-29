@@ -3,9 +3,9 @@
 namespace App\Service;
 
 use App\Entity\EnvAuth;
-use App\Entity\Permission;
+use App\Entity\Account;
 use App\Repository\EnvironmentRepository;
-use App\Service\CommonService;
+use App\Repository\SysConfigRepository;
 use Doctrine\ORM\EntityManagerInterface;
 use Psr\Log\LoggerInterface;
 use Symfony\Bundle\SecurityBundle\Security;
@@ -31,9 +31,10 @@ final class AuthService extends CommonService
         LoggerInterface $logger,
         UserPasswordHasherInterface $passwordHasher,
         EnvironmentRepository $environmentRepository,
+        SysConfigRepository $sysConfigRepository,
         HttpClientInterface $httpClient
     ) {
-        parent::__construct($em, $security, $parameters, $mailer, $logger, $passwordHasher, $environmentRepository);
+        parent::__construct($em, $security, $parameters, $mailer, $logger, $passwordHasher, $environmentRepository, $sysConfigRepository);
         $this->httpClient = $httpClient;
     }
 
@@ -50,7 +51,7 @@ final class AuthService extends CommonService
         $url = "";
 
         $permission = $this->security->getUser();
-        if ($permission instanceof Permission) {
+        if ($permission instanceof Account) {
             $url = $this->parameters->get('app.microsoft.url')."/";
 
             $url .= $permission->getEnvironment()?->getTenantId()."/oauth2/v2.0/token";

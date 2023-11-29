@@ -2,7 +2,7 @@
 
 namespace App\Security;
 
-use App\Repository\PermissionRepository;
+use App\Repository\AccountRepository;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -16,9 +16,9 @@ use Symfony\Component\Security\Http\Authenticator\Passport\SelfValidatingPasspor
 
 class ApiTokenAuthenticator extends AbstractAuthenticator
 {
-    private PermissionRepository $permission;
+    private AccountRepository $permission;
 
-    public function __construct(PermissionRepository $permissionRepo)
+    public function __construct(AccountRepository $permissionRepo)
     {
         $this->permission = $permissionRepo;
     }
@@ -47,6 +47,10 @@ class ApiTokenAuthenticator extends AbstractAuthenticator
             'accessToken' => $apiToken,
             'isActive' => true
         ]);
+
+        if (is_null($permission)) {
+            throw new CustomUserMessageAuthenticationException('User not found');
+        }
 
         return new SelfValidatingPassport(new UserBadge($permission->getUserIdentifier()));
     }

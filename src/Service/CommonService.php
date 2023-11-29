@@ -4,9 +4,10 @@ namespace App\Service;
 
 use App\Entity\Client;
 use App\Entity\Environment;
-use App\Entity\Permission;
+use App\Entity\Account;
 use App\Entity\User;
 use App\Repository\EnvironmentRepository;
+use App\Repository\SysConfigRepository;
 use Doctrine\ORM\EntityManagerInterface;
 use Psr\Log\LoggerInterface;
 use Symfony\Bundle\SecurityBundle\Security;
@@ -30,6 +31,7 @@ class CommonService
     protected LoggerInterface $logger;
     protected UserPasswordHasherInterface $passwordHasher;
     protected EnvironmentRepository  $environment;
+    protected SysConfigRepository $sysConfigRepo;
 
     /**
      * @param EntityManagerInterface $em
@@ -39,6 +41,7 @@ class CommonService
      * @param LoggerInterface $logger
      * @param UserPasswordHasherInterface $passwordHasher
      * @param EnvironmentRepository $environmentRepository
+     * @param SysConfigRepository $sysConfigRepo
      */
     public function __construct(
         EntityManagerInterface $em,
@@ -47,7 +50,8 @@ class CommonService
         MailerInterface $mailer,
         LoggerInterface $logger,
         UserPasswordHasherInterface $passwordHasher,
-        EnvironmentRepository $environmentRepository
+        EnvironmentRepository $environmentRepository,
+        SysConfigRepository $sysConfigRepo
     ) {
         $this->em = $em;
         $this->security = $security;
@@ -56,6 +60,7 @@ class CommonService
         $this->logger = $logger;
         $this->passwordHasher = $passwordHasher;
         $this->environment = $environmentRepository;
+        $this->sysConfigRepo = $sysConfigRepo;
         $encoders = [new XmlEncoder(), new JsonEncoder()];
         $normalizer = [new DateTimeNormalizer(), new DateIntervalNormalizer(), new ObjectNormalizer()];
         $this->serializer = new Serializer($normalizer, $encoders);
@@ -80,43 +85,72 @@ class CommonService
     }
 
     public function onCreateCompany(): void {
-        $environment = new Environment();
-        $environment->setBasePath("");
-        $environment->setClientId("696ee5fc-9128-44ec-ab1a-3cb43871804b");
-        $environment->setScope("api://148563e0-e668-4f39-a441-49c6a9373dbf/.default");
-        $environment->setIsActive(true);
-        $environment->setClientSecret("AN18Q~CYbT20zAvIYJTnKME1XPdUXMFKJgzyZbQu");
-        $environment->setTenantId("c602b45a-7c38-4b4d-a2c3-8c41dfa957ca");
-        $environment->setType("TEST");
-        $environment->setProviderName("RebusPay");
+        $envSandbox = new Environment();
+        $envSandbox->setBasePath("https://demo.rebuspay.com");
+        $envSandbox->setClientId("696ee5fc-9128-44ec-ab1a-3cb43871804b");
+        $envSandbox->setScope("api://148563e0-e668-4f39-a441-49c6a9373dbf/.default");
+        $envSandbox->setIsActive(true);
+        $envSandbox->setIsActiveAt(new \DateTimeImmutable('now'));
+        $envSandbox->setClientSecret("AN18Q~CYbT20zAvIYJTnKME1XPdUXMFKJgzyZbQu");
+        $envSandbox->setTenantId("c602b45a-7c38-4b4d-a2c3-8c41dfa957ca");
+        $envSandbox->setType("TEST");
+        $envSandbox->setProviderName("RebusPay");
 
-        $this->em->persist($environment);
+        $this->em->persist($envSandbox);
+
+        $envProd = new Environment();
+        $envProd->setBasePath("https://www.rebuspay.com");
+        $envProd->setClientId("696ee5fc-9128-44ec-ab1a-3cb43871804b");
+        $envProd->setScope("api://148563e0-e668-4f39-a441-49c6a9373dbf/.default");
+        $envProd->setIsActive(false);
+        $envProd->setClientSecret("AN18Q~CYbT20zAvIYJTnKME1XPdUXMFKJgzyZbQu");
+        $envProd->setTenantId("c602b45a-7c38-4b4d-a2c3-8c41dfa957ca");
+        $envProd->setType("PROD");
+        $envProd->setProviderName("RebusPay");
+
+        $this->em->persist($envProd);
 
         $company = new Client();
         $company->setCompanyName("Comremit Solutions SL");
         $company->setCompanyCountry("ESP");
         $company->setCompanyAddress("Pasaje del Carme, 24, Sant Cugat del Vallés, 08173, Barcelona, España");
+        $company->setCompanyZipCode("08173");
         $company->setCompanyIdentification("B10583565");
         $company->setCompanyIdentificationType("CIF");
         $company->setCompanyEmail("support@comremit.com");
-        $company->setCompanyPhoneNumber("+34");
+        $company->setCompanyPhoneNumber("+34602027541");
         $company->setDiscountOfClient(0);
 
         $this->em->persist($company);
 
-        $permission = new Permission();
-        $permission->setDiscount(0);
-        $permission->setCommission(0);
-        $permission->setDiscountUnit("%");
-        $permission->setClient($company);
-        $permission->setEnvironment($environment);
-        $permission->setIsActive(true);
-        $permission->setIsActiveAt(new \DateTimeImmutable('now'));
-        $permission->setOrigin("*");
+        $accountSandbox = new Account();
+        $accountSandbox->setDiscount(0);
+        $accountSandbox->setCommission(0);
+        $accountSandbox->setDiscountUnit("%");
+        $accountSandbox->setClient($company);
+        $accountSandbox->setEnvironment($envSandbox);
+        $accountSandbox->setIsActive(true);
+        $accountSandbox->setIsActiveAt(new \DateTimeImmutable('now'));
+        $accountSandbox->setOrigin("*");
+        $accountSandbox->setAccountId(11);
+        $accountSandbox->setEnvironmentName("SANDBOX");
 
-        $this->em->persist($permission);
+        $this->em->persist($accountSandbox);
 
-//        $this->em->flush();
+        $accountProd = new Account();
+        $accountProd->setDiscount(0);
+        $accountProd->setCommission(0);
+        $accountProd->setDiscountUnit("%");
+        $accountProd->setClient($company);
+        $accountProd->setEnvironment($envProd);
+        $accountProd->setIsActive(false);
+        $accountProd->setIsActiveAt(new \DateTimeImmutable('now'));
+        $accountProd->setOrigin("*");
+        $accountProd->setEnvironmentName("PROD");
+
+        $this->em->persist($accountProd);
+
+        $this->em->flush();
     }
 
 

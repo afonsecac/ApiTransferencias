@@ -12,7 +12,7 @@ security:
         # used to reload user from session & other features (e.g. switch_user)
         app_token_user_provider:
             entity:
-                class: App\Entity\Permission
+                class: App\Entity\Account
                 property: accessToken
         all_users:
             chain:

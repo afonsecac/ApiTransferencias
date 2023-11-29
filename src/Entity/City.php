@@ -2,32 +2,18 @@
 
 namespace App\Entity;
 
-use ApiPlatform\Doctrine\Orm\State\Options;
 use ApiPlatform\Metadata\ApiProperty;
 use ApiPlatform\Metadata\ApiResource;
 use ApiPlatform\Metadata\GetCollection;
-use ApiPlatform\Metadata\Link;
 use App\Repository\CityRepository;
 use Doctrine\ORM\Mapping as ORM;
-use Symfony\Bridge\Doctrine\Types\UlidType;
 use Symfony\Component\Serializer\Annotation\Groups;
-use Symfony\Component\Uid\Ulid;
 use Symfony\Component\Validator\Constraints as Assert;
 
 #[ORM\Entity(repositoryClass: CityRepository::class)]
 #[ApiResource(
     operations: [
         new GetCollection(),
-        new GetCollection(
-            uriTemplate: "/provinces/{provinceId}/cities",
-            uriVariables: [
-                "provinceId" => new Link(
-                    fromProperty: "province",
-                    fromClass: Province::class
-                )
-            ],
-            stateOptions: new Options(handleLinks: [City::class, 'handleLinks'])
-        )
     ],
     normalizationContext: ['groups' => ['city:read']],
     denormalizationContext: ['groups' => ['city:write']]
@@ -35,12 +21,11 @@ use Symfony\Component\Validator\Constraints as Assert;
 class City
 {
     #[ORM\Id]
-    #[ORM\GeneratedValue(strategy: 'CUSTOM')]
-    #[ORM\Column(type: UlidType::NAME, unique: true)]
-    #[ORM\CustomIdGenerator(class: 'doctrine.ulid_generator')]
+    #[ORM\GeneratedValue]
+    #[ORM\Column]
     #[Groups(['city:read'])]
     #[ApiProperty(identifier: true)]
-    private ?Ulid $id = null;
+    private ?int $id = null;
 
     #[ORM\Column(length: 255)]
     #[Groups(['city:read'])]
@@ -55,7 +40,18 @@ class City
     #[Groups(['city:read'])]
     private ?bool $isActive = null;
 
-    public function getId(): ?Ulid
+    #[ORM\ManyToOne]
+    #[ORM\JoinColumn(nullable: false)]
+    private ?Environment $environment = null;
+
+    #[ORM\ManyToOne]
+    #[ORM\JoinColumn(nullable: false)]
+    private ?Province $province = null;
+
+    #[ORM\Column(nullable: false)]
+    private ?int $rebusId = null;
+
+    public function getId(): ?int
     {
         return $this->id;
     }
@@ -92,6 +88,42 @@ class City
     public function setIsActive(bool $isActive): static
     {
         $this->isActive = $isActive;
+
+        return $this;
+    }
+
+    public function getEnvironment(): ?Environment
+    {
+        return $this->environment;
+    }
+
+    public function setEnvironment(?Environment $environment): static
+    {
+        $this->environment = $environment;
+
+        return $this;
+    }
+
+    public function getProvince(): ?Province
+    {
+        return $this->province;
+    }
+
+    public function setProvince(?Province $province): static
+    {
+        $this->province = $province;
+
+        return $this;
+    }
+
+    public function getRebusId(): ?int
+    {
+        return $this->rebusId;
+    }
+
+    public function setRebusId(?int $rebusId): static
+    {
+        $this->rebusId = $rebusId;
 
         return $this;
     }
