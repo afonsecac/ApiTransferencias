@@ -21,7 +21,7 @@ final class Version20231206193902 extends AbstractMigration
     {
         // this up() migration is auto-generated, please modify it to your needs
         $this->addSql('ALTER TABLE communication_recharge ADD com_info JSON NOT NULL');
-        $this->addSql('ALTER TABLE communication_sale ALTER status TYPE VARCHAR(20)');
+        $this->addSql('ALTER TABLE communication_sale ADD status VARCHAR(20) NULL');
     }
 
     public function down(Schema $schema): void
