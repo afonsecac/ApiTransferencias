@@ -44,7 +44,7 @@ final class Version20231206163008 extends AbstractMigration
         $this->addSql('CREATE INDEX IDX_3DBB4692F44CABFF ON communication_recharge (package_id)');
         $this->addSql('COMMENT ON COLUMN communication_recharge.created_at IS \'(DC2Type:datetime_immutable)\'');
         $this->addSql('COMMENT ON COLUMN communication_recharge.updated_at IS \'(DC2Type:datetime_immutable)\'');
-        $this->addSql('CREATE TABLE communication_sale (id INT NOT NULL, package_id INT NOT NULL, tenant_id INT NOT NULL, created_at TIMESTAMP(0) WITHOUT TIME ZONE NOT NULL, updated_at TIMESTAMP(0) WITHOUT TIME ZONE NOT NULL, type VARCHAR(2) NOT NULL, sequence INT NOT NULL, amount DOUBLE PRECISION NOT NULL, currency VARCHAR(3) NOT NULL, client_info JSON NOT NULL, PRIMARY KEY(id))');
+        $this->addSql('CREATE TABLE communication_sale (id INT NOT NULL, package_id INT NOT NULL, tenant_id INT NOT NULL, created_at TIMESTAMP(0) WITHOUT TIME ZONE NOT NULL, updated_at TIMESTAMP(0) WITHOUT TIME ZONE NOT NULL, type VARCHAR(2) NOT NULL, sequence INT NOT NULL, amount DOUBLE PRECISION NOT NULL, currency VARCHAR(3) NOT NULL, status INT NULL, client_info JSON NOT NULL, PRIMARY KEY(id))');
         $this->addSql('CREATE INDEX IDX_DA9CB8D19033212A ON communication_sale (tenant_id)');
         $this->addSql('CREATE INDEX IDX_DA9CB8D1F44CABFF ON communication_sale (package_id)');
         $this->addSql('COMMENT ON COLUMN communication_sale.created_at IS \'(DC2Type:datetime_immutable)\'');
