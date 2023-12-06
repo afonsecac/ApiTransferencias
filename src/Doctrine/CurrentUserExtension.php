@@ -6,22 +6,25 @@ use ApiPlatform\Doctrine\Orm\Extension\QueryCollectionExtensionInterface;
 use ApiPlatform\Doctrine\Orm\Extension\QueryItemExtensionInterface;
 use ApiPlatform\Doctrine\Orm\Util\QueryNameGeneratorInterface;
 use ApiPlatform\Metadata\Operation;
+use App\Entity\Account;
 use App\Entity\BankCard;
 use App\Entity\City;
+use App\Entity\CommunicationNationality;
+use App\Entity\CommunicationOffice;
+use App\Entity\CommunicationPackage;
+use App\Entity\CommunicationProvinces;
 use App\Entity\Country;
-use App\Entity\Account;
 use App\Entity\Province;
 use Doctrine\ORM\QueryBuilder;
-use Symfony\Bridge\Doctrine\Types\UuidType;
 use Symfony\Bundle\SecurityBundle\Security;
 
 final class CurrentUserExtension implements QueryCollectionExtensionInterface, QueryItemExtensionInterface
 {
     public function __construct(
         private readonly Security $security
-    )
-    {
+    ) {
     }
+
     public function applyToCollection(
         QueryBuilder $queryBuilder,
         QueryNameGeneratorInterface $queryNameGenerator,
@@ -43,7 +46,11 @@ final class CurrentUserExtension implements QueryCollectionExtensionInterface, Q
         $this->addWhere($queryBuilder, $resourceClass, $queryNameGenerator);
     }
 
-    public function addWhere(QueryBuilder $queryBuilder, string $resourceClass, QueryNameGeneratorInterface $queryNameGenerator = null): void {
+    public function addWhere(
+        QueryBuilder $queryBuilder,
+        string $resourceClass,
+        QueryNameGeneratorInterface $queryNameGenerator = null
+    ): void {
         if ($this->security->isGranted('ROLE_SUPER_ADMIN')) {
             return;
         }
@@ -55,7 +62,18 @@ final class CurrentUserExtension implements QueryCollectionExtensionInterface, Q
 
         if ($user instanceof Account) {
             $rootAlias = $queryBuilder->getRootAliases()[0];
-            if (in_array($resourceClass, [Country::class, Province::class, City::class])) {
+            if (in_array(
+                $resourceClass,
+                [
+                    Country::class,
+                    Province::class,
+                    City::class,
+                    CommunicationNationality::class,
+                    CommunicationPackage::class,
+                    CommunicationProvinces::class,
+                    CommunicationOffice::class
+                ]
+            )) {
                 $environment = $user->getEnvironment();
                 $queryBuilder->andWhere(sprintf('%s.environment = :env', $rootAlias));
                 $queryBuilder->setParameter('env', $environment?->getId());
