@@ -9,10 +9,13 @@
 /vendor/
 composer.lock
 
-/.idea/*
-/.idea/
-.idea/
-.idea/*
+
 /.idea
+.project
+.classpath
+.c9/
+*.launch
+.settings/
+*.sublime-workspace
 ###< symfony/framework-bundle ###
 !/composer.lock
