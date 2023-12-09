@@ -121,7 +121,11 @@ class CreateRechargeProcessor implements ProcessorInterface
             } catch (RedirectionExceptionInterface|ServerExceptionInterface|TransportExceptionInterface|ClientExceptionInterface $ex) {
                 $data->setStatus('FAILED');
                 $data->setComInfo([
-                    'error' => $ex->getMessage(),
+                    'error' => sprintf(
+                        "action=Recharge, Message=%s, Type=%s",
+                        $ex->getMessage(),
+                        $ex->getTraceAsString()
+                    ),
                     'orderID' => $orderId,
                     'transactionID' => $transactionId,
                     'body' => $body,
