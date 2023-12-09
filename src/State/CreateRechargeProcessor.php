@@ -44,6 +44,7 @@ class CreateRechargeProcessor implements ProcessorInterface
         $user = $this->security->getUser();
         $orderId = null;
         $transactionId = null;
+        $body = null;
         if ($data instanceof CommunicationRecharge && $user instanceof Account) {
             $package = $this->em->getRepository(CommunicationPackage::class)->find($data->getPackageId());
             $data->setPackage($package);
@@ -123,7 +124,8 @@ class CreateRechargeProcessor implements ProcessorInterface
                 $data->setComInfo([
                     'error' => $ex->getMessage(),
                     'orderID' => $orderId,
-                    'transactionID' => $transactionId
+                    'transactionID' => $transactionId,
+                    'body' => $body
                 ]);
             }
             $this->em->persist($data);
