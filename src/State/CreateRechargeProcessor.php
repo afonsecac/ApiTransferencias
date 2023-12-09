@@ -122,9 +122,8 @@ class CreateRechargeProcessor implements ProcessorInterface
                 $data->setStatus('FAILED');
                 $data->setComInfo([
                     'error' => sprintf(
-                        "action=Recharge, Message=%s, Type=%s",
-                        $ex->getMessage(),
-                        $ex->getTraceAsString()
+                        "action=Recharge, Message=%s",
+                        $ex->getMessage()
                     ),
                     'orderID' => $orderId,
                     'transactionID' => $transactionId,
