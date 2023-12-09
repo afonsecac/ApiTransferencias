@@ -68,7 +68,7 @@ class CreateRechargeProcessor implements ProcessorInterface
                 $body = [
                     'phoneNumber' => $data->getPhoneNumber(),
                     'productCode' => $package?->getComId(),
-                    'productPrice' => $data?->getPrice(),
+                    'productPrice' => round($data?->getPrice(), 2),
                     'transactionId' => $transactionId,
                     'environment' => $user?->getEnvironment()?->getType(),
                 ];
@@ -130,6 +130,7 @@ class CreateRechargeProcessor implements ProcessorInterface
                     'transactionID' => $transactionId,
                     'body' => $body,
                     'bodyCheck' => $bodyCheck,
+                    'errorTrace' => $ex->getTrace()
                 ]);
             }
             $this->em->persist($data);
