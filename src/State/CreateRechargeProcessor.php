@@ -45,6 +45,7 @@ class CreateRechargeProcessor implements ProcessorInterface
         $orderId = null;
         $transactionId = null;
         $body = null;
+        $bodyCheck = null;
         if ($data instanceof CommunicationRecharge && $user instanceof Account) {
             $package = $this->em->getRepository(CommunicationPackage::class)->find($data->getPackageId());
             $data->setPackage($package);
@@ -64,15 +65,13 @@ class CreateRechargeProcessor implements ProcessorInterface
                         '0',
                         STR_PAD_LEFT
                     );
-                $body = $this->serializer->serialize(
-                    [
-                        'phoneNumber' => $data->getPhoneNumber(),
-                        'productCode' => $package?->getComId(),
-                        'productPrice' => $data?->getPrice(),
-                        'transactionId' => $transactionId,
-                        'environment' => $user?->getEnvironment()?->getType(),
-                    ], 'json', []
-                );
+                $body = [
+                    'phoneNumber' => $data->getPhoneNumber(),
+                    'productCode' => $package?->getComId(),
+                    'productPrice' => $data?->getPrice(),
+                    'transactionId' => $transactionId,
+                    'environment' => $user?->getEnvironment()?->getType(),
+                ];
                 $response = $this->httpClient->request(
                     'POST',
                     $urlRecharge,
@@ -81,7 +80,7 @@ class CreateRechargeProcessor implements ProcessorInterface
                             'Content-Type' => 'application/json',
                             'Accept' => 'application/json',
                         ],
-                        'body' => $body,
+                        'body' => $this->serializer->serialize($body, 'json', []),
                     ]
                 );
 
@@ -91,6 +90,12 @@ class CreateRechargeProcessor implements ProcessorInterface
 
                 $data->setStatus('PENDING');
 
+                $bodyCheck = [
+                    'orderId' => $orderId,
+                    'transactionId' => $transactionId,
+                    'environment' => $user?->getEnvironment()?->getType(),
+                ];
+
                 $responseStatus = $this->httpClient->request(
                     'POST',
                     $urlStatus,
@@ -99,14 +104,8 @@ class CreateRechargeProcessor implements ProcessorInterface
                             'Content-Type' => 'application/json',
                             'Accept' => 'application/json',
                         ],
-                        'body' => $this->serializer->serialize(
-                            [
-                                'orderId' => $orderId,
-                                'transactionId' => $transactionId,
-                                'environment' => $user?->getEnvironment()?->getType(),
-                            ], 'json', []
-                        ),
-                        'timeout' => 15*60*60
+                        'body' => $this->serializer->serialize($bodyCheck, 'json', []),
+                        'timeout' => 15 * 60 * 60,
                     ]
                 );
                 $contentCheck = $responseStatus->getContent();
@@ -115,17 +114,18 @@ class CreateRechargeProcessor implements ProcessorInterface
                     'info' => [
                         'sale' => $infoCheck->sale,
                         'result' => $infoCheck->result,
-                        'transactionID' => $transactionId
+                        'transactionID' => $transactionId,
                     ],
                 ]);
-                $data->setStatus(((object) $infoCheck->sale)->state);
+                $data->setStatus(((object)$infoCheck->sale)->state);
             } catch (RedirectionExceptionInterface|ServerExceptionInterface|TransportExceptionInterface|ClientExceptionInterface $ex) {
                 $data->setStatus('FAILED');
                 $data->setComInfo([
                     'error' => $ex->getMessage(),
                     'orderID' => $orderId,
                     'transactionID' => $transactionId,
-                    'body' => $body
+                    'body' => $body,
+                    'bodyCheck' => $bodyCheck,
                 ]);
             }
             $this->em->persist($data);
