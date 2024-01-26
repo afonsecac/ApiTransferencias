@@ -4,15 +4,20 @@ namespace App\State;
 
 use ApiPlatform\Metadata\Operation;
 use ApiPlatform\State\ProcessorInterface;
+use App\ApiResource\Calculator;
 use App\Entity\Account;
+use App\Entity\BalanceOperation;
 use App\Entity\Transfer;
+use App\Repository\BalanceOperationRepository;
 use App\Repository\BankCardRepository;
 use App\Repository\EnvAuthRepository;
 use App\Repository\SenderRepository;
 use App\Repository\SysConfigRepository;
 use App\Service\AuthService;
+use App\Service\TransferCalculatorService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\SecurityBundle\Security;
+use Symfony\Component\HttpFoundation\Exception\BadRequestException;
 use Symfony\Component\Serializer\Encoder\JsonEncoder;
 use Symfony\Component\Serializer\Encoder\XmlEncoder;
 use Symfony\Component\Serializer\Normalizer\DateIntervalNormalizer;
@@ -39,6 +44,8 @@ class CreateTransactionProcessor implements ProcessorInterface
         private readonly Security $security,
         private readonly BankCardRepository $bankCardRepository,
         private readonly SenderRepository $senderRepository,
+        private readonly BalanceOperationRepository $balanceRepository,
+        private readonly TransferCalculatorService $transferCalculatorService,
     ) {
         $encoders = [new XmlEncoder(), new JsonEncoder()];
         $normalizer = [new DateTimeNormalizer(), new DateIntervalNormalizer(), new ObjectNormalizer()];
@@ -75,9 +82,20 @@ class CreateTransactionProcessor implements ProcessorInterface
             if ($user instanceof Account) {
                 $url = $accessToken->getPermission()?->getEnvironment()?->getBasePath()."/api/Transactions";
                 $tokenIn = 'Bearer '.$accessToken->getTokenAuth();
+                $balance = $this->balanceRepository->getBalanceOutput($user->getId());
                 if ($data instanceof Transfer && $data->getTransactionType() !== '5') {
-                    $beneficiary = $this->bankCardRepository->find($data->getBeneficiaryId());
+                    $calcObject = new Calculator();
+                    $calcObject->setSendAmount($data->getAmountDeposit());
+                    $calcObject->setSendCurrency($data->getCurrency());
+                    $calculator = $this->transferCalculatorService->calculator($calcObject);
+                    if ($calculator->getTotal() > $balance) {
+                        throw new BadRequestException('You do not have sufficient funds to carry out this operation');
+                    }
+                    $beneficiary = $this->bankCardRepository->getBeneficiaryCard($data->getBeneficiaryId());
                     $sender = $this->senderRepository->find($data->getSenderId());
+                    if (is_null($sender) || is_null($beneficiary)) {
+                        throw new BadRequestException('You need create sender and beneficiary');
+                    }
                     $serializerInfo = $this->serializer->serialize(
                         [
                             'accountId' => $user->getAccountId(),
@@ -167,6 +185,20 @@ class CreateTransactionProcessor implements ProcessorInterface
                 }
 
                 $this->em->persist($data);
+                $balanceOperation = new BalanceOperation();
+                $balanceOperation->setTotalAmount((-1) * $data->getTotalAmount());
+                $balanceOperation->setTotalCurrency($data->getCurrencyTotal());
+                $balanceOperation->setOperationType("DEBIT");
+                $balanceOperation->setState('COMPLETED');
+                $balanceOperation->setAmountTax($data->getAmountCommission());
+                $balanceOperation->setCurrencyTax($data->getCurrencyCommission());
+                $balanceOperation->setTransfer($data);
+                $balanceOperation->setTransferId($data->getId());
+                $balanceOperation->setTenant($user);
+                $balanceOperation->setAmount($data->getAmountDeposit());
+                $balanceOperation->setCurrency($data->getCurrency());
+                $this->em->persist($balanceOperation);
+
                 $this->em->flush();
             }
         } catch (RedirectionExceptionInterface|ServerExceptionInterface|TransportExceptionInterface|ClientExceptionInterface $ex) {
