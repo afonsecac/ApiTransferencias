@@ -112,7 +112,7 @@ class CommunicationPackage
         openapiContext: [
             'type' => 'array',
             'items' => ['type' => 'json'],
-            'example' => '[{"lang": "es", "desc": "Description in SP" }, {"lang": "en", "desc": "Description in EN" }]'
+            'example' => '[{"language": "es", "main": "Description in SP", "optional": "", "youKnow": [], "knowMore": "url" }, {"language": "en", "main": "Description in EN", "optional": "", "youKnow": [], "knowMore": "url" }]'
         ],
     )]
     private array $comInfo = [];

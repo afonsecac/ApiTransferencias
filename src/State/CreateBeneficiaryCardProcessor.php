@@ -76,6 +76,34 @@ final class CreateBeneficiaryCardProcessor implements ProcessorInterface
             if (!is_null($accessToken)) {
                 $url = $accessToken->getPermission()?->getEnvironment()?->getBasePath()."/api/BeneficiaryRemittances";
                 $tokenIn = 'Bearer '.$accessToken->getTokenAuth();
+                $beneficiaryInfo = $this->serializer->serialize(
+                    [
+                        'email' => $data->getBeneficiary()?->getEmail(),
+                        'telephone' => trim($data->getBeneficiary()?->getPhone()),
+                        'homeTelephone' => trim($data->getBeneficiary()?->getHomePhone()),
+                        'displayName' => sprintf(
+                            "%s%s %s",
+                            $data->getBeneficiary()?->getFirstName(),
+                            is_null($data->getBeneficiary()?->getMiddleName()) ? "" : " ".$data->getBeneficiary()?->getMiddleName(),
+                            $data->getBeneficiary()?->getLastName()
+                        ),
+                        'firstName' => sprintf(
+                            "%s%s",
+                            $data->getBeneficiary()?->getFirstName(),
+                            is_null($data->getBeneficiary()?->getMiddleName()) ? "" : " ".$data->getBeneficiary()?->getMiddleName()
+                        ),
+                        'dob' => $data->getBeneficiary()?->getDateOfBirth()?->format('Y-m-d'),
+                        'lastName' => $data->getBeneficiary()?->getLastName(),
+                        'addressLine1' => $data->getBeneficiary()?->getAddressLine1(),
+                        'addressLine2' => $data->getBeneficiary()?->getAddressLine2(),
+                        'nationalIdNumber' => $data->getBeneficiary()?->getIdentificationNumber(),
+                        'cityId' => $data->getBeneficiary()?->getCity()?->getRebusId(),
+                        'provinceId' => $data->getBeneficiary()?->getCity()?->getProvince()?->getRebusProvinceId(),
+                        'countryId' => $data->getBeneficiary()?->getCity()?->getProvince()?->getCountry()?->getRebusId(),
+                        'postalCode' => $data->getBeneficiary()?->getZipCode(),
+                        'cardNumber' => $data->getCardNumber()
+                    ], 'json', []
+                );
                 $response = $this->httpClient->request(
                     'POST',
                     $url,
@@ -85,34 +113,7 @@ final class CreateBeneficiaryCardProcessor implements ProcessorInterface
                             'Accept' => 'application/json',
                             'Authorization' => $tokenIn,
                         ],
-                        'body' => $this->serializer->serialize(
-                            [
-                                'email' => $data->getBeneficiary()?->getEmail(),
-                                'telephone' => trim($data->getBeneficiary()?->getPhone()),
-                                'homeTelephone' => trim($data->getBeneficiary()?->getHomePhone()),
-                                'displayName' => sprintf(
-                                    "%s%s %s",
-                                    $data->getBeneficiary()?->getFirstName(),
-                                    is_null($data->getBeneficiary()?->getMiddleName()) ? "" : " ".$data->getBeneficiary()->getMiddleName(),
-                                    $data->getBeneficiary()?->getLastName()
-                                ),
-                                'firstName' => sprintf(
-                                    "%s%s",
-                                    $data->getBeneficiary()?->getFirstName(),
-                                    is_null($data->getBeneficiary()?->getMiddleName()) ? "" : " ".$data->getBeneficiary()?->getMiddleName()
-                                ),
-                                'dob' => $data->getBeneficiary()?->getDateOfBirth()?->format('Y-m-d'),
-                                'lastName' => $data->getBeneficiary()?->getLastName(),
-                                'addressLine1' => $data->getBeneficiary()?->getAddressLine1(),
-                                'addressLine2' => $data->getBeneficiary()?->getAddressLine2(),
-                                'nationalIdNumber' => $data->getBeneficiary()?->getIdentificationNumber(),
-                                'cityId' => $data->getBeneficiary()?->getCity()?->getRebusId(),
-                                'provinceId' => $data->getBeneficiary()?->getCity()?->getProvince()?->getRebusProvinceId(),
-                                'countryId' => $data->getBeneficiary()?->getCity()?->getProvince()?->getCountry()?->getRebusId(),
-                                'postalCode' => $data->getBeneficiary()?->getZipCode(),
-                                'cardNumber' => $data->getCardNumber()
-                            ], 'json', []
-                        ),
+                        'body' => $beneficiaryInfo,
                     ]
                 );
 
