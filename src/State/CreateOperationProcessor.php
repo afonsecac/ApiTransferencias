@@ -30,7 +30,7 @@ class CreateOperationProcessor implements ProcessorInterface
             $balance->setAmount($data->amount);
             $balance->setCurrency($data->currency);
             $balance->setTenant($user);
-            $balance->setState('DEPOSIT');
+            $balance->setState('PENDING');
             $balance->setOperationType('CREDIT');
 
             $this->em->persist($balance);

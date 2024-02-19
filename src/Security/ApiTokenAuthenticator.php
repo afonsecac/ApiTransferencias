@@ -42,9 +42,13 @@ class ApiTokenAuthenticator extends AbstractAuthenticator
             // Code 401 "Unauthorized"
             throw new CustomUserMessageAuthenticationException('No API token provided');
         }
+        $currentToken = base64_decode($apiToken, true);
+        if (!$currentToken) {
+            throw new CustomUserMessageAuthenticationException('No valid token');
+        }
 
         $permission = $this->permission->findOneBy([
-            'accessToken' => $apiToken,
+            'accessToken' => $currentToken,
             'isActive' => true
         ]);
 

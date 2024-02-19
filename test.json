@@ -1,0 +1,12 @@
+[
+  {
+    "language": "es",
+    "main": "Ganas bonos de 14GB + 75 min + 80 SMS",
+    "optional": "",
+    "youKnow": [{
+      "id": 1,
+      "text": "NO recibirá los 75.00 CUP en su saldo principal, sólo los bonos de DATOS, MIN y SMS."
+    }],
+    "knowMore": "https://www.etecsa.cu/es/promocion/recarga_internacional"
+  }
+]

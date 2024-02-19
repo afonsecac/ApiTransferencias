@@ -14,8 +14,10 @@ use App\Repository\EnvAuthRepository;
 use App\Repository\SenderRepository;
 use App\Repository\SysConfigRepository;
 use App\Service\AuthService;
+use App\Service\ConfigureSequenceService;
 use App\Service\TransferCalculatorService;
 use Doctrine\ORM\EntityManagerInterface;
+use Doctrine\ORM\NonUniqueResultException;
 use Symfony\Bundle\SecurityBundle\Security;
 use Symfony\Component\HttpFoundation\Exception\BadRequestException;
 use Symfony\Component\Serializer\Encoder\JsonEncoder;
@@ -58,6 +60,7 @@ class CreateTransactionProcessor implements ProcessorInterface
      * @throws ClientExceptionInterface
      * @throws TransportExceptionInterface
      * @throws ServerExceptionInterface
+     * @throws NonUniqueResultException
      */
     public function process(mixed $data, Operation $operation, array $uriVariables = [], array $context = [])
     {
@@ -126,7 +129,6 @@ class CreateTransactionProcessor implements ProcessorInterface
                         ]
                     );
 
-                    $content = $response->getContent();
                     $info = (object)$response->toArray();
 
                     $getInfoResponse = $this->httpClient->request(
@@ -140,7 +142,7 @@ class CreateTransactionProcessor implements ProcessorInterface
                             ],
                         ]
                     );
-                    $getInfoContent = $getInfoResponse->getContent();
+
                     $getInfo = (object) $getInfoResponse->toArray();
 
                     $data->setTotalAmount($getInfo->transAmount);

@@ -2,6 +2,8 @@
 
 namespace App\Entity;
 
+use ApiPlatform\Doctrine\Orm\Filter\DateFilter;
+use ApiPlatform\Metadata\ApiFilter;
 use ApiPlatform\Metadata\ApiProperty;
 use ApiPlatform\Metadata\ApiResource;
 use ApiPlatform\Metadata\Get;
@@ -47,6 +49,7 @@ use Symfony\Component\Validator\Constraints as Assert;
     normalizationContext: ['groups' => ['balance:read', 'balance:reading']],
     denormalizationContext: ['groups' => ['balance:update', 'balance:create']],
 )]
+#[ApiFilter(DateFilter::class, properties: ['createdAt'])]
 #[ORM\HasLifecycleCallbacks]
 class BalanceOperation
 {

@@ -69,7 +69,6 @@ final class CurrentUserExtension implements QueryCollectionExtensionInterface, Q
                     Province::class,
                     City::class,
                     CommunicationNationality::class,
-                    CommunicationPackage::class,
                     CommunicationProvinces::class,
                     CommunicationOffice::class
                 ]
@@ -84,6 +83,13 @@ final class CurrentUserExtension implements QueryCollectionExtensionInterface, Q
             } else {
                 $queryBuilder->andWhere(sprintf('%s.tenant = :current_user', $rootAlias));
                 $queryBuilder->setParameter('current_user', $user->getId());
+                if ($resourceClass == CommunicationPackage::class) {
+                    $queryBuilder->andWhere(sprintf('%s.isEnabled = :sIsEnabled', $rootAlias))
+                        ->setParameter('sIsEnabled', true)
+                        ->addOrderBy(sprintf('%s.comId', $rootAlias))
+                        ->addOrderBy(sprintf('%s.amount', $rootAlias));
+
+                }
             }
         }
     }

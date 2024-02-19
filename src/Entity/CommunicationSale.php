@@ -15,26 +15,26 @@ use Symfony\Component\Serializer\Attribute\Groups;
 use Symfony\Component\Validator\Constraints as Assert;
 
 #[ORM\Entity(repositoryClass: CommunicationSaleRepository::class)]
-#[ApiResource(
-    uriTemplate: '/communication/sales',
-    operations: [
-        new Get(
-            uriTemplate: '/communication/sales/{id}',
-            defaults: ['color' => 'brown'],
-            requirements: ['id' => '\d+'],
-        ),
-        new GetCollection(
-            uriTemplate: '/communication/sales',
-        ),
-        new Post(
-            uriTemplate: '/communication/sales',
-            input: CreateSaleDto::class,
-            processor: CreateSaleProcessor::class
-        )
-    ],
-    normalizationContext: ['groups' => ['comSales:read']],
-    denormalizationContext: ['groups' => ['comSales:update', 'comSales:create']],
-)]
+//#[ApiResource(
+//    uriTemplate: '/communication/sales',
+//    operations: [
+//        new Get(
+//            uriTemplate: '/communication/sales/{id}',
+//            defaults: ['color' => 'brown'],
+//            requirements: ['id' => '\d+'],
+//        ),
+//        new GetCollection(
+//            uriTemplate: '/communication/sales',
+//        ),
+//        new Post(
+//            uriTemplate: '/communication/sales',
+//            input: CreateSaleDto::class,
+//            processor: CreateSaleProcessor::class
+//        )
+//    ],
+//    normalizationContext: ['groups' => ['comSales:read']],
+//    denormalizationContext: ['groups' => ['comSales:update', 'comSales:create']],
+//)]
 #[ORM\HasLifecycleCallbacks]
 class CommunicationSale
 {

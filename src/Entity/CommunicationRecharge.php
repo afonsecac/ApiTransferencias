@@ -14,26 +14,26 @@ use Symfony\Component\Serializer\Attribute\Groups;
 use Symfony\Component\Validator\Constraints as Assert;
 
 #[ORM\Entity(repositoryClass: CommunicationRechargeRepository::class)]
-#[ApiResource(
-    uriTemplate: '/communication/recharges',
-    operations: [
-        new Get(
-            uriTemplate: '/communication/recharges/{id}',
-            defaults: ['color' => 'brown'],
-            requirements: ['id' => '\d+'],
-        ),
-        new GetCollection(
-            uriTemplate: '/communication/recharges',
-        ),
-        new Post(
-            uriTemplate: '/communication/recharges',
-            processor: CreateRechargeProcessor::class
-        )
-    ],
-    normalizationContext: ['groups' => ['comRecharges:read']],
-    denormalizationContext: ['groups' => ['comRecharges:create', 'comRecharges:update']],
-
-)]
+//#[ApiResource(
+//    uriTemplate: '/communication/recharges',
+//    operations: [
+//        new Get(
+//            uriTemplate: '/communication/recharges/{id}',
+//            defaults: ['color' => 'brown'],
+//            requirements: ['id' => '\d+'],
+//        ),
+//        new GetCollection(
+//            uriTemplate: '/communication/recharges',
+//        ),
+//        new Post(
+//            uriTemplate: '/communication/recharges',
+//            processor: CreateRechargeProcessor::class
+//        )
+//    ],
+//    normalizationContext: ['groups' => ['comRecharges:read']],
+//    denormalizationContext: ['groups' => ['comRecharges:create', 'comRecharges:update']],
+//
+//)]
 #[ORM\HasLifecycleCallbacks]
 class CommunicationRecharge
 {

@@ -129,9 +129,17 @@ class CommunicationPackage
     #[ORM\JoinColumn(nullable: false)]
     private ?Environment $environment = null;
 
+    #[ORM\ManyToOne]
+    private ?Account $tenant = null;
+
+    #[ORM\Column(length: 10, nullable: true)]
+    #[ApiProperty]
+    private ?string $packageType = 'RT';
+
     public function __construct()
     {
         $this->isEnabled = true;
+        $this->packageType = 'RT';
     }
 
     public function getId(): ?int
@@ -327,6 +335,30 @@ class CommunicationPackage
     public function setEnvironment(?Environment $environment): static
     {
         $this->environment = $environment;
+
+        return $this;
+    }
+
+    public function getTenant(): ?Account
+    {
+        return $this->tenant;
+    }
+
+    public function setTenant(?Account $tenant): static
+    {
+        $this->tenant = $tenant;
+
+        return $this;
+    }
+
+    public function getPackageType(): ?string
+    {
+        return $this->packageType;
+    }
+
+    public function setPackageType(?string $packageType): static
+    {
+        $this->packageType = $packageType;
 
         return $this;
     }

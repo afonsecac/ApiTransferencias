@@ -3,7 +3,9 @@
 namespace App\Repository;
 
 use App\Entity\CommunicationNationality;
+use App\Entity\Environment;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
+use Doctrine\DBAL\Exception;
 use Doctrine\Persistence\ManagerRegistry;
 
 /**
@@ -21,28 +23,15 @@ class CommunicationNationalityRepository extends ServiceEntityRepository
         parent::__construct($registry, CommunicationNationality::class);
     }
 
-//    /**
-//     * @return CommunicationNationality[] Returns an array of CommunicationNationality objects
-//     */
-//    public function findByExampleField($value): array
-//    {
-//        return $this->createQueryBuilder('c')
-//            ->andWhere('c.exampleField = :val')
-//            ->setParameter('val', $value)
-//            ->orderBy('c.id', 'ASC')
-//            ->setMaxResults(10)
-//            ->getQuery()
-//            ->getResult()
-//        ;
-//    }
+    /**
+     * @throws Exception
+     */
+    public function deleteAll(Environment $environment)
+    {
+        $conn = $this->getEntityManager()->getConnection();
 
-//    public function findOneBySomeField($value): ?CommunicationNationality
-//    {
-//        return $this->createQueryBuilder('c')
-//            ->andWhere('c.exampleField = :val')
-//            ->setParameter('val', $value)
-//            ->getQuery()
-//            ->getOneOrNullResult()
-//        ;
-//    }
+        $sql = 'DELETE FROM communication_nationality c WHERE c.environment_id = :env';
+
+        return $conn->executeQuery($sql, ['env' => $environment->getId()])->fetchAssociative();
+    }
 }

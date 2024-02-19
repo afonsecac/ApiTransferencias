@@ -3,7 +3,9 @@
 namespace App\Repository;
 
 use App\Entity\CommunicationOffice;
+use App\Entity\Environment;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
+use Doctrine\DBAL\Exception;
 use Doctrine\Persistence\ManagerRegistry;
 
 /**
@@ -21,28 +23,15 @@ class CommunicationOfficeRepository extends ServiceEntityRepository
         parent::__construct($registry, CommunicationOffice::class);
     }
 
-//    /**
-//     * @return CommunicationOffice[] Returns an array of CommunicationOffice objects
-//     */
-//    public function findByExampleField($value): array
-//    {
-//        return $this->createQueryBuilder('c')
-//            ->andWhere('c.exampleField = :val')
-//            ->setParameter('val', $value)
-//            ->orderBy('c.id', 'ASC')
-//            ->setMaxResults(10)
-//            ->getQuery()
-//            ->getResult()
-//        ;
-//    }
+    /**
+     * @throws Exception
+     */
+    public function deleteAll(Environment $environment, int $provinceId): void
+    {
+        $conn = $this->getEntityManager()->getConnection();
 
-//    public function findOneBySomeField($value): ?CommunicationOffice
-//    {
-//        return $this->createQueryBuilder('c')
-//            ->andWhere('c.exampleField = :val')
-//            ->setParameter('val', $value)
-//            ->getQuery()
-//            ->getOneOrNullResult()
-//        ;
-//    }
+        $sql = 'DELETE FROM communication_office c WHERE c.province_id = :prov AND c.environment_id = :env';
+
+        $conn->executeStatement($sql, ['prov' => $provinceId, 'env' => $environment->getId()]);
+    }
 }
