@@ -27,7 +27,8 @@ api_platform:
             url: "https://sendmundo.com/contact"
     defaults:
         pagination_client_enabled: true
-        pagination_items_per_page: 10
+        pagination_items_per_page: 50
+        pagination_minim_items_per_page: 10
         pagination_maximum_items_per_page: 100
         pagination_client_partial: true
         pagination_client_items_per_page: true

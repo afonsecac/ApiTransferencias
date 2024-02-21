@@ -2,13 +2,26 @@
 
 namespace App\Entity;
 
+use ApiPlatform\Doctrine\Common\Filter\SearchFilterInterface;
+use ApiPlatform\Doctrine\Orm\Filter\DateFilter;
+use ApiPlatform\Doctrine\Orm\Filter\SearchFilter;
+use ApiPlatform\Metadata\ApiFilter;
+use ApiPlatform\Metadata\ApiProperty;
 use ApiPlatform\Metadata\ApiResource;
+use ApiPlatform\Metadata\Get;
+use ApiPlatform\Metadata\GetCollection;
+use ApiPlatform\Metadata\Post;
+use ApiPlatform\Serializer\Filter\PropertyFilter;
+use App\Enums\CommunicationStateEnum;
 use App\Repository\CommunicationSaleInfoRepository;
+use App\State\CreateSaleInfoProcessor;
 use Doctrine\ORM\Mapping as ORM;
+use Symfony\Component\Serializer\Annotation\Groups;
+use Symfony\Component\Validator\Constraints as Assert;
 
 #[ORM\Entity(repositoryClass: CommunicationSaleInfoRepository::class)]
 #[ORM\InheritanceType('SINGLE_TABLE')]
-#[ORM\DiscriminatorColumn(name: 'type', type: 'string')]
+#[ORM\DiscriminatorColumn(name: 'type', type: 'string', length: 10)]
 #[ORM\DiscriminatorMap(['recharge' => CommunicationSaleRecharge::class, 'sale' => CommunicationSalePackage::class])]
 #[ORM\HasLifecycleCallbacks]
 #[ORM\UniqueConstraint(
@@ -17,64 +30,157 @@ use Doctrine\ORM\Mapping as ORM;
 )]
 #[ORM\UniqueConstraint(
     name: 'unique_identification_client',
-    fields: ['clientTransactionId', 'tenant']
+    fields: ['clientTransactionId', 'tenant'],
+
 )]
 #[ApiResource(
-    uriTemplate: '/communication/sale'
+    uriTemplate: '/communication/sale',
+    operations: [
+        new Get(
+            uriTemplate: '/communication/sale/{id}',
+            defaults: ['color' => 'brown'],
+            requirements: ['id' => '\d+'],
+        ),
+        new GetCollection(
+            uriTemplate: '/communication/sale'
+        ),
+        new Post(
+            uriTemplate: '/communication/sale/recharge',
+            input: CommunicationSaleRecharge::class,
+            processor: CreateSaleInfoProcessor::class,
+        ),
+        new Post(
+            uriTemplate: '/communication/sale/package',
+            input: CommunicationSalePackage::class,
+            processor: CreateSaleInfoProcessor::class,
+        ),
+    ],
+    normalizationContext: ['groups' => ['comSales:read']],
+    denormalizationContext: ['groups' => ['comSales:update', 'comSales:create']],
 )]
+#[ApiFilter(DateFilter::class, properties: ['createdAt'])]
 class CommunicationSaleInfo
 {
     #[ORM\Id]
     #[ORM\GeneratedValue]
     #[ORM\Column]
-    private ?int $id = null;
+    #[ApiProperty(
+        identifier: true
+    )]
+    #[Groups(['comSales:read'])]
+    protected ?int $id = null;
 
     #[ORM\Column(length: 15, nullable: true)]
-    private ?string $transactionOrder = null;
+    #[ApiProperty]
+    #[Groups(['comSales:read'])]
+    protected ?string $transactionOrder = null;
 
     #[ORM\Column(length: 15, nullable: true)]
-    private ?string $transactionId = null;
+    #[ApiProperty]
+    #[Groups(['comSales:read'])]
+    protected ?string $transactionId = null;
 
     #[ORM\Column]
-    private ?\DateTimeImmutable $createdAt = null;
+    #[ApiProperty]
+    #[Groups(['comSales:read'])]
+    protected ?\DateTimeImmutable $createdAt;
 
     #[ORM\Column]
-    private ?\DateTimeImmutable $updatedAt = null;
+    #[ApiProperty]
+    #[Groups(['comSales:read'])]
+    protected ?\DateTimeImmutable $updatedAt = null;
 
     #[ORM\Column(length: 255)]
-    private ?string $clientTransactionId = null;
+    #[ApiProperty(
+        description: 'The transaction id on system of client, this info is unique',
+        required: true
+    )]
+    #[Groups(['comSales:read', 'comSales:create'])]
+    #[Assert\NotBlank]
+    protected ?string $clientTransactionId = null;
 
     #[ORM\Column]
-    private ?float $amount = 0;
+    #[ApiProperty]
+    #[Groups(['comSales:read'])]
+    protected ?float $amount = 0;
 
     #[ORM\Column(length: 3)]
-    private ?string $currency = null;
+    #[ApiProperty(
+        openapiContext: [
+            'type' => 'string',
+            'enum' => ['USD', 'EUR'],
+            'default' => 'USD',
+            'example' => 'USD',
+        ],
+        types: 'https://schema.org/priceCurrency'
+    )]
+    #[Groups(['comSales:read'])]
+    #[Assert\Length(min: 3, max: 3)]
+    protected ?string $currency = null;
 
     #[ORM\Column]
-    private ?int $packageId = null;
+    #[ApiProperty(
+        description: 'The package id in current system, take the information from /communication/packages',
+        required: true
+    )]
+    #[Assert\Positive]
+    #[Assert\NotNull]
+    #[Groups(['comSales:create'])]
+    protected ?int $packageId = null;
 
     #[ORM\ManyToOne]
     #[ORM\JoinColumn(nullable: false)]
-    private ?CommunicationPackage $package = null;
+    #[Groups(['comSales:read'])]
+    #[ApiProperty(
+        schema: ['application/json'],
+    )]
+    protected ?CommunicationPackage $package = null;
 
     #[ORM\ManyToOne]
     #[ORM\JoinColumn(nullable: false)]
-    private ?Account $tenant = null;
+    protected ?Account $tenant = null;
 
     #[ORM\Column(nullable: true)]
-    private ?float $discount = 0;
+    #[Groups(['comSales:read'])]
+    #[ApiProperty]
+    protected ?float $discount = 0;
 
     #[ORM\Column(nullable: true)]
-    private ?float $amountTax = 0;
+    #[Groups(['comSales:read'])]
+    #[ApiProperty]
+    protected ?float $amountTax = 0;
 
     #[ORM\Column]
-    private ?float $totalPrice = 0;
+    #[Groups(['comSales:read'])]
+    #[ApiProperty]
+    protected ?float $totalPrice = 0;
+
+    #[ORM\Column]
+    #[Groups(['comSales:read'])]
+    #[ApiProperty]
+    protected array $transactionStatus = [];
+
+    #[ORM\Column(length: 15)]
+    #[Groups(['comSales:read'])]
+    #[ApiProperty]
+    protected ?CommunicationStateEnum $state = null;
+
+    #[ApiProperty(
+        openapiContext: [
+            'type' => 'string',
+            'enum' => ['recharge', 'sale'],
+        ]
+    )]
+    #[ApiFilter(SearchFilter::class, strategy: SearchFilterInterface::STRATEGY_EXACT)]
+    #[Groups(['comSales:read'])]
+    public string $type;
 
     public function __construct()
     {
         $this->discount = 0;
         $this->amountTax = 0;
         $this->createdAt = new \DateTimeImmutable('now');
+        $this->transactionStatus = [];
     }
 
     public function getId(): ?int
@@ -244,5 +350,34 @@ class CommunicationSaleInfo
     public function setUpdated(): void
     {
         $this->updatedAt = new \DateTimeImmutable('now');
+    }
+
+    public function getTransactionStatus(): array
+    {
+        return $this->transactionStatus;
+    }
+
+    public function setTransactionStatus(array $transactionStatus): static
+    {
+        $this->transactionStatus = $transactionStatus;
+
+        return $this;
+    }
+
+    public function getState(): ?CommunicationStateEnum
+    {
+        return $this->state;
+    }
+
+    public function setState(CommunicationStateEnum $state): static
+    {
+        $this->state = $state;
+
+        return $this;
+    }
+
+    public function getCalculatePrice(): void
+    {
+        $this->totalPrice = $this->amount + $this->amountTax - $this->discount;
     }
 }

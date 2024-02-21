@@ -2,6 +2,9 @@
 
 namespace App\Entity;
 
+use ApiPlatform\Doctrine\Orm\Filter\SearchFilter;
+use ApiPlatform\Doctrine\Orm\Filter\DateFilter;
+use ApiPlatform\Metadata\ApiFilter;
 use ApiPlatform\Metadata\ApiProperty;
 use ApiPlatform\Metadata\ApiResource;
 use ApiPlatform\Metadata\Get;
@@ -28,6 +31,8 @@ use Symfony\Component\Validator\Constraints as Assert;
     denormalizationContext: ['groups' => ['comPackage:create', 'comPackage:update']],
 )]
 #[ORM\HasLifecycleCallbacks]
+#[ApiFilter(DateFilter::class, properties: ['startAt', 'endDateAt'])]
+#[ApiFilter(SearchFilter::class, properties: ['packageType'])]
 class CommunicationPackage
 {
     #[ORM\Id]
@@ -133,7 +138,15 @@ class CommunicationPackage
     private ?Account $tenant = null;
 
     #[ORM\Column(length: 10, nullable: true)]
-    #[ApiProperty]
+    #[ApiProperty(
+        description: 'Package Type. RT=Recharges, CT=Cubacel Tur ME=Modem 4G, PQ=Combined Packages, ET=Devices',
+        openapiContext: [
+            'type' => 'string',
+            'enum' => ['RT', 'CT', 'ME', 'PQ', 'ET'],
+            'example' => 'RT'
+        ]
+    )]
+    #[Groups(['comPackage:read'])]
     private ?string $packageType = 'RT';
 
     public function __construct()

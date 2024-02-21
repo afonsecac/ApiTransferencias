@@ -50,6 +50,12 @@ security:
         - { path: '^/api/docs/*', roles: PUBLIC_ACCESS }
         - { path: '^/api', roles: ROLE_API_USER }
         # - { path: ^/profile, roles: ROLE_USER }
+    role_hierarchy:
+        ROLE_API_SHOW: ROLE_USER
+        ROLE_API_EDITOR: ROLE_API_SHOW
+        ROLE_API_ADMIN: ROLE_API_EDITOR
+        ROLE_ADMIN: ROLE_API_ADMIN
+        ROLE_SUPER_ADMIN: ROLE_ADMIN
 
 when@test:
     security:

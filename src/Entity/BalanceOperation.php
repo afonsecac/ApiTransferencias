@@ -26,7 +26,7 @@ use Symfony\Component\Validator\Constraints as Assert;
             uriTemplate: '/balance',
             defaults: ['color' => 'brown'],
             normalizationContext: [
-                'groups' => ['balance:reading']
+                'groups' => ['balance:reading'],
             ],
             output: AccountBalanceDto::class,
             provider: BalanceProvider::class,
@@ -34,13 +34,13 @@ use Symfony\Component\Validator\Constraints as Assert;
         new GetCollection(
             uriTemplate: '/balance/operations',
             normalizationContext: [
-                'groups' => ['balance:read']
+                'groups' => ['balance:read'],
             ],
         ),
         new Post(
             uriTemplate: '/balance/operations',
             normalizationContext: [
-                'groups' => ['balance:create']
+                'groups' => ['balance:create'],
             ],
             input: CreateOperationDto::class,
             processor: CreateOperationProcessor::class
@@ -153,26 +153,6 @@ class BalanceOperation
     #[ApiProperty(
         schema: ['application/json'],
     )]
-    private ?CommunicationRecharge $recharge = null;
-
-    #[ORM\Column(nullable: true)]
-    private ?int $rechargeId = null;
-
-    #[ORM\ManyToOne]
-    #[Groups(['balance:read'])]
-    #[ApiProperty(
-        schema: ['application/json'],
-    )]
-    private ?CommunicationSale $sale = null;
-
-    #[ORM\Column(nullable: true)]
-    private ?int $saleId = null;
-
-    #[ORM\ManyToOne]
-    #[Groups(['balance:read'])]
-    #[ApiProperty(
-        schema: ['application/json'],
-    )]
     private ?Transfer $transfer = null;
 
     #[ORM\Column(nullable: true)]
@@ -193,6 +173,12 @@ class BalanceOperation
     #[ORM\Column(length: 10, nullable: true)]
     #[Groups(['balance:read'])]
     private ?string $operationType = null;
+
+    #[ORM\ManyToOne]
+    private ?CommunicationSaleInfo $communicationSale = null;
+
+    #[ORM\Column(nullable: true)]
+    private ?\DateTimeImmutable $disabledAt = null;
 
     public function __construct()
     {
@@ -317,54 +303,6 @@ class BalanceOperation
         return $this;
     }
 
-    public function getRecharge(): ?CommunicationRecharge
-    {
-        return $this->recharge;
-    }
-
-    public function setRecharge(?CommunicationRecharge $recharge): static
-    {
-        $this->recharge = $recharge;
-
-        return $this;
-    }
-
-    public function getRechargeId(): ?int
-    {
-        return $this->rechargeId;
-    }
-
-    public function setRechargeId(?int $rechargeId): static
-    {
-        $this->rechargeId = $rechargeId;
-
-        return $this;
-    }
-
-    public function getSale(): ?CommunicationSale
-    {
-        return $this->sale;
-    }
-
-    public function setSale(?CommunicationSale $sale): static
-    {
-        $this->sale = $sale;
-
-        return $this;
-    }
-
-    public function getSaleId(): ?int
-    {
-        return $this->saleId;
-    }
-
-    public function setSaleId(?int $saleId): static
-    {
-        $this->saleId = $saleId;
-
-        return $this;
-    }
-
     public function getTransfer(): ?Transfer
     {
         return $this->transfer;
@@ -450,5 +388,34 @@ class BalanceOperation
     public function setUpdated(): void
     {
         $this->updatedAt = new \DateTimeImmutable('now');
+    }
+
+    public function getCommunicationSale(): ?CommunicationSaleInfo
+    {
+        return $this->communicationSale;
+    }
+
+    public function setCommunicationSale(?CommunicationSaleInfo $communicationSale): static
+    {
+        $this->communicationSale = $communicationSale;
+
+        return $this;
+    }
+
+    public function getCalculateTotal(): void
+    {
+        $this->totalAmount = $this->amount + $this->amountTax - $this->discount;
+    }
+
+    public function getDisabledAt(): ?\DateTimeImmutable
+    {
+        return $this->disabledAt;
+    }
+
+    public function setDisabledAt(?\DateTimeImmutable $disabledAt): static
+    {
+        $this->disabledAt = $disabledAt;
+
+        return $this;
     }
 }
