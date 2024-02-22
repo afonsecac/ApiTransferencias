@@ -29,6 +29,7 @@ use Symfony\Component\Validator\Constraints as Assert;
     ],
     normalizationContext: ['groups' => ['comPackage:read']],
     denormalizationContext: ['groups' => ['comPackage:create', 'comPackage:update']],
+    security: "is_granted('ROLE_COM_API_USER')",
 )]
 #[ORM\HasLifecycleCallbacks]
 #[ApiFilter(DateFilter::class, properties: ['startAt', 'endDateAt'])]

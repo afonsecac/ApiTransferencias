@@ -20,7 +20,8 @@ use Symfony\Component\Validator\Constraints as Assert;
         new GetCollection(),
     ],
     normalizationContext: ['groups' => ['province:read']],
-    denormalizationContext: ['groups' => ['province:write']]
+    denormalizationContext: ['groups' => ['province:write']],
+    security: "is_granted('ROLE_REM_API_USER')",
 )]
 class Province
 {

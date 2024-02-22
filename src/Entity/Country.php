@@ -30,7 +30,8 @@ use Symfony\Component\Validator\Constraints as Assert;
         new GetCollection(),
     ],
     normalizationContext: ['groups' => ['country:read']],
-    denormalizationContext: ['groups' => ['country:write']]
+    denormalizationContext: ['groups' => ['country:write']],
+    security: "is_granted('ROLE_REM_API_USER')",
 )]
 class Country
 {

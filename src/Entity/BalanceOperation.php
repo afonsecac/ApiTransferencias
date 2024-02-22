@@ -48,6 +48,7 @@ use Symfony\Component\Validator\Constraints as Assert;
     ],
     normalizationContext: ['groups' => ['balance:read', 'balance:reading']],
     denormalizationContext: ['groups' => ['balance:update', 'balance:create']],
+    security: "is_granted('ROLE_API_USER')",
 )]
 #[ApiFilter(DateFilter::class, properties: ['createdAt'])]
 #[ORM\HasLifecycleCallbacks]

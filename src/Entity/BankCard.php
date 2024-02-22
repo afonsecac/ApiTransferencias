@@ -41,6 +41,7 @@ use Symfony\Component\Validator\Constraints as Assert;
     ],
     normalizationContext: ['groups' => ['bankCard:read']],
     denormalizationContext: ['groups' => ['bankCard:write']],
+    security: "is_granted('ROLE_REM_API_USER')",
 )]
 #[ORM\UniqueConstraint(
     name: "unique_card_by_beneficiary",

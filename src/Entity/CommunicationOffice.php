@@ -27,6 +27,7 @@ use Symfony\Component\Serializer\Attribute\Groups;
         ),
     ],
     normalizationContext: ['groups' => ['comOffices:read']],
+    security: "is_granted('ROLE_COM_API_USER')",
 )]
 class CommunicationOffice
 {

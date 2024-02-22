@@ -4,9 +4,11 @@ namespace App\EventListener;
 
 use App\Exception\MyCurrentException;
 use Symfony\Component\EventDispatcher\Attribute\AsEventListener;
+use Symfony\Component\Finder\Exception\AccessDeniedException;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Event\ExceptionEvent;
+use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 
 #[AsEventListener]
@@ -37,6 +39,12 @@ class ExceptionListener
                     'code' => $exception->getCodeWork(),
                 ]
             ], Response::HTTP_BAD_REQUEST);
+        } elseif ($exception instanceof AccessDeniedException || $exception instanceof AccessDeniedHttpException) {
+            $response = new JsonResponse([
+                'error' => [
+                    'message' => $exception->getMessage()
+                ]
+            ], $exception->getStatusCode());
         } elseif ($exception instanceof HttpExceptionInterface || $exception instanceof \ApiPlatform\Metadata\Exception\HttpExceptionInterface) {
             $response->setStatusCode($exception->getStatusCode());
             $response->headers->replace($exception->getHeaders());

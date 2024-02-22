@@ -34,6 +34,7 @@ use Symfony\Component\Validator\Constraints as Assert;
     ],
     normalizationContext: ['groups' => ['sender:read']],
     denormalizationContext: ['groups' => ['sender:write']],
+    security: "is_granted('ROLE_REM_API_USER')",
 )]
 #[ApiFilter(DateFilter::class, properties: ['dateOfBirth'])]
 #[ApiFilter(SearchFilter::class, properties: [

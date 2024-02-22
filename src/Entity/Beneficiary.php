@@ -34,6 +34,7 @@ use Symfony\Component\Validator\Constraints as Assert;
     ],
     normalizationContext: ['groups' => ['beneficiary:read']],
     denormalizationContext: ['groups' => ['beneficiary:write']],
+    security: "is_granted('ROLE_REM_API_USER')",
 )]
 #[ORM\UniqueConstraint(
     name: "unique_beneficiary_by_environment",

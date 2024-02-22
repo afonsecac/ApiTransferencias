@@ -12,6 +12,7 @@ use Symfony\Component\Validator\Constraints as Assert;
 #[ORM\Entity(repositoryClass: CommunicationSaleRechargeRepository::class)]
 #[ApiResource(
     operations: [],
+    security: "is_granted('ROLE_COM_API_USER')",
 )]
 class CommunicationSaleRecharge extends CommunicationSaleInfo
 {

@@ -19,6 +19,7 @@ use Symfony\Component\Serializer\Attribute\Groups;
         )
     ],
     normalizationContext: ['groups' => ['comNationality:read']],
+    security: "is_granted('ROLE_COM_API_USER')",
 )]
 #[ApiFilter(SearchFilter::class, properties: ['codeAlpha3', 'name'])]
 class CommunicationNationality

@@ -57,6 +57,7 @@ use Symfony\Component\Validator\Constraints as Assert;
     ],
     normalizationContext: ['groups' => ['comSales:read']],
     denormalizationContext: ['groups' => ['comSales:update', 'comSales:create']],
+    security: "is_granted('ROLE_COM_API_USER')",
 )]
 #[ApiFilter(DateFilter::class, properties: ['createdAt'])]
 class CommunicationSaleInfo

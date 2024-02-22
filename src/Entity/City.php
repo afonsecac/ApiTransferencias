@@ -16,7 +16,8 @@ use Symfony\Component\Validator\Constraints as Assert;
         new GetCollection(),
     ],
     normalizationContext: ['groups' => ['city:read']],
-    denormalizationContext: ['groups' => ['city:write']]
+    denormalizationContext: ['groups' => ['city:write']],
+    security: "is_granted('ROLE_REM_API_USER')",
 )]
 class City
 {
