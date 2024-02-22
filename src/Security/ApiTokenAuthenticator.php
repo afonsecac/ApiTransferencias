@@ -2,6 +2,7 @@
 
 namespace App\Security;
 
+use ApiPlatform\Symfony\Security\Exception\AccessDeniedException;
 use App\Repository\AccountRepository;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -46,14 +47,23 @@ class ApiTokenAuthenticator extends AbstractAuthenticator
         if (!$currentToken) {
             throw new CustomUserMessageAuthenticationException('No valid token');
         }
-
         $permission = $this->permission->findOneBy([
             'accessToken' => $currentToken,
-            'isActive' => true
+            'isActive' => true,
         ]);
 
         if (is_null($permission)) {
             throw new CustomUserMessageAuthenticationException('User not found');
+        }
+        $ips = $request->headers->get('X-Forwarded-For') ?? $request->headers->get('x-forwarded-for');
+        $referer = $request->headers->get("Referer");
+        $host = $request->headers->get("host");
+        $isWebPage = !is_null($referer) && strpos($host, $referer) >= 0;
+
+        $isLocal = str_contains($ips, "127.0.0.1") || str_contains($ips, "::1");
+        $isRemote = !is_null($ips) && !empty($ips) && !empty($permission->getOrigin()) && (strpos($ips, $permission->getOrigin()) >= 0 || strpos( "*", $permission->getOrigin()) >= 0);
+        if (!$isLocal && !$isRemote && !$isWebPage) {
+            throw new AccessDeniedException();
         }
 
         return new SelfValidatingPassport(new UserBadge($permission->getUserIdentifier()));
@@ -73,7 +83,7 @@ class ApiTokenAuthenticator extends AbstractAuthenticator
     public function onAuthenticationFailure(Request $request, AuthenticationException $exception): ?Response
     {
         $data = [
-            'error' => strtr($exception->getMessageKey(), $exception->getMessageData())
+            'error' => strtr($exception->getMessageKey(), $exception->getMessageData()),
         ];
 
         return new JsonResponse($data, Response::HTTP_UNAUTHORIZED);

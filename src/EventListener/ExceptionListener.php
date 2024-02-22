@@ -10,6 +10,7 @@ use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Event\ExceptionEvent;
 use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
+use Symfony\Component\Security\Core\Exception\InsufficientAuthenticationException;
 
 #[AsEventListener]
 class ExceptionListener
@@ -19,7 +20,7 @@ class ExceptionListener
         $exception = $event->getThrowable();
 
         $message = sprintf(
-            'Error says: %s with code: %s',
+            'Error: %s with code: %s',
             $exception->getMessage(),
             $exception->getCode()
         );
@@ -32,19 +33,19 @@ class ExceptionListener
             $response = new JsonResponse([
                 'error' => [
                     'message' => sprintf(
-                        'Error says: %s with code: %s',
+                        'Error: %s with code: %s',
                         $exception->getMessage(),
                         $exception->getCodeWork()
                     ),
                     'code' => $exception->getCodeWork(),
                 ]
             ], Response::HTTP_BAD_REQUEST);
-        } elseif ($exception instanceof AccessDeniedException || $exception instanceof AccessDeniedHttpException) {
+        } elseif ($exception instanceof AccessDeniedException || $exception instanceof InsufficientAuthenticationException || $exception instanceof AccessDeniedHttpException) {
             $response = new JsonResponse([
                 'error' => [
                     'message' => $exception->getMessage()
                 ]
-            ], $exception->getStatusCode());
+            ], 403);
         } elseif ($exception instanceof HttpExceptionInterface || $exception instanceof \ApiPlatform\Metadata\Exception\HttpExceptionInterface) {
             $response->setStatusCode($exception->getStatusCode());
             $response->headers->replace($exception->getHeaders());
