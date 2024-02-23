@@ -52,7 +52,7 @@ class ApiTokenAuthenticator extends AbstractAuthenticator
             'isActive' => true,
         ]);
 
-        if (is_null($permission)) {
+        if (is_null($permission) || !$permission->getClient()?->isIsActive()) {
             throw new CustomUserMessageAuthenticationException('User not found');
         }
         $ips = $request->headers->get('X-Forwarded-For') ?? $request->headers->get('x-forwarded-for');
