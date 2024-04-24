@@ -78,6 +78,7 @@ class ApiTokenAuthenticator extends AbstractAuthenticator
                 'ips' => $ips,
                 'url' => $request->getPathInfo(),
                 'headers' => $request->headers->all(),
+                'request' => $request->request->all(),
             ]);
             throw new AccessDeniedException();
         }
