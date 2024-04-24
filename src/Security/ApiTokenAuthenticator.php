@@ -64,6 +64,10 @@ class ApiTokenAuthenticator extends AbstractAuthenticator
             throw new CustomUserMessageAuthenticationException('User not found');
         }
         $ips = $request->headers->get('X-Forwarded-For') ?? $request->headers->get('x-forwarded-for');
+        $otherIps = $request->getClientIps();
+        if (is_null($ips) && count($otherIps) !== 0) {
+            $ips = implode(",", $otherIps);
+        }
         $referer = $request->headers->get("Referer");
         $host = $request->headers->get("host");
         $isWebPage = !is_null($referer) && strpos($host, $referer) >= 0;
