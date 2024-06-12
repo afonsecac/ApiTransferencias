@@ -22,8 +22,8 @@ use Symfony\Component\Validator\Constraints as Assert;
             uriTemplate: '/communication/promotions',
         ),
     ],
-    normalizationContext: ['groups' => ['comPackage:read']],
-    denormalizationContext: ['groups' => ['comPackage:create', 'comPackage:update']],
+    normalizationContext: ['groups' => ['comProm:read']],
+    denormalizationContext: ['groups' => ['comProm:create', 'comProm:update']],
     order: ['packageClientPrice.amount' => 'DESC'],
     security: "is_granted('ROLE_COM_API_USER')"
 )]
@@ -32,22 +32,22 @@ class CommunicationPromotions
     #[ORM\Id]
     #[ORM\GeneratedValue]
     #[ORM\Column]
-    #[Groups(['comPackage:read'])]
+    #[Groups(['comProm:read'])]
     #[ApiProperty(identifier: true)]
     private ?int $id = null;
 
     #[ORM\Column(length: 255)]
-    #[Groups(['comPackage:read'])]
+    #[Groups(['comProm:read'])]
     #[ApiProperty()]
     private ?string $name = null;
 
     #[ORM\Column(length: 255)]
-    #[Groups(['comPackage:read'])]
+    #[Groups(['comProm:read'])]
     #[ApiProperty()]
     private ?string $description = null;
 
     #[ORM\Column(type: Types::TEXT)]
-    #[Groups(['comPackage:read'])]
+    #[Groups(['comProm:read'])]
     #[ApiProperty()]
     private ?string $infoDescription = null;
 
@@ -110,7 +110,7 @@ class CommunicationPromotions
             ],
         ]
     )]
-    #[Groups(['comPackage:read'])]
+    #[Groups(['comProm:read'])]
     private array $terms = [];
 
     #[ORM\Column]
@@ -120,19 +120,19 @@ class CommunicationPromotions
     private ?\DateTimeImmutable $updatedAt = null;
 
     #[ORM\Column]
-    #[Groups(['comPackage:read'])]
+    #[Groups(['comProm:read'])]
     #[Assert\NotNull]
     #[ApiProperty(types: 'https://scheme.org/DateTime')]
     private ?\DateTimeImmutable $startAt = null;
 
     #[ORM\Column]
-    #[Groups(['comPackage:read'])]
+    #[Groups(['comProm:read'])]
     #[Assert\NotNull]
     #[ApiProperty(types: 'https://scheme.org/DateTime')]
     private ?\DateTimeImmutable $endAt = null;
 
     #[ORM\ManyToMany(targetEntity: CommunicationClientPackage::class, inversedBy: 'currentPromotions')]
-    #[Groups(['comPackage:read'])]
+    #[Groups(['comProm:read'])]
     #[ApiProperty]
     private Collection $products;
 

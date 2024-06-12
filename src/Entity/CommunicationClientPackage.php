@@ -43,7 +43,7 @@ class CommunicationClientPackage
     #[ORM\Id]
     #[ORM\GeneratedValue]
     #[ORM\Column]
-    #[Groups(['comPackage:read'])]
+    #[Groups(['comPackage:read', 'comProm:read'])]
     #[ApiProperty(identifier: true)]
     private ?int $id = null;
 
@@ -136,12 +136,12 @@ class CommunicationClientPackage
     private array $benefits = [];
 
     #[ORM\Column(length: 255)]
-    #[Groups(['comPackage:read'])]
+    #[Groups(['comPackage:read', 'comProm:read'])]
     #[ApiProperty]
     private ?string $description = null;
 
     #[ORM\Column(length: 255)]
-    #[Groups(['comPackage:read'])]
+    #[Groups(['comPackage:read','comProm:read'])]
     #[Assert\NotNull]
     #[ApiProperty]
     private ?string $name = null;

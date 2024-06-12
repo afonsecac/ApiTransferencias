@@ -26,6 +26,7 @@ api_platform:
             email: "support@sendmundo.com"
             url: "https://sendmundo.com/contact"
     defaults:
+        enable_link_security: true
         pagination_client_enabled: true
         pagination_items_per_page: 50
         pagination_minim_items_per_page: 10
