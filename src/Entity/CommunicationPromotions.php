@@ -4,7 +4,6 @@ namespace App\Entity;
 
 use ApiPlatform\Metadata\ApiProperty;
 use ApiPlatform\Metadata\ApiResource;
-use ApiPlatform\Metadata\Get;
 use ApiPlatform\Metadata\GetCollection;
 use App\Repository\CommunicationPromotionsRepository;
 use Doctrine\Common\Collections\ArrayCollection;
@@ -51,64 +50,7 @@ class CommunicationPromotions
     private ?string $infoDescription = null;
 
     #[ORM\Column]
-    #[ApiProperty(
-        description: 'List of benefits and terms',
-        openapiContext: [
-            'type' => 'array',
-            'items' => [
-                'type' => 'object',
-                'properties' => [
-                    'additional_information' => [
-                        'type' => 'string',
-                    ],
-                    'amount' => [
-                        'type' => 'object',
-                        'properties' => [
-                            'base' => [
-                                'type' => 'integer',
-                            ],
-                            'promotion_bonus' => [
-                                'type' => 'integer',
-                            ],
-                            'total_excluding_tax' => [
-                                'type' => 'integer',
-                            ],
-                            'total_including_tax' => [
-                                'type' => 'integer',
-                            ],
-                        ],
-                    ],
-                    'type' => [
-                        'type' => 'string',
-                        'enum' => ['CREDITS', 'TALKTIME', 'DATA', 'SMS'],
-                    ],
-                    'unit' => [
-                        'type' => 'string',
-                        'enum' => ['CUP', 'USD', 'UNITS', 'MINUTES', 'GB', 'ILIM'],
-                    ],
-                    'unit_type' => [
-                        'type' => 'string',
-                        'enum' => ['CURRENCY', 'QUANTITY', 'DATA', 'TIME'],
-                    ],
-                    'schedule' => [
-                        'type' => 'object',
-                        'properties' => [
-                            'start' => [
-                                'type' => 'string',
-                            ],
-                            'end' => [
-                                'type' => 'string',
-                                'nullable' => true,
-                                'default' => null,
-                            ],
-                        ],
-                        'default' => null,
-                        'nullable' => true,
-                    ],
-                ],
-            ],
-        ]
-    )]
+    #[ApiProperty]
     #[Groups(['comProm:read'])]
     private array $terms = [];
 
