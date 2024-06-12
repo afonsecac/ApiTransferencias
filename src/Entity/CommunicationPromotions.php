@@ -24,7 +24,6 @@ use Symfony\Component\Validator\Constraints as Assert;
     ],
     normalizationContext: ['groups' => ['comProm:read']],
     denormalizationContext: ['groups' => ['comProm:create', 'comProm:update']],
-    order: ['packageClientPrice.amount' => 'DESC'],
     security: "is_granted('ROLE_COM_API_USER')"
 )]
 class CommunicationPromotions
