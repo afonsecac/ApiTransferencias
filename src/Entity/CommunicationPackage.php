@@ -2,38 +2,16 @@
 
 namespace App\Entity;
 
-use ApiPlatform\Doctrine\Orm\Filter\SearchFilter;
-use ApiPlatform\Doctrine\Orm\Filter\DateFilter;
-use ApiPlatform\Metadata\ApiFilter;
 use ApiPlatform\Metadata\ApiProperty;
-use ApiPlatform\Metadata\ApiResource;
-use ApiPlatform\Metadata\Get;
-use ApiPlatform\Metadata\GetCollection;
 use App\Repository\CommunicationPackageRepository;
+use Doctrine\Common\Collections\ArrayCollection;
+use Doctrine\Common\Collections\Collection;
 use Doctrine\ORM\Mapping as ORM;
 use Symfony\Component\Serializer\Attribute\Groups;
 use Symfony\Component\Validator\Constraints as Assert;
 
 #[ORM\Entity(repositoryClass: CommunicationPackageRepository::class)]
-#[ApiResource(
-    uriTemplate: '/communication/packages',
-    operations: [
-        new Get(
-            uriTemplate: '/communication/packages/{id}',
-            defaults: ['color' => 'brown'],
-            requirements: ['id' => '\d+'],
-        ),
-        new GetCollection(
-            uriTemplate: '/communication/packages',
-        ),
-    ],
-    normalizationContext: ['groups' => ['comPackage:read']],
-    denormalizationContext: ['groups' => ['comPackage:create', 'comPackage:update']],
-    security: "is_granted('ROLE_COM_API_USER')",
-)]
 #[ORM\HasLifecycleCallbacks]
-#[ApiFilter(DateFilter::class, properties: ['startAt', 'endDateAt'])]
-#[ApiFilter(SearchFilter::class, properties: ['packageType'])]
 class CommunicationPackage
 {
     #[ORM\Id]
@@ -150,10 +128,14 @@ class CommunicationPackage
     #[Groups(['comPackage:read'])]
     private ?string $packageType = 'RT';
 
+    #[ORM\ManyToMany(targetEntity: CommunicationPromotions::class, mappedBy: 'products')]
+    private Collection $currentPromotions;
+
     public function __construct()
     {
         $this->isEnabled = true;
         $this->packageType = 'RT';
+        $this->currentPromotions = new ArrayCollection();
     }
 
     public function getId(): ?int
@@ -373,6 +355,33 @@ class CommunicationPackage
     public function setPackageType(?string $packageType): static
     {
         $this->packageType = $packageType;
+
+        return $this;
+    }
+
+    /**
+     * @return Collection<int, CommunicationPromotions>
+     */
+    public function getCurrentPromotions(): Collection
+    {
+        return $this->currentPromotions;
+    }
+
+    public function addCurrentPromotion(CommunicationPromotions $currentPromotion): static
+    {
+        if (!$this->currentPromotions->contains($currentPromotion)) {
+            $this->currentPromotions->add($currentPromotion);
+            $currentPromotion->addProduct($this);
+        }
+
+        return $this;
+    }
+
+    public function removeCurrentPromotion(CommunicationPromotions $currentPromotion): static
+    {
+        if ($this->currentPromotions->removeElement($currentPromotion)) {
+            $currentPromotion->removeProduct($this);
+        }
 
         return $this;
     }

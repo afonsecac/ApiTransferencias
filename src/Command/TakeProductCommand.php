@@ -15,7 +15,7 @@ use Symfony\Contracts\HttpClient\Exception\RedirectionExceptionInterface;
 use Symfony\Contracts\HttpClient\Exception\ServerExceptionInterface;
 use Symfony\Contracts\HttpClient\Exception\TransportExceptionInterface;
 
-#[AsCommand('app:takeProduct:command', 'Takes products of environments')]
+#[AsCommand('app:takeProduct', 'Takes products of environments')]
 class TakeProductCommand extends Command
 {
     public function __construct(

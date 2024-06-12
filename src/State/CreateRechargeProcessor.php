@@ -53,6 +53,7 @@ class CreateRechargeProcessor implements ProcessorInterface
      * @return CommunicationRecharge|mixed
      * @throws MyCurrentException
      * @throws DecodingExceptionInterface
+     * @throws \JsonException
      */
     public function process(
         mixed $data,
@@ -182,10 +183,7 @@ class CreateRechargeProcessor implements ProcessorInterface
                             $streamContent = fopen($ex->getResponse()->getContent(), 'r');
                             $meta = stream_get_meta_data($streamContent);
                             $info = $meta;
-                        } catch (ClientExceptionInterface $e) {
-                        } catch (RedirectionExceptionInterface $e) {
-                        } catch (ServerExceptionInterface $e) {
-                        } catch (TransportExceptionInterface $e) {
+                        } catch (ClientExceptionInterface|RedirectionExceptionInterface|ServerExceptionInterface|TransportExceptionInterface $e) {
                         }
                         $comInfo['code'] = 'COM004';
                         $comInfo['error'] = 'The provider server no response';

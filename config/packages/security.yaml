@@ -46,6 +46,7 @@ security:
     # Note: Only the *first* access control that matches will be used
     access_control:
         - { path: '^/api/login', roles: PUBLIC_ACCESS }
+        - { path: '^/api/admin/*', roles: PUBLIC_ACCESS }
         - { path: '^/api/docs', roles: PUBLIC_ACCESS }
         - { path: '^/api/docs/*', roles: PUBLIC_ACCESS }
         - { path: '^/api', roles: ROLE_API_USER }
@@ -56,7 +57,7 @@ security:
         ROLE_COM_API_USER: ROLE_API_USER
         ROLE_REM_API_USER: ROLE_API_USER
         ROLE_COM_API_ADMIN: [ROLE_COM_API_USER]
-        ROLE_REM_API_ADMIN: []ROLE_REM_API_USER]
+        ROLE_REM_API_ADMIN: [ROLE_REM_API_USER]
         ROLE_API_ADMIN: [ROLE_API_EDITOR, ROLE_COM_API_ADMIN, ROLE_REM_API_ADMIN]
         ROLE_ADMIN: ROLE_API_ADMIN
         ROLE_SUPER_ADMIN: ROLE_ADMIN

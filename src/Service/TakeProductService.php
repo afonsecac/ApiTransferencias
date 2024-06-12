@@ -79,25 +79,28 @@ class TakeProductService extends CommonService
                 ]
             );
 
-            $content = $response->getContent();
             $products = (object)$response->toArray();
+            $currentDate = new \DateTimeImmutable();
             foreach ($products as $productItem) {
                 $currentProduct = (object)$productItem;
-                $product = new CommunicationProduct();
-                $product->setPackageType($currentProduct->PackageType);
-                $product->setEnvironment($item);
-                $product->setPackageId($currentProduct->Id);
-                $product->setDescription($currentProduct->Description);
-                $product->setEnabled($currentProduct->Enabled);
-                if (!is_null($currentProduct->InitialDate)) {
-                    $product->setInitialDate(new \DateTimeImmutable($currentProduct->InitialDate));
+                $endDate = !is_null($currentProduct->FinalDate) ? new \DateTimeImmutable($currentProduct->FinalDate) : null;
+                if ((is_null($endDate) || $currentDate <= $endDate) && $currentProduct->Enabled) {
+                    $product = new CommunicationProduct();
+                    $product->setPackageType($currentProduct->PackageType);
+                    $product->setEnvironment($item);
+                    $product->setPackageId($currentProduct->Id);
+                    $product->setDescription($currentProduct->Description);
+                    $product->setEnabled($currentProduct->Enabled);
+                    if (!is_null($currentProduct->InitialDate)) {
+                        $product->setInitialDate(new \DateTimeImmutable($currentProduct->InitialDate));
+                    }
+                    if (!is_null($endDate)) {
+                        $product->setEndDateAt($endDate);
+                    }
+                    $product->setPrice($currentProduct->Price);
+                    $product->setProductType($currentProduct->PackageType);
+                    $this->em->persist($product);
                 }
-                if (!is_null($currentProduct->FinalDate)) {
-                    $product->setEndDateAt(new \DateTimeImmutable($currentProduct->FinalDate));
-                }
-                $product->setPrice($currentProduct->Price);
-                $product->setProductType($currentProduct->PackageType);
-                $this->em->persist($product);
             }
         }
 
