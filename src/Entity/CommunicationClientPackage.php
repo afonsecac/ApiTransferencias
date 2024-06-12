@@ -51,10 +51,6 @@ class CommunicationClientPackage
     #[ORM\JoinColumn(nullable: false)]
     private ?Account $tenant = null;
 
-    #[ORM\ManyToOne]
-    #[ORM\JoinColumn(name: "package_client_price", nullable: false)]
-    private ?CommunicationPricePackage $packageClientPrice = null;
-
     #[ORM\Column]
     private ?\DateTimeImmutable $createdAt = null;
 
@@ -255,18 +251,6 @@ class CommunicationClientPackage
     public function setTenant(?Account $tenant): static
     {
         $this->tenant = $tenant;
-
-        return $this;
-    }
-
-    public function getPackageClientPrice(): ?CommunicationPricePackage
-    {
-        return $this->packageClientPrice;
-    }
-
-    public function setPackageClientPrice(?CommunicationPricePackage $packageClientPrice): static
-    {
-        $this->packageClientPrice = $packageClientPrice;
 
         return $this;
     }
