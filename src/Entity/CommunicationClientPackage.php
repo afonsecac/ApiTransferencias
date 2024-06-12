@@ -33,7 +33,6 @@ use Symfony\Component\Serializer\Attribute\Groups;
     ],
     normalizationContext: ['groups' => ['comPackage:read']],
     denormalizationContext: ['groups' => ['comPackage:create', 'comPackage:update']],
-    order: ['packageClientPrice.amount' => 'DESC'],
     security: "is_granted('ROLE_COM_API_USER')"
 )]
 #[ApiFilter(DateFilter::class, properties: ['activeStartAt', 'activeEndAt'])]
