@@ -9,9 +9,11 @@ use ApiPlatform\Metadata\Operation;
 use App\Entity\Account;
 use App\Entity\BankCard;
 use App\Entity\City;
+use App\Entity\CommunicationClientPackage;
 use App\Entity\CommunicationNationality;
 use App\Entity\CommunicationOffice;
 use App\Entity\CommunicationPackage;
+use App\Entity\CommunicationPromotions;
 use App\Entity\CommunicationProvinces;
 use App\Entity\Country;
 use App\Entity\Province;
@@ -70,7 +72,7 @@ final class CurrentUserExtension implements QueryCollectionExtensionInterface, Q
                     City::class,
                     CommunicationNationality::class,
                     CommunicationProvinces::class,
-                    CommunicationOffice::class
+                    CommunicationOffice::class,
                 ]
             )) {
                 $environment = $user->getEnvironment();
@@ -80,15 +82,11 @@ final class CurrentUserExtension implements QueryCollectionExtensionInterface, Q
                 $queryBuilder->innerJoin(sprintf('%s.beneficiary', $rootAlias), 'b')
                     ->andWhere('b.tenant = :current_user')
                     ->setParameter('current_user', $user->getId());
-            } else {
+            } elseif ($resourceClass !== CommunicationPromotions::class) {
                 $queryBuilder->andWhere(sprintf('%s.tenant = :current_user', $rootAlias));
                 $queryBuilder->setParameter('current_user', $user->getId());
-                if ($resourceClass == CommunicationPackage::class) {
-                    $queryBuilder->andWhere(sprintf('%s.isEnabled = :sIsEnabled', $rootAlias))
-                        ->setParameter('sIsEnabled', true)
-                        ->addOrderBy(sprintf('%s.comId', $rootAlias))
-                        ->addOrderBy(sprintf('%s.amount', $rootAlias));
-
+                if ($resourceClass === CommunicationClientPackage::class) {
+                    $queryBuilder->addOrderBy(sprintf('%s.name', $rootAlias));
                 }
             }
         }

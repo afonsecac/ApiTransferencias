@@ -430,7 +430,11 @@ class CommunicationClientPackage
      */
     public function getPromotions(): Collection
     {
-        return $this->promotions;
+
+        return $this->promotions->filter(function (CommunicationPromotions $promotion) {
+            $currentDate = new \DateTimeImmutable();
+            return (is_null($promotion->getEndAt()) || $promotion->getEndAt() >= $currentDate) && $promotion->getStartAt() <= $currentDate;
+        });
     }
 
     public function addPromotion(CommunicationPromotions $promotion): static

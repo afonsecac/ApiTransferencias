@@ -74,10 +74,6 @@ class CommunicationPromotions
 
     #[ORM\ManyToOne]
     #[ORM\JoinColumn(nullable: false)]
-    private ?Account $tenant = null;
-
-    #[ORM\ManyToOne]
-    #[ORM\JoinColumn(nullable: false)]
     private ?CommunicationProduct $product = null;
 
     #[ORM\ManyToMany(targetEntity: CommunicationClientPackage::class, inversedBy: 'promotions')]
@@ -187,18 +183,6 @@ class CommunicationPromotions
     public function setEndAt(\DateTimeImmutable $endAt): static
     {
         $this->endAt = $endAt;
-
-        return $this;
-    }
-
-    public function getTenant(): ?Account
-    {
-        return $this->tenant;
-    }
-
-    public function setTenant(?Account $tenant): static
-    {
-        $this->tenant = $tenant;
 
         return $this;
     }

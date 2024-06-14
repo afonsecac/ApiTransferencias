@@ -31,18 +31,20 @@ class CommunicationClientPackageProvider implements ProviderInterface
     public function provide(Operation $operation, array $uriVariables = [], array $context = []): object|array|null
     {
         $clientPackages = $this->itemProvider->provide($operation, $uriVariables, $context);
-        $tenant = $this->security->getUser();
 
         if ($clientPackages->count() === 0) {
-            $packageItems = $this->em->getRepository(CommunicationPricePackage::class)->findBy([
-                'tenant' => null
-            ], ['price' => 'ASC']);
-            foreach ($packageItems as $packageItem) {
-                $this->packagePriceService->copyPricePackage($packageItem, $tenant);
-            }
-            $this->em->flush();
+            $tenant = $this->security->getUser();
+            if (!is_null($tenant) && $tenant instanceof Account) {
+                $packageItems = $this->em->getRepository(CommunicationPricePackage::class)->findBy([
+                    'tenant' => null
+                ], ['price' => 'ASC']);
+                foreach ($packageItems as $packageItem) {
+                    $this->packagePriceService->copyPricePackage($packageItem, $tenant);
+                }
+                $this->em->flush();
 
-            $clientPackages = $this->itemProvider->provide($operation, $uriVariables, $context);
+                $clientPackages = $this->itemProvider->provide($operation, $uriVariables, $context);
+            }
         }
 
         return $clientPackages;
