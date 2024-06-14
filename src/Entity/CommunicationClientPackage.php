@@ -31,6 +31,7 @@ use Symfony\Component\Serializer\Attribute\Groups;
         ),
         new GetCollection(
             uriTemplate: '/communication/packages',
+            provider: CommunicationClientPackageProvider::class,
         ),
     ],
     normalizationContext: ['groups' => ['comPackage:read']],
