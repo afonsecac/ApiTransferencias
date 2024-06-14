@@ -331,7 +331,16 @@ class CommunicationClientPackage
 
     public function getBenefits(): array
     {
-        return $this->benefits;
+        $benefitsOut = $this->benefits;
+        if ($this->getPromotions()->count() > 0) {
+            $amountOut = $benefitsOut[0]['amount'];
+            $amountOut['promotion_bonus'] = $amountOut['base'] * 11;
+            $total = $amountOut['base'] + $amountOut['promotion_bonus'];
+            $amountOut['total_excluding_tax'] = $total;
+            $amountOut['total_including_tax'] = $total;
+            $benefitsOut[0]['amount'] = $amountOut;
+        }
+        return $benefitsOut;
     }
 
     public function setBenefits(array $benefits): static
