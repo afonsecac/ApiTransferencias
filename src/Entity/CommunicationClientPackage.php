@@ -13,6 +13,8 @@ use App\DTO\InputPaginationPackage;
 use App\DTO\OutputPaginationPackage;
 use App\Repository\CommunicationClientPackageRepository;
 use App\State\CommunicationClientPackageProvider;
+use Doctrine\Common\Collections\ArrayCollection;
+use Doctrine\Common\Collections\Collection;
 use Doctrine\ORM\Mapping as ORM;
 use Symfony\Component\Serializer\Attribute\Groups;
     use Symfony\Component\Validator\Constraints as Assert;
@@ -227,6 +229,15 @@ class CommunicationClientPackage
     #[ApiProperty]
     private ?string $knowMore = null;
 
+    #[ORM\ManyToMany(targetEntity: CommunicationPromotions::class, mappedBy: 'products')]
+    #[Groups(['comPackage:read'])]
+    #[ApiProperty]
+    private Collection $promotions;
+
+    #[ORM\ManyToOne]
+    #[ORM\JoinColumn(nullable: false)]
+    private ?CommunicationPricePackage $priceClientPackage = null;
+
     public function __construct()
     {
         $this->activeStartAt = new \DateTimeImmutable();
@@ -235,6 +246,7 @@ class CommunicationClientPackage
         $this->service = [];
         $this->destination = [];
         $this->validity = [];
+        $this->promotions = new ArrayCollection();
     }
 
     public function getId(): ?int
@@ -408,6 +420,45 @@ class CommunicationClientPackage
     public function setKnowMore(?string $knowMore): static
     {
         $this->knowMore = $knowMore;
+
+        return $this;
+    }
+
+    /**
+     * @return Collection<int, CommunicationPromotions>
+     */
+    public function getPromotions(): Collection
+    {
+        return $this->promotions;
+    }
+
+    public function addPromotion(CommunicationPromotions $promotion): static
+    {
+        if (!$this->promotions->contains($promotion)) {
+            $this->promotions->add($promotion);
+            $promotion->addProduct($this);
+        }
+
+        return $this;
+    }
+
+    public function removePromotion(CommunicationPromotions $promotion): static
+    {
+        if ($this->promotions->removeElement($promotion)) {
+            $promotion->removeProduct($this);
+        }
+
+        return $this;
+    }
+
+    public function getPriceClientPackage(): ?CommunicationPricePackage
+    {
+        return $this->priceClientPackage;
+    }
+
+    public function setPriceClientPackage(?CommunicationPricePackage $priceClientPackage): static
+    {
+        $this->priceClientPackage = $priceClientPackage;
 
         return $this;
     }

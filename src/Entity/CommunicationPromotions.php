@@ -30,28 +30,28 @@ class CommunicationPromotions
     #[ORM\Id]
     #[ORM\GeneratedValue]
     #[ORM\Column]
-    #[Groups(['comProm:read'])]
+    #[Groups(['comProm:read', 'comPackage:read'])]
     #[ApiProperty(identifier: true)]
     private ?int $id = null;
 
     #[ORM\Column(length: 255)]
-    #[Groups(['comProm:read'])]
+    #[Groups(['comProm:read', 'comPackage:read'])]
     #[ApiProperty()]
     private ?string $name = null;
 
     #[ORM\Column(length: 255)]
-    #[Groups(['comProm:read'])]
-    #[ApiProperty()]
+    #[Groups(['comProm:read', 'comPackage:read'])]
+    #[ApiProperty]
     private ?string $description = null;
 
     #[ORM\Column(type: Types::TEXT)]
-    #[Groups(['comProm:read'])]
-    #[ApiProperty()]
+    #[Groups(['comProm:read', 'comPackage:read'])]
+    #[ApiProperty]
     private ?string $infoDescription = null;
 
     #[ORM\Column]
     #[ApiProperty]
-    #[Groups(['comProm:read'])]
+    #[Groups(['comProm:read', 'comPackage:read'])]
     private array $terms = [];
 
     #[ORM\Column]
@@ -61,21 +61,16 @@ class CommunicationPromotions
     private ?\DateTimeImmutable $updatedAt = null;
 
     #[ORM\Column]
-    #[Groups(['comProm:read'])]
     #[Assert\NotNull]
     #[ApiProperty(types: 'https://scheme.org/DateTime')]
+    #[Groups(['comProm:read', 'comPackage:read'])]
     private ?\DateTimeImmutable $startAt = null;
 
     #[ORM\Column]
-    #[Groups(['comProm:read'])]
     #[Assert\NotNull]
     #[ApiProperty(types: 'https://scheme.org/DateTime')]
+    #[Groups(['comProm:read', 'comPackage:read'])]
     private ?\DateTimeImmutable $endAt = null;
-
-    #[ORM\ManyToMany(targetEntity: CommunicationClientPackage::class, inversedBy: 'currentPromotions')]
-    #[Groups(['comProm:read'])]
-    #[ApiProperty]
-    private Collection $products;
 
     #[ORM\ManyToOne]
     #[ORM\JoinColumn(nullable: false)]
@@ -84,6 +79,11 @@ class CommunicationPromotions
     #[ORM\ManyToOne]
     #[ORM\JoinColumn(nullable: false)]
     private ?CommunicationProduct $product = null;
+
+    #[ORM\ManyToMany(targetEntity: CommunicationClientPackage::class, inversedBy: 'promotions')]
+    #[Groups(['comProm:read'])]
+    #[ApiProperty]
+    private Collection $products;
 
     public function __construct()
     {
@@ -191,30 +191,6 @@ class CommunicationPromotions
         return $this;
     }
 
-    /**
-     * @return Collection<int, CommunicationPackage>
-     */
-    public function getProducts(): Collection
-    {
-        return $this->products;
-    }
-
-    public function addProduct(CommunicationPackage $product): static
-    {
-        if (!$this->products->contains($product)) {
-            $this->products->add($product);
-        }
-
-        return $this;
-    }
-
-    public function removeProduct(CommunicationPackage $product): static
-    {
-        $this->products->removeElement($product);
-
-        return $this;
-    }
-
     public function getTenant(): ?Account
     {
         return $this->tenant;
@@ -235,6 +211,30 @@ class CommunicationPromotions
     public function setProduct(?CommunicationProduct $product): static
     {
         $this->product = $product;
+
+        return $this;
+    }
+
+    /**
+     * @return Collection<int, CommunicationClientPackage>
+     */
+    public function getProducts(): Collection
+    {
+        return $this->products;
+    }
+
+    public function addProduct(CommunicationClientPackage $product): static
+    {
+        if (!$this->products->contains($product)) {
+            $this->products->add($product);
+        }
+
+        return $this;
+    }
+
+    public function removeProduct(CommunicationClientPackage $product): static
+    {
+        $this->products->removeElement($product);
 
         return $this;
     }

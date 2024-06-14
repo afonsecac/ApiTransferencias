@@ -21,6 +21,25 @@ class AccountRepository extends ServiceEntityRepository
         parent::__construct($registry, Account::class);
     }
 
+    public function getClientsWithCondition(bool $isActive = true, string $env = 'TEST'): array
+    {
+        $currentDate = new \DateTimeImmutable();
+        return $this->createQueryBuilder('a')
+            ->leftJoin('a.client', 'c')
+            ->leftJoin('a.environment', 'e')
+            ->where('c.isActive = :isActive AND c.isActive = :isActive')
+            ->andWhere('c.isActiveAt <= :currentDate')
+            ->andWhere('c.removeAt IS NULL')
+            ->andWhere('a.isActiveAt <= :currentDate')
+            ->andWhere('e.type = :env')
+            ->andWhere('e.isActive = :isEnvActive')
+            ->setParameters([
+                'isActive' => $isActive,
+                'currentDate' => $currentDate,
+                'env' => $env,
+                'isEnvActive' => true,
+            ])->getQuery()->getResult();
+    }
 //    /**
 //     * @return Account[] Returns an array of Account objects
 //     */

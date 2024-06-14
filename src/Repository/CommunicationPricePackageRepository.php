@@ -23,12 +23,13 @@ class CommunicationPricePackageRepository extends ServiceEntityRepository
 
     /**
      * @param int $productId
+     * @param int|null $clientId
      * @return array
      */
-    public function getIdsWithPrices(int $productId): array
+    public function getIdsWithPrices(int $productId, int $clientId = null): array
     {
         $currentDate = new \DateTimeImmutable();
-        return $this->createQueryBuilder('p')
+        $dql = $this->createQueryBuilder('p')
             ->leftJoin('p.product', 'pd')
             ->leftJoin('p.priceUsed', 'u')
             ->select('u.id')
@@ -37,13 +38,20 @@ class CommunicationPricePackageRepository extends ServiceEntityRepository
             ->andWhere('p.isActive = :enabled')
             ->andWhere('u.isActive = :enabled')
             ->andWhere('u.validStartAt <= :currentDate AND (u.validEndAt > :currentDate OR u.validEndAt IS NULL)')
-            ->andWhere('pd.initialDate <= :currentDate AND (pd.endDateAt > :currentDate OR pd.endDate IS NULL)')
+            ->andWhere('pd.initialDate <= :currentDate AND (pd.endDateAt > :currentDate OR pd.endDateAt IS NULL)')
             ->andWhere('p.activeStartAt <= :currentDate AND (p.activeEndAt > :currentDate OR p.activeEndAt IS NULL)')
             ->setParameters([
                 'pdId' => $productId,
                 'enabled' => true,
                 'currentDate' => $currentDate,
-            ])
+            ]);
+        if (!is_null($clientId)) {
+            $dql = $dql->leftJoin('p.tenant', 't')
+                ->andWhere('t.id = :client')
+                ->setParameter('client', $clientId);
+        }
+
+        return $dql->orderBy('p.price', 'ASC')
             ->getQuery()->getScalarResult();
     }
 }

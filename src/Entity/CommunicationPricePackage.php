@@ -31,9 +31,6 @@ class CommunicationPricePackage
     #[ORM\Column]
     private ?float $amount = null;
 
-    #[ORM\ManyToOne]
-    private ?Client $client = null;
-
     #[ORM\Column]
     private ?\DateTimeImmutable $createdAt = null;
 
@@ -57,6 +54,15 @@ class CommunicationPricePackage
 
     #[ORM\Column]
     private array $dataInfo = [];
+
+    #[ORM\ManyToOne]
+    private ?Account $tenant = null;
+
+    #[ORM\Column(length: 255)]
+    private ?string $name = null;
+
+    #[ORM\Column(length: 255, nullable: true)]
+    private ?string $description = null;
 
     public function __construct()
     {
@@ -128,18 +134,6 @@ class CommunicationPricePackage
     public function setAmount(float $amount): static
     {
         $this->amount = $amount;
-
-        return $this;
-    }
-
-    public function getClient(): ?Client
-    {
-        return $this->client;
-    }
-
-    public function setClient(?Client $client): static
-    {
-        $this->client = $client;
 
         return $this;
     }
@@ -249,6 +243,42 @@ class CommunicationPricePackage
     public function setDataInfo(array $dataInfo): static
     {
         $this->dataInfo = $dataInfo;
+
+        return $this;
+    }
+
+    public function getTenant(): ?Account
+    {
+        return $this->tenant;
+    }
+
+    public function setTenant(?Account $tenant): static
+    {
+        $this->tenant = $tenant;
+
+        return $this;
+    }
+
+    public function getName(): ?string
+    {
+        return $this->name;
+    }
+
+    public function setName(string $name): static
+    {
+        $this->name = $name;
+
+        return $this;
+    }
+
+    public function getDescription(): ?string
+    {
+        return $this->description;
+    }
+
+    public function setDescription(?string $description): static
+    {
+        $this->description = $description;
 
         return $this;
     }

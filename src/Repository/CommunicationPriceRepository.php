@@ -27,8 +27,12 @@ class CommunicationPriceRepository extends ServiceEntityRepository
      */
     public function getPricesNoUsed(array $ids): array
     {
-        return $this->createQueryBuilder('p')
-            ->where('p.id NOT IN (:ids)')
-            ->getQuery()->getResult();
+        $dql = $this->createQueryBuilder('p');
+        if (count($ids) !== 0) {
+            $dql = $dql->where($dql->expr()->notIn('p.id', ':ids'))
+                ->setParameter('ids', $ids);
+        }
+
+        return $dql->orderBy('p.amount', 'ASC')->getQuery()->getResult();
     }
 }

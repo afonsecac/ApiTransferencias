@@ -23,13 +23,42 @@ class AdminPackagePricesController extends AbstractController
         $this->packagePriceService = $packagePriceService;
     }
 
-    #[Route('/{packageId}', name: 'admin_package_prices', methods: ['GET'])]
-    public function pricesByPackages(Request $request): JsonResponse
+    #[Route('/prices/{packageId}', name: 'admin_package_prices', methods: ['GET'])]
+    public function pricesByPackages(int $packageId, Request $request): JsonResponse
     {
-        $packageId = $request->query->getInt('packageId');
+        $clientId = $request->query->getInt('clientId');
+
 
         return $this->json(
-            $this->packagePriceService->getUnusedPrices($packageId)
+            $this->packagePriceService->getUnusedPrices($packageId, $clientId ?: null)
+        );
+    }
+
+    /**
+     * @throws \Exception
+     */
+    #[Route('/single', name: 'admin_package_prices_single', methods: ['POST'])]
+    public function addPackagePrice(Request $request): JsonResponse
+    {
+        $packageInfo = $request->request->all();
+        return $this->json(
+            $this->packagePriceService->addPackagePrices([
+                $packageInfo
+            ])
+        );
+    }
+
+    /**
+     * @throws \Exception
+     */
+    #[Route('/multiple', name: 'admin_packages_prices_single', methods: ['POST'])]
+    public function addPackagesPrice(Request $request): JsonResponse
+    {
+        $packageInfo = $request->request->all();
+        return $this->json(
+            $this->packagePriceService->addPackagePrices([
+                $packageInfo
+            ])
         );
     }
 }
