@@ -86,7 +86,7 @@ final class CurrentUserExtension implements QueryCollectionExtensionInterface, Q
                 $queryBuilder->andWhere(sprintf('%s.tenant = :current_user', $rootAlias));
                 $queryBuilder->setParameter('current_user', $user->getId());
                 if ($resourceClass === CommunicationClientPackage::class) {
-                    $queryBuilder->addOrderBy(sprintf('%s.name', $rootAlias));
+                    // $queryBuilder->addOrderBy(sprintf('%s.name', $rootAlias));
                 }
             }
         }

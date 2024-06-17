@@ -29,15 +29,18 @@ use Symfony\Component\Validator\Constraints as Assert;
         ),
         new GetCollection(
             uriTemplate: '/communication/packages',
-            provider: CommunicationClientPackageProvider::class,
+            description: 'List all available packages',
+            name: 'Packages',
+            provider: CommunicationClientPackageProvider::class
         ),
     ],
     normalizationContext: ['groups' => ['comPackage:read']],
     denormalizationContext: ['groups' => ['comPackage:create', 'comPackage:update']],
-    security: "is_granted('ROLE_COM_API_USER')"
+    security: "is_granted('ROLE_COM_API_USER')",
+
 )]
 #[ApiFilter(DateFilter::class, properties: ['activeStartAt', 'activeEndAt'])]
-#[ApiFilter(OrderFilter::class, properties: ['id', 'activeStartAt'], arguments: ['orderParameterName' => 'orderBy'])]
+#[ApiFilter(OrderFilter::class, properties: ['id', 'priceClientPackage.amount'], arguments: ['orderParameterName' => 'orderBy'])]
 class CommunicationClientPackage
 {
     #[ORM\Id]
