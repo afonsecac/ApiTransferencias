@@ -21,6 +21,27 @@ class CommunicationPromotionsRepository extends ServiceEntityRepository
         parent::__construct($registry, CommunicationPromotions::class);
     }
 
+    /**
+     * @param int $promotionId
+     * @return \App\Entity\CommunicationPromotions|null
+     * @throws \Doctrine\ORM\NonUniqueResultException
+     */
+    public function getActivePromotionById(int $promotionId): ?CommunicationPromotions
+    {
+        $currentDate = new \DateTimeImmutable();
+        return $this->createQueryBuilder('p')
+            ->leftJoin('p.product', 'pc')
+            ->where('p.id = :promotionId')
+            ->andWhere('p.startAt <= :currentDate AND p.endAt > :currentDate')
+            ->andWhere('pc.initialDate <= :currentDate AND pc.endDateAt > :currentDate')
+            ->andWhere('pc.enabled = :enabled')
+            ->setParameters([
+                'currentDate' => $currentDate,
+                'promotionId' => $promotionId,
+                'enabled' => true,
+            ])->getQuery()->getOneOrNullResult();
+    }
+
 //    /**
 //     * @return CommunicationPromotions[] Returns an array of CommunicationPromotions objects
 //     */

@@ -58,7 +58,9 @@ class PackagePriceService extends CommonService
                 $tenant = $this->em->getRepository(Account::class)->find($packageItem->tenantId);
                 $packagePrice->setTenant($tenant);
                 $this->em->persist($packagePrice);
-                $this->createPackageClient($packagePrice, $tenant);
+                if (!is_null($tenant)) {
+                    $this->createPackageClient($packagePrice, $tenant);
+                }
                 $insertedCount++;
             } else if (!is_null($packageItem->tenantIds) && is_array($packageItem->tenantIds) && count($packageItem->tenantIds) > 0) {
                 foreach ($packageItem->tenantIds as $tenantId) {

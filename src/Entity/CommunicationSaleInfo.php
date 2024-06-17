@@ -129,13 +129,13 @@ class CommunicationSaleInfo
     #[Groups(['comSales:create'])]
     protected ?int $packageId = null;
 
-    #[ORM\ManyToOne]
-    #[ORM\JoinColumn(nullable: false)]
-    #[Groups(['comSales:read'])]
+    #[ORM\Column(nullable: true)]
     #[ApiProperty(
-        schema: ['application/json'],
+        description: 'The promotion id in current system, take the information from /communication/promotions',
     )]
-    protected ?CommunicationPackage $package = null;
+    #[Assert\Positive]
+    #[Groups(['comSales:create'])]
+    protected ?int $promotionId = null;
 
     #[ORM\ManyToOne]
     #[ORM\JoinColumn(nullable: false)]
@@ -175,6 +175,13 @@ class CommunicationSaleInfo
     #[ApiFilter(SearchFilter::class, strategy: SearchFilterInterface::STRATEGY_EXACT)]
     #[Groups(['comSales:read'])]
     public string $type;
+
+    #[ORM\ManyToOne]
+    #[ORM\JoinColumn(nullable: false)]
+    private ?CommunicationClientPackage $package = null;
+
+    #[ORM\ManyToOne]
+    private ?CommunicationPromotions $promotion = null;
 
     public function __construct()
     {
@@ -285,19 +292,7 @@ class CommunicationSaleInfo
         return $this;
     }
 
-    public function getPackage(): ?CommunicationPackage
-    {
-        return $this->package;
-    }
-
-    public function setPackage(?CommunicationPackage $package): static
-    {
-        $this->package = $package;
-
-        return $this;
-    }
-
-    public function getTenant(): ?Account
+   public function getTenant(): ?Account
     {
         return $this->tenant;
     }
@@ -380,5 +375,39 @@ class CommunicationSaleInfo
     public function getCalculatePrice(): void
     {
         $this->totalPrice = $this->amount + $this->amountTax - $this->discount;
+    }
+
+    public function getPackage(): ?CommunicationClientPackage
+    {
+        return $this->package;
+    }
+
+    public function setPackage(?CommunicationClientPackage $package): static
+    {
+        $this->package = $package;
+
+        return $this;
+    }
+
+    public function getPromotion(): ?CommunicationPromotions
+    {
+        return $this->promotion;
+    }
+
+    public function setPromotion(?CommunicationPromotions $promotion): static
+    {
+        $this->promotion = $promotion;
+
+        return $this;
+    }
+
+    public function getPromotionId(): ?int
+    {
+        return $this->promotionId;
+    }
+
+    public function setPromotionId(?int $promotionId): void
+    {
+        $this->promotionId = $promotionId;
     }
 }

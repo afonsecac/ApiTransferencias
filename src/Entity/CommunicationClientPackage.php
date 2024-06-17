@@ -9,15 +9,13 @@ use ApiPlatform\Metadata\ApiProperty;
 use ApiPlatform\Metadata\ApiResource;
 use ApiPlatform\Metadata\Get;
 use ApiPlatform\Metadata\GetCollection;
-use App\DTO\InputPaginationPackage;
-use App\DTO\OutputPaginationPackage;
 use App\Repository\CommunicationClientPackageRepository;
 use App\State\CommunicationClientPackageProvider;
 use Doctrine\Common\Collections\ArrayCollection;
 use Doctrine\Common\Collections\Collection;
 use Doctrine\ORM\Mapping as ORM;
 use Symfony\Component\Serializer\Attribute\Groups;
-    use Symfony\Component\Validator\Constraints as Assert;
+use Symfony\Component\Validator\Constraints as Assert;
 
 #[ORM\Entity(repositoryClass: CommunicationClientPackageRepository::class)]
 #[ORM\HasLifecycleCallbacks]
@@ -139,7 +137,7 @@ class CommunicationClientPackage
     private ?string $description = null;
 
     #[ORM\Column(length: 255)]
-    #[Groups(['comPackage:read','comProm:read'])]
+    #[Groups(['comPackage:read', 'comProm:read'])]
     #[Assert\NotNull]
     #[ApiProperty]
     private ?string $name = null;
@@ -150,7 +148,7 @@ class CommunicationClientPackage
             'type' => 'array',
             'items' => [
                 'type' => 'string',
-                'enum' => ['AIRTIME', 'BUNDLE', 'DATA', 'SMS', 'INTERNET']
+                'enum' => ['AIRTIME', 'BUNDLE', 'DATA', 'SMS', 'INTERNET'],
             ],
         ]
     )]
@@ -164,18 +162,18 @@ class CommunicationClientPackage
             'properties' => [
                 'name' => [
                     'type' => 'string',
-                    'enum' => ['Mobile', 'uSIM', 'Devices']
+                    'enum' => ['Mobile', 'uSIM', 'Devices'],
                 ],
                 'subservice' => [
                     'type' => 'object',
                     'properties' => [
                         'name' => [
                             'type' => 'string',
-                            'enum' => ['AIRTIME', 'BUNDLE', 'DATA', 'SMS', 'INTERNET', 'uSIM']
-                        ]
-                    ]
-                ]
-            ]
+                            'enum' => ['AIRTIME', 'BUNDLE', 'DATA', 'SMS', 'INTERNET', 'uSIM'],
+                        ],
+                    ],
+                ],
+            ],
         ]
     )]
     #[Groups(['comPackage:read'])]
@@ -193,13 +191,13 @@ class CommunicationClientPackage
                 'unit' => [
                     'type' => 'string',
                     'enum' => ['CUP', 'MLC', 'USD'],
-                    'types' => ['https://schema.org/priceCurrency']
+                    'types' => ['https://schema.org/priceCurrency'],
                 ],
                 'unit_type' => [
                     'type' => 'string',
-                    'enum' => ['CURRENCY']
-                ]
-            ]
+                    'enum' => ['CURRENCY'],
+                ],
+            ],
         ]
     )]
     #[Groups(['comPackage:read'])]
@@ -216,7 +214,7 @@ class CommunicationClientPackage
                 'unit' => [
                     'type' => 'string',
                     'enum' => ['DAYS', 'MONTH', 'YEAR'],
-                ]
+                ],
             ],
             'nullable' => true,
             'default' => null,
@@ -331,15 +329,59 @@ class CommunicationClientPackage
 
     public function getBenefits(): array
     {
-        $benefitsOut = $this->benefits;
+        $benefitsOut = [];
+        $benefits = $this->benefits;
         if ($this->getPromotions()->count() > 0) {
-            $amountOut = $benefitsOut[0]['amount'];
-            $amountOut['promotion_bonus'] = $amountOut['base'] * 11;
-            $total = $amountOut['base'] + $amountOut['promotion_bonus'];
-            $amountOut['total_excluding_tax'] = $total;
-            $amountOut['total_including_tax'] = $total;
-            $benefitsOut[0]['amount'] = $amountOut;
+            foreach ($this->getPromotions() as $promotion) {
+                foreach ($promotion->getTerms() as $term) {
+                    $temItem = (object)$term;
+                    $posUnit = array_search($temItem->unit, array_column($benefits, 'unit'), true);
+                    $posUnitType = array_search($temItem->unit_type, array_column($benefits, 'unit_type'), true);
+                    $posType = array_search($temItem->type, array_column($benefits, 'type'), true);
+                    if (is_numeric($posUnit) && $posUnit === $posUnitType && $posType === $posUnitType) {
+                        $currentBenefit = $benefits[$posUnit];
+                        $base = $currentBenefit['amount']['base'];
+                        $promotionAmount = $currentBenefit['amount']['promotion_bonus'];
+                        $operation = $temItem->amount['operation'];
+                        if ($operation === 'MULTI') {
+                            $promotionAmount = $base * $temItem->amount['promotion_bonus'];
+                        } elseif ($operation === 'ADD') {
+                            $promotionAmount += $temItem->amount['promotion_bonus'];
+                        }
+
+                        $total = $base + $promotionAmount;
+                        $currentBenefit['amount']['promotion_bonus'] = $promotionAmount;
+                        $currentBenefit['amount']['total_including_tax'] = $total;
+                        $currentBenefit['amount']['total_excluding_tax'] = $total;
+                        $benefitsOut[] = $currentBenefit;
+                    } else {
+                        $arrayInfo = array_merge([
+                            'additional_information' => null,
+                            'amount' => [],
+                            'type' => 'CREDITS',
+                            'unit' => 'CUP',
+                            'unit_type' => 'CURRENCY',
+                            'schedule' => [
+                                'start' => null,
+                                'end' => null,
+                            ],
+                        ], $term);
+                        $amountMerged = array_merge([
+                            'base' => 0,
+                            'promotion_bonus' => 0,
+                            'total_excluding_tax' => 0,
+                            'total_including_tax' => 0,
+                        ], $term['amount']);
+                        $total = $amountMerged['base'] + $amountMerged['promotion_bonus'];
+                        $amountMerged['total_excluding_tax'] = $total;
+                        $amountMerged['total_including_tax'] = $total;
+                        $arrayInfo['amount'] = $amountMerged;
+                        $benefitsOut[] = $arrayInfo;
+                    }
+                }
+            }
         }
+
         return $benefitsOut;
     }
 
@@ -442,7 +484,9 @@ class CommunicationClientPackage
 
         return $this->promotions->filter(function (CommunicationPromotions $promotion) {
             $currentDate = new \DateTimeImmutable();
-            return (is_null($promotion->getEndAt()) || $promotion->getEndAt() >= $currentDate) && $promotion->getStartAt() <= $currentDate;
+
+            return (is_null($promotion->getEndAt()) || $promotion->getEndAt(
+                    ) >= $currentDate) && $promotion->getStartAt() <= $currentDate;
         });
     }
 

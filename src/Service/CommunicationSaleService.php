@@ -5,9 +5,10 @@ namespace App\Service;
 use ApiPlatform\Symfony\Security\Exception\AccessDeniedException;
 use App\Entity\Account;
 use App\Entity\BalanceOperation;
+use App\Entity\CommunicationClientPackage;
 use App\Entity\CommunicationNationality;
 use App\Entity\CommunicationOffice;
-use App\Entity\CommunicationPackage;
+use App\Entity\CommunicationPromotions;
 use App\Entity\CommunicationSalePackage;
 use App\Entity\CommunicationSaleRecharge;
 use App\Enums\BalanceOperationEnum;
@@ -45,8 +46,8 @@ class CommunicationSaleService extends CommonService
         '109' => 'El paquete especificado no estÃ¡ habilitado',
         '110' => 'El paquete especificado no existe',
         '111' => 'No fue especificado un paquete para la venta',
-        '112' => 'Los datos para la modificaciÃ³n de la venta no son vÃ¡lidos',
-        '151' => 'El nÃºmero de telÃ©fono no existe',
+        '112' => 'Los datos para la modificacion de la venta no son vÃ¡lidos',
+        '151' => 'El numero de telefono no existe',
         '152' => 'Servicio celular del cliente en estado no vÃ¡lido para ser recargado',
         '153' => 'Tipo de servicio celular del cliente no vÃ¡lido para ser recargado',
         '198' => 'CombinaciÃ³n de productos no vÃ¡lida',
@@ -126,14 +127,15 @@ class CommunicationSaleService extends CommonService
             throw new AccessDeniedException();
         }
         $balance = $this->balanceRepository->getBalanceOutput($user->getId());
-        $package = $this->em->getRepository(CommunicationPackage::class)->getPackageById(
+        $package = $this->em->getRepository(CommunicationClientPackage::class)->getPackageById(
             $recharge->getPackageId(),
             $user
         );
         if (is_null($package)) {
             throw new MyCurrentException('COM003', 'The package don\'t exist');
         }
-        if ($balance < $package->getAmount()) {
+        $destination = (object)$package->getDestination();
+        if ($balance < $package->getPriceClientPackage()?->getAmount()) {
             throw new MyCurrentException('COM001', 'Insufficient balance');
         }
 
@@ -147,8 +149,8 @@ class CommunicationSaleService extends CommonService
         $recharge->setTransactionId($transactionId);
         $recharge->setPackage($package);
         $recharge->setTenant($user);
-        $recharge->setAmount($package->getAmount());
-        $recharge->setCurrency($package->getCurrency());
+        $recharge->setAmount($package->getPriceClientPackage()?->getAmount());
+        $recharge->setCurrency($package->getPriceClientPackage()?->getCurrency());
         $recharge->getCalculatePrice();
         $recharge->setState(CommunicationStateEnum::PENDING);
         try {
@@ -156,11 +158,20 @@ class CommunicationSaleService extends CommonService
             $this->em->flush();
 
             $urlRecharge = $user->getEnvironment()?->getBasePath().'/sale/recharge';
+            $productCode = $package->getPriceClientPackage()?->getProduct()?->getPackageId();
+            if (!is_null($recharge->getPromotionId())) {
+                $promotion = $this->em->getRepository(CommunicationPromotions::class)->getActivePromotionById(
+                    $recharge->getPromotionId()
+                );
+                if (!is_null($promotion)) {
+                    $productCode = $promotion->getProduct()?->getPackageId();
+                }
+            }
 
             $body = [
                 'phoneNumber' => $recharge->getPhoneNumber(),
-                'productCode' => $package->getComId(),
-                'productPrice' => round($package->getComPrice(), 2),
+                'productCode' => $productCode,
+                'productPrice' => round($destination->amount, 2),
                 'transactionId' => $transactionId,
                 'environment' => $user->getEnvironment()?->getType(),
             ];
@@ -178,8 +189,47 @@ class CommunicationSaleService extends CommonService
             );
 
 
-            $rechargeInfo = $this->serializer->decode($rechargeResponse->getContent(), 'json');
+            $rechargeInfo = null;
             $rechargeResult = null;
+            if ($user->getEnvironment()?->getType() === 'TEST') {
+                $phoneLength = strlen($recharge->getPhoneNumber());
+                $checkPhone = substr($recharge->getPhoneNumber(), $phoneLength - 2, $phoneLength);
+                $rechargeInfo = $this->serializer->decode($rechargeResponse->getContent(), 'json');
+                if ($checkPhone === "60") {
+                    $rechargeInfo = [
+                        'result' => [
+                            'valueOk' => true,
+                            'orderId' => rand(0, 10000),
+                            'requestTime' => new \DateTimeImmutable('now'),
+                            'responseTime' => new \DateTimeImmutable('now'),
+                        ],
+                    ];
+                } elseif ($checkPhone === '65') {
+                    $rechargeInfo = [
+                        'result' => [
+                            'valueOk' => false,
+                            'message' => 'Error 152',
+                            'requestTime' => new \DateTimeImmutable('now'),
+                            'responseTime' => new \DateTimeImmutable('now'),
+                            'code' => 152,
+                        ],
+                        'code' => 152,
+                    ];
+                } else {
+                    $rechargeInfo = [
+                        'result' => [
+                            'valueOk' => false,
+                            'message' => 'Error 151',
+                            'requestTime' => new \DateTimeImmutable('now'),
+                            'responseTime' => new \DateTimeImmutable('now'),
+                            'code' => 151,
+                        ],
+                        'code' => 151,
+                    ];
+                }
+            } else {
+                $rechargeInfo = $this->serializer->decode($rechargeResponse->getContent(), 'json');
+            }
             if (is_array($rechargeInfo)) {
                 $rechargeResult = (object)((object)$rechargeInfo)->result;
             } else {
@@ -201,13 +251,13 @@ class CommunicationSaleService extends CommonService
 
                 $balanceOperation = new BalanceOperation();
                 $balanceOperation->setTenant($user);
-                $balanceOperation->setAmount($package->getAmount());
-                $balanceOperation->setCurrency($package->getCurrency());
-                $balanceOperation->setState(BalanceStateEnum::COMPLETED);
-                $balanceOperation->setOperationType(BalanceOperationEnum::DEBIT);
+                $balanceOperation->setAmount($package->getPriceClientPackage()?->getAmount());
+                $balanceOperation->setCurrency($package->getPriceClientPackage()?->getCurrency());
+                $balanceOperation->setState((string)BalanceStateEnum::COMPLETED->value);
+                $balanceOperation->setOperationType(BalanceOperationEnum::DEBIT->value);
                 $balanceOperation->getCalculateTotal();
                 $balanceOperation->setTotalAmount($balanceOperation->getTotalAmount() * -1);
-                $balanceOperation->setTotalCurrency($package->getCurrency());
+                $balanceOperation->setTotalCurrency($package->getPriceClientPackage()?->getCurrency());
                 $balanceOperation->setCommunicationSale($recharge);
                 $this->em->persist($balanceOperation);
             } else {
@@ -314,11 +364,14 @@ class CommunicationSaleService extends CommonService
             throw new AccessDeniedException();
         }
         $balance = $this->balanceRepository->getBalanceOutput($user->getId());
-        $package = $this->em->getRepository(CommunicationPackage::class)->getPackageById($sale->getPackageId(), $user);
+        $package = $this->em->getRepository(CommunicationClientPackage::class)->getPackageById(
+            $sale->getPackageId(),
+            $user
+        );
         if (is_null($package)) {
             throw new MyCurrentException('COM003', 'The package don\'t exist');
         }
-        if ($balance < $package->getAmount()) {
+        if ($balance < $package->getPriceClientPackage()?->getAmount()) {
             throw new MyCurrentException('COM001', 'Insufficient balance');
         }
         $lastSequence = $this->configureSequence->getLastSequence(CommunicationSalePackage::class);
@@ -331,8 +384,8 @@ class CommunicationSaleService extends CommonService
         $sale->setTransactionId($transactionId);
         $sale->setPackage($package);
         $sale->setTenant($user);
-        $sale->setAmount($package->getAmount());
-        $sale->setCurrency($package->getCurrency());
+        $sale->setAmount($package->getPriceClientPackage()?->getAmount());
+        $sale->setCurrency($package->getPriceClientPackage()?->getCurrency());
         $sale->getCalculatePrice();
         $sale->setState(CommunicationStateEnum::PENDING);
 
@@ -399,21 +452,21 @@ class CommunicationSaleService extends CommonService
                 $saleData = $saleInfo->sale;
             }
 
-            $txStatus = (boolean) $saleResult->valueOk;
+            $txStatus = (boolean)$saleResult->valueOk;
             if ($txStatus) {
                 $sale->setState(CommunicationStateEnum::COMPLETED);
                 $comInfo = [
-                    'sale' => $saleData
+                    'sale' => $saleData,
                 ];
                 $balanceOperation = new BalanceOperation();
                 $balanceOperation->setTenant($user);
-                $balanceOperation->setAmount($package->getAmount());
-                $balanceOperation->setCurrency($package->getCurrency());
+                $balanceOperation->setAmount($package->getPriceClientPackage()?->getAmount());
+                $balanceOperation->setCurrency($package->getPriceClientPackage()?->getCurrency());
                 $balanceOperation->setState('COMPLETED');
                 $balanceOperation->setOperationType('DEBIT');
                 $balanceOperation->getCalculateTotal();
                 $balanceOperation->setTotalAmount($balanceOperation->getTotalAmount() * -1);
-                $balanceOperation->setTotalCurrency($package->getCurrency());
+                $balanceOperation->setTotalCurrency($package->getPriceClientPackage()?->getCurrency());
                 $balanceOperation->setCommunicationSale($sale);
                 $this->em->persist($balanceOperation);
             } else {

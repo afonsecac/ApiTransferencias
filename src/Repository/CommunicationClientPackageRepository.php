@@ -2,7 +2,9 @@
 
 namespace App\Repository;
 
+use App\Entity\Account;
 use App\Entity\CommunicationClientPackage;
+use App\Entity\CommunicationPackage;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
 
@@ -19,6 +21,26 @@ class CommunicationClientPackageRepository extends ServiceEntityRepository
     public function __construct(ManagerRegistry $registry)
     {
         parent::__construct($registry, CommunicationClientPackage::class);
+    }
+
+    /**
+     * @throws \Doctrine\ORM\NonUniqueResultException
+     * @throws \Doctrine\ORM\NoResultException
+     */
+    public function getPackageById(int $packageId, Account $account): CommunicationClientPackage | null
+    {
+        $currentDate = new \DateTimeImmutable('now');
+        return $this->createQueryBuilder('p')
+            ->leftJoin('p.tenant', 'a')
+            ->where('p.id = :id')
+            ->andWhere('a.id = :aId')
+            ->andWhere('p.activeStartAt <= :currentDate AND p.activeEndAt > :currentDate')
+            ->setParameters([
+                'id' => $packageId,
+                'aId' => $account->getId(),
+                'currentDate' => $currentDate
+            ])
+            ->getQuery()->getSingleResult();
     }
 
 //    /**

@@ -3,38 +3,12 @@
 namespace App\Entity;
 
 use ApiPlatform\Metadata\ApiProperty;
-use ApiPlatform\Metadata\ApiResource;
-use ApiPlatform\Metadata\Get;
-use ApiPlatform\Metadata\GetCollection;
-use ApiPlatform\Metadata\Post;
-use App\DTO\CreateSaleDto;
 use App\Repository\CommunicationSaleRepository;
-use App\State\CreateSaleProcessor;
 use Doctrine\ORM\Mapping as ORM;
 use Symfony\Component\Serializer\Attribute\Groups;
 use Symfony\Component\Validator\Constraints as Assert;
 
 #[ORM\Entity(repositoryClass: CommunicationSaleRepository::class)]
-//#[ApiResource(
-//    uriTemplate: '/communication/sales',
-//    operations: [
-//        new Get(
-//            uriTemplate: '/communication/sales/{id}',
-//            defaults: ['color' => 'brown'],
-//            requirements: ['id' => '\d+'],
-//        ),
-//        new GetCollection(
-//            uriTemplate: '/communication/sales',
-//        ),
-//        new Post(
-//            uriTemplate: '/communication/sales',
-//            input: CreateSaleDto::class,
-//            processor: CreateSaleProcessor::class
-//        )
-//    ],
-//    normalizationContext: ['groups' => ['comSales:read']],
-//    denormalizationContext: ['groups' => ['comSales:update', 'comSales:create']],
-//)]
 #[ORM\HasLifecycleCallbacks]
 class CommunicationSale
 {
@@ -66,14 +40,6 @@ class CommunicationSale
     #[Groups(['comSales:create'])]
     #[Assert\NotNull]
     private ?int $packageId = null;
-
-    #[ORM\ManyToOne]
-    #[ORM\JoinColumn(nullable: false)]
-    #[Groups(['comSales:read'])]
-    #[ApiProperty(
-        schema: ['application/json'],
-    )]
-    private ?CommunicationPackage $package = null;
 
     #[ORM\Column]
     #[Groups(['comSales:create', 'comSales:read'])]
@@ -107,6 +73,16 @@ class CommunicationSale
     #[ORM\Column(length: 20, nullable: true)]
     #[Groups(['comSales:read'])]
     private ?string $status = null;
+
+    #[ORM\Column(nullable: true)]
+    private ?int $promotionId = null;
+
+    #[ORM\ManyToOne]
+    #[ORM\JoinColumn(nullable: false)]
+    private ?CommunicationClientPackage $package = null;
+
+    #[ORM\ManyToOne]
+    private ?CommunicationPromotions $promotion = null;
 
     public function getId(): ?int
     {
@@ -185,18 +161,6 @@ class CommunicationSale
         return $this;
     }
 
-    public function getPackage(): ?CommunicationPackage
-    {
-        return $this->package;
-    }
-
-    public function setPackage(?CommunicationPackage $package): static
-    {
-        $this->package = $package;
-
-        return $this;
-    }
-
     public function getAmount(): ?float
     {
         return $this->amount;
@@ -253,6 +217,42 @@ class CommunicationSale
     public function setStatus(?string $status): static
     {
         $this->status = $status;
+
+        return $this;
+    }
+
+    public function getPromotionId(): ?int
+    {
+        return $this->promotionId;
+    }
+
+    public function setPromotionId(?int $promotionId): static
+    {
+        $this->promotionId = $promotionId;
+
+        return $this;
+    }
+
+    public function getPackage(): ?CommunicationClientPackage
+    {
+        return $this->package;
+    }
+
+    public function setPackage(?CommunicationClientPackage $package): static
+    {
+        $this->package = $package;
+
+        return $this;
+    }
+
+    public function getPromotion(): ?CommunicationPromotions
+    {
+        return $this->promotion;
+    }
+
+    public function setPromotion(?CommunicationPromotions $promotion): static
+    {
+        $this->promotion = $promotion;
 
         return $this;
     }

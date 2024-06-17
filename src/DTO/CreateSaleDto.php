@@ -13,7 +13,15 @@ final class CreateSaleDto
 
     #[Assert\Positive]
     #[Assert\NotNull]
+    #[ApiProperty(
+        description: 'Current selected package',
+    )]
     public int $packageId;
+    #[ApiProperty(
+        description: 'Apply current promotion selected'
+    )]
+    #[Assert\Positive]
+    public int $promotionId;
 
     #[Assert\Length(min: 8, max: 10)]
     #[ApiProperty(

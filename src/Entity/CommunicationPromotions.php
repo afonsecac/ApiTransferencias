@@ -10,6 +10,8 @@ use Doctrine\Common\Collections\ArrayCollection;
 use Doctrine\Common\Collections\Collection;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
+use Symfony\Bundle\SecurityBundle\Security;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\Serializer\Attribute\Groups;
 use Symfony\Component\Validator\Constraints as Assert;
 
@@ -51,7 +53,6 @@ class CommunicationPromotions
 
     #[ORM\Column]
     #[ApiProperty]
-    #[Groups(['comProm:read', 'comPackage:read'])]
     private array $terms = [];
 
     #[ORM\Column]
@@ -81,7 +82,15 @@ class CommunicationPromotions
     #[ApiProperty]
     private Collection $products;
 
-    public function __construct()
+    #[ORM\Column(length: 500, nullable: true)]
+    #[Groups(['comProm:read', 'comPackage:read'])]
+    #[ApiProperty]
+    private ?string $knowMore = null;
+
+    public function __construct(
+        #[Autowire(service: 'security.authenticator.access_token')]
+        private readonly Security $security,
+    )
     {
         $this->products = new ArrayCollection();
     }
@@ -189,6 +198,15 @@ class CommunicationPromotions
 
     public function getProduct(): ?CommunicationProduct
     {
+
+        $products = $this->product;
+        $productOuts = [];
+        foreach ($products as $key => $product) {
+            $tenant = $this->security?->getUser();
+            if (!is_null($tenant) && $tenant instanceof Account && $product instanceof CommunicationClientPackage && (is_null($product->getTenant()) || $product->getTenant()?->getId() === $tenant->getId())) {
+                $productOuts[] = $product;
+            }
+        }
         return $this->product;
     }
 
@@ -219,6 +237,18 @@ class CommunicationPromotions
     public function removeProduct(CommunicationClientPackage $product): static
     {
         $this->products->removeElement($product);
+
+        return $this;
+    }
+
+    public function getKnowMore(): ?string
+    {
+        return $this->knowMore;
+    }
+
+    public function setKnowMore(?string $knowMore): static
+    {
+        $this->knowMore = $knowMore;
 
         return $this;
     }

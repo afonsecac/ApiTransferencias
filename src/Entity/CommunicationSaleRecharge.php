@@ -18,9 +18,24 @@ class CommunicationSaleRecharge extends CommunicationSaleInfo
 {
     #[ORM\Column(length: 15, nullable: true)]
     #[ApiProperty(
-        description: 'The numbers will be preceded by 53 and so on until completing the 10 numbers.',
+        description: '<p>All transactions in the sandbox environment are simulated: no real transaction takes place. To simulate different responses use the following numbers below:</p><table>
+	<tbody>
+		<tr>
+			<td>Mobile Number</td>
+			<td>Response Type</td>
+		</tr>
+		<tr>
+			<td>xxxx xx60</td>
+			<td>Completed</td>
+		</tr>
+		<tr>
+			<td>xxxx xx65</td>
+			<td>Rejected</td>
+		</tr>
+	</tbody>
+</table><p>Any other number used that is not contemplated in this document will be shown as rejected.</p>',
         required: true,
-        example: '5350499847',
+        default: '5350499847'
     )]
     #[Assert\NotBlank]
     #[Assert\Length(min: 8, max: 10)]
