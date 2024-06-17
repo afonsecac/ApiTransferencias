@@ -6,6 +6,7 @@
 parameters:
     app.email.support: '%env(MAILER_DSN)%'
     app.microsoft.url: '%env(MICROSOFT_URL)%'
+    app.phoneNumber: '5350499847'
 
 services:
 #    App\State\CreateBeneficiaryCardProcessor:

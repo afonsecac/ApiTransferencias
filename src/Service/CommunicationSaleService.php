@@ -168,8 +168,15 @@ class CommunicationSaleService extends CommonService
                 }
             }
 
+            $phoneLength = strlen($recharge->getPhoneNumber());
+            $checkPhone = substr($recharge->getPhoneNumber(), $phoneLength - 2, $phoneLength);
+            $phoneNumber = $recharge->getPhoneNumber();
+            if ($user->getEnvironment()?->getType() === 'TEST') {
+                $phoneNumber = $checkPhone === "60" ? $this->parameters->get('app.phoneNumber') : $recharge->getPhoneNumber();
+            }
+
             $body = [
-                'phoneNumber' => $recharge->getPhoneNumber(),
+                'phoneNumber' => $phoneNumber,
                 'productCode' => $productCode,
                 'productPrice' => round($destination->amount, 2),
                 'transactionId' => $transactionId,
