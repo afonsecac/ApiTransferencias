@@ -380,6 +380,8 @@ class CommunicationClientPackage
                     }
                 }
             }
+        } else {
+            $benefitsOut = $benefits;
         }
 
         return $benefitsOut;
