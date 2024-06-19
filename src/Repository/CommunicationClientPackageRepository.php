@@ -4,7 +4,6 @@ namespace App\Repository;
 
 use App\Entity\Account;
 use App\Entity\CommunicationClientPackage;
-use App\Entity\CommunicationPackage;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
 
@@ -38,9 +37,38 @@ class CommunicationClientPackageRepository extends ServiceEntityRepository
             ->setParameters([
                 'id' => $packageId,
                 'aId' => $account->getId(),
-                'currentDate' => $currentDate
+                'currentDate' => $currentDate,
             ])
             ->getQuery()->getSingleResult();
+    }
+
+    /**
+     * @param string $env
+     * @param int|null $tenant
+     * @return array
+     */
+    public function getAllPackages(string $env = 'TEST', int $tenant = null):array
+    {
+        $currentDate = new \DateTimeImmutable('now');
+        $dql = $this->createQueryBuilder('p')
+            ->leftJoin('p.tenant', 't')
+            ->leftJoin('t.client', 'c')
+            ->leftJoin('t.environment', 'e')
+            ->select('p')
+            ->addSelect('t')
+            ->addSelect('c')
+            ->where('p.activeStartAt <= :currentDate AND p.activeEndAt > :currentDate')
+            ->andWhere('t.isActive = :isActive')
+            ->andWhere('e.type = :type')
+            ->setParameter('currentDate', $currentDate)
+            ->setParameter('type', $env)
+            ->setParameter('isActive', true);
+
+        if (!is_null($tenant) && $tenant) {
+            $dql->andWhere('t.id = :tenant')->setParameter('tenant', $tenant);
+        }
+
+        return $dql->orderBy('c.companyName')->addOrderBy('p.amount')->getQuery()->getResult();
     }
 
 //    /**

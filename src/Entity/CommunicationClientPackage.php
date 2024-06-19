@@ -40,7 +40,10 @@ use Symfony\Component\Validator\Constraints as Assert;
 
 )]
 #[ApiFilter(DateFilter::class, properties: ['activeStartAt', 'activeEndAt'])]
-#[ApiFilter(OrderFilter::class, properties: ['id', 'priceClientPackage.amount'], arguments: ['orderParameterName' => 'orderBy'])]
+#[ApiFilter(OrderFilter::class, properties: [
+    'id',
+    'priceClientPackage.amount',
+], arguments: ['orderParameterName' => 'orderBy'])]
 class CommunicationClientPackage
 {
     #[ORM\Id]
@@ -240,6 +243,14 @@ class CommunicationClientPackage
     #[ORM\JoinColumn(nullable: false)]
     private ?CommunicationPricePackage $priceClientPackage = null;
 
+    #[ORM\Column(nullable: true)]
+    #[Groups(['comPackage:read'])]
+    private ?float $amount = null;
+
+    #[ORM\Column(length: 3, nullable: true)]
+    #[Groups(['comPackage:read'])]
+    private ?string $currency = null;
+
     public function __construct()
     {
         $this->activeStartAt = new \DateTimeImmutable();
@@ -349,10 +360,12 @@ class CommunicationClientPackage
                         if ($operation === 'MULTI') {
                             $promotionAmount = $base * $temItem->amount['promotion_bonus'];
                         } elseif ($operation === 'ADD') {
+                            $base += $temItem->amount['base'];
                             $promotionAmount += $temItem->amount['promotion_bonus'];
                         }
 
                         $total = $base + $promotionAmount;
+                        $currentBenefit['amount']['base'] = $base;
                         $currentBenefit['amount']['promotion_bonus'] = $promotionAmount;
                         $currentBenefit['amount']['total_including_tax'] = $total;
                         $currentBenefit['amount']['total_excluding_tax'] = $total;
@@ -489,9 +502,9 @@ class CommunicationClientPackage
 
         return $this->promotions->filter(function (CommunicationPromotions $promotion) {
             $currentDate = new \DateTimeImmutable();
-
-            return (is_null($promotion->getEndAt()) || $promotion->getEndAt(
-                    ) >= $currentDate) && $promotion->getStartAt() <= $currentDate;
+            $isEndDate = is_null($promotion->getEndAt()) || $promotion->getEndAt() > $currentDate;
+            $isStartDate = $promotion->getStartAt() <= $currentDate;
+            return $isStartDate && $isEndDate;
         });
     }
 
@@ -522,6 +535,30 @@ class CommunicationClientPackage
     public function setPriceClientPackage(?CommunicationPricePackage $priceClientPackage): static
     {
         $this->priceClientPackage = $priceClientPackage;
+
+        return $this;
+    }
+
+    public function getAmount(): ?float
+    {
+        return $this->amount;
+    }
+
+    public function setAmount(float $amount): static
+    {
+        $this->amount = $amount;
+
+        return $this;
+    }
+
+    public function getCurrency(): ?string
+    {
+        return $this->currency;
+    }
+
+    public function setCurrency(string $currency): static
+    {
+        $this->currency = $currency;
 
         return $this;
     }

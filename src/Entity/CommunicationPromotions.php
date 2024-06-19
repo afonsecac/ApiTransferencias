@@ -10,8 +10,6 @@ use Doctrine\Common\Collections\ArrayCollection;
 use Doctrine\Common\Collections\Collection;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
-use Symfony\Bundle\SecurityBundle\Security;
-use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\Serializer\Attribute\Groups;
 use Symfony\Component\Validator\Constraints as Assert;
 
@@ -27,6 +25,7 @@ use Symfony\Component\Validator\Constraints as Assert;
     denormalizationContext: ['groups' => ['comProm:create', 'comProm:update']],
     security: "is_granted('ROLE_COM_API_USER')"
 )]
+#[Orm\HasLifecycleCallbacks]
 class CommunicationPromotions
 {
     #[ORM\Id]
@@ -46,7 +45,7 @@ class CommunicationPromotions
     #[ApiProperty]
     private ?string $description = null;
 
-    #[ORM\Column(type: Types::TEXT)]
+    #[ORM\Column(type: Types::TEXT, nullable: true)]
     #[Groups(['comProm:read', 'comPackage:read'])]
     #[ApiProperty]
     private ?string $infoDescription = null;
@@ -87,10 +86,7 @@ class CommunicationPromotions
     #[ApiProperty]
     private ?string $knowMore = null;
 
-    public function __construct(
-        #[Autowire(service: 'security.authenticator.access_token')]
-        private readonly Security $security,
-    )
+    public function __construct()
     {
         $this->products = new ArrayCollection();
     }
@@ -203,10 +199,15 @@ class CommunicationPromotions
         $productOuts = [];
         foreach ($products as $key => $product) {
             $tenant = $this->security?->getUser();
-            if (!is_null($tenant) && $tenant instanceof Account && $product instanceof CommunicationClientPackage && (is_null($product->getTenant()) || $product->getTenant()?->getId() === $tenant->getId())) {
+            if (!is_null(
+                    $tenant
+                ) && $tenant instanceof Account && $product instanceof CommunicationClientPackage && (is_null(
+                        $product->getTenant()
+                    ) || $product->getTenant()?->getId() === $tenant->getId())) {
                 $productOuts[] = $product;
             }
         }
+
         return $this->product;
     }
 
@@ -251,5 +252,19 @@ class CommunicationPromotions
         $this->knowMore = $knowMore;
 
         return $this;
+    }
+
+    #[ORM\PrePersist]
+    public function setCreated(): void
+    {
+        $this->createdAt = new \DateTimeImmutable();
+    }
+
+    #[ORM\PreFlush]
+    #[ORM\PostPersist]
+    #[ORM\PreUpdate]
+    public function setUpdated(): void
+    {
+        $this->updatedAt = new \DateTimeImmutable();
     }
 }

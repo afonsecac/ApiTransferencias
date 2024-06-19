@@ -99,6 +99,8 @@ class PackagePriceService extends CommonService
         $clientPackage->setTags($dataInfo->tags);
         $clientPackage->setValidity($dataInfo->validity);
         $clientPackage->setName($pricePackage->getName());
+        $clientPackage->setAmount($pricePackage->getAmount());
+        $clientPackage->setCurrency($pricePackage->getCurrency());
         $clientPackage->setDescription($pricePackage->getDescription());
         $clientPackage->setActiveStartAt($pricePackage->getActiveStartAt());
         $clientPackage->setActiveEndAt($pricePackage->getActiveEndAt());
