@@ -70,8 +70,6 @@ class CommunicationClientPackageRepository extends ServiceEntityRepository
                 ->andWhere('t.isActive = :isActive')
                 ->setParameter('tenant', $tenant)
                 ->setParameter('isActive', true);
-        } else {
-            $dql->andWhere('p.tenant IS NULL');
         }
 
         return $dql->orderBy('c.companyName')->addOrderBy('p.amount')->getQuery()->getResult();

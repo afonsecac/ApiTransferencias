@@ -75,9 +75,11 @@ class CommunicationPricePackageRepository extends ServiceEntityRepository
                 'type' => $env,
             ]);
         if (!is_null($tenantId)) {
-            $dql = $dql->leftJoin('pp.tenant', 't')
-                ->andWhere('t.id = :tenant')
+            $dql = $dql
+                ->leftJoin('pp.tenant', 't')->andWhere('t.id = :tenant')
                 ->setParameter('tenant', $tenantId);
+        } else {
+            $dql->andWhere('pp.tenant IS NULL');
         }
 
         return $dql->orderBy('pp.price', 'ASC')->getQuery()->getResult();
