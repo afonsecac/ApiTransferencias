@@ -46,7 +46,9 @@ class CommunicationClientPackageProvider implements ProviderInterface
                         $this->packagePriceService->copyPricePackage($packageItem, $tenant);
                     }
                 }
-                $this->em->flush();
+                if (count($packageItems) > 0) {
+                    $this->em->flush();
+                }
 
                 $clientPackages = $this->itemProvider->provide($operation, $uriVariables, $context);
             }
