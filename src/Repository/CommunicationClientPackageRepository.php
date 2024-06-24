@@ -26,9 +26,10 @@ class CommunicationClientPackageRepository extends ServiceEntityRepository
      * @throws \Doctrine\ORM\NonUniqueResultException
      * @throws \Doctrine\ORM\NoResultException
      */
-    public function getPackageById(int $packageId, Account $account): CommunicationClientPackage | null
+    public function getPackageById(int $packageId, Account $account): CommunicationClientPackage|null
     {
         $currentDate = new \DateTimeImmutable('now');
+
         return $this->createQueryBuilder('p')
             ->leftJoin('p.tenant', 'a')
             ->where('p.id = :id')
@@ -45,15 +46,17 @@ class CommunicationClientPackageRepository extends ServiceEntityRepository
     /**
      * @param string $env
      * @param int|null $tenant
-     * @return array
+     * @return CommunicationClientPackage[]
      */
-    public function getAllPackages(string $env = 'TEST', int $tenant = null):array
+    public function getAllPackages(string $env = 'TEST', int $tenant = null): array
     {
         $currentDate = new \DateTimeImmutable('now');
         $dql = $this->createQueryBuilder('p')
             ->leftJoin('p.tenant', 't')
+            ->leftJoin('p.priceClientPackage', 'pc')
             ->leftJoin('t.client', 'c')
-            ->leftJoin('t.environment', 'e')
+            ->leftJoin('pc.product', 'pe')
+            ->leftJoin('pe.environment', 'e')
             ->select('p')
             ->addSelect('t')
             ->addSelect('c')
@@ -67,6 +70,8 @@ class CommunicationClientPackageRepository extends ServiceEntityRepository
                 ->andWhere('t.isActive = :isActive')
                 ->setParameter('tenant', $tenant)
                 ->setParameter('isActive', true);
+        } else {
+            $dql->andWhere('p.tenant IS NULL');
         }
 
         return $dql->orderBy('c.companyName')->addOrderBy('p.amount')->getQuery()->getResult();
