@@ -251,6 +251,9 @@ class CommunicationClientPackage
     #[Groups(['comPackage:read'])]
     private ?string $currency = null;
 
+    #[ORM\ManyToOne]
+    private ?Environment $environment = null;
+
     public function __construct()
     {
         $this->activeStartAt = new \DateTimeImmutable();
@@ -472,7 +475,15 @@ class CommunicationClientPackage
 
     public function getValidity(): ?array
     {
-        return $this->validity;
+        $validityInfo = $this->validity;
+        if ($this->getPromotions()->count() > 0) {
+            foreach ($this->getPromotions() as $promotion) {
+                if ($promotion instanceof CommunicationPromotions && $promotion->getValidityInfo()) {
+                    $validityInfo = $promotion->getValidityInfo();
+                }
+            }
+        }
+        return $validityInfo;
     }
 
     public function setValidity(?array $validity): static
@@ -559,6 +570,18 @@ class CommunicationClientPackage
     public function setCurrency(string $currency): static
     {
         $this->currency = $currency;
+
+        return $this;
+    }
+
+    public function getEnvironment(): ?Environment
+    {
+        return $this->environment;
+    }
+
+    public function setEnvironment(?Environment $environment): static
+    {
+        $this->environment = $environment;
 
         return $this;
     }

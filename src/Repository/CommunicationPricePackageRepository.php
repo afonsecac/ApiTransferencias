@@ -49,9 +49,37 @@ class CommunicationPricePackageRepository extends ServiceEntityRepository
             $dql = $dql->leftJoin('p.tenant', 't')
                 ->andWhere('t.id = :client')
                 ->setParameter('client', $clientId);
+        } else {
+            $dql = $dql->andWhere('p.tenant IS NULL');
         }
 
         return $dql->orderBy('p.price', 'ASC')
             ->getQuery()->getScalarResult();
+    }
+
+    public function getPricesByEnvironment(string $env = 'TEST', int $tenantId = null): array
+    {
+        $currentDate = new \DateTimeImmutable();
+        $dql = $this->createQueryBuilder('pp')
+            ->leftJoin('pp.product', 'p')
+            ->leftJoin('p.environment', 'e')
+            ->where('e.type = :type')
+            ->andWhere('pp.activeStartAt <= :currentDate')
+            ->andWhere('pp.activeEndAt > :currentDate')
+            ->andWhere('p.initialDate <= :currentDate')
+            ->andWhere('p.endDateAt > :currentDate')
+            ->andWhere('p.enabled <= :enabled')
+            ->setParameters([
+                'currentDate' => $currentDate,
+                'enabled' => true,
+                'type' => $env,
+            ]);
+        if (!is_null($tenantId)) {
+            $dql = $dql->leftJoin('pp.tenant', 't')
+                ->andWhere('t.id = :tenant')
+                ->setParameter('tenant', $tenantId);
+        }
+
+        return $dql->orderBy('pp.price', 'ASC')->getQuery()->getResult();
     }
 }

@@ -135,7 +135,7 @@ class CommunicationSaleService extends CommonService
             throw new MyCurrentException('COM003', 'The package don\'t exist');
         }
         $destination = (object)$package->getDestination();
-        if ($balance < $package->getPriceClientPackage()?->getAmount()) {
+        if ($balance < $package->getAmount()) {
             throw new MyCurrentException('COM001', 'Insufficient balance');
         }
 
@@ -149,8 +149,8 @@ class CommunicationSaleService extends CommonService
         $recharge->setTransactionId($transactionId);
         $recharge->setPackage($package);
         $recharge->setTenant($user);
-        $recharge->setAmount($package->getPriceClientPackage()?->getAmount());
-        $recharge->setCurrency($package->getPriceClientPackage()?->getCurrency());
+        $recharge->setAmount($package->getAmount());
+        $recharge->setCurrency($package->getCurrency());
         $recharge->getCalculatePrice();
         $recharge->setState(CommunicationStateEnum::PENDING);
         try {
@@ -166,6 +166,9 @@ class CommunicationSaleService extends CommonService
                 if (!is_null($promotion)) {
                     $productCode = $promotion->getProduct()?->getPackageId();
                 }
+            } elseif($package->getPromotions()->count() === 1) {
+                $promotions = $package->getPromotions();
+                $productCode = $promotions[0]->getProduct()?->getPackageId();
             }
 
             $phoneLength = strlen($recharge->getPhoneNumber());
@@ -204,9 +207,10 @@ class CommunicationSaleService extends CommonService
                 $rechargeInfo = $this->serializer->decode($rechargeResponse->getContent(), 'json');
                 if ($checkPhone === "60") {
                     $rechargeInfo = [
+                        'orderId' => rand(0, 10000),
                         'result' => [
                             'valueOk' => true,
-                            'orderId' => rand(0, 10000),
+                            'message' => 'La recarga se realizo con exito',
                             'requestTime' => new \DateTimeImmutable('now'),
                             'responseTime' => new \DateTimeImmutable('now'),
                         ],
@@ -244,7 +248,11 @@ class CommunicationSaleService extends CommonService
             }
             $txStatus = (boolean)$rechargeResult->valueOk;
             if ($txStatus) {
-                $orderId = $rechargeResult->orderId;
+                try {
+                    $orderId = ((object)$rechargeInfo)->orderId;
+                } catch (\Exception $e) {
+                    $orderId = null;
+                }
 
                 $bodyCheck = [
                     'orderId' => $orderId,
@@ -258,13 +266,13 @@ class CommunicationSaleService extends CommonService
 
                 $balanceOperation = new BalanceOperation();
                 $balanceOperation->setTenant($user);
-                $balanceOperation->setAmount($package->getPriceClientPackage()?->getAmount());
-                $balanceOperation->setCurrency($package->getPriceClientPackage()?->getCurrency());
-                $balanceOperation->setState((string)BalanceStateEnum::COMPLETED->value);
+                $balanceOperation->setAmount($package->getAmount());
+                $balanceOperation->setCurrency($package->getCurrency());
+                $balanceOperation->setState(BalanceStateEnum::COMPLETED->value);
                 $balanceOperation->setOperationType(BalanceOperationEnum::DEBIT->value);
                 $balanceOperation->getCalculateTotal();
                 $balanceOperation->setTotalAmount($balanceOperation->getTotalAmount() * -1);
-                $balanceOperation->setTotalCurrency($package->getPriceClientPackage()?->getCurrency());
+                $balanceOperation->setTotalCurrency($package->getCurrency());
                 $balanceOperation->setCommunicationSale($recharge);
                 $this->em->persist($balanceOperation);
             } else {

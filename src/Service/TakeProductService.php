@@ -50,19 +50,24 @@ class TakeProductService extends CommonService
     }
 
     /**
-     * @throws RedirectionExceptionInterface
-     * @throws DecodingExceptionInterface
-     * @throws ClientExceptionInterface
-     * @throws TransportExceptionInterface
-     * @throws ServerExceptionInterface
+     * @param string $env
+     * @return array
+     * @throws \Symfony\Contracts\HttpClient\Exception\ClientExceptionInterface
+     * @throws \Symfony\Contracts\HttpClient\Exception\DecodingExceptionInterface
+     * @throws \Symfony\Contracts\HttpClient\Exception\RedirectionExceptionInterface
+     * @throws \Symfony\Contracts\HttpClient\Exception\ServerExceptionInterface
+     * @throws \Symfony\Contracts\HttpClient\Exception\TransportExceptionInterface
      * @throws \Exception
      */
-    public function takeProduct(): void
+    public function takeProduct(string $env): array
     {
         $environments = $this->environment->findBy([
             'scope' => 'ET',
             'isActive' => true,
+            'type' => $env
         ]);
+
+        $items = 0;
 
         foreach ($environments as $key => $item) {
             $response = $this->httpClient->request(
@@ -84,7 +89,11 @@ class TakeProductService extends CommonService
             foreach ($products as $productItem) {
                 $currentProduct = (object)$productItem;
                 $endDate = !is_null($currentProduct->FinalDate) ? new \DateTimeImmutable($currentProduct->FinalDate) : null;
-                if ((is_null($endDate) || $currentDate <= $endDate) && $currentProduct->Enabled) {
+                $findProduct = $this->em->getRepository(CommunicationProduct::class)->findBy([
+                    'environment' => $item,
+                    'packageId' => $currentProduct->Id,
+                ]);
+                if ((is_null($endDate) || $currentDate <= $endDate) && $currentProduct->Enabled && count($findProduct) === 0) {
                     $product = new CommunicationProduct();
                     $product->setPackageType($currentProduct->PackageType);
                     $product->setEnvironment($item);
@@ -100,11 +109,19 @@ class TakeProductService extends CommonService
                     $product->setPrice($currentProduct->Price);
                     $product->setProductType($currentProduct->PackageType);
                     $this->em->persist($product);
+                    ++$items;
                 }
             }
         }
 
-        $this->em->flush();
+        if ($items > 0) {
+            $this->em->flush();
+        }
+
+        return [
+            'items' => $items,
+            'isProcessed' => true
+        ];
     }
 
     /**

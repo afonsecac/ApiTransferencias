@@ -64,6 +64,9 @@ class CommunicationPricePackage
     #[ORM\Column(length: 255, nullable: true)]
     private ?string $description = null;
 
+    #[ORM\ManyToOne]
+    private ?Environment $environment = null;
+
     public function __construct()
     {
         $this->isActive = true;
@@ -279,6 +282,18 @@ class CommunicationPricePackage
     public function setDescription(?string $description): static
     {
         $this->description = $description;
+
+        return $this;
+    }
+
+    public function getEnvironment(): ?Environment
+    {
+        return $this->environment;
+    }
+
+    public function setEnvironment(?Environment $environment): static
+    {
+        $this->environment = $environment;
 
         return $this;
     }

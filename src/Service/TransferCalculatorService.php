@@ -4,10 +4,16 @@ namespace App\Service;
 
 use App\ApiResource\Calculator;
 use App\Entity\Account;
+use App\Entity\BalanceOperation;
+use App\Entity\Transfer;
+use App\Enums\BalanceOperationEnum;
+use App\Enums\BalanceStateEnum;
+use App\Enums\RebusStatusEnum;
 use App\Repository\EnvAuthRepository;
 use App\Repository\EnvironmentRepository;
 use App\Repository\SysConfigRepository;
 use App\Service\CommonService;
+use App\Util\RebusUtil;
 use Doctrine\ORM\EntityManagerInterface;
 use Psr\Log\LoggerInterface;
 use Symfony\Bundle\SecurityBundle\Security;
@@ -93,8 +99,8 @@ class TransferCalculatorService extends CommonService
                                 'toCurrency' => $data->getSendCurrency(),
                                 'sendAmount' => $data->getSendAmount(),
                                 'tenantProcessorId' => (int)$this->sysConfigRepo->findOneBy([
-                                    'propertyName' => 'rebuspay.tenant.account.'.strtolower($user->getEnvironmentName()).'.value'
-                                ])?->getPropertyValue()
+                                    'propertyName' => 'rebuspay.tenant.account.'.strtolower($user->getEnvironmentName()).'.value',
+                                ])?->getPropertyValue(),
                             ], 'json', []
                         ),
                     ]
@@ -123,6 +129,75 @@ class TransferCalculatorService extends CommonService
         }
 
         return $data;
+    }
+
+    /**
+     * @throws \Symfony\Contracts\HttpClient\Exception\RedirectionExceptionInterface
+     * @throws \Symfony\Contracts\HttpClient\Exception\DecodingExceptionInterface
+     * @throws \Symfony\Contracts\HttpClient\Exception\ClientExceptionInterface
+     * @throws \Symfony\Contracts\HttpClient\Exception\TransportExceptionInterface
+     * @throws \Symfony\Contracts\HttpClient\Exception\ServerExceptionInterface
+     */
+    public function getTransferData(Transfer $transfer, Account $user): Transfer
+    {
+        $accessTokens = $this->authRepository->findBy([
+            'closedAt' => null,
+            'permission' => $user,
+        ], [
+            'createdAt' => 'DESC',
+        ]);
+        if (is_null($accessTokens) || count($accessTokens) === 0) {
+            $token = $this->authService->start();
+            $accessToken = $this->authRepository->findOneBy([
+                'tokenAuth' => $token,
+            ]);
+        } else {
+            $accessToken = $accessTokens[0];
+            $token = $accessToken->getTokenAuth();
+        }
+        try {
+            $url = $accessToken->getPermission()?->getEnvironment()?->getBasePath()."/api/Transactions/". $transfer->getRebusPayId();
+            $tokenIn = 'Bearer '.$accessToken->getTokenAuth();
+            $response = $this->httpClient->request(
+                'GET',
+                $url,
+                [
+                    'headers' => [
+                        'Content-Type' => 'application/json',
+                        'Accept' => 'application/json',
+                        'Authorization' => $tokenIn,
+                    ]
+                ]
+            );
+
+            $info = (object)$response->toArray();
+            $transfer->setStatusId($info->workflowStatus);
+            $enumClass = RebusStatusEnum::class;
+            $enumItem = null;
+            if (enum_exists($enumClass)) {
+                $enumItem = $enumClass::from($info->workflowStatus);
+            }
+            $statusName = RebusUtil::getRebusStatusName($enumItem);
+            $transfer->setStatusName($statusName);
+            if (!is_null($enumItem) && $enumItem === RebusStatusEnum::Rejected) {
+                $balanceInfo = $this->em->getRepository(BalanceOperation::class)->getBalanceByTransferId($transfer->getId(), $user->getId());
+                if (!is_null($balanceInfo)) {
+                    $balanceInfo->setState(BalanceStateEnum::REVERSED->value);
+                }
+            }
+            $this->em->flush();
+
+
+            return $transfer;
+        } catch (RedirectionExceptionInterface|ServerExceptionInterface|TransportExceptionInterface|ClientExceptionInterface $ex) {
+            if ($ex->getCode() === 401) {
+                $accessToken->setClosedAt(new \DateTimeImmutable('now'));
+                $this->em->flush();
+
+                return $this->getTransferData($transfer, $user);
+            }
+            throw $ex;
+        }
     }
 
 }

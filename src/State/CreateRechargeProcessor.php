@@ -6,14 +6,11 @@ use ApiPlatform\Metadata\Operation;
 use ApiPlatform\State\ProcessorInterface;
 use App\Entity\Account;
 use App\Entity\BalanceOperation;
-use App\Entity\CommunicationPackage;
-use App\Entity\CommunicationRecharge;
 use App\Exception\MyCurrentException;
 use App\Repository\BalanceOperationRepository;
 use App\Service\ConfigureSequenceService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\SecurityBundle\Security;
-use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Serializer\Encoder\JsonEncoder;
 use Symfony\Component\Serializer\Encoder\XmlEncoder;
 use Symfony\Component\Serializer\Normalizer\DateIntervalNormalizer;
@@ -50,7 +47,6 @@ class CreateRechargeProcessor implements ProcessorInterface
      * @param Operation $operation
      * @param array $uriVariables
      * @param array $context
-     * @return CommunicationRecharge|mixed
      * @throws MyCurrentException
      * @throws DecodingExceptionInterface
      * @throws \JsonException

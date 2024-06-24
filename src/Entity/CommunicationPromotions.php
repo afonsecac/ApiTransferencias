@@ -6,6 +6,7 @@ use ApiPlatform\Metadata\ApiProperty;
 use ApiPlatform\Metadata\ApiResource;
 use ApiPlatform\Metadata\GetCollection;
 use App\Repository\CommunicationPromotionsRepository;
+use App\State\CommunicationPromotionProvider;
 use Doctrine\Common\Collections\ArrayCollection;
 use Doctrine\Common\Collections\Collection;
 use Doctrine\DBAL\Types\Types;
@@ -19,6 +20,7 @@ use Symfony\Component\Validator\Constraints as Assert;
     operations: [
         new GetCollection(
             uriTemplate: '/communication/promotions',
+            provider: CommunicationPromotionProvider::class
         ),
     ],
     normalizationContext: ['groups' => ['comProm:read']],
@@ -85,6 +87,13 @@ class CommunicationPromotions
     #[Groups(['comProm:read', 'comPackage:read'])]
     #[ApiProperty]
     private ?string $knowMore = null;
+
+    #[ORM\ManyToOne]
+    #[ORM\JoinColumn(nullable: true)]
+    private ?Environment $environment = null;
+
+    #[ORM\Column(nullable: true)]
+    private ?array $validityInfo = [];
 
     public function __construct()
     {
@@ -266,5 +275,34 @@ class CommunicationPromotions
     public function setUpdated(): void
     {
         $this->updatedAt = new \DateTimeImmutable();
+    }
+
+    public function getEnvironment(): ?Environment
+    {
+        return $this->environment;
+    }
+
+    public function setEnvironment(?Environment $environment): static
+    {
+        $this->environment = $environment;
+
+        return $this;
+    }
+
+    public function setProductsTemp(Collection $products): void
+    {
+        $this->products = $products;
+    }
+
+    public function getValidityInfo(): ?array
+    {
+        return $this->validityInfo;
+    }
+
+    public function setValidityInfo(?array $validityInfo): static
+    {
+        $this->validityInfo = $validityInfo;
+
+        return $this;
     }
 }

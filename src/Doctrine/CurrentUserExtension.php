@@ -73,6 +73,7 @@ final class CurrentUserExtension implements QueryCollectionExtensionInterface, Q
                     CommunicationNationality::class,
                     CommunicationProvinces::class,
                     CommunicationOffice::class,
+                    CommunicationPromotions::class,
                 ]
             )) {
                 $environment = $user->getEnvironment();

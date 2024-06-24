@@ -45,6 +45,23 @@ class BalanceOperationRepository extends ServiceEntityRepository
         }
     }
 
+    /**
+     * @throws \Doctrine\ORM\NonUniqueResultException
+     */
+    public function getBalanceByTransferId(int $transferId, int $userId): BalanceOperation | null
+    {
+        return $this->createQueryBuilder('b')
+            ->leftJoin('b.tenant', 't')
+            ->where('b.transferId = :transferId')
+            ->andWhere('b.state = :completed')
+            ->andWhere('t.id = :tenantId')
+            ->setParameter('transferId', $transferId)
+            ->setParameter('completed', 'COMPLETED')
+            ->setParameter('tenantId', $userId)
+            ->setMaxResults(1)
+            ->getQuery()->getOneOrNullResult();
+    }
+
 //    /**
 //     * @return BalanceOperation[] Returns an array of BalanceOperation objects
 //     */

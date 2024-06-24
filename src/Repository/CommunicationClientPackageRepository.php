@@ -58,14 +58,15 @@ class CommunicationClientPackageRepository extends ServiceEntityRepository
             ->addSelect('t')
             ->addSelect('c')
             ->where('p.activeStartAt <= :currentDate AND p.activeEndAt > :currentDate')
-            ->andWhere('t.isActive = :isActive')
             ->andWhere('e.type = :type')
             ->setParameter('currentDate', $currentDate)
-            ->setParameter('type', $env)
-            ->setParameter('isActive', true);
+            ->setParameter('type', $env);
 
         if (!is_null($tenant) && $tenant) {
-            $dql->andWhere('t.id = :tenant')->setParameter('tenant', $tenant);
+            $dql->andWhere('t.id = :tenant')
+                ->andWhere('t.isActive = :isActive')
+                ->setParameter('tenant', $tenant)
+                ->setParameter('isActive', true);
         }
 
         return $dql->orderBy('c.companyName')->addOrderBy('p.amount')->getQuery()->getResult();

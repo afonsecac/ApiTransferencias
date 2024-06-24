@@ -35,11 +35,16 @@ class CommunicationClientPackageProvider implements ProviderInterface
         if ($clientPackages->count() === 0) {
             $tenant = $this->security->getUser();
             if (!is_null($tenant) && $tenant instanceof Account) {
-                $packageItems = $this->em->getRepository(CommunicationPricePackage::class)->findBy([
-                    'tenant' => null
-                ], ['price' => 'ASC']);
-                foreach ($packageItems as $packageItem) {
-                    $this->packagePriceService->copyPricePackage($packageItem, $tenant);
+                $packageItems = $this->em->getRepository(CommunicationPricePackage::class)->getPricesByEnvironment($tenant->getEnvironment()?->getType(), $tenant->getId());
+                if (count($packageItems) > 0) {
+                    foreach ($packageItems as $packageItem) {
+                        $this->packagePriceService->createPackageClient($packageItem, $tenant);
+                    }
+                } else {
+                    $packageItems = $this->em->getRepository(CommunicationPricePackage::class)->getPricesByEnvironment($tenant->getEnvironment()?->getType());
+                    foreach ($packageItems as $packageItem) {
+                        $this->packagePriceService->copyPricePackage($packageItem, $tenant);
+                    }
                 }
                 $this->em->flush();
 

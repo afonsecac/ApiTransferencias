@@ -10,6 +10,7 @@ use ApiPlatform\Metadata\Patch;
 use ApiPlatform\Metadata\Post;
 use App\Repository\TransferRepository;
 use App\State\CreateTransactionProcessor;
+use App\State\TransferProvider;
 use DateTimeImmutable;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
@@ -20,7 +21,9 @@ use Symfony\Component\Validator\Constraints as Assert;
 #[ORM\HasLifecycleCallbacks]
 #[ApiResource(
     operations: [
-        new Get(),
+        new Get(
+            provider: TransferProvider::class
+        ),
         new GetCollection(),
         new Post(
             validationContext: [
@@ -164,7 +167,8 @@ class Transfer
         $this->currencyCommission = 'USD';
     }
 
-    public static function validationsTransactionType(self $transfer) {
+    public static function validationsTransactionType(self $transfer): array
+    {
         if ('5' !== $transfer->getTransactionType()) {
             return ['debitTx'];
         }

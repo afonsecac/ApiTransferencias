@@ -8,6 +8,8 @@ use App\ApiResource\Calculator;
 use App\Entity\Account;
 use App\Entity\BalanceOperation;
 use App\Entity\Transfer;
+use App\Enums\BalanceStateEnum;
+use App\Enums\RebusStatusEnum;
 use App\Repository\BalanceOperationRepository;
 use App\Repository\BankCardRepository;
 use App\Repository\EnvAuthRepository;
@@ -16,6 +18,7 @@ use App\Repository\SysConfigRepository;
 use App\Service\AuthService;
 use App\Service\ConfigureSequenceService;
 use App\Service\TransferCalculatorService;
+use App\Util\RebusUtil;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\NonUniqueResultException;
 use Symfony\Bundle\SecurityBundle\Security;
@@ -154,17 +157,7 @@ class CreateTransactionProcessor implements ProcessorInterface
                     $data->setAmountCommission($getInfo->feeTransAmount);
                     $data->setCurrencyCommission($data->getCurrency());
                     $data->setStatusId($getInfo->workflowStatus);
-                    switch ($getInfo->workflowStatus) {
-                        case 1:
-                            $data->setSenderName('IN_DEPOSIT');
-                            break;
-                        case 2:
-                            $data->setStatusName('DEPOSIT');
-                            break;
-                        default:
-                            $data->setStatusName('PENDING');
-                            break;
-                    }
+                    $data->setStatusName(RebusUtil::getRebusStatusName($getInfo->workflowStatus));
                     $data->setSender($sender);
                     $data->setSenderName(
                         sprintf(
@@ -191,7 +184,11 @@ class CreateTransactionProcessor implements ProcessorInterface
                 $balanceOperation->setTotalAmount((-1) * $data->getTotalAmount());
                 $balanceOperation->setTotalCurrency($data->getCurrencyTotal());
                 $balanceOperation->setOperationType("DEBIT");
-                $balanceOperation->setState('COMPLETED');
+                if ($data->getStatusId() === RebusStatusEnum::Rejected) {
+                    $balanceOperation->setState(BalanceStateEnum::REVERSED->value);
+                } else {
+                    $balanceOperation->setState(BalanceStateEnum::COMPLETED->value);
+                }
                 $balanceOperation->setAmountTax($data->getAmountCommission());
                 $balanceOperation->setCurrencyTax($data->getCurrencyCommission());
                 $balanceOperation->setTransfer($data);

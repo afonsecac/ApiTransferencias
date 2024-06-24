@@ -31,6 +31,8 @@ class CommunicationPromotionService extends CommonService
         $endDateAt = new \DateTimeImmutable($params->range['endAt']);
         $promotion->setStartAt($startDateAt);
         $promotion->setEndAt($endDateAt);
+        $promotion->setValidityInfo($params->validity);
+        $promotion->setEnvironment($productPromotion->getEnvironment());
 
 
         foreach ($params->products as $key => $item) {
