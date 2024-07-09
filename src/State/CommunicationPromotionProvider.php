@@ -3,10 +3,8 @@
 namespace App\State;
 
 use ApiPlatform\Metadata\Operation;
-use ApiPlatform\State\Pagination;
 use ApiPlatform\State\ProviderInterface;
 use App\Entity\Account;
-use App\Entity\CommunicationPricePackage;
 use App\Entity\CommunicationPromotions;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\SecurityBundle\Security;
@@ -21,8 +19,7 @@ class CommunicationPromotionProvider implements ProviderInterface
         #[Autowire(service: 'doctrine.orm.entity_manager')]
         private readonly EntityManagerInterface $em,
         private readonly Security $security
-    )
-    {
+    ) {
     }
 
     public function provide(Operation $operation, array $uriVariables = [], array $context = []): object|array|null
@@ -35,10 +32,14 @@ class CommunicationPromotionProvider implements ProviderInterface
                 for ($i = 0; $i < $countPromotion; $i++) {
                     $promotion = $promotions->getIterator()->offsetGet($i);
                     if ($promotion instanceof CommunicationPromotions) {
-                        $products = $promotion->getProducts()->filter(function (\App\Entity\CommunicationClientPackage $clientPackage) {
-                            $user = $this->security->getUser();
-                            return $user instanceof Account && $clientPackage->getTenant()?->getId() === $user->getId();
-                        });
+                        $products = $promotion->getProducts()->filter(
+                            function (\App\Entity\CommunicationClientPackage $clientPackage) {
+                                $user = $this->security->getUser();
+
+                                return $user instanceof Account && $clientPackage->getTenant()?->getId(
+                                    ) === $user->getId();
+                            }
+                        );
                         $promotion->setProductsTemp($products);
                         $promotions->getIterator()->offsetSet($i, $promotion);
                     }
