@@ -272,8 +272,8 @@ class CommunicationSaleService extends CommonService
                 $balanceOperation->setTenant($user);
                 $balanceOperation->setAmount($package->getAmount());
                 $balanceOperation->setCurrency($package->getCurrency());
-                $balanceOperation->setState(BalanceStateEnum::COMPLETED->value);
-                $balanceOperation->setOperationType(BalanceOperationEnum::DEBIT->value);
+                $balanceOperation->setState('COMPLETED');
+                $balanceOperation->setOperationType('DEBIT');
                 $balanceOperation->getCalculateTotal();
                 $balanceOperation->setTotalAmount($balanceOperation->getTotalAmount() * -1);
                 $balanceOperation->setTotalCurrency($package->getCurrency());
