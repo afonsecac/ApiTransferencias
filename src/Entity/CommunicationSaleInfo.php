@@ -14,6 +14,7 @@ use ApiPlatform\Metadata\Post;
 use ApiPlatform\Serializer\Filter\PropertyFilter;
 use App\Enums\CommunicationStateEnum;
 use App\Repository\CommunicationSaleInfoRepository;
+use App\State\CommunicationSaleProvider;
 use App\State\CreateSaleInfoProcessor;
 use Doctrine\ORM\Mapping as ORM;
 use Symfony\Component\Serializer\Annotation\Groups;
@@ -40,6 +41,7 @@ use Symfony\Component\Validator\Constraints as Assert;
             uriTemplate: '/communication/sale/{id}',
             defaults: ['color' => 'brown'],
             requirements: ['id' => '\d+'],
+            provider: CommunicationSaleProvider::class
         ),
         new GetCollection(
             uriTemplate: '/communication/sale'

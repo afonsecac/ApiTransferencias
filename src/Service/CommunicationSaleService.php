@@ -9,8 +9,10 @@ use App\Entity\CommunicationClientPackage;
 use App\Entity\CommunicationNationality;
 use App\Entity\CommunicationOffice;
 use App\Entity\CommunicationPromotions;
+use App\Entity\CommunicationSaleInfo;
 use App\Entity\CommunicationSalePackage;
 use App\Entity\CommunicationSaleRecharge;
+use App\Entity\User;
 use App\Enums\BalanceOperationEnum;
 use App\Enums\BalanceStateEnum;
 use App\Enums\CommunicationStateEnum;
@@ -18,6 +20,7 @@ use App\Exception\MyCurrentException;
 use App\Repository\BalanceOperationRepository;
 use App\Repository\EnvironmentRepository;
 use App\Repository\SysConfigRepository;
+use App\State\CommunicationSaleProvider;
 use Doctrine\DBAL\Exception;
 use Doctrine\ORM\EntityManagerInterface;
 use Psr\Log\LoggerInterface;
@@ -27,6 +30,7 @@ use Symfony\Component\HttpClient\Exception\TimeoutException;
 use Symfony\Component\Mailer\MailerInterface;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 use Symfony\Contracts\HttpClient\Exception\ClientExceptionInterface;
+use Symfony\Contracts\HttpClient\Exception\DecodingExceptionInterface;
 use Symfony\Contracts\HttpClient\Exception\RedirectionExceptionInterface;
 use Symfony\Contracts\HttpClient\Exception\ServerExceptionInterface;
 use Symfony\Contracts\HttpClient\Exception\TransportExceptionInterface;
@@ -570,5 +574,87 @@ class CommunicationSaleService extends CommonService
         }
 
         return $sale;
+    }
+
+    /**
+     * @param int $saleId
+     * @return \App\Entity\CommunicationSaleInfo|null
+     */
+    public function checkSaleInfo(int $saleId): CommunicationSaleInfo | null
+    {
+        $user = $this->security->getUser();
+        $communicationSale = $this->em->getRepository(CommunicationSaleInfo::class)->find($saleId);
+        try {
+            if (!$user instanceof Account) {
+                return null;
+            }
+            if (is_null($communicationSale)) {
+                return null;
+            }
+            $url = $user->getEnvironment()?->getBasePath().'/sale/sale-info';
+
+            $body = [
+                'environment' => $user->getEnvironment()?->getType(),
+                'transactionId' => $communicationSale->getTransactionID(),
+            ];
+
+//            $body = [
+//                'environment' => 'PROD',
+//                'transactionId' => '2407140100035',
+//            ];
+
+            $rechargeResponse = $this->httpClient->request(
+                'POST',
+                $url,
+                [
+                    'headers' => [
+                        'Content-Type' => 'application/json',
+                        'Accept' => 'application/json',
+                    ],
+                    'body' => $this->serializer->serialize($body, 'json', []),
+                ]
+            );
+
+            $response = $rechargeResponse->toArray();
+            if (is_array($response)) {
+                $responseInfo = (object) $response;
+                $result = null;
+                try {
+                    $orderId = $responseInfo->orderId;
+                    $result = (object) $responseInfo->result;
+                    $communicationSale->setTransactionOrder($orderId);
+                    $communicationSale->setState(CommunicationStateEnum::COMPLETED);
+
+                    $balanceOperation = new BalanceOperation();
+                    $balanceOperation->setTenant($user);
+                    $balanceOperation->setAmount($communicationSale->getTotalPrice());
+                    $balanceOperation->setCurrency($communicationSale->getCurrency());
+                    $balanceOperation->setState('COMPLETED');
+                    $balanceOperation->setOperationType('DEBIT');
+                    $balanceOperation->getCalculateTotal();
+                    $balanceOperation->setTotalAmount($balanceOperation->getTotalAmount() * -1);
+                    $balanceOperation->setTotalCurrency($communicationSale->getCurrency());
+                    $balanceOperation->setCommunicationSale($communicationSale);
+                    $this->em->persist($balanceOperation);
+                }  catch (\Exception $exc) {
+
+                }
+                if (!is_null($result) && !$result->valueOk) {
+                    $communicationSale->setState(CommunicationStateEnum::REJECTED);
+                } else if(is_null($result)) {
+                    $communicationSale->setState(CommunicationStateEnum::FAILED);
+                }
+                $communicationSale->setTransactionStatus($response);
+            }
+
+            $this->em->flush();
+
+        } catch (ClientExceptionInterface | DecodingExceptionInterface | RedirectionExceptionInterface | ServerExceptionInterface | TransportExceptionInterface $exc) {
+            $cont = $exc->getMessage();
+        } catch (\Exception $exc) {
+            $cont = $exc->getMessage();
+        }
+
+        return $communicationSale;
     }
 }
