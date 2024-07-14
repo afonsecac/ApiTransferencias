@@ -595,7 +595,7 @@ class CommunicationSaleService extends CommonService
 
             $body = [
                 'environment' => $user->getEnvironment()?->getType(),
-                'transactionId' => $communicationSale->getTransactionID(),
+                'transactionId' => $communicationSale->getTransactionId(),
             ];
 
 //            $body = [
