@@ -648,12 +648,13 @@ class CommunicationSaleService extends CommonService
             }
 
             $this->em->flush();
-
+            $message = "Successfully";
         } catch (ClientExceptionInterface | DecodingExceptionInterface | RedirectionExceptionInterface | ServerExceptionInterface | TransportExceptionInterface $exc) {
-            $cont = $exc->getMessage();
+            $message = $exc->getMessage();
         } catch (\Exception $exc) {
-            $cont = $exc->getMessage();
+            $message = $exc->getMessage();
         }
+        $this->logger->info($message);
 
         return $communicationSale;
     }
