@@ -171,8 +171,9 @@ class CommunicationSaleService extends CommonService
                     $productCode = $promotion->getProduct()?->getPackageId();
                 }
             } elseif($package->getPromotions()->count() === 1) {
-                $promotions = $package->getPromotions();
-                $productCode = $promotions[0]->getProduct()?->getPackageId();
+                $promotions = $package->getPromotions()->toArray();
+                $promotion = $promotions['1'];
+                $productCode = $promotion?->getProduct()?->getPackageId();
             }
 
             $phoneLength = strlen($recharge->getPhoneNumber());
@@ -579,6 +580,12 @@ class CommunicationSaleService extends CommonService
     /**
      * @param int $saleId
      * @return \App\Entity\CommunicationSaleInfo|null
+     * @throws \App\Exception\MyCurrentException
+     * @throws \Symfony\Contracts\HttpClient\Exception\ClientExceptionInterface
+     * @throws \Symfony\Contracts\HttpClient\Exception\DecodingExceptionInterface
+     * @throws \Symfony\Contracts\HttpClient\Exception\RedirectionExceptionInterface
+     * @throws \Symfony\Contracts\HttpClient\Exception\ServerExceptionInterface
+     * @throws \Symfony\Contracts\HttpClient\Exception\TransportExceptionInterface
      */
     public function checkSaleInfo(int $saleId): CommunicationSaleInfo | null
     {
@@ -651,11 +658,122 @@ class CommunicationSaleService extends CommonService
             $message = "Successfully";
         } catch (ClientExceptionInterface | DecodingExceptionInterface | RedirectionExceptionInterface | ServerExceptionInterface | TransportExceptionInterface $exc) {
             $message = $exc->getMessage();
+            if ($exc->getCode() === 400) {
+                try {
+                    $this->tryAgain($communicationSale);
+                } catch (RedirectionExceptionInterface|ServerExceptionInterface|TransportExceptionInterface|MyCurrentException|DecodingExceptionInterface|ClientExceptionInterface $ex) {
+                    $message = $ex->getMessage();
+                    throw $ex;
+                }
+            }
         } catch (\Exception $exc) {
             $message = $exc->getMessage();
         }
         $this->logger->info($message);
 
         return $communicationSale;
+    }
+
+    /**
+     * @param \App\Entity\CommunicationSaleRecharge|\App\Entity\CommunicationSalePackage $operation
+     * @throws \App\Exception\MyCurrentException
+     * @throws \Symfony\Contracts\HttpClient\Exception\ClientExceptionInterface
+     * @throws \Symfony\Contracts\HttpClient\Exception\DecodingExceptionInterface
+     * @throws \Symfony\Contracts\HttpClient\Exception\RedirectionExceptionInterface
+     * @throws \Symfony\Contracts\HttpClient\Exception\ServerExceptionInterface
+     * @throws \Symfony\Contracts\HttpClient\Exception\TransportExceptionInterface
+     */
+    protected function tryAgain(CommunicationSaleRecharge | CommunicationSalePackage $operation): void
+    {
+        $user = $this->security->getUser();
+        try {
+            if (!$user instanceof Account){
+                return;
+            }
+            $balance = $this->balanceRepository->getBalanceOutput($user->getId());
+            $package = $this->em->getRepository(CommunicationClientPackage::class)->getPackageById(
+                $operation->getPackageId(),
+                $user
+            );
+            if (is_null($package)) {
+                throw new MyCurrentException('COM003', 'The package don\'t exist');
+            }
+            $destination = (object)$package->getDestination();
+            if ($balance < $package->getAmount()) {
+                throw new MyCurrentException('COM001', 'Insufficient balance');
+            }
+            $urlRecharge = $user->getEnvironment()?->getBasePath().'/sale/recharge';
+            $productCode = $package->getPriceClientPackage()?->getProduct()?->getPackageId();
+            if (!is_null($operation->getPromotionId())) {
+                $promotion = $this->em->getRepository(CommunicationPromotions::class)->getActivePromotionById(
+                    $operation->getPromotionId()
+                );
+                if (!is_null($promotion)) {
+                    $productCode = $promotion->getProduct()?->getPackageId();
+                }
+            } elseif($package->getPromotions()->count() === 1) {
+                $promotions = $package->getPromotions()->toArray();
+                $promotion = $promotions['1'];
+                $productCode = $promotion?->getProduct()?->getPackageId();
+            }
+            if ($operation instanceof CommunicationSaleRecharge) {
+                $body = [
+                    'phoneNumber' => $operation->getPhoneNumber(),
+                    'productCode' => $productCode,
+                    'productPrice' => round($destination->amount, 2),
+                    'transactionId' => $operation->getTransactionId(),
+                    'environment' => $user->getEnvironment()?->getType(),
+                ];
+
+                $rechargeResponse = $this->httpClient->request(
+                    'POST',
+                    $urlRecharge,
+                    [
+                        'headers' => [
+                            'Content-Type' => 'application/json',
+                            'Accept' => 'application/json',
+                        ],
+                        'body' => $this->serializer->serialize($body, 'json', []),
+                    ]
+                );
+
+                $rechargeInfo = $rechargeResponse->toArray();
+                $toResponse = (object) $rechargeInfo;
+                $result = $toResponse->result;
+                if (is_array($result)) {
+                    $result = (object) $result;
+                }
+
+                if ($result->valueOk) {
+                    try {
+                        $orderId = $toResponse->orderId;
+                    } catch (\Exception $e) {
+                        $orderId = null;
+                    }
+
+                    $balanceOperation = new BalanceOperation();
+                    $balanceOperation->setTenant($user);
+                    $balanceOperation->setAmount($package->getAmount());
+                    $balanceOperation->setCurrency($package->getCurrency());
+                    $balanceOperation->setState('COMPLETED');
+                    $balanceOperation->setOperationType('DEBIT');
+                    $balanceOperation->getCalculateTotal();
+                    $balanceOperation->setTotalAmount($balanceOperation->getTotalAmount() * -1);
+                    $balanceOperation->setTotalCurrency($package->getCurrency());
+                    $balanceOperation->setCommunicationSale($operation);
+                    $this->em->persist($balanceOperation);
+
+                    $comInfo = [
+                        'info' => $rechargeInfo,
+                    ];
+                    $operation->setTransactionOrder($orderId);
+                    $operation->setState(CommunicationStateEnum::COMPLETED);
+                    $operation->setTransactionStatus($comInfo);
+                    $this->em->flush();
+                }
+            }
+        } catch (Exception $e) {
+            $message = $e->getMessage();
+        }
     }
 }
