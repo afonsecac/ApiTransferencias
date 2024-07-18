@@ -171,8 +171,13 @@ class CommunicationSaleService extends CommonService
                     $productCode = $promotion->getProduct()?->getPackageId();
                 }
             } elseif($package->getPromotions()->count() === 1) {
-                $promotions = $package->getPromotions()->toArray();
-                $promotion = $promotions['1'];
+                $promotions = $package->getPromotions();
+                try {
+                    $promotionsArray = $promotions->toArray();
+                    $promotion = $promotionsArray[0];
+                } catch (\Exception $exc) {
+                    $promotion = $promotions['1'];
+                }
                 $productCode = $promotion?->getProduct()?->getPackageId();
             }
 
@@ -712,8 +717,13 @@ class CommunicationSaleService extends CommonService
                     $productCode = $promotion->getProduct()?->getPackageId();
                 }
             } elseif($package->getPromotions()->count() === 1) {
-                $promotions = $package->getPromotions()->toArray();
-                $promotion = $promotions['1'];
+                $promotions = $package->getPromotions();
+                try {
+                    $promotionsArray = $promotions->toArray();
+                    $promotion = $promotionsArray[0];
+                } catch (\Exception $exc) {
+                    $promotion = $promotions->getValues()[0];
+                }
                 $productCode = $promotion?->getProduct()?->getPackageId();
             }
             if ($operation instanceof CommunicationSaleRecharge) {
