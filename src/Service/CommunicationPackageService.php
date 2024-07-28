@@ -3,6 +3,7 @@
 namespace App\Service;
 
 use App\Entity\CommunicationClientPackage;
+use App\Entity\CommunicationPricePackage;
 use App\Entity\CommunicationProduct;
 use App\Service\CommonService;
 
@@ -16,6 +17,12 @@ class CommunicationPackageService extends CommonService
     public function all(int $productId, int $tenant = null): array
     {
         $product = $this->em->getRepository(CommunicationProduct::class)->find($productId);
-        return $this->em->getRepository(CommunicationClientPackage::class)->getAllPackages($product?->getEnvironment()?->getType(), $tenant);
+        $productList = $this->em->getRepository(CommunicationClientPackage::class)->getAllPackages($product?->getEnvironment()?->getType(), $tenant);
+        if (count($productList) === 0) {
+            $productList = $this->em->getRepository(CommunicationPricePackage::class)->findBy([], [
+                'amount' => 'ASC'
+            ]);
+        }
+        return $productList;
     }
 }

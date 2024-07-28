@@ -53,4 +53,9 @@ class CommunicationSaleRecharge extends CommunicationSaleInfo
 
         return $this;
     }
+
+    public function addId(int $id): void
+    {
+        $this->id = $id;
+    }
 }

@@ -23,11 +23,18 @@ class CommunicationSaleProvider implements ProviderInterface
     {
     }
 
+    /**
+     * @throws \Symfony\Contracts\HttpClient\Exception\TransportExceptionInterface
+     * @throws \Symfony\Contracts\HttpClient\Exception\ServerExceptionInterface
+     * @throws \Symfony\Contracts\HttpClient\Exception\RedirectionExceptionInterface
+     * @throws \Symfony\Contracts\HttpClient\Exception\DecodingExceptionInterface
+     * @throws \Symfony\Contracts\HttpClient\Exception\ClientExceptionInterface
+     * @throws \App\Exception\MyCurrentException
+     */
     public function provide(Operation $operation, array $uriVariables = [], array $context = []): object|array|null
     {
         $communicationSale = $this->itemProvider->provide($operation, $uriVariables, $context);
 
-        // && $communicationSale->getState() === CommunicationStateEnum::PENDING
         if ($communicationSale instanceof CommunicationSaleInfo && $communicationSale->getState() === CommunicationStateEnum::PENDING) {
             $communicationSale = $this->saleService->checkSaleInfo($communicationSale->getId());
         }

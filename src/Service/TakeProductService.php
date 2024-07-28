@@ -9,6 +9,7 @@ use App\Entity\CommunicationPackage;
 use App\Entity\CommunicationPriceTable;
 use App\Entity\CommunicationProduct;
 use App\Entity\CommunicationProvinces;
+use App\Exception\MyCurrentException;
 use App\Repository\EnvironmentRepository;
 use App\Repository\SysConfigRepository;
 use Doctrine\ORM\EntityManagerInterface;
@@ -27,16 +28,17 @@ use Symfony\Contracts\HttpClient\HttpClientInterface;
 class TakeProductService extends CommonService
 {
     public function __construct(
-        EntityManagerInterface $em,
-        Security $security,
-        ParameterBagInterface $parameters,
-        MailerInterface $mailer,
-        LoggerInterface $logger,
-        UserPasswordHasherInterface $passwordHasher,
-        EnvironmentRepository $environmentRepository,
-        SysConfigRepository $sysConfigRepo,
+        EntityManagerInterface               $em,
+        Security                             $security,
+        ParameterBagInterface                $parameters,
+        MailerInterface                      $mailer,
+        LoggerInterface                      $logger,
+        UserPasswordHasherInterface          $passwordHasher,
+        EnvironmentRepository                $environmentRepository,
+        SysConfigRepository                  $sysConfigRepo,
         private readonly HttpClientInterface $httpClient,
-    ) {
+    )
+    {
         parent::__construct(
             $em,
             $security,
@@ -61,67 +63,76 @@ class TakeProductService extends CommonService
      */
     public function takeProduct(string $env): array
     {
-        $environments = $this->environment->findBy([
-            'scope' => 'ET',
-            'isActive' => true,
-            'type' => $env
-        ]);
+        try {
+            $environments = $this->environment->findBy([
+                'scope' => 'ET',
+                'isActive' => true,
+                'type' => $env
+            ]);
 
-        $items = 0;
+            $items = 0;
 
-        foreach ($environments as $key => $item) {
-            $response = $this->httpClient->request(
-                'POST',
-                $item->getBasePath().'/information/packages',
-                [
-                    'headers' => [
-                        'Content-Type' => 'application/json',
-                        'Accept' => 'application/json',
-                    ],
-                    'body' => $this->serializer->serialize([
-                        'environment' => $item->getType(),
-                    ], 'json', []),
-                ]
-            );
+            foreach ($environments as $key => $item) {
+                $response = $this->httpClient->request(
+                    'POST',
+                    $item->getBasePath() . '/information/packages',
+                    [
+                        'headers' => [
+                            'Content-Type' => 'application/json',
+                            'Accept' => 'application/json',
+                        ],
+                        'body' => $this->serializer->serialize([
+                            'environment' => $item->getType(),
+                        ], 'json', []),
+                    ]
+                );
 
-            $products = (object)$response->toArray();
-            $currentDate = new \DateTimeImmutable();
-            foreach ($products as $productItem) {
-                $currentProduct = (object)$productItem;
-                $endDate = !is_null($currentProduct->FinalDate) ? new \DateTimeImmutable($currentProduct->FinalDate) : null;
-                $findProduct = $this->em->getRepository(CommunicationProduct::class)->findBy([
-                    'environment' => $item,
-                    'packageId' => $currentProduct->Id,
-                ]);
-                if ((is_null($endDate) || $currentDate <= $endDate) && $currentProduct->Enabled && count($findProduct) === 0) {
-                    $product = new CommunicationProduct();
-                    $product->setPackageType($currentProduct->PackageType);
-                    $product->setEnvironment($item);
-                    $product->setPackageId($currentProduct->Id);
-                    $product->setDescription($currentProduct->Description);
-                    $product->setEnabled($currentProduct->Enabled);
-                    if (!is_null($currentProduct->InitialDate)) {
-                        $product->setInitialDate(new \DateTimeImmutable($currentProduct->InitialDate));
+                $products = (object)$response->toArray();
+                $currentDate = new \DateTimeImmutable();
+                foreach ($products as $productItem) {
+                    $currentProduct = (object)$productItem;
+                    $endDate = !is_null($currentProduct->FinalDate) ? new \DateTimeImmutable($currentProduct->FinalDate) : null;
+                    $findProduct = $this->em->getRepository(CommunicationProduct::class)->findBy([
+                        'environment' => $item,
+                        'packageId' => $currentProduct->Id,
+                    ]);
+                    if ((is_null($endDate) || $currentDate <= $endDate) && $currentProduct->Enabled && count($findProduct) === 0) {
+                        $product = new CommunicationProduct();
+                        $product->setPackageType($currentProduct->PackageType);
+                        $product->setEnvironment($item);
+                        $product->setPackageId($currentProduct->Id);
+                        $product->setDescription($currentProduct->Description);
+                        $product->setEnabled($currentProduct->Enabled);
+                        if (!is_null($currentProduct->InitialDate)) {
+                            $product->setInitialDate(new \DateTimeImmutable($currentProduct->InitialDate));
+                        }
+                        if (!is_null($endDate)) {
+                            $product->setEndDateAt($endDate);
+                        }
+                        $product->setPrice($currentProduct->Price);
+                        $product->setProductType($currentProduct->PackageType);
+                        $this->em->persist($product);
+                        ++$items;
                     }
-                    if (!is_null($endDate)) {
-                        $product->setEndDateAt($endDate);
-                    }
-                    $product->setPrice($currentProduct->Price);
-                    $product->setProductType($currentProduct->PackageType);
-                    $this->em->persist($product);
-                    ++$items;
                 }
             }
-        }
 
-        if ($items > 0) {
-            $this->em->flush();
-        }
+            if ($items > 0) {
+                $this->em->flush();
+            }
 
-        return [
-            'items' => $items,
-            'isProcessed' => true
-        ];
+            return [
+                'items' => $items,
+                'isProcessed' => true
+            ];
+        } catch (\Exception $exception) {
+            $this->logger->error($exception->getMessage());
+            if ($exception->getCode()) {
+                $codeExc = (string) $exception->getCode();
+            } else
+                $codeExc = 'Unknown error';
+            throw new MyCurrentException($codeExc, $exception->getMessage());
+        }
     }
 
     /**
@@ -141,7 +152,7 @@ class TakeProductService extends CommonService
         foreach ($environments as $key => $item) {
             $nationalitiesResponse = $this->httpClient->request(
                 'POST',
-                $item->getBasePath().'/information/nationalities',
+                $item->getBasePath() . '/information/nationalities',
                 [
                     'headers' => [
                         'Content-Type' => 'application/json',
@@ -171,7 +182,7 @@ class TakeProductService extends CommonService
 
             $provincesResponse = $this->httpClient->request(
                 'POST',
-                $item->getBasePath().'/information/provinces',
+                $item->getBasePath() . '/information/provinces',
                 [
                     'headers' => [
                         'Content-Type' => 'application/json',
@@ -190,7 +201,7 @@ class TakeProductService extends CommonService
 
                     $commercialOfficesResponse = $this->httpClient->request(
                         'POST',
-                        $item->getBasePath().'/information/commercialOffices',
+                        $item->getBasePath() . '/information/commercialOffices',
                         [
                             'headers' => [
                                 'Content-Type' => 'application/json',
