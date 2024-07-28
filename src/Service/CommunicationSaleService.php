@@ -43,6 +43,7 @@ use Symfony\Contracts\HttpClient\HttpClientInterface;
 class CommunicationSaleService extends CommonService
 {
     const ETECSA_INFO_ERROR = [
+
         '100' => 'No se especificaron productos para la venta',
         '101' => 'Se enviÃ³ una Recarga junto a compra de artÃ­culos solamente.',
         '102' => 'Se enviÃ³ mÃ¡s de una ActivaciÃ³n en la misma transacciÃ³n.',
@@ -87,7 +88,8 @@ class CommunicationSaleService extends CommonService
         '903' => 'El distribuidor no tiene permitida la venta de Terminales y Accesorios',
         '904' => 'El distribuidor no tiene permitida la venta de Activaciones Temportales TURISTA',
         '905' => 'El distribuidor no tiene permitida la venta de Recursos TURISTA',
-        '-1' => 'Su transaccion se esta procesando'
+        '-1' => 'Su transaccion se esta procesando',
+        '-2' => 'Su orden aun se esta procesando'
     ];
 
     public function __construct(
@@ -761,9 +763,20 @@ class CommunicationSaleService extends CommonService
                 $recharge->setPhoneNumber($communicationSale->getPhoneNumber());
 
                 $this->invokeRechargeCommunication($recharge, $saleId);
-            } else {
+            } elseif ($exc->getCode() === 400) {
+                $comInfo = [
+                    'status' => [
+                        'message' => sprintf(
+                            "action=Recharge, Message=%s",
+                            'La orden aun esta en procesamiento'
+                        ),
+                        'code' => 'COM000',
+                        'transactionID' => $communicationSale->getTransactionId(),
+                    ],
+                ];
+                $communicationSale->setTransactionStatus($comInfo);
+            } else
                 throw $exc;
-            }
         } catch (\Exception $exc) {
             $message = $exc->getMessage();
             $this->logger->info($message);
