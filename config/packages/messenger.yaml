@@ -14,7 +14,7 @@ framework:
                    queue_name: high
                retry_strategy:
                    max_retries: 3
-                   delay: 300000
+                   delay: 1000
                    multiplier: 4
                    max_delay: 0
 
