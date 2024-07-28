@@ -15,7 +15,7 @@ framework:
                retry_strategy:
                    max_retries: 3
                    delay: 1000
-                   multiplier: 4
+                   multiplier: 10
                    max_delay: 0
 
             async_clients_low:
