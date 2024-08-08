@@ -174,7 +174,7 @@ class CommunicationSaleService extends CommonService
             return $recharge;
         } catch (\Exception $ex) {
             if (str_contains($ex->getMessage(), "unique_identification_client")) {
-                throw new MyCurrentException("103", utf8_decode(self::ETECSA_INFO_ERROR['103']));
+                throw new MyCurrentException("103", mb_convert_encoding(self::ETECSA_INFO_ERROR['103'], 'ISO-8859-1', 'UTF-8'));
             }
             throw new $ex;
         }
@@ -380,7 +380,7 @@ class CommunicationSaleService extends CommonService
 
 
                     if ($errMsg) {
-                        $errMsg = utf8_decode($errMsg);
+                        $errMsg = mb_convert_encoding($errMsg, 'ISO-8859-1', 'UTF-8');
                     }
                     $comInfo = [
                         'error' => [
@@ -592,7 +592,7 @@ class CommunicationSaleService extends CommonService
                 $errMsg = self::ETECSA_INFO_ERROR[$code];
 
                 if ($errMsg) {
-                    $errMsg = utf8_decode($errMsg);
+                    $errMsg = mb_convert_encoding($errMsg, 'ISO-8859-1', 'UTF-8');
                 }
                 $comInfo = [
                     'error' => [
@@ -742,10 +742,14 @@ class CommunicationSaleService extends CommonService
             if (!is_null($result) && !$result->valueOk) {
                 if (!is_null($result->code)) {
                     $message = self::ETECSA_INFO_ERROR[$result->code];
-                    $response['result']['message'] = utf8_decode($message);
+                    $response['result']['message'] = mb_convert_encoding($message, 'ISO-8859-1', 'UTF-8');
                     $communicationSale->setTransactionStatus($response);
+                    if ($result->code != -1) {
+                        $communicationSale->setState(CommunicationStateEnum::REJECTED);
+                    }
+                } else {
+                    $communicationSale->setState(CommunicationStateEnum::REJECTED);
                 }
-                $communicationSale->setState(CommunicationStateEnum::REJECTED);
             } else if(is_null($result)) {
                 $communicationSale->setState(CommunicationStateEnum::FAILED);
             }
@@ -755,6 +759,7 @@ class CommunicationSaleService extends CommonService
             $message = "Successfully";
         } catch (ClientExceptionInterface | DecodingExceptionInterface | RedirectionExceptionInterface | ServerExceptionInterface | TransportExceptionInterface $exc) {
             $infoResponse = $this->serializer->decode($rechargeResponse->getContent(false), 'json');
+            $this->logger->error($rechargeResponse->getContent(false), $infoResponse);
             if ($exc->getCode() === 404) {
                 $recharge = new CommunicationSaleRecharge();
                 $recharge->addId($saleId);
@@ -763,6 +768,7 @@ class CommunicationSaleService extends CommonService
                 $recharge->setPhoneNumber($communicationSale->getPhoneNumber());
 
                 $this->invokeRechargeCommunication($recharge, $saleId);
+                $message = $infoResponse['error']['message'];
             } elseif ($exc->getCode() === 400) {
                 $comInfo = [
                     'status' => [
