@@ -6,10 +6,10 @@ when@dev:
     monolog:
         handlers:
             main:
-                type: rotating_file
-                level: debug
+                type: stream
+                level: error
+                path: '%kernel.logs_dir%/debug.%kernel.environment%.log'
                 max_files: 10
-                handler: grouped
             # uncomment to get logging in your browser
             # you may have to allow bigger header sizes in your Web server configuration
             #firephp:
@@ -37,7 +37,7 @@ when@dev:
                 from_email: 'support@sendmundo.com'
                 to_email: ['alexander.afonsecac@gmail.com', 'aportela7@gmail.com']
                 subject: 'An Error Occurred! %%message%%'
-                level: debug
+                level: error
                 formatter: monolog.formatter.html
                 content_type: text/html
 
@@ -101,7 +101,7 @@ when@prod:
                 type: symfony_mailer
                 from_email: 'support@sendmundo.com'
                 to_email: ['alexander.afonsecac@gmail.com', 'aportela7@gmail.com']
-                subject: 'An Error Occurred! %%message%%'
+                subject: 'An Error Occurred in Api Clients! %%message%%'
                 level: debug
                 formatter: monolog.formatter.html
                 content_type: text/html

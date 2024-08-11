@@ -89,7 +89,8 @@ class CommunicationSaleService extends CommonService
         '904' => 'El distribuidor no tiene permitida la venta de Activaciones Temportales TURISTA',
         '905' => 'El distribuidor no tiene permitida la venta de Recursos TURISTA',
         '-1' => 'Su transaccion se esta procesando',
-        '-2' => 'Su orden aun se esta procesando'
+        '-2' => 'Su orden aun se esta procesando',
+        '-3' => 'Ha ocurrido una falla durante el proceso de procesamiento de la recarga. Pronto nos pondremos en contacto.'
     ];
 
     public function __construct(
@@ -184,9 +185,7 @@ class CommunicationSaleService extends CommonService
      * @param \App\Entity\CommunicationSaleRecharge $recharge
      * @param int $saleId
      * @return void
-     * @throws \Symfony\Contracts\HttpClient\Exception\ClientExceptionInterface
-     * @throws \Symfony\Contracts\HttpClient\Exception\RedirectionExceptionInterface
-     * @throws \Symfony\Contracts\HttpClient\Exception\ServerExceptionInterface
+     * @throws \App\Exception\MyCurrentException
      * @throws \Symfony\Contracts\HttpClient\Exception\DecodingExceptionInterface
      */
     public function invokeRechargeCommunication(CommunicationSaleRecharge $recharge, int $saleId): void
@@ -313,8 +312,8 @@ class CommunicationSaleService extends CommonService
                             'result' => [
                                 'valueOk' => false,
                                 'message' => 'Error 152',
-                                'requestTime' => new \DateTimeImmutable('now'),
-                                'responseTime' => new \DateTimeImmutable('now'),
+                                'requestTime' => (new \DateTimeImmutable('now'))->format('Y-m-d H:i:s'),
+                                'responseTime' => (new \DateTimeImmutable('now'))->format('Y-m-d H:i:s'),
                                 'code' => 152,
                             ],
                             'code' => 152,
@@ -324,8 +323,8 @@ class CommunicationSaleService extends CommonService
                             'result' => [
                                 'valueOk' => false,
                                 'message' => 'Error 151',
-                                'requestTime' => new \DateTimeImmutable('now'),
-                                'responseTime' => new \DateTimeImmutable('now'),
+                                'requestTime' => (new \DateTimeImmutable('now'))->format('Y-m-d H:i:s'),
+                                'responseTime' => (new \DateTimeImmutable('now'))->format('Y-m-d H:i:s'),
                                 'code' => 151,
                             ],
                             'code' => 151,
@@ -370,7 +369,6 @@ class CommunicationSaleService extends CommonService
                     $balanceOperation->setCommunicationSale($recharge);
                     $this->em->persist($balanceOperation);
                 } elseif ($rechargeResult->code !== "-1") {
-
                     $code = $rechargeResult->code;
                     $errMsg = null;
                     if (is_numeric($code)) {
@@ -464,7 +462,7 @@ class CommunicationSaleService extends CommonService
 
             $this->em->flush();
         } else
-            throw new MyCurrentException('The sale information no longer exists.');
+            throw new MyCurrentException(151,'The sale information no longer exists.');
     }
 
     /**
@@ -682,13 +680,16 @@ class CommunicationSaleService extends CommonService
      * @throws \Symfony\Contracts\HttpClient\Exception\RedirectionExceptionInterface
      * @throws \Symfony\Contracts\HttpClient\Exception\ServerExceptionInterface
      * @throws \Symfony\Contracts\HttpClient\Exception\TransportExceptionInterface
+     * @throws \App\Exception\MyCurrentException
      */
     public function checkSaleInfo(int $saleId): CommunicationSaleInfo | null
     {
         $user = $this->security->getUser();
         $message = "";
         $infoResponse = null;
+        $rechargeResponse = null;
         $communicationSale = $this->em->getRepository(CommunicationSaleInfo::class)->find($saleId);
+
         try {
             if (!$user instanceof Account) {
                 return null;
@@ -717,9 +718,9 @@ class CommunicationSaleService extends CommonService
 
             $response = $rechargeResponse->toArray();
             $responseInfo = (object) $response;
-            $result = null;
-            try {
-                $result = (object) $responseInfo->result;
+            $result = (object) $responseInfo->result;
+            $communicationSale->setTransactionStatus($response);
+            if ($result->valueOk && property_exists($result, 'orderId')) {
                 $orderId = $responseInfo->orderId;
                 $communicationSale->setTransactionOrder($orderId);
                 $communicationSale->setState(CommunicationStateEnum::COMPLETED);
@@ -735,16 +736,14 @@ class CommunicationSaleService extends CommonService
                 $balanceOperation->setTotalCurrency($communicationSale->getCurrency());
                 $balanceOperation->setCommunicationSale($communicationSale);
                 $this->em->persist($balanceOperation);
-            }  catch (\Exception $exc) {
-
-            }
-            $communicationSale->setTransactionStatus($response);
-            if (!is_null($result) && !$result->valueOk) {
+            } elseif (!is_null($result) && !$result->valueOk) {
                 if (!is_null($result->code)) {
                     $message = self::ETECSA_INFO_ERROR[$result->code];
                     $response['result']['message'] = mb_convert_encoding($message, 'ISO-8859-1', 'UTF-8');
                     $communicationSale->setTransactionStatus($response);
-                    if ($result->code != -1) {
+                    if ($result->code == '-3') {
+                        $communicationSale->setState(CommunicationStateEnum::FAILED);
+                    } elseif ($result->code != '-1') {
                         $communicationSale->setState(CommunicationStateEnum::REJECTED);
                     }
                 } else {
@@ -753,7 +752,6 @@ class CommunicationSaleService extends CommonService
             } else if(is_null($result)) {
                 $communicationSale->setState(CommunicationStateEnum::FAILED);
             }
-
 
             $this->em->flush();
             $message = "Successfully";
