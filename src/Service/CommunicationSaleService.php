@@ -712,7 +712,7 @@ class CommunicationSaleService extends CommonService
                         'Content-Type' => 'application/json',
                         'Accept' => 'application/json',
                     ],
-                    'body' => $this->serializer->serialize($body, 'json', []),
+                    'body' => $this->serializer->serialize($body, 'json'),
                 ]
             );
 
@@ -720,7 +720,7 @@ class CommunicationSaleService extends CommonService
             $responseInfo = (object) $response;
             $result = (object) $responseInfo->result;
             $communicationSale->setTransactionStatus($response);
-            if ($result->valueOk && property_exists($responseInfo, 'orderId') && isset($responseInfo->orderId)) {
+            if (property_exists($responseInfo, 'orderId') && isset($responseInfo->orderId)) {
                 $orderId = $responseInfo->orderId;
                 $communicationSale->setTransactionOrder($orderId);
                 $communicationSale->setState(CommunicationStateEnum::COMPLETED);
@@ -764,8 +764,6 @@ class CommunicationSaleService extends CommonService
                 $recharge->setTransactionId($communicationSale->getTransactionId());
                 $recharge->setPackageId($communicationSale->getPackage()->getId());
                 $recharge->setPhoneNumber($communicationSale->getPhoneNumber());
-
-                $this->invokeRechargeCommunication($recharge, $saleId);
                 $message = $infoResponse['error']['message'];
             } elseif ($exc->getCode() === 400) {
                 $comInfo = [

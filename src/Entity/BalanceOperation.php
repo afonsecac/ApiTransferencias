@@ -55,7 +55,7 @@ use Symfony\Component\Validator\Constraints as Assert;
 class BalanceOperation
 {
     #[ORM\Id]
-    #[ORM\GeneratedValue(strategy: 'SEQUENCE')]
+    #[ORM\GeneratedValue]
     #[ORM\Column]
     #[ApiProperty(identifier: true)]
     #[Groups(['balance:read'])]
