@@ -720,7 +720,7 @@ class CommunicationSaleService extends CommonService
             $responseInfo = (object) $response;
             $result = (object) $responseInfo->result;
             $communicationSale->setTransactionStatus($response);
-            if (property_exists($responseInfo, 'orderId') && isset($responseInfo->orderId)) {
+            if (property_exists($responseInfo, 'orderId') && isset($responseInfo->orderId) && $result->valueOk) {
                 $orderId = $responseInfo->orderId;
                 $communicationSale->setTransactionOrder($orderId);
                 $communicationSale->setState(CommunicationStateEnum::COMPLETED);
