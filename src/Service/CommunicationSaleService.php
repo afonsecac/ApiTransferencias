@@ -680,7 +680,6 @@ class CommunicationSaleService extends CommonService
      * @throws \Symfony\Contracts\HttpClient\Exception\RedirectionExceptionInterface
      * @throws \Symfony\Contracts\HttpClient\Exception\ServerExceptionInterface
      * @throws \Symfony\Contracts\HttpClient\Exception\TransportExceptionInterface
-     * @throws \App\Exception\MyCurrentException
      */
     public function checkSaleInfo(int $saleId): CommunicationSaleInfo | null
     {

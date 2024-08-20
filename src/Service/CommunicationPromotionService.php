@@ -27,8 +27,8 @@ class CommunicationPromotionService extends CommonService
         $promotion->setInfoDescription($params->infoDescription);
         $promotion->setKnowMore($params->knowMore);
         $promotion->setTerms($params->terms);
-        $startDateAt = new \DateTimeImmutable($params->range['startAt']);
-        $endDateAt = new \DateTimeImmutable($params->range['endAt']);
+        $startDateAt = new \DateTimeImmutable($params->startAt);
+        $endDateAt = new \DateTimeImmutable($params->endAt);
         $promotion->setStartAt($startDateAt);
         $promotion->setEndAt($endDateAt);
         $promotion->setValidityInfo($params->validity);
