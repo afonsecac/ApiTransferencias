@@ -756,6 +756,7 @@ class CommunicationSaleService extends CommonService
             $message = "Successfully";
         } catch (ClientExceptionInterface | DecodingExceptionInterface | RedirectionExceptionInterface | ServerExceptionInterface | TransportExceptionInterface $exc) {
             $infoResponse = $this->serializer->decode($rechargeResponse->getContent(false), 'json');
+            $message = $exc->getMessage();
             $this->logger->error($rechargeResponse->getContent(false), $infoResponse);
             if ($exc->getCode() === 404) {
                 $recharge = new CommunicationSaleRecharge();
@@ -776,8 +777,8 @@ class CommunicationSaleService extends CommonService
                     ],
                 ];
                 $communicationSale->setTransactionStatus($comInfo);
-            } else
-                throw $exc;
+            }
+            $this->logger->info($message);
         } catch (\Exception $exc) {
             $message = $exc->getMessage();
             $this->logger->info($message);
