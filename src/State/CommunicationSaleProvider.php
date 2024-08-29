@@ -3,12 +3,10 @@
 namespace App\State;
 
 use ApiPlatform\Metadata\Operation;
-use ApiPlatform\State\Pagination;
 use ApiPlatform\State\ProviderInterface;
 use App\Entity\CommunicationSaleInfo;
 use App\Enums\CommunicationStateEnum;
 use App\Service\CommunicationSaleService;
-use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
 
 class CommunicationSaleProvider implements ProviderInterface
@@ -36,7 +34,12 @@ class CommunicationSaleProvider implements ProviderInterface
         $communicationSale = $this->itemProvider->provide($operation, $uriVariables, $context);
 
         if ($communicationSale instanceof CommunicationSaleInfo && $communicationSale->getState() === CommunicationStateEnum::PENDING) {
-            $communicationSale = $this->saleService->checkSaleInfo($communicationSale->getId());
+            $currentDate = new \DateTimeImmutable('now');
+            $updatedAt = $communicationSale->getUpdatedAt();
+            $updatedAtDiff = $currentDate->diff($updatedAt);
+            if ($updatedAtDiff->s >= 5) {
+                $communicationSale = $this->saleService->checkSaleInfo($communicationSale->getId());
+            }
         }
 
         return $communicationSale;

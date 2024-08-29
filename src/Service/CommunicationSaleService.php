@@ -181,6 +181,15 @@ class CommunicationSaleService extends CommonService
         }
     }
 
+    public function tryAgainWithTransaction(int $saleId): void
+    {
+        $recharge = $this->em->getRepository(CommunicationSaleRecharge::class)->find($saleId);
+        $this->messageBus->dispatch(new SaleRechargeMessage(
+            $saleId,
+            $recharge
+        ));
+    }
+
     /**
      * @param \App\Entity\CommunicationSaleRecharge $recharge
      * @param int $saleId
@@ -261,11 +270,11 @@ class CommunicationSaleService extends CommonService
                     $promotions = $package->getPromotions();
                     try {
                         $promotionsArray = $promotions->toArray();
-                        $promotion = $promotionsArray[0];
+                        $promotion = $promotions->first();
                     } catch (\Exception $exc) {
                         $promotion = $promotions->first();
                     }
-                    $saleRecharge->setPromotionId($recharge->getPromotionId());
+                    $saleRecharge->setPromotionId($promotion->getId());
                     $saleRecharge->setPromotion($promotion);
                     $productCode = $promotion?->getProduct()?->getPackageId();
                 }
@@ -786,5 +795,21 @@ class CommunicationSaleService extends CommonService
         $this->logger->info($message);
 
         return $communicationSale;
+    }
+
+    /**
+     * @return void
+     * @throws \Symfony\Contracts\HttpClient\Exception\ClientExceptionInterface
+     * @throws \Symfony\Contracts\HttpClient\Exception\DecodingExceptionInterface
+     * @throws \Symfony\Contracts\HttpClient\Exception\RedirectionExceptionInterface
+     * @throws \Symfony\Contracts\HttpClient\Exception\ServerExceptionInterface
+     * @throws \Symfony\Contracts\HttpClient\Exception\TransportExceptionInterface
+     */
+    public function unprocessed(): void
+    {
+        $sales = $this->em->getRepository(CommunicationSaleInfo::class)->getLastPending();
+        foreach ($sales as $sale) {
+            $saleResult = $this->checkSaleInfo($sale->getId());
+        }
     }
 }
