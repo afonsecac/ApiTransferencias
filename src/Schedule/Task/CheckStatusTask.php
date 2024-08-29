@@ -5,7 +5,7 @@ namespace App\Schedule\Task;
 use App\Service\CommunicationSaleService;
 use Symfony\Component\Scheduler\Attribute\AsCronTask;
 
-#[AsCronTask("* * * * *", "America/Havana")]
+//#[AsCronTask("* * * * *", "America/Havana")]
 class CheckStatusTask
 {
     public function __construct(

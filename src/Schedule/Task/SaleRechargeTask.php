@@ -7,7 +7,7 @@ use App\Service\CommunicationSaleService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\Scheduler\Attribute\AsCronTask;
 
-#[AsCronTask("*/15 * * * *", "America/Havana")]
+//#[AsCronTask("*/15 * * * *", "America/Havana")]
 class SaleRechargeTask
 {
     public function __construct(private readonly EntityManagerInterface $em, private readonly CommunicationSaleService $saleService) {
