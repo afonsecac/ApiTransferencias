@@ -266,8 +266,8 @@ class CommunicationSaleService extends CommonService
                     }
                     $saleRecharge->setPromotionId($recharge->getPromotionId());
                     $saleRecharge->setPromotion($promotion);
-                } elseif($package->getPromotions()->count() === 1) {
-                    $promotions = $package->getPromotions();
+                } elseif($package->getPromotionItems()->count() === 1) {
+                    $promotions = $package->getPromotionItems();
                     try {
                         $promotionsArray = $promotions->toArray();
                         $promotion = $promotions->first();

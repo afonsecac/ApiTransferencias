@@ -78,7 +78,7 @@ class CommunicationPromotions
     #[ORM\JoinColumn(nullable: false)]
     private ?CommunicationProduct $product = null;
 
-    #[ORM\ManyToMany(targetEntity: CommunicationClientPackage::class, inversedBy: 'promotions')]
+    #[ORM\ManyToMany(targetEntity: CommunicationClientPackage::class, inversedBy: 'promotionItems')]
     #[Groups(['comProm:read'])]
     #[ApiProperty]
     private Collection $products;

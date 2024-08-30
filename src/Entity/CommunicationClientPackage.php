@@ -235,9 +235,11 @@ class CommunicationClientPackage
     private ?string $knowMore = null;
 
     #[ORM\ManyToMany(targetEntity: CommunicationPromotions::class, mappedBy: 'products')]
+    private Collection $promotionItems;
+
     #[Groups(['comPackage:read'])]
     #[ApiProperty]
-    private Collection $promotions;
+    private array $promotions;
 
     #[ORM\ManyToOne]
     #[ORM\JoinColumn(nullable: false)]
@@ -262,7 +264,8 @@ class CommunicationClientPackage
         $this->service = [];
         $this->destination = [];
         $this->validity = [];
-        $this->promotions = new ArrayCollection();
+        $this->promotionItems = new ArrayCollection();
+        $this->promotions = [];
     }
 
     public function getId(): ?int
@@ -348,8 +351,9 @@ class CommunicationClientPackage
     {
         $benefitsOut = [];
         $benefits = $this->benefits;
-        if ($this->getPromotions()->count() > 0) {
-            foreach ($this->getPromotions() as $promotion) {
+        $size = $this->getPromotionItems() instanceof Collection ? $this->getPromotionItems()->count() : count($this->getPromotionItems());
+        if ($size > 0) {
+            foreach ($this->getPromotionItems() as $promotion) {
                 foreach ($promotion->getTerms() as $term) {
                     $temItem = (object)$term;
                     $posUnit = array_search($temItem->unit, array_column($benefits, 'unit'), true);
@@ -476,8 +480,8 @@ class CommunicationClientPackage
     public function getValidity(): ?array
     {
         $validityInfo = $this->validity;
-        if ($this->getPromotions()->count() > 0) {
-            foreach ($this->getPromotions() as $promotion) {
+        if ($this->getPromotionItems()->count() > 0) {
+            foreach ($this->getPromotionItems() as $promotion) {
                 if ($promotion instanceof CommunicationPromotions && $promotion->getValidityInfo()) {
                     $validityInfo = $promotion->getValidityInfo();
                 }
@@ -505,13 +509,10 @@ class CommunicationClientPackage
         return $this;
     }
 
-    /**
-     * @return Collection<int, CommunicationPromotions>
-     */
-    public function getPromotions(): Collection
+    public function getPromotionItems(): ArrayCollection
     {
 
-        return $this->promotions->filter(function (CommunicationPromotions $promotion) {
+        return $this->promotionItems->filter(function (CommunicationPromotions $promotion) {
             $currentDate = new \DateTimeImmutable();
             $isEndDate = is_null($promotion->getEndAt()) || $promotion->getEndAt() > $currentDate;
             $isStartDate = $promotion->getStartAt() <= $currentDate;
@@ -521,8 +522,8 @@ class CommunicationClientPackage
 
     public function addPromotion(CommunicationPromotions $promotion): static
     {
-        if (!$this->promotions->contains($promotion)) {
-            $this->promotions->add($promotion);
+        if (!$this->promotionItems->contains($promotion)) {
+            $this->promotionItems->add($promotion);
             $promotion->addProduct($this);
         }
 
@@ -531,7 +532,7 @@ class CommunicationClientPackage
 
     public function removePromotion(CommunicationPromotions $promotion): static
     {
-        if ($this->promotions->removeElement($promotion)) {
+        if ($this->promotionItems->removeElement($promotion)) {
             $promotion->removeProduct($this);
         }
 
@@ -584,5 +585,15 @@ class CommunicationClientPackage
         $this->environment = $environment;
 
         return $this;
+    }
+
+    public function getPromotions(): array
+    {
+        $this->promotions = [];
+        if ($this->getPromotionItems()->count() > 0) {
+            $this->promotions[] = $this->getPromotionItems()->first();
+        }
+
+        return $this->promotions;
     }
 }
