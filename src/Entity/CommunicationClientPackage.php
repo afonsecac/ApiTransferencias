@@ -351,7 +351,7 @@ class CommunicationClientPackage
     {
         $benefitsOut = [];
         $benefits = $this->benefits;
-        $size = $this->getPromotionItems() instanceof Collection ? $this->getPromotionItems()->count() : count($this->getPromotionItems());
+        $size = $this->getPromotionItems()->count();
         if ($size > 0) {
             foreach ($this->getPromotionItems() as $promotion) {
                 foreach ($promotion->getTerms() as $term) {
