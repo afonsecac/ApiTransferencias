@@ -4,6 +4,7 @@ namespace App\Entity;
 
 use ApiPlatform\Doctrine\Common\Filter\SearchFilterInterface;
 use ApiPlatform\Doctrine\Orm\Filter\DateFilter;
+use ApiPlatform\Doctrine\Orm\Filter\OrderFilter;
 use ApiPlatform\Doctrine\Orm\Filter\SearchFilter;
 use ApiPlatform\Metadata\ApiFilter;
 use ApiPlatform\Metadata\ApiProperty;
@@ -44,7 +45,8 @@ use Symfony\Component\Validator\Constraints as Assert;
             provider: CommunicationSaleProvider::class
         ),
         new GetCollection(
-            uriTemplate: '/communication/sale'
+            uriTemplate: '/communication/sale',
+            order: ['id' => 'DESC']
         ),
         new Post(
             uriTemplate: '/communication/sale/recharge',
@@ -67,6 +69,9 @@ use Symfony\Component\Validator\Constraints as Assert;
     security: "is_granted('ROLE_COM_API_USER')",
 )]
 #[ApiFilter(DateFilter::class, properties: ['createdAt'])]
+#[ApiFilter(OrderFilter::class, properties: [
+    'id',
+], arguments: ['orderParameterName' => 'orderBy'])]
 class CommunicationSaleInfo
 {
     #[ORM\Id]

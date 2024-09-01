@@ -3,6 +3,7 @@
 namespace App\Entity;
 
 use ApiPlatform\Doctrine\Orm\Filter\DateFilter;
+use ApiPlatform\Doctrine\Orm\Filter\OrderFilter;
 use ApiPlatform\Metadata\ApiFilter;
 use ApiPlatform\Metadata\ApiProperty;
 use ApiPlatform\Metadata\ApiResource;
@@ -33,6 +34,7 @@ use Symfony\Component\Validator\Constraints as Assert;
         ),
         new GetCollection(
             uriTemplate: '/balance/operations',
+            order: ['id' => 'DESC'],
             normalizationContext: [
                 'groups' => ['balance:read'],
             ],
@@ -51,6 +53,9 @@ use Symfony\Component\Validator\Constraints as Assert;
     security: "is_granted('ROLE_API_USER')",
 )]
 #[ApiFilter(DateFilter::class, properties: ['createdAt'])]
+#[ApiFilter(OrderFilter::class, properties: [
+    'id',
+], arguments: ['orderParameterName' => 'orderBy'])]
 #[ORM\HasLifecycleCallbacks]
 class BalanceOperation
 {
