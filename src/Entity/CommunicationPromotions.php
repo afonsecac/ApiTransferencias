@@ -2,6 +2,9 @@
 
 namespace App\Entity;
 
+use ApiPlatform\Doctrine\Orm\Filter\DateFilter;
+use ApiPlatform\Doctrine\Orm\Filter\OrderFilter;
+use ApiPlatform\Metadata\ApiFilter;
 use ApiPlatform\Metadata\ApiProperty;
 use ApiPlatform\Metadata\ApiResource;
 use ApiPlatform\Metadata\GetCollection;
@@ -20,13 +23,18 @@ use Symfony\Component\Validator\Constraints as Assert;
     operations: [
         new GetCollection(
             uriTemplate: '/communication/promotions',
-            provider: CommunicationPromotionProvider::class
+            order: ['id' => 'DESC'],
+            provider: CommunicationPromotionProvider::class,
         ),
     ],
     normalizationContext: ['groups' => ['comProm:read']],
     denormalizationContext: ['groups' => ['comProm:create', 'comProm:update']],
     security: "is_granted('ROLE_COM_API_USER')"
 )]
+#[ApiFilter(DateFilter::class, properties: ['createdAt', 'startAt', 'endAt'])]
+#[ApiFilter(OrderFilter::class, properties: [
+    'id',
+], arguments: ['orderParameterName' => 'orderBy'])]
 #[Orm\HasLifecycleCallbacks]
 class CommunicationPromotions
 {
