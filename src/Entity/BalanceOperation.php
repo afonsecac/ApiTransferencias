@@ -181,6 +181,10 @@ class BalanceOperation
     private ?string $operationType = null;
 
     #[ORM\ManyToOne]
+    #[Groups(['balance:read'])]
+    #[ApiProperty(
+        schema: ['application/json'],
+    )]
     private ?CommunicationSaleInfo $communicationSale = null;
 
     #[ORM\Column(nullable: true)]
