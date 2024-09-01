@@ -7,6 +7,8 @@ use App\Entity\CommunicationProduct;
 use App\EntityPaginator\PaginatorResponse;
 use App\Util\IPaginationResponse;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
+use Doctrine\Common\Collections\ArrayCollection;
+use Doctrine\ORM\Query\Parameter;
 use Doctrine\ORM\Tools\Pagination\Paginator;
 use Doctrine\Persistence\ManagerRegistry;
 
@@ -77,12 +79,12 @@ class CommunicationProductRepository extends ServiceEntityRepository
             ->andWhere('c.endDateAt > :currentDate')
             ->andWhere('c.enabled = :enabled')
             ->andWhere('e.id = :env')
-            ->setParameters([
-                'cPackageId' => $packageId,
-                'currentDate' => $currentDate,
-                'enabled' => true,
-                'env' => $envId,
-            ]);
+            ->setParameters(new ArrayCollection([
+                new Parameter('cPackageId', $packageId),
+                new Parameter('currentDate', $currentDate),
+                new Parameter('env', $envId),
+                new Parameter('enabled', true),
+            ]));
 
         return $sql->getQuery()->getResult();
     }

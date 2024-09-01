@@ -20,50 +20,21 @@ use Symfony\Component\Serializer\Normalizer\DateIntervalNormalizer;
 use Symfony\Component\Serializer\Normalizer\DateTimeNormalizer;
 use Symfony\Component\Serializer\Normalizer\ObjectNormalizer;
 use Symfony\Component\Serializer\Serializer;
+use Symfony\Component\Serializer\SerializerInterface;
 
 class CommonService
 {
-    protected EntityManagerInterface $em;
-    protected Security $security;
-    protected ParameterBagInterface $parameters;
-    protected Serializer $serializer;
-    protected MailerInterface $mailer;
-    protected LoggerInterface $logger;
-    protected UserPasswordHasherInterface $passwordHasher;
-    protected EnvironmentRepository  $environment;
-    protected SysConfigRepository $sysConfigRepo;
-
-    /**
-     * @param EntityManagerInterface $em
-     * @param Security $security
-     * @param ParameterBagInterface $parameters
-     * @param MailerInterface $mailer
-     * @param LoggerInterface $logger
-     * @param UserPasswordHasherInterface $passwordHasher
-     * @param EnvironmentRepository $environmentRepository
-     * @param SysConfigRepository $sysConfigRepo
-     */
     public function __construct(
-        EntityManagerInterface $em,
-        Security $security,
-        ParameterBagInterface $parameters,
-        MailerInterface $mailer,
-        LoggerInterface $logger,
-        UserPasswordHasherInterface $passwordHasher,
-        EnvironmentRepository $environmentRepository,
-        SysConfigRepository $sysConfigRepo
+        protected readonly EntityManagerInterface $em,
+        protected readonly Security $security,
+        protected readonly ParameterBagInterface $parameters,
+        protected readonly MailerInterface $mailer,
+        protected readonly LoggerInterface $logger,
+        protected readonly UserPasswordHasherInterface $passwordHasher,
+        protected readonly EnvironmentRepository $environmentRepository,
+        protected readonly SysConfigRepository $sysConfigRepo,
+        protected readonly SerializerInterface $serializer
     ) {
-        $this->em = $em;
-        $this->security = $security;
-        $this->parameters = $parameters;
-        $this->mailer = $mailer;
-        $this->logger = $logger;
-        $this->passwordHasher = $passwordHasher;
-        $this->environment = $environmentRepository;
-        $this->sysConfigRepo = $sysConfigRepo;
-        $encoders = [new XmlEncoder(), new JsonEncoder()];
-        $normalizer = [new DateTimeNormalizer(), new DateIntervalNormalizer(), new ObjectNormalizer()];
-        $this->serializer = new Serializer($normalizer, $encoders);
     }
 
     public function onCreatedAdmin(): void {

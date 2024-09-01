@@ -191,4 +191,28 @@ class ProductComm
 
         return $this;
     }
+
+    public function isApproved(): ?bool
+    {
+        return $this->isApproved;
+    }
+
+    public function setApproved(bool $isApproved): static
+    {
+        $this->isApproved = $isApproved;
+
+        return $this;
+    }
+
+    public function isProcessed(): ?bool
+    {
+        return $this->isProcessed;
+    }
+
+    public function setProcessed(bool $isProcessed): static
+    {
+        $this->isProcessed = $isProcessed;
+
+        return $this;
+    }
 }

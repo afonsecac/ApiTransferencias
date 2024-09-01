@@ -4,6 +4,8 @@ namespace App\Repository;
 
 use App\Entity\CommunicationPricePackage;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
+use Doctrine\Common\Collections\ArrayCollection;
+use Doctrine\ORM\Query\Parameter;
 use Doctrine\Persistence\ManagerRegistry;
 
 /**
@@ -40,11 +42,11 @@ class CommunicationPricePackageRepository extends ServiceEntityRepository
             ->andWhere('u.validStartAt <= :currentDate AND (u.validEndAt > :currentDate OR u.validEndAt IS NULL)')
             ->andWhere('pd.initialDate <= :currentDate AND (pd.endDateAt > :currentDate OR pd.endDateAt IS NULL)')
             ->andWhere('p.activeStartAt <= :currentDate AND (p.activeEndAt > :currentDate OR p.activeEndAt IS NULL)')
-            ->setParameters([
-                'pdId' => $productId,
-                'enabled' => true,
-                'currentDate' => $currentDate,
-            ]);
+            ->setParameters(new ArrayCollection([
+                new Parameter('pdId', $productId),
+                new Parameter('enabled', true),
+                new Parameter('currentDate', $currentDate),
+            ]));
         if (!is_null($clientId)) {
             $dql = $dql->leftJoin('p.tenant', 't')
                 ->andWhere('t.id = :client')
@@ -69,11 +71,11 @@ class CommunicationPricePackageRepository extends ServiceEntityRepository
             ->andWhere('p.initialDate <= :currentDate')
             ->andWhere('p.endDateAt > :currentDate')
             ->andWhere('p.enabled <= :enabled')
-            ->setParameters([
-                'currentDate' => $currentDate,
-                'enabled' => true,
-                'type' => $env,
-            ]);
+            ->setParameters(new ArrayCollection([
+                new Parameter('type', $env),
+                new Parameter('currentDate', $currentDate),
+                new Parameter('enabled', true),
+            ]));
         if (!is_null($tenantId)) {
             $dql = $dql
                 ->leftJoin('pp.tenant', 't')->andWhere('t.id = :tenant')

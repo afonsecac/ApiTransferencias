@@ -37,7 +37,7 @@ class CommunicationSaleProvider implements ProviderInterface
             $currentDate = new \DateTimeImmutable('now');
             $updatedAt = $communicationSale->getUpdatedAt();
             $updatedAtDiff = $currentDate->diff($updatedAt);
-            if ($updatedAtDiff->s >= 5) {
+            if ($updatedAtDiff->s >= 50) {
                 $communicationSale = $this->saleService->checkSaleInfo($communicationSale->getId());
             }
         }

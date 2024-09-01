@@ -138,4 +138,16 @@ class SysConfig
     {
         $this->updatedAt = new \DateTimeImmutable('now');
     }
+
+    public function isActive(): ?bool
+    {
+        return $this->isActive;
+    }
+
+    public function setActive(?bool $isActive): static
+    {
+        $this->isActive = $isActive;
+
+        return $this;
+    }
 }

@@ -4,6 +4,8 @@ namespace App\Repository;
 
 use App\Entity\CommunicationPromotions;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
+use Doctrine\Common\Collections\ArrayCollection;
+use Doctrine\ORM\Query\Parameter;
 use Doctrine\Persistence\ManagerRegistry;
 
 /**
@@ -35,11 +37,36 @@ class CommunicationPromotionsRepository extends ServiceEntityRepository
             ->andWhere('p.startAt <= :currentDate AND p.endAt > :currentDate')
             ->andWhere('pc.initialDate <= :currentDate AND pc.endDateAt > :currentDate')
             ->andWhere('pc.enabled = :enabled')
-            ->setParameters([
-                'currentDate' => $currentDate,
-                'promotionId' => $promotionId,
-                'enabled' => true,
-            ])->getQuery()->getOneOrNullResult();
+            ->setParameters(new ArrayCollection([
+                new Parameter('promotionId', $promotionId),
+                new Parameter('currentDate', $currentDate),
+                new Parameter('enabled', true),
+            ]))->getQuery()->getOneOrNullResult();
+    }
+
+    /**
+     * @param int $promotionId
+     * @param int $packageId
+     * @return \App\Entity\CommunicationPromotions|null
+     */
+    public function getFuturePromotionById(int $promotionId, int $packageId): ?CommunicationPromotions
+    {
+        $currentDate = new \DateTimeImmutable('now');
+        return $this->createQueryBuilder('p')
+            ->leftJoin('p.products', 'cp')
+            ->where('p.id = :promotionId')
+            ->andWhere('cp.id = :packageId')
+            ->andWhere('p.startAt > :currentDate')
+            ->andWhere('p.createdAt <= :currentDate')
+            ->andWhere('p.updatedAt <= :currentDate')
+            ->setParameters(new ArrayCollection([
+                new Parameter('promotionId', $promotionId),
+                new Parameter('currentDate', $currentDate),
+                new Parameter('packageId', $packageId),
+            ]))
+            ->getQuery()
+            ->setMaxResults(1)
+            ->getOneOrNullResult();
     }
 
 //    /**

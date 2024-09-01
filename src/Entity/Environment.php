@@ -14,10 +14,10 @@ use Symfony\Component\Uid\Uuid;
     name: "unique_Provider_Info", fields: ["type", "providerName"]
 )]
 #[ORM\Index(
-    fields: ["type"], name: "index_type_environment"
+    name: "index_type_environment", fields: ["type"]
 )]
 #[ORM\Index(
-    fields: ["providerName"], name: "index_provider_name"
+    name: "index_provider_name", fields: ["providerName"]
 )]
 class Environment
 {
@@ -244,5 +244,17 @@ class Environment
     public function setUpdated(): void
     {
         $this->updatedAt = new DateTimeImmutable('now');
+    }
+
+    public function isActive(): ?bool
+    {
+        return $this->isActive;
+    }
+
+    public function setActive(?bool $isActive): static
+    {
+        $this->isActive = $isActive;
+
+        return $this;
     }
 }

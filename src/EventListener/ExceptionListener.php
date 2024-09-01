@@ -20,9 +20,8 @@ class ExceptionListener
         $exception = $event->getThrowable();
 
         $message = sprintf(
-            'Error: %s with code: %s',
-            $exception->getMessage(),
-            $exception->getCode()
+            '%s',
+            $exception->getMessage()
         );
         $response = new JsonResponse([
             'error' => [
@@ -32,14 +31,10 @@ class ExceptionListener
         if ($exception instanceof MyCurrentException) {
             $response = new JsonResponse([
                 'error' => [
-                    'message' => sprintf(
-                        'Error: %s with code: %s',
-                        $exception->getMessage(),
-                        $exception->getCodeWork()
-                    ),
+                    'message' => $exception->getMessage(),
                     'code' => $exception->getCodeWork(),
                 ]
-            ], Response::HTTP_BAD_REQUEST);
+            ], Response::HTTP_INTERNAL_SERVER_ERROR);
         } elseif ($exception instanceof AccessDeniedException || $exception instanceof InsufficientAuthenticationException || $exception instanceof AccessDeniedHttpException) {
             $response = new JsonResponse([
                 'error' => [

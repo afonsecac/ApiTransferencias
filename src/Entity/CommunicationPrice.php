@@ -191,4 +191,16 @@ class CommunicationPrice
     {
         $this->updatedAt = new \DateTimeImmutable();
     }
+
+    public function isActive(): ?bool
+    {
+        return $this->isActive;
+    }
+
+    public function setActive(bool $isActive): static
+    {
+        $this->isActive = $isActive;
+
+        return $this;
+    }
 }

@@ -4,6 +4,7 @@ namespace App\State;
 
 use ApiPlatform\Metadata\Operation;
 use ApiPlatform\State\ProcessorInterface;
+use App\DTO\ReserveRecharge;
 use App\Entity\CommunicationSaleInfo;
 use App\Entity\CommunicationSalePackage;
 use App\Entity\CommunicationSaleRecharge;
@@ -43,6 +44,8 @@ class CreateSaleInfoProcessor implements ProcessorInterface
             $communicationSale = $this->saleService->processRecharge($data);
         } else if ($data instanceof CommunicationSalePackage) {
             $communicationSale = $this->saleService->executeSale($data);
+        } else if ($data instanceof ReserveRecharge) {
+            $communicationSale = $this->saleService->processReserve($data);
         }
         return $communicationSale;
     }

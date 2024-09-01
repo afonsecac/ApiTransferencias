@@ -22,40 +22,18 @@ class CommunicationSaleInfoRepository extends ServiceEntityRepository
         parent::__construct($registry, CommunicationSaleInfo::class);
     }
 
+    /**
+     * @return CommunicationSaleInfo[]
+     */
     public function getLastPending(): array
     {
         $currentDate = (new \DateTimeImmutable('now'))->modify('-5 seconds');
         return $this->createQueryBuilder('csi')
             ->where('csi.createdAt <= :currentDate')
             ->andWhere('csi.updatedAt <= :currentDate')
-            ->andWhere('csi.status = :status')
+            ->andWhere('csi.state = :status')
             ->setParameter('currentDate', $currentDate)
             ->setParameter('status', CommunicationStateEnum::PENDING)
-            ->getQuery()->getResult();
+            ->getQuery()->execute();
     }
-
-//    /**
-//     * @return CommunicationSaleInfo[] Returns an array of CommunicationSaleInfo objects
-//     */
-//    public function findByExampleField($value): array
-//    {
-//        return $this->createQueryBuilder('c')
-//            ->andWhere('c.exampleField = :val')
-//            ->setParameter('val', $value)
-//            ->orderBy('c.id', 'ASC')
-//            ->setMaxResults(10)
-//            ->getQuery()
-//            ->getResult()
-//        ;
-//    }
-
-//    public function findOneBySomeField($value): ?CommunicationSaleInfo
-//    {
-//        return $this->createQueryBuilder('c')
-//            ->andWhere('c.exampleField = :val')
-//            ->setParameter('val', $value)
-//            ->getQuery()
-//            ->getOneOrNullResult()
-//        ;
-//    }
 }

@@ -14,9 +14,8 @@ final class SaleRechargeMessageHandler
     /**
      * @param \App\Message\SaleRechargeMessage $message
      * @return void
-     * @throws \Symfony\Contracts\HttpClient\Exception\ClientExceptionInterface
-     * @throws \Symfony\Contracts\HttpClient\Exception\RedirectionExceptionInterface
-     * @throws \Symfony\Contracts\HttpClient\Exception\ServerExceptionInterface
+     * @throws \App\Exception\MyCurrentException
+     * @throws \Symfony\Contracts\HttpClient\Exception\DecodingExceptionInterface
      */
     public function __invoke(SaleRechargeMessage $message): void {
         $this->saleService->invokeRechargeCommunication($message->getSale(), $message->getSaleId());

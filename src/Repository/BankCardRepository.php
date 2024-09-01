@@ -4,7 +4,9 @@ namespace App\Repository;
 
 use App\Entity\BankCard;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
+use Doctrine\Common\Collections\ArrayCollection;
 use Doctrine\ORM\NonUniqueResultException;
+use Doctrine\ORM\Query\Parameter;
 use Doctrine\Persistence\ManagerRegistry;
 
 /**
@@ -32,11 +34,11 @@ class BankCardRepository extends ServiceEntityRepository
             ->where('b.id = :bId OR a.id = :bId')
             ->andWhere('a.isActive = :aIsActive')
             ->setMaxResults(1)
-            ->setParameters([
-                'bId' => $id,
-                'aIsActive' => true
-            ])
-            ->getQuery()->getOneOrNullResult();
+            ->setParameters(new ArrayCollection([
+                new Parameter('bId', $id),
+                new Parameter('aIsActive', true)
+            ]))
+            ->getQuery()->setMaxResults(1)->getOneOrNullResult();
     }
 
 //    /**

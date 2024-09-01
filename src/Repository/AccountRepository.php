@@ -4,6 +4,8 @@ namespace App\Repository;
 
 use App\Entity\Account;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
+use Doctrine\Common\Collections\ArrayCollection;
+use Doctrine\ORM\Query\Parameter;
 use Doctrine\Persistence\ManagerRegistry;
 
 /**
@@ -33,12 +35,12 @@ class AccountRepository extends ServiceEntityRepository
             ->andWhere('a.isActiveAt <= :currentDate')
             ->andWhere('e.type = :env')
             ->andWhere('e.isActive = :isEnvActive')
-            ->setParameters([
-                'isActive' => $isActive,
-                'currentDate' => $currentDate,
-                'env' => $env,
-                'isEnvActive' => true,
-            ])->getQuery()->getResult();
+            ->setParameters(new ArrayCollection([
+                new Parameter('isActive', $isActive),
+                new Parameter('currentDate', $currentDate),
+                new Parameter('env', $env),
+                new Parameter('isEnvActive', true),
+            ]))->getQuery()->execute();
     }
 //    /**
 //     * @return Account[] Returns an array of Account objects

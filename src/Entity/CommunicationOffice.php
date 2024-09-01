@@ -140,4 +140,28 @@ class CommunicationOffice
 
         return $this;
     }
+
+    public function isAirport(): ?bool
+    {
+        return $this->isAirport;
+    }
+
+    public function setAirport(?bool $isAirport): static
+    {
+        $this->isAirport = $isAirport;
+
+        return $this;
+    }
+
+    public function isActive(): ?bool
+    {
+        return $this->isActive;
+    }
+
+    public function setActive(bool $isActive): static
+    {
+        $this->isActive = $isActive;
+
+        return $this;
+    }
 }

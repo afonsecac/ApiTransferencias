@@ -367,4 +367,28 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     {
         $this->updatedAt = new DateTimeImmutable('now');
     }
+
+    public function isActive(): ?bool
+    {
+        return $this->isActive;
+    }
+
+    public function setActive(?bool $isActive): static
+    {
+        $this->isActive = $isActive;
+
+        return $this;
+    }
+
+    public function isCheckValidation(): ?bool
+    {
+        return $this->isCheckValidation;
+    }
+
+    public function setCheckValidation(bool $isCheckValidation): static
+    {
+        $this->isCheckValidation = $isCheckValidation;
+
+        return $this;
+    }
 }

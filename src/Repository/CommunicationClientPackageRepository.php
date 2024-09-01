@@ -5,6 +5,8 @@ namespace App\Repository;
 use App\Entity\Account;
 use App\Entity\CommunicationClientPackage;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
+use Doctrine\Common\Collections\ArrayCollection;
+use Doctrine\ORM\Query\Parameter;
 use Doctrine\Persistence\ManagerRegistry;
 
 /**
@@ -35,12 +37,12 @@ class CommunicationClientPackageRepository extends ServiceEntityRepository
             ->where('p.id = :id')
             ->andWhere('a.id = :aId')
             ->andWhere('p.activeStartAt <= :currentDate AND p.activeEndAt > :currentDate')
-            ->setParameters([
-                'id' => $packageId,
-                'aId' => $account->getId(),
-                'currentDate' => $currentDate,
-            ])
-            ->getQuery()->getSingleResult();
+            ->setParameters(new ArrayCollection([
+                new Parameter('id', $packageId),
+                new Parameter('aId', $account->getId()),
+                new Parameter('currentDate', $currentDate),
+            ]))
+            ->getQuery()->setMaxResults(1)->getOneOrNullResult();
     }
 
     /**

@@ -596,4 +596,23 @@ class CommunicationClientPackage
 
         return $this->promotions;
     }
+
+    public function addPromotionItem(CommunicationPromotions $promotionItem): static
+    {
+        if (!$this->promotionItems->contains($promotionItem)) {
+            $this->promotionItems->add($promotionItem);
+            $promotionItem->addProduct($this);
+        }
+
+        return $this;
+    }
+
+    public function removePromotionItem(CommunicationPromotions $promotionItem): static
+    {
+        if ($this->promotionItems->removeElement($promotionItem)) {
+            $promotionItem->removeProduct($this);
+        }
+
+        return $this;
+    }
 }

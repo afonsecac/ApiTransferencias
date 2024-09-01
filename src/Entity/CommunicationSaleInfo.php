@@ -11,7 +11,7 @@ use ApiPlatform\Metadata\ApiResource;
 use ApiPlatform\Metadata\Get;
 use ApiPlatform\Metadata\GetCollection;
 use ApiPlatform\Metadata\Post;
-use ApiPlatform\Serializer\Filter\PropertyFilter;
+use App\DTO\ReserveRecharge;
 use App\Enums\CommunicationStateEnum;
 use App\Repository\CommunicationSaleInfoRepository;
 use App\State\CommunicationSaleProvider;
@@ -49,6 +49,11 @@ use Symfony\Component\Validator\Constraints as Assert;
         new Post(
             uriTemplate: '/communication/sale/recharge',
             input: CommunicationSaleRecharge::class,
+            processor: CreateSaleInfoProcessor::class,
+        ),
+        new Post(
+            uriTemplate: '/communication/sale/recharge/reserve',
+            input: ReserveRecharge::class,
             processor: CreateSaleInfoProcessor::class,
         ),
         new Post(

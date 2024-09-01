@@ -39,6 +39,6 @@ final class AccountBalanceDto
     public function __construct(string $currency, float $amount)
     {
         $this->currency = $currency;
-        $this->amount = $amount;
+        $this->amount = round($amount, 4);
     }
 }
