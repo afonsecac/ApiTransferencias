@@ -18,6 +18,7 @@ use Symfony\Bundle\SecurityBundle\Security;
 use Symfony\Component\DependencyInjection\ParameterBag\ParameterBagInterface;
 use Symfony\Component\Mailer\MailerInterface;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
+use Symfony\Component\Serializer\SerializerInterface;
 use Symfony\Contracts\HttpClient\Exception\ClientExceptionInterface;
 use Symfony\Contracts\HttpClient\Exception\DecodingExceptionInterface;
 use Symfony\Contracts\HttpClient\Exception\RedirectionExceptionInterface;
@@ -36,20 +37,13 @@ class TakeProductService extends CommonService
         UserPasswordHasherInterface          $passwordHasher,
         EnvironmentRepository                $environmentRepository,
         SysConfigRepository                  $sysConfigRepo,
-        private readonly HttpClientInterface $httpClient,
+        SerializerInterface                  $serializer,
+        private readonly HttpClientInterface $httpClient
     )
     {
-        parent::__construct(
-            $em,
-            $security,
-            $parameters,
-            $mailer,
-            $logger,
-            $passwordHasher,
-            $environmentRepository,
-            $sysConfigRepo
-        );
+        parent::__construct($em, $security, $parameters, $mailer, $logger, $passwordHasher, $environmentRepository, $sysConfigRepo, $serializer);
     }
+
 
     /**
      * @param string $env
@@ -128,7 +122,7 @@ class TakeProductService extends CommonService
         } catch (\Exception $exception) {
             $this->logger->error($exception->getMessage());
             if ($exception->getCode()) {
-                $codeExc = (string) $exception->getCode();
+                $codeExc = (string)$exception->getCode();
             } else
                 $codeExc = 'Unknown error';
             throw new MyCurrentException($codeExc, $exception->getMessage());

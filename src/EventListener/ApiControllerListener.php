@@ -14,14 +14,14 @@ use Symfony\Component\Serializer\SerializerInterface;
 )]
 class ApiControllerListener
 {
-    private Serializer $serializer;
-
     /**
      * @param \Symfony\Component\Serializer\Serializer $serializer
      */
-    public function __construct(SerializerInterface $serializer)
+    public function __construct(
+        private readonly SerializerInterface $serializer
+    )
     {
-        $this->serializer = $serializer;
+
     }
 
     public function __invoke(ControllerEvent $event): void {

@@ -6,13 +6,11 @@ use App\ApiResource\Calculator;
 use App\Entity\Account;
 use App\Entity\BalanceOperation;
 use App\Entity\Transfer;
-use App\Enums\BalanceOperationEnum;
 use App\Enums\BalanceStateEnum;
 use App\Enums\RebusStatusEnum;
 use App\Repository\EnvAuthRepository;
 use App\Repository\EnvironmentRepository;
 use App\Repository\SysConfigRepository;
-use App\Service\CommonService;
 use App\Util\RebusUtil;
 use Doctrine\ORM\EntityManagerInterface;
 use Psr\Log\LoggerInterface;
@@ -20,6 +18,7 @@ use Symfony\Bundle\SecurityBundle\Security;
 use Symfony\Component\DependencyInjection\ParameterBag\ParameterBagInterface;
 use Symfony\Component\Mailer\MailerInterface;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
+use Symfony\Component\Serializer\SerializerInterface;
 use Symfony\Contracts\HttpClient\Exception\ClientExceptionInterface;
 use Symfony\Contracts\HttpClient\Exception\DecodingExceptionInterface;
 use Symfony\Contracts\HttpClient\Exception\RedirectionExceptionInterface;
@@ -30,28 +29,20 @@ use Symfony\Contracts\HttpClient\HttpClientInterface;
 class TransferCalculatorService extends CommonService
 {
     public function __construct(
-        EntityManagerInterface $em,
-        Security $security,
-        ParameterBagInterface $parameters,
-        MailerInterface $mailer,
-        LoggerInterface $logger,
-        UserPasswordHasherInterface $passwordHasher,
-        EnvironmentRepository $environmentRepository,
-        SysConfigRepository $sysConfigRepo,
+        EntityManagerInterface               $em,
+        Security                             $security,
+        ParameterBagInterface                $parameters,
+        MailerInterface                      $mailer,
+        LoggerInterface                      $logger,
+        UserPasswordHasherInterface          $passwordHasher,
+        EnvironmentRepository                $environmentRepository,
+        SysConfigRepository                  $sysConfigRepo,
+        SerializerInterface                  $serializer,
         private readonly HttpClientInterface $httpClient,
-        private readonly AuthService $authService,
-        private readonly EnvAuthRepository $authRepository,
-    ) {
-        parent::__construct(
-            $em,
-            $security,
-            $parameters,
-            $mailer,
-            $logger,
-            $passwordHasher,
-            $environmentRepository,
-            $sysConfigRepo
-        );
+        private readonly AuthService         $authService,
+        private readonly EnvAuthRepository   $authRepository)
+    {
+        parent::__construct($em, $security, $parameters, $mailer, $logger, $passwordHasher, $environmentRepository, $sysConfigRepo, $serializer);
     }
 
     /**
@@ -82,8 +73,8 @@ class TransferCalculatorService extends CommonService
         }
         try {
             if ($user instanceof Account) {
-                $url = $accessToken->getPermission()?->getEnvironment()?->getBasePath()."/api/Transactions/calculator";
-                $tokenIn = 'Bearer '.$accessToken->getTokenAuth();
+                $url = $accessToken->getPermission()?->getEnvironment()?->getBasePath() . "/api/Transactions/calculator";
+                $tokenIn = 'Bearer ' . $accessToken->getTokenAuth();
                 $response = $this->httpClient->request(
                     'POST',
                     $url,
@@ -99,7 +90,7 @@ class TransferCalculatorService extends CommonService
                                 'toCurrency' => $data->getSendCurrency(),
                                 'sendAmount' => $data->getSendAmount(),
                                 'tenantProcessorId' => (int)$this->sysConfigRepo->findOneBy([
-                                    'propertyName' => 'rebuspay.tenant.account.'.strtolower($user->getEnvironmentName()).'.value',
+                                    'propertyName' => 'rebuspay.tenant.account.' . strtolower($user->getEnvironmentName()) . '.value',
                                 ])?->getPropertyValue(),
                             ], 'json', []
                         ),
@@ -156,8 +147,8 @@ class TransferCalculatorService extends CommonService
             $token = $accessToken->getTokenAuth();
         }
         try {
-            $url = $accessToken->getPermission()?->getEnvironment()?->getBasePath()."/api/Transactions/". $transfer->getRebusPayId();
-            $tokenIn = 'Bearer '.$accessToken->getTokenAuth();
+            $url = $accessToken->getPermission()?->getEnvironment()?->getBasePath() . "/api/Transactions/" . $transfer->getRebusPayId();
+            $tokenIn = 'Bearer ' . $accessToken->getTokenAuth();
             $response = $this->httpClient->request(
                 'GET',
                 $url,

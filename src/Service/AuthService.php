@@ -12,6 +12,7 @@ use Symfony\Bundle\SecurityBundle\Security;
 use Symfony\Component\DependencyInjection\ParameterBag\ParameterBagInterface;
 use Symfony\Component\Mailer\MailerInterface;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
+use Symfony\Component\Serializer\SerializerInterface;
 use Symfony\Contracts\HttpClient\Exception\ClientExceptionInterface;
 use Symfony\Contracts\HttpClient\Exception\DecodingExceptionInterface;
 use Symfony\Contracts\HttpClient\Exception\RedirectionExceptionInterface;
@@ -21,8 +22,6 @@ use Symfony\Contracts\HttpClient\HttpClientInterface;
 
 final class AuthService extends CommonService
 {
-    private HttpClientInterface $httpClient;
-
     public function __construct(
         EntityManagerInterface $em,
         Security $security,
@@ -31,12 +30,14 @@ final class AuthService extends CommonService
         LoggerInterface $logger,
         UserPasswordHasherInterface $passwordHasher,
         EnvironmentRepository $environmentRepository,
-        SysConfigRepository $sysConfigRepository,
-        HttpClientInterface $httpClient
-    ) {
-        parent::__construct($em, $security, $parameters, $mailer, $logger, $passwordHasher, $environmentRepository, $sysConfigRepository);
-        $this->httpClient = $httpClient;
+        SysConfigRepository $sysConfigRepo,
+        SerializerInterface $serializer,
+        private  readonly HttpClientInterface $httpClient
+    )
+    {
+        parent::__construct($em, $security, $parameters, $mailer, $logger, $passwordHasher, $environmentRepository, $sysConfigRepo, $serializer);
     }
+
 
     /**
      * @return string

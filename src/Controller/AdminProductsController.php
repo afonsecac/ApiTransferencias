@@ -21,9 +21,8 @@ class AdminProductsController extends AbstractController
     /**
      * @param \App\Service\ProductBenefitService $productBenefitService
      * @param \App\Service\CommunicationProductService $prdService
-     * @param \Symfony\Component\Serializer\SerializerInterface $serializer
      */
-    public function __construct(ProductBenefitService $productBenefitService, CommunicationProductService $prdService, SerializerInterface $serializer)
+    public function __construct(ProductBenefitService $productBenefitService, CommunicationProductService $prdService)
     {
         $this->prdBenService = $productBenefitService;
         $this->prodService = $prdService;

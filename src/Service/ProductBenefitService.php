@@ -15,10 +15,10 @@ use Symfony\Bundle\SecurityBundle\Security;
 use Symfony\Component\DependencyInjection\ParameterBag\ParameterBagInterface;
 use Symfony\Component\Mailer\MailerInterface;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
+use Symfony\Component\Serializer\SerializerInterface;
 
 class ProductBenefitService extends CommonService
 {
-    private CommunicationProductRepository $productRepository;
     public function __construct(
         EntityManagerInterface $em,
         Security $security,
@@ -28,19 +28,11 @@ class ProductBenefitService extends CommonService
         UserPasswordHasherInterface $passwordHasher,
         EnvironmentRepository $environmentRepository,
         SysConfigRepository $sysConfigRepo,
-        CommunicationProductRepository $communicationProductRepository
-    ) {
-        parent::__construct(
-            $em,
-            $security,
-            $parameters,
-            $mailer,
-            $logger,
-            $passwordHasher,
-            $environmentRepository,
-            $sysConfigRepo
-        );
-        $this->productRepository = $communicationProductRepository;
+        SerializerInterface $serializer,
+        private readonly CommunicationProductRepository $productRepository
+    )
+    {
+        parent::__construct($em, $security, $parameters, $mailer, $logger, $passwordHasher, $environmentRepository, $sysConfigRepo, $serializer);
     }
 
     public function getImportProducts(): array {
