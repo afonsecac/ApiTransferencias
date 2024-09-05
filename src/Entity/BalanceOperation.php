@@ -180,7 +180,7 @@ class BalanceOperation
     #[Groups(['balance:read'])]
     private ?string $operationType = null;
 
-    #[ORM\ManyToOne]
+    #[ORM\OneToOne(cascade: ['persist', 'remove'])]
     #[Groups(['balance:read'])]
     #[ApiProperty(
         schema: ['application/json'],
