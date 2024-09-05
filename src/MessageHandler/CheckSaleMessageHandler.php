@@ -1,18 +1,21 @@
 <?php
 
-namespace App\Schedule\Task;
+namespace App\MessageHandler;
 
+use App\Message\CheckSaleMessage;
 use App\Service\CommunicationSaleService;
-use Symfony\Component\Scheduler\Attribute\AsCronTask;
+use Symfony\Component\Messenger\Attribute\AsMessageHandler;
 
-#[AsCronTask("0 1 * * *", "America/Havana")]
-class CheckStatusTask
+#[AsMessageHandler]
+class CheckSaleMessageHandler
 {
-    public function __construct(
-        private readonly CommunicationSaleService $communicationSaleService,
-    ) {}
+
+    public function __construct(private readonly CommunicationSaleService $communicationSaleService)
+    {
+    }
 
     /**
+     * @param \App\Message\CheckSaleMessage $message
      * @return void
      * @throws \Symfony\Contracts\HttpClient\Exception\ClientExceptionInterface
      * @throws \Symfony\Contracts\HttpClient\Exception\DecodingExceptionInterface
@@ -20,10 +23,9 @@ class CheckStatusTask
      * @throws \Symfony\Contracts\HttpClient\Exception\ServerExceptionInterface
      * @throws \Symfony\Contracts\HttpClient\Exception\TransportExceptionInterface
      */
-    public function __invoke(): void
+    public function __invoke(CheckSaleMessage $message): void
     {
-        $this->communicationSaleService->unprocessed();
+        $this->communicationSaleService->checkStatusOrder($message->getSaleId(), true);
     }
-
 
 }

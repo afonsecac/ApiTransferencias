@@ -16,6 +16,7 @@ use App\Entity\CommunicationSaleRecharge;
 use App\Entity\Environment;
 use App\Enums\CommunicationStateEnum;
 use App\Exception\MyCurrentException;
+use App\Message\CheckSaleMessage;
 use App\Message\SaleRechargeMessage;
 use App\Repository\BalanceOperationRepository;
 use App\Repository\EnvironmentRepository;
@@ -247,6 +248,7 @@ class CommunicationSaleService extends CommonService
      * @return void
      * @throws \App\Exception\MyCurrentException
      * @throws \Symfony\Contracts\HttpClient\Exception\DecodingExceptionInterface
+     * @throws \Symfony\Component\Messenger\Exception\ExceptionInterface
      */
     public function invokeRechargeCommunication(CommunicationSaleRecharge $recharge, int $saleId): void
     {
@@ -410,6 +412,8 @@ class CommunicationSaleService extends CommonService
                     $saleRecharge->setTransactionStatus($comInfo);
                 }
 
+                $this->messageBus->dispatch(new CheckSaleMessage($saleRecharge->getId()));
+
                 $this->em->flush();
             } catch (ClientExceptionInterface|TimeoutException $exc) {
                 $saleRecharge->setState(CommunicationStateEnum::FAILED);
@@ -486,7 +490,7 @@ class CommunicationSaleService extends CommonService
         $bodyCheck = null;
         $body = null;
         $comInfo = [];
-        if (is_null($user) || !$user instanceof Account) {
+        if (!$user instanceof Account) {
             throw new AccessDeniedException();
         }
         $balance = $this->balanceRepository->getBalanceOutput($user->getId());
@@ -691,6 +695,7 @@ class CommunicationSaleService extends CommonService
      * @throws \Symfony\Contracts\HttpClient\Exception\RedirectionExceptionInterface
      * @throws \Symfony\Contracts\HttpClient\Exception\ServerExceptionInterface
      * @throws \Symfony\Contracts\HttpClient\Exception\TransportExceptionInterface
+     * @throws \Symfony\Component\Messenger\Exception\ExceptionInterface
      */
     public function checkSaleInfo(int $saleId): CommunicationSaleInfo|null
     {
@@ -717,6 +722,7 @@ class CommunicationSaleService extends CommonService
      * @param int $saleId
      * @param bool|null $isProcess
      * @return void
+     * @throws \Symfony\Component\Messenger\Exception\ExceptionInterface
      * @throws \Symfony\Contracts\HttpClient\Exception\ClientExceptionInterface
      * @throws \Symfony\Contracts\HttpClient\Exception\DecodingExceptionInterface
      * @throws \Symfony\Contracts\HttpClient\Exception\RedirectionExceptionInterface
@@ -777,14 +783,14 @@ class CommunicationSaleService extends CommonService
                     $sale->setTransactionStatus($response);
                     if (in_array($result->code, ['151', '152', '153', '198', '199', '200'], true)) {
                         $sale->setState(CommunicationStateEnum::REJECTED);
-                    } elseif($result->code != '-1') {
-                        $sale->setState(CommunicationStateEnum::FAILED);
+                    } elseif((int)$result->code !== -1) {
+                        $sale->setState(CommunicationStateEnum::PENDING);
                     }
                 } else {
                     $sale->setState(CommunicationStateEnum::REJECTED);
                 }
             } else if (is_null($result)) {
-                $sale->setState(CommunicationStateEnum::FAILED);
+                $sale->setState(CommunicationStateEnum::PENDING);
             }
             $this->em->flush();
         } catch (\Exception $e) {
@@ -813,6 +819,7 @@ class CommunicationSaleService extends CommonService
 
     /**
      * @return void
+     * @throws \Symfony\Component\Messenger\Exception\ExceptionInterface
      * @throws \Symfony\Contracts\HttpClient\Exception\ClientExceptionInterface
      * @throws \Symfony\Contracts\HttpClient\Exception\DecodingExceptionInterface
      * @throws \Symfony\Contracts\HttpClient\Exception\RedirectionExceptionInterface
