@@ -415,7 +415,7 @@ class CommunicationSaleService extends CommonService
 
 
                 $this->em->flush();
-                $this->messageBus->dispatch(new CheckSaleMessage($saleRecharge->getId()));
+                $this->messageBus->dispatch(new CheckSaleMessage($saleId));
             } catch (ClientExceptionInterface|TimeoutException $exc) {
                 $saleRecharge->setState(CommunicationStateEnum::FAILED);
                 $comInfo = [
@@ -812,9 +812,10 @@ class CommunicationSaleService extends CommonService
                     ],
                 ];
                 $sale->setTransactionStatus($comInfo);
+                $this->em->flush();
+                $this->messageBus->dispatch(new CheckSaleMessage($saleId));
             }
             $this->logger->info($message);
-            $this->em->flush();
         }
     }
 
