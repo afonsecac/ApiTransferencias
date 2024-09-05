@@ -381,7 +381,7 @@ class CommunicationSaleService extends CommonService
                     $balanceOperation->setTotalCurrency($package?->getCurrency());
                     $balanceOperation->setCommunicationSale($recharge);
                     $this->em->persist($balanceOperation);
-                } elseif ($rechargeResult->code !== "-1") {
+                } elseif ((int)$rechargeResult->code !== -1) {
                     $code = $rechargeResult->code;
                     $errMsg = null;
                     if (is_numeric($code)) {
@@ -412,9 +412,10 @@ class CommunicationSaleService extends CommonService
                     $saleRecharge->setTransactionStatus($comInfo);
                 }
 
-                $this->messageBus->dispatch(new CheckSaleMessage($saleRecharge->getId()));
+
 
                 $this->em->flush();
+                $this->messageBus->dispatch(new CheckSaleMessage($saleRecharge->getId()));
             } catch (ClientExceptionInterface|TimeoutException $exc) {
                 $saleRecharge->setState(CommunicationStateEnum::FAILED);
                 $comInfo = [

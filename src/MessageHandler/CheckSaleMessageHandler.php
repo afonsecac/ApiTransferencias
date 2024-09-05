@@ -26,7 +26,7 @@ class CheckSaleMessageHandler
      */
     public function __invoke(CheckSaleMessage $message): void
     {
-        $this->communicationSaleService->checkStatusOrder($message->getSaleId(), true);
+        $this->communicationSaleService->checkSaleInfo($message->getSaleId());
     }
 
 }
