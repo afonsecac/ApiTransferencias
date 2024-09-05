@@ -34,7 +34,7 @@ class ExceptionListener
                     'message' => $exception->getMessage(),
                     'code' => $exception->getCodeWork(),
                 ]
-            ], Response::HTTP_INTERNAL_SERVER_ERROR);
+            ], Response::HTTP_BAD_REQUEST);
         } elseif ($exception instanceof AccessDeniedException || $exception instanceof InsufficientAuthenticationException || $exception instanceof AccessDeniedHttpException) {
             $response = new JsonResponse([
                 'error' => [
