@@ -81,6 +81,7 @@ when@prod:
                 type: stream
                 path: '%kernel.logs_dir%/debug.%kernel.environment%.log'
                 level: debug
+                max_files: 10
             deduplicated:
                 type: deduplication
                 handler: symfony_mailer
