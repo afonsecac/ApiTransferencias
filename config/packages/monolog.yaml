@@ -56,6 +56,7 @@ when@prod:
                 path: "%kernel.logs_dir%/security.%kernel.environment%.log"
                 level: debug
                 channels: [ "security" ]
+                max_files: 10
             file_log:
                 type: stream
                 path: "%kernel.logs_dir%/%kernel.environment%.log"
