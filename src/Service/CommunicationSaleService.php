@@ -709,7 +709,7 @@ class CommunicationSaleService extends CommonService
                 return null;
             }
             $this->checkStatusOrder($saleId);
-            $this->em->getRepository(CommunicationSaleInfo::class)->find($saleId);
+            $communicationSale = $this->em->getRepository(CommunicationSaleInfo::class)->find($saleId);
         } catch (\Exception $exc) {
             $message = $exc->getMessage();
             $this->logger->info($message);

@@ -26,6 +26,7 @@ class CommunicationSaleProvider implements ProviderInterface
      * @param array $uriVariables
      * @param array $context
      * @return object|array|null
+     * @throws \Symfony\Component\Messenger\Exception\ExceptionInterface
      * @throws \Symfony\Contracts\HttpClient\Exception\ClientExceptionInterface
      * @throws \Symfony\Contracts\HttpClient\Exception\DecodingExceptionInterface
      * @throws \Symfony\Contracts\HttpClient\Exception\RedirectionExceptionInterface
@@ -40,7 +41,7 @@ class CommunicationSaleProvider implements ProviderInterface
             $currentDate = new \DateTimeImmutable('now');
             $updatedAt = $communicationSale->getUpdatedAt();
             $updatedAtDiff = $currentDate->diff($updatedAt);
-            if ($updatedAtDiff->s >= 50) {
+            if ($updatedAtDiff->m >= 1) {
                 $communicationSale = $this->saleService->checkSaleInfo($communicationSale->getId());
             }
         }
