@@ -11,32 +11,37 @@ framework:
         transports:
             # https://symfony.com/doc/current/messenger.html#transport-configuration
             # async: '%env(MESSENGER_TRANSPORT_DSN)%'
-            failed: 'doctrine://default?queue_name=failed'
-#            failure_transport: 'doctrine://default?queue_name=failed_low_check_status'
+            failed: '%env(MESSENGER_TRANSPORT_FAILURE)%'
             # sync: 'sync://'
             async_clients_high:
                dsn: '%env(MESSENGER_TRANSPORT_DSN)%'
                serializer: messenger.transport.symfony_serializer
                options:
-                   queue_name: high
+                   vhost: '%env(MESSENGER_TRANSPORT_VHOST)%'
+                   exchange:
+                     name: high
+                   queues:
+                     recharge_mobile_send:
+                       binding_keys: [ recharge_mobile_send ]
                retry_strategy:
-                   max_retries: 3
+                   max_retries: 5
                    delay: 1000
-                   multiplier: 10
-                   max_delay: 0
+                   multiplier: 3
+
             async_check_status:
                dsn: '%env(MESSENGER_TRANSPORT_DSN)%'
                serializer: messenger.transport.symfony_serializer
-#               failure_transport: failed_low_check_status
                options:
-                   queue_name: low
+                   vhost: '%env(MESSENGER_TRANSPORT_VHOST)%'
+                   exchange:
+                     name: low
+                   queues:
+                      check_status_recharge:
+                        binding_keys: [ check_status_recharge ]
                retry_strategy:
                    max_retries: 5
                    delay: 10000
-                   multiplier: 5
-                   max_delay: 0
-
-
+                   multiplier: 2
         routing:
             # Route your messages to the transports
              'App\Message\SaleRechargeMessage': async_clients_high

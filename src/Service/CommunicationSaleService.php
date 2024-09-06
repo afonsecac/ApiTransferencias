@@ -721,6 +721,21 @@ class CommunicationSaleService extends CommonService
 
     /**
      * @param int $saleId
+     * @return void
+     * @throws \Symfony\Component\Messenger\Exception\ExceptionInterface
+     * @throws \Symfony\Contracts\HttpClient\Exception\ClientExceptionInterface
+     * @throws \Symfony\Contracts\HttpClient\Exception\DecodingExceptionInterface
+     * @throws \Symfony\Contracts\HttpClient\Exception\RedirectionExceptionInterface
+     * @throws \Symfony\Contracts\HttpClient\Exception\ServerExceptionInterface
+     * @throws \Symfony\Contracts\HttpClient\Exception\TransportExceptionInterface
+     */
+    public function checkStatusSaleInfo(int $saleId): void
+    {
+        $this->checkStatusOrder($saleId, true);
+    }
+
+    /**
+     * @param int $saleId
      * @param bool|null $isProcess
      * @return void
      * @throws \Symfony\Component\Messenger\Exception\ExceptionInterface

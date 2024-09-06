@@ -30,12 +30,8 @@ class CreateSaleInfoProcessor implements ProcessorInterface
      * @param array $uriVariables
      * @param array $context
      * @return CommunicationSaleInfo|null
-     * @throws MyCurrentException
-     * @throws \JsonException
-     * @throws ClientExceptionInterface
-     * @throws RedirectionExceptionInterface
-     * @throws ServerExceptionInterface
-     * @throws TransportExceptionInterface
+     * @throws \App\Exception\MyCurrentException
+     * @throws \Symfony\Component\Messenger\Exception\ExceptionInterface
      */
     public function process(mixed $data, Operation $operation, array $uriVariables = [], array $context = []): CommunicationSaleInfo | null
     {

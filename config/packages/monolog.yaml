@@ -26,6 +26,7 @@ when@dev:
                 type: stream
                 path: '%kernel.logs_dir%/debug.%kernel.environment%.log'
                 level: debug
+                max_files: 10
 
 
 when@test:
@@ -48,9 +49,8 @@ when@prod:
             main:
                 type: fingers_crossed
                 action_level: error
-                excluded_http_codes: [404, 405]
-                buffer_size: 50 # How many messages should be saved? Prevent memory leaks
                 handler: grouped
+                max_files: 10
             security:
                 type: stream
                 path: "%kernel.logs_dir%/security.%kernel.environment%.log"
@@ -59,7 +59,7 @@ when@prod:
                 max_files: 10
             file_log:
                 type: stream
-                path: "%kernel.logs_dir%/%kernel.environment%.log"
+                path: "%kernel.logs_dir%/info.%kernel.environment%.log"
                 max_files: 10
                 level: info
             nested:
@@ -77,7 +77,7 @@ when@prod:
                 path: php://stderr
             grouped:
                 type: group
-                members: [ streamed, deduplicated ]
+                members: [ streamed, deduplicated, symfony_mailer_critical ]
             streamed:
                 type: stream
                 path: '%kernel.logs_dir%/debug.%kernel.environment%.log'
@@ -90,7 +90,15 @@ when@prod:
                 type: symfony_mailer
                 from_email: 'support@sendmundo.com'
                 to_email: ['alexander.afonsecac@gmail.com', 'aportela7@gmail.com']
-                subject: 'An Error Occurred in Api Clients! %%message%%'
-                level: debug
+                subject: 'An Error Occurred in Api Clients!'
+                level: error
+                formatter: monolog.formatter.html
+                content_type: text/html
+            symfony_mailer_critical:
+                type: symfony_mailer
+                from_email: 'support@sendmundo.com'
+                to_email: [ 'alexander.afonsecac@gmail.com', 'aportela7@gmail.com' ]
+                subject: 'An Critical Error Occurred in Api Clients!'
+                level: critical
                 formatter: monolog.formatter.html
                 content_type: text/html
