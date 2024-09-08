@@ -40,10 +40,7 @@ class CreateOperationProcessor implements ProcessorInterface
                 $lastNotification->setBalanceIn($balance);
                 $lastNotification->setClosedAt(new \DateTimeImmutable('now'));
             }
-            $notification = new EmailNotification();
-            $notification->setBalanceIn($balance);
-            $notification->setAccount($user);
-            $this->em->persist($notification);
+
 
             $this->em->flush();
         }
