@@ -4,6 +4,8 @@ namespace App\Repository;
 
 use App\Entity\EmailNotification;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
+use Doctrine\Common\Collections\ArrayCollection;
+use Doctrine\ORM\Query\Parameter;
 use Doctrine\Persistence\ManagerRegistry;
 use Symfony\Component\Mime\Email;
 
@@ -22,8 +24,12 @@ class EmailNotificationRepository extends ServiceEntityRepository
         return $this->createQueryBuilder('e')
             ->leftJoin('e.account', 'a')
             ->where('a.id = :accountId')
-            ->setParameter('accountId', $accountId)
             ->andWhere('e.closedAt IS NULL')
+            ->andWhere('e.isActive = :active')
+            ->setParameters(new ArrayCollection([
+                new Parameter('active', true),
+                new Parameter('accountId', $accountId),
+            ]))
             ->getQuery()->setMaxResults(1)->getOneOrNullResult();
     }
     //    /**
