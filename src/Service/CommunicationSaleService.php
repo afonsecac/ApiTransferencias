@@ -105,7 +105,8 @@ class CommunicationSaleService extends CommonService
         private readonly HttpClientInterface        $httpClient,
         private readonly BalanceOperationRepository $balanceRepository,
         private readonly ConfigureSequenceService   $configureSequence,
-        private readonly MessageBusInterface        $messageBus
+        private readonly MessageBusInterface        $messageBus,
+        private readonly HistoricalSaleService      $historicalSaleService,
     )
     {
         parent::__construct($em, $security, $parameters, $mailer, $logger, $passwordHasher, $environmentRepository, $sysConfigRepo, $serializer);
@@ -158,6 +159,7 @@ class CommunicationSaleService extends CommonService
         $recharge->setTransactionId($transactionId);
         $recharge->setAmount($package->getAmount());
         $recharge->setCurrency($package->getCurrency());
+
 
         $this->em->persist($recharge);
         try {
@@ -381,6 +383,7 @@ class CommunicationSaleService extends CommonService
                     $balanceOperation->setTotalCurrency($package?->getCurrency());
                     $balanceOperation->setCommunicationSale($recharge);
                     $this->em->persist($balanceOperation);
+                    $this->historicalSaleService->createHistoricalCommunication($recharge->getId(), CommunicationStateEnum::COMPLETED);
                 } elseif ((int)$rechargeResult->code !== -1) {
                     $code = $rechargeResult->code;
                     $errMsg = null;
@@ -388,6 +391,7 @@ class CommunicationSaleService extends CommonService
                         $errMsg = self::ETECSA_INFO_ERROR[$code];
                     }
                     $recharge->setState(CommunicationStateEnum::REJECTED);
+                    $this->historicalSaleService->createHistoricalCommunication($recharge->getId(), CommunicationStateEnum::REJECTED);
 
 
                     if ($errMsg) {
@@ -431,9 +435,11 @@ class CommunicationSaleService extends CommonService
                         'bodyCheck' => $bodyCheck,
                     ],
                 ];
+                $this->historicalSaleService->createHistoricalCommunication($recharge->getId(), CommunicationStateEnum::FAILED);
                 $saleRecharge->setTransactionStatus($comInfo);
             } catch (RedirectionExceptionInterface|ServerExceptionInterface|TransportExceptionInterface $exc) {
                 $saleRecharge->setState(CommunicationStateEnum::FAILED);
+                $this->historicalSaleService->createHistoricalCommunication($recharge->getId(), CommunicationStateEnum::FAILED);
                 $comInfo = [
                     'error' => [
                         'message' => sprintf(
@@ -458,6 +464,7 @@ class CommunicationSaleService extends CommonService
                     ],
                 ];
                 $saleRecharge->setTransactionStatus($comInfo);
+                $this->historicalSaleService->createHistoricalCommunication($recharge->getId(), CommunicationStateEnum::FAILED);
                 if ($ex instanceof Exception\UniqueConstraintViolationException) {
                     $exc = $ex->getPrevious();
                     if (strpos($exc->getMessage(), "unique_identification_client") >= 0) {
@@ -792,6 +799,7 @@ class CommunicationSaleService extends CommonService
                 $balanceOperation->setTotalCurrency($sale->getCurrency());
                 $balanceOperation->setCommunicationSale($sale);
                 $this->em->persist($balanceOperation);
+                $this->historicalSaleService->createHistoricalCommunication($sale->getId(), CommunicationStateEnum::COMPLETED, $response);
             } elseif (!is_null($result) && !$result->valueOk) {
                 if (!is_null($result->code)) {
                     $message = self::ETECSA_INFO_ERROR[$result->code];
@@ -799,14 +807,18 @@ class CommunicationSaleService extends CommonService
                     $sale->setTransactionStatus($response);
                     if (in_array($result->code, ['151', '152', '153', '198', '199', '200'], true)) {
                         $sale->setState(CommunicationStateEnum::REJECTED);
+                        $this->historicalSaleService->createHistoricalCommunication($sale->getId(), CommunicationStateEnum::REJECTED, $response);
                     } elseif((int)$result->code !== -1) {
                         $sale->setState(CommunicationStateEnum::PENDING);
+                        $this->historicalSaleService->createHistoricalCommunication($sale->getId(), CommunicationStateEnum::PENDING, $response);
                     }
                 } else {
                     $sale->setState(CommunicationStateEnum::REJECTED);
+                    $this->historicalSaleService->createHistoricalCommunication($sale->getId(), CommunicationStateEnum::PENDING, $response);
                 }
             } else if (is_null($result)) {
                 $sale->setState(CommunicationStateEnum::PENDING);
+                $this->historicalSaleService->createHistoricalCommunication($sale->getId(), CommunicationStateEnum::PENDING);
             }
             $this->em->flush();
         } catch (\Exception $e) {
@@ -827,6 +839,7 @@ class CommunicationSaleService extends CommonService
                     ],
                 ];
                 $sale->setTransactionStatus($comInfo);
+                $this->historicalSaleService->createHistoricalCommunication($sale->getId(), CommunicationStateEnum::FAILED, $comInfo);
                 $this->em->flush();
                 $this->messageBus->dispatch(new CheckSaleMessage($saleId));
             }
