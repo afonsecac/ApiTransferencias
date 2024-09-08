@@ -46,6 +46,7 @@ class TryApprovedBalanceCommand extends Command
                 $account = $balance->getTenant();
                 $balance->setTotalAmount($amount);
                 $balance->setCurrency($currency);
+                $balance->setState('COMPLETED');
                 if (!is_null($account)) {
                     $lastNotification = $this->em->getRepository(EmailNotification::class)->getLastNotification($account?->getId());
                     if (!is_null($lastNotification)) {
