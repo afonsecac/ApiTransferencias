@@ -37,6 +37,9 @@ class EmailNotification
     #[ORM\JoinColumn(nullable: false)]
     private ?Account $account = null;
 
+    #[ORM\Column(nullable: true)]
+    private ?bool $isActive = null;
+
     public function getId(): ?int
     {
         return $this->id;
@@ -133,5 +136,17 @@ class EmailNotification
     #[ORM\PreFlush]
     public function setUpdated(): void {
         $this->updatedAt = new \DateTimeImmutable();
+    }
+
+    public function isActive(): ?bool
+    {
+        return $this->isActive;
+    }
+
+    public function setActive(?bool $isActive): static
+    {
+        $this->isActive = $isActive;
+
+        return $this;
     }
 }
