@@ -7,6 +7,7 @@ parameters:
     app.email.support: '%env(MAILER_DSN)%'
     app.microsoft.url: '%env(MICROSOFT_URL)%'
     app.phoneNumber: '5350499650'
+    app.email.from: 'support@sendmundo.com'
 
 services:
 #    App\State\CreateBeneficiaryCardProcessor:

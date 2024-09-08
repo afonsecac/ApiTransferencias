@@ -42,10 +42,26 @@ framework:
                    max_retries: 5
                    delay: 10000
                    multiplier: 2
+
+            async_send_notification:
+              dsn: '%env(MESSENGER_TRANSPORT_DSN)%'
+              serializer: messenger.transport.symfony_serializer
+              options:
+                   vhost: '%env(MESSENGER_TRANSPORT_VHOST)%'
+                   exchange:
+                     name: medium
+                   queues:
+                     send_balance_notification:
+                       binding_keys: [ send_balance_notification ]
+              retry_strategy:
+                  max_retries: 1
+                  delay: 1000
+                  multiplier: 2
         routing:
             # Route your messages to the transports
              'App\Message\SaleRechargeMessage': async_clients_high
              'App\Message\CheckSaleMessage': async_check_status
+             'App\Message\BalanceMessage': async_send_notification
 
 # when@test:
 #    framework:

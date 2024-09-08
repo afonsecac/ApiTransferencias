@@ -39,6 +39,11 @@ class CommunicationSaleHistory
     #[Groups(['comSales:read'])]
     private ?\DateTimeImmutable $updatedAt = null;
 
+    public function __construct()
+    {
+        $this->info = [];
+    }
+
     public function getId(): ?int
     {
         return $this->id;
