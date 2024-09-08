@@ -51,6 +51,7 @@ class TryApprovedBalanceCommand extends Command
                     $lastNotification = $this->em->getRepository(EmailNotification::class)->getLastNotification($account?->getId());
                     if (!is_null($lastNotification)) {
                         $lastNotification->setBalanceIn($balance);
+                        $lastNotification->setActive(false);
                         $lastNotification->setClosedAt(new \DateTimeImmutable('now'));
                     }
                     $notification = new EmailNotification();
