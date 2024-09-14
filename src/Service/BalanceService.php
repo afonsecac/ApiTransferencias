@@ -61,6 +61,7 @@ class BalanceService extends CommonService
             $lastNotification = $this->em->getRepository(EmailNotification::class)->getLastNotification($userId);
             if (is_null($lastNotification)) {
                 $lastNotification = new EmailNotification();
+                $lastNotification->setActive(true);
                 $lastNotification->setAccount($account);
                 $this->em->persist($lastNotification);
             }

@@ -11,7 +11,7 @@ use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\Messenger\Attribute\AsMessageHandler;
 
 #[AsMessageHandler]
-class CheckSaleMessageHandler
+final class CheckSaleMessageHandler
 {
 
     public function __construct(private readonly CommunicationSaleService $communicationSaleService, private readonly EntityManagerInterface $em)

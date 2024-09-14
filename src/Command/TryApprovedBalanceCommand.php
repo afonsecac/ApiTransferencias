@@ -39,7 +39,7 @@ class TryApprovedBalanceCommand extends Command
         try {
             $balanceId = (int)$input->getArgument('balanceId');
             $amount = (float)$input->getArgument('amount');
-            $currency = $input->getOption('currency');
+            $currency = $input->getArgument('currency');
 
             $balance = $this->em->getRepository(BalanceOperation::class)->find($balanceId);
             if (!is_null($balance)) {
