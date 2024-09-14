@@ -65,21 +65,11 @@ class Account implements UserInterface
     #[ORM\Column(length: 255)]
     private ?string $environmentName = null;
 
-    #[ORM\Column(length: 3, nullable: true)]
-    private ?string $contractCurrency = null;
-
-    #[ORM\Column(nullable: true)]
-    private ?float $minBalance = null;
-
-    #[ORM\Column(nullable: true)]
-    private ?float $criticalBalance = null;
-
     public function __construct()
     {
         $this->discount = 0;
         $this->discountUnit = '%';
         $this->commission = 0;
-        $this->contractCurrency = 'EUR';
     }
 
     public function getId(): ?int
@@ -305,42 +295,6 @@ class Account implements UserInterface
     public function setActive(bool $isActive): static
     {
         $this->isActive = $isActive;
-
-        return $this;
-    }
-
-    public function getContractCurrency(): ?string
-    {
-        return $this->contractCurrency;
-    }
-
-    public function setContractCurrency(?string $contractCurrency): static
-    {
-        $this->contractCurrency = $contractCurrency;
-
-        return $this;
-    }
-
-    public function getMinBalance(): ?float
-    {
-        return $this->minBalance;
-    }
-
-    public function setMinBalance(?float $minBalance): static
-    {
-        $this->minBalance = $minBalance;
-
-        return $this;
-    }
-
-    public function getCriticalBalance(): ?float
-    {
-        return $this->criticalBalance;
-    }
-
-    public function setCriticalBalance(?float $criticalBalance): static
-    {
-        $this->criticalBalance = $criticalBalance;
 
         return $this;
     }

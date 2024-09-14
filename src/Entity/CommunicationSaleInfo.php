@@ -17,8 +17,6 @@ use App\Enums\CommunicationStateEnum;
 use App\Repository\CommunicationSaleInfoRepository;
 use App\State\CommunicationSaleProvider;
 use App\State\CreateSaleInfoProcessor;
-use Doctrine\Common\Collections\ArrayCollection;
-use Doctrine\Common\Collections\Collection;
 use Doctrine\ORM\Mapping as ORM;
 use Symfony\Component\Serializer\Annotation\Groups;
 use Symfony\Component\Validator\Constraints as Assert;
@@ -197,21 +195,12 @@ class CommunicationSaleInfo
     #[ORM\ManyToOne]
     private ?CommunicationPromotions $promotion = null;
 
-    /**
-     * @var Collection<int, CommunicationSaleHistory>
-     */
-    #[ORM\OneToMany(targetEntity: CommunicationSaleHistory::class, mappedBy: 'sale')]
-    #[ApiProperty]
-    #[Groups(['comSales:read'])]
-    private Collection $historical;
-
     public function __construct()
     {
         $this->discount = 0;
         $this->amountTax = 0;
         $this->createdAt = new \DateTimeImmutable('now');
         $this->transactionStatus = [];
-        $this->historical = new ArrayCollection();
     }
 
     public function getId(): ?int
@@ -432,35 +421,5 @@ class CommunicationSaleInfo
     public function setPromotionId(?int $promotionId): void
     {
         $this->promotionId = $promotionId;
-    }
-
-    /**
-     * @return Collection<int, CommunicationSaleHistory>
-     */
-    public function getHistorical(): Collection
-    {
-        return $this->historical;
-    }
-
-    public function addHistorical(CommunicationSaleHistory $historical): static
-    {
-        if (!$this->historical->contains($historical)) {
-            $this->historical->add($historical);
-            $historical->setSale($this);
-        }
-
-        return $this;
-    }
-
-    public function removeHistorical(CommunicationSaleHistory $historical): static
-    {
-        if ($this->historical->removeElement($historical)) {
-            // set the owning side to null (unless already changed)
-            if ($historical->getSale() === $this) {
-                $historical->setSale(null);
-            }
-        }
-
-        return $this;
     }
 }

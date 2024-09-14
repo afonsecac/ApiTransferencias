@@ -70,13 +70,13 @@ class CommunicationPromotions
     #[ORM\Column]
     private ?\DateTimeImmutable $updatedAt = null;
 
-    #[ORM\Column(type: Types::DATETIMETZ_IMMUTABLE)]
+    #[ORM\Column]
     #[Assert\NotNull]
     #[ApiProperty(types: 'https://scheme.org/DateTime')]
     #[Groups(['comProm:read', 'comPackage:read'])]
     private ?\DateTimeImmutable $startAt = null;
 
-    #[ORM\Column(type: Types::DATETIMETZ_IMMUTABLE)]
+    #[ORM\Column]
     #[Assert\NotNull]
     #[ApiProperty(types: 'https://scheme.org/DateTime')]
     #[Groups(['comProm:read', 'comPackage:read'])]

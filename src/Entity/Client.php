@@ -66,18 +66,6 @@ class Client
     #[ORM\Column(length: 255)]
     private ?string $companyIdentificationType = null;
 
-    #[ORM\Column(nullable: true)]
-    private ?float $minBalance = null;
-
-    #[ORM\Column(nullable: true)]
-    private ?float $criticalBalance = null;
-
-    #[ORM\Column(length: 3, nullable: true)]
-    private ?string $currency = null;
-
-    #[ORM\Column(nullable: true)]
-    private ?bool $isAlert = null;
-
     public function __construct()
     {
         $this->isActive = false;
@@ -279,54 +267,6 @@ class Client
     public function setActive(?bool $isActive): static
     {
         $this->isActive = $isActive;
-
-        return $this;
-    }
-
-    public function getMinBalance(): ?float
-    {
-        return $this->minBalance;
-    }
-
-    public function setMinBalance(?float $minBalance): static
-    {
-        $this->minBalance = $minBalance;
-
-        return $this;
-    }
-
-    public function getCriticalBalance(): ?float
-    {
-        return $this->criticalBalance;
-    }
-
-    public function setCriticalBalance(?float $criticalBalance): static
-    {
-        $this->criticalBalance = $criticalBalance;
-
-        return $this;
-    }
-
-    public function getCurrency(): ?string
-    {
-        return $this->currency;
-    }
-
-    public function setCurrency(?string $currency): static
-    {
-        $this->currency = $currency;
-
-        return $this;
-    }
-
-    public function isAlert(): ?bool
-    {
-        return $this->isAlert;
-    }
-
-    public function setAlert(?bool $isAlert): static
-    {
-        $this->isAlert = $isAlert;
 
         return $this;
     }
