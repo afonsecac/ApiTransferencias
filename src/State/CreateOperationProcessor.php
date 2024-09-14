@@ -7,6 +7,7 @@ use ApiPlatform\State\ProcessorInterface;
 use App\DTO\CreateOperationDto;
 use App\Entity\Account;
 use App\Entity\BalanceOperation;
+use App\Entity\EmailNotification;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\SecurityBundle\Security;
 
@@ -34,6 +35,13 @@ class CreateOperationProcessor implements ProcessorInterface
             $balance->setOperationType('CREDIT');
 
             $this->em->persist($balance);
+            $lastNotification = $this->em->getRepository(EmailNotification::class)->getLastNotification($user->getId());
+            if (!is_null($lastNotification)) {
+                $lastNotification->setBalanceIn($balance);
+                $lastNotification->setClosedAt(new \DateTimeImmutable('now'));
+            }
+
+
             $this->em->flush();
         }
 

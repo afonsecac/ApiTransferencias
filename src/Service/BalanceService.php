@@ -1,0 +1,94 @@
+<?php
+
+namespace App\Service;
+
+use App\DTO\AccountBalanceDto;
+use App\Entity\Account;
+use App\Entity\BalanceOperation;
+use App\Entity\EmailNotification;
+use App\Message\BalanceMessage;
+use App\Repository\EnvironmentRepository;
+use App\Repository\SysConfigRepository;
+use Doctrine\ORM\EntityManagerInterface;
+use Psr\Log\LoggerInterface;
+use Symfony\Bundle\SecurityBundle\Security;
+use Symfony\Component\DependencyInjection\ParameterBag\ParameterBagInterface;
+use Symfony\Component\Mailer\MailerInterface;
+use Symfony\Component\Messenger\MessageBusInterface;
+use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
+use Symfony\Component\Serializer\SerializerInterface;
+
+class BalanceService extends CommonService
+{
+    public function __construct(
+        EntityManagerInterface               $em,
+        Security                             $security,
+        ParameterBagInterface                $parameters,
+        MailerInterface                      $mailer,
+        LoggerInterface                      $logger,
+        UserPasswordHasherInterface          $passwordHasher,
+        EnvironmentRepository                $environmentRepository,
+        SysConfigRepository                  $sysConfigRepo,
+        SerializerInterface                  $serializer,
+        private readonly MessageBusInterface $messageBus
+    )
+    {
+        parent::__construct($em, $security, $parameters, $mailer, $logger, $passwordHasher, $environmentRepository, $sysConfigRepo, $serializer);
+    }
+
+    /**
+     * @param int $userId
+     * @return \App\DTO\AccountBalanceDto
+     * @throws \Symfony\Component\Messenger\Exception\ExceptionInterface
+     */
+    public function balance(int $userId): AccountBalanceDto
+    {
+        $balance = $this->em->getRepository(BalanceOperation::class)->getBalanceOutput($userId);
+        $account = $this->em->getRepository(Account::class)->find($userId);
+        if (!is_null($account)) {
+            $criticalBalance = $account->getCriticalBalance() ?? $account->getClient()?->getCriticalBalance();
+            $minBalance = $account->getMinBalance() ?? $account->getClient()?->getMinBalance();
+            if (is_null($criticalBalance)) {
+                $criticalBalance = (float)$this->sysConfigRepo->findOneBy([
+                    'propertyName' => 'client.critical.balance.operation',
+                ])?->getPropertyValue();
+            }
+            if (is_null($minBalance)) {
+                $minBalance = (float)$this->sysConfigRepo->findOneBy([
+                    'propertyName' => 'client.min.balance.operation',
+                ])?->getPropertyValue();
+            }
+            $lastNotification = $this->em->getRepository(EmailNotification::class)->getLastNotification($userId);
+            if (is_null($lastNotification)) {
+                $lastNotification = new EmailNotification();
+                $lastNotification->setAccount($account);
+                $this->em->persist($lastNotification);
+            }
+            if ($balance <= $criticalBalance) {
+                $tryCritical = $lastNotification?->getCriticalTry() ?? 0;
+                $lastNotification->setCriticalTry($tryCritical + 1);
+                $this->messageBus->dispatch(
+                    new BalanceMessage(
+                        'CRITICAL',
+                        $balance,
+                        $account->getContractCurrency() ?? $account->getClient()?->getCurrency() ?? 'USD',
+                        $userId
+                    )
+                );
+            } elseif ($balance <= $minBalance) {
+                if (is_null($lastNotification) || is_null($lastNotification->getMinInfo())) {
+                    $this->messageBus->dispatch(
+                        new BalanceMessage(
+                            'RISK',
+                            $balance,
+                            $account->getContractCurrency() ?? $account->getClient()?->getCurrency() ?? 'USD',
+                            $userId
+                        )
+                    );
+                    $lastNotification->setMinInfo(1);
+                }
+            }
+        }
+        return new AccountBalanceDto($account?->getContractCurrency() ?? 'USD', $balance);
+    }
+}

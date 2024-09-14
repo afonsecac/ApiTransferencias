@@ -1,0 +1,241 @@
+<html lang="es">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <style>
+        .contentDiv {
+            width: 100vw;
+            display: block;
+            flex-direction: row;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .contentImgLogo {
+            margin-top: 50px;
+        }
+
+        .contentTextTitle {
+            display: block;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .titleText {
+            color: rgb(175, 1, 1);
+            font-size: 30px;
+            font-weight: bold;
+            font-family: Arial, Helvetica, sans-serif;
+        }
+
+        .contentTextSubTitle {
+            display: block;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .subTitleText {
+            color: rgb(175, 1, 1);
+            font-size: 14px;
+            font-weight: 400;
+            margin-top: 10px;
+            text-align: justify;
+            font-weight: bold;
+            font-family: Arial, Helvetica, sans-serif;
+        }
+
+        .contentBill {
+            display: block;
+            justify-content: center;
+            align-items: center;
+            margin-top: 20px;
+            padding-right: 5px;
+            padding-left: 5px;
+            gap: 15px;
+        }
+
+        .textBillContent {
+            gap: 10px;
+            display: block;
+            flex-direction: column;
+        }
+
+        .textBill {
+            color: rgb(175, 1, 1);
+            font-size: 14px;
+            text-align: end;
+            font-weight: 400;
+            font-weight: bold;
+            font-family: Arial, Helvetica, sans-serif;
+        }
+
+        .textBillInfo {
+            color: rgb(128, 121, 121);
+            font-size: 14px;
+            text-align: start;
+            margin-left: 10px;
+            font-weight: 400;
+            font-weight: bold;
+            font-family: Arial, Helvetica, sans-serif;
+        }
+
+        .subTitleTextBill {
+            color: rgb(209, 148, 16);
+            font-size: 14px;
+            font-weight: 400;
+            margin-top: 15px;
+            text-align: center;
+            font-weight: bold;
+            font-family: Arial, Helvetica, sans-serif;
+        }
+
+        .divLine {
+            width: 100%;
+            margin-top: 10px;
+            border: 2px solid rgb(209, 148, 16);
+        }
+
+        .divContentProd {
+            width: 100%;
+            margin-top: 10px;
+            border-radius: 5px;
+            display: block;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background-color: rgb(175, 1, 1);
+        }
+
+        .itemProdText {
+            color: white;
+            font-size: 14px;
+            text-align: end;
+            font-weight: 400;
+            font-weight: bold;
+            padding: 5px 5px 0px 5px;
+            font-family: Arial, Helvetica, sans-serif;
+        }
+
+        .phoneItemProd {
+            display: block;
+            padding: 0 5px 5px 5px;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .totalPay {
+            margin-top: 10px;
+            color: rgb(209, 148, 16);
+            font-size: 20px;
+            font-weight: bold;
+            font-family: Arial, Helvetica, sans-serif;
+        }
+
+        .contactContent {
+            display: block;
+            flex-direction: row;
+            justify-content: center;
+            align-items: center;
+            margin-top: 10px;
+            margin-bottom: 10px;
+        }
+
+        .contactText {
+            color: rgb(128, 121, 121);
+            font-size: 14px;
+            text-align: center;
+            margin-top: 25px;
+            font-weight: 400;
+            font-weight: bold;
+            font-family: Arial, Helvetica, sans-serif;
+        }
+
+        .contactEmailText {
+            color: rgb(163, 77, 77);
+            font-size: 14px;
+            font-weight: 400;
+            text-align: center;
+            font-weight: bold;
+            font-family: Arial, Helvetica, sans-serif;
+        }
+
+        .footerContent {
+            width: 100%;
+            display: block;
+            flex-direction: row;
+            align-items: center;
+            justify-content: center;
+            margin-top: 50px;
+            padding-top: 20px;
+            padding-bottom: 20px;
+            gap: 10px;
+            background: rgb(175, 1, 1);
+        }
+
+        .footerText {
+            font-size: 12px;
+            color: white;
+            text-align: center;
+            padding-left: 5px;
+            padding-right: 5px;
+            font-family: Arial, Helvetica, sans-serif;
+        }
+    </style>
+</head>
+<body>
+<div class="contentDiv">
+    <div class="contentTextTitle">
+        <h3 class="titleText">¡SALDO EN ESTADO {{ status }}!</h3>
+    </div>
+    <br>
+    <div class="contentTextSubTitle">
+        <p class="subTitleText">
+            Estimado cliente {{ name }}, el motivo de este correo electrónico es para ponerlo al tanto del estado de su
+            saldo con nosotros. Sugerimos realizar un depósito para mantener las operaciones correspondientes con
+            nosotros.
+        </p>
+    </div>
+    <br>
+    <div class="contentBill">
+        <table cellpadding="0" cellspacing="0" border="0">
+            <tbody class="textBillContent">
+            <tr>
+                <th class="textBill">Saldo actual:</th>
+                <td class="textBillInfo"> {{ balance }} </td>
+            </tr>
+            <tr>
+                <th class="textBill">Moneda:</th>
+                <td class="textBillInfo"> {{ currency }} </td>
+            </tr>
+            <tr>
+                <th class="textBill">Fecha:</th>
+                <td class="textBillInfo"> {{ 'now' | date('d/m/Y') }} </td>
+            </tr>
+            </tbody>
+        </table>
+    </div>
+    <div class="divLine"></div>
+    <div class="contactContent">
+        <p class="subTitleText">¡Muchas gracias por elegirnos!</p>
+        <br>
+        <p class="contactText">Contáctenos a</p>
+        <br>
+        <p class="contactEmailText">sendmundo@sendmundo.com</p>
+    </div>
+    <div class="footerContent">
+        <p class="footerText">
+            SendMundo Communications and Finance Technologies SL
+        </p>
+        <br>
+        <p class="footerText">
+            Pasaje del Carme, 24, Sant Cugat del Vallés, 08173. Barcelona, España
+        </p>
+        <br>
+        <p class="footerText">CIF: B42981191</p>
+        <p class="footerText">www.sendmundo.com</p>
+    </div>
+</div>
+</body>
+</html>
