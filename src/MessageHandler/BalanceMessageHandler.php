@@ -4,7 +4,6 @@ namespace App\MessageHandler;
 
 use App\Entity\Account;
 use App\Message\BalanceMessage;
-use App\Repository\AccountRepository;
 use Doctrine\ORM\EntityManagerInterface;
 use Psr\Log\LoggerInterface;
 use Symfony\Bridge\Twig\Mime\TemplatedEmail;
