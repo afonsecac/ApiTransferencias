@@ -28,6 +28,21 @@ framework:
                    delay: 1000
                    multiplier: 3
 
+            async_send_sale_package:
+               dsn: '%env(MESSENGER_TRANSPORT_DSN)%'
+               serializer: messenger.transport.symfony_serializer
+               options:
+                   vhost: '%env(MESSENGER_TRANSPORT_VHOST)%'
+                   exchange:
+                     name: highest
+                   queues:
+                     send_sale_package:
+                        binding_keys: [ send_sale_package ]
+               retry_strategy:
+                   max_retries: 5
+                   delay: 1000
+                   multiplier: 3
+
             async_check_status:
                dsn: '%env(MESSENGER_TRANSPORT_DSN)%'
                serializer: messenger.transport.symfony_serializer
@@ -62,6 +77,7 @@ framework:
              'App\Message\SaleRechargeMessage': async_clients_high
              'App\Message\CheckSaleMessage': async_check_status
              'App\Message\BalanceMessage': async_send_notification
+             'App\Message\SalePackageMessage': async_send_sale_package
 
 # when@test:
 #    framework:

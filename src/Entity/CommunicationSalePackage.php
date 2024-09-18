@@ -88,6 +88,19 @@ class CommunicationSalePackage extends CommunicationSaleInfo
     )]
     private ?bool $officeIsAirport = null;
 
+    #[ORM\Column(nullable: true)]
+    #[Groups(['comSales:read', 'comSales:create'])]
+    #[ApiProperty(
+        description: 'Identification Type used 1 if National Document or 9 IF Passport',
+        openapiContext: [
+            'type' => 'integer',
+            'enum' => [1, 9],
+            'default' => 1,
+            'example' => 1,
+        ],
+    )]
+    private ?int $identificationType = null;
+
     public function getIdentificationNumber(): ?string
     {
         return $this->identificationNumber;
@@ -168,6 +181,18 @@ class CommunicationSalePackage extends CommunicationSaleInfo
     public function setOfficeIsAirport(?bool $officeIsAirport): static
     {
         $this->officeIsAirport = $officeIsAirport;
+
+        return $this;
+    }
+
+    public function getIdentificationType(): ?int
+    {
+        return $this->identificationType;
+    }
+
+    public function setIdentificationType(?int $identificationType): static
+    {
+        $this->identificationType = $identificationType;
 
         return $this;
     }
