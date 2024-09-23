@@ -47,8 +47,6 @@ class ApiTokenAuthenticator extends AbstractAuthenticator
     {
         $apiToken = $request->headers->get('X-AUTH-TOKEN');
         if (null === $apiToken) {
-            // The token header was empty, authentication fails with HTTP Status
-            // Code 401 "Unauthorized"
             throw new CustomUserMessageAuthenticationException('No API token provided');
         }
         $currentToken = base64_decode($apiToken, true);

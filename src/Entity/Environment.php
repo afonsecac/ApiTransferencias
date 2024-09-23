@@ -6,6 +6,7 @@ use App\Repository\EnvironmentRepository;
 use DateTimeImmutable;
 use Doctrine\ORM\Mapping as ORM;
 use Symfony\Bridge\Doctrine\Types\UuidType;
+use Symfony\Component\Serializer\Attribute\Groups;
 use Symfony\Component\Uid\Uuid;
 
 #[ORM\Entity(repositoryClass: EnvironmentRepository::class)]
@@ -24,9 +25,11 @@ class Environment
     #[ORM\Id]
     #[ORM\GeneratedValue]
     #[ORM\Column]
+    #[Groups(['balance:reading'])]
     private ?int $id = null;
 
     #[ORM\Column(length: 10)]
+    #[Groups(['balance:reading'])]
     private ?string $type = null;
 
     #[ORM\Column(length: 255)]

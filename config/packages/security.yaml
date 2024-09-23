@@ -2,6 +2,7 @@ security:
     # https://symfony.com/doc/current/security.html#registering-the-user-hashing-passwords
     password_hashers:
         Symfony\Component\Security\Core\User\PasswordAuthenticatedUserInterface: 'auto'
+        App\Entity\User: 'auto'
     # https://symfony.com/doc/current/security.html#loading-the-user-the-user-provider
     providers:
         # used to reload user from session & other features (e.g. switch_user)
@@ -23,19 +24,20 @@ security:
         dev:
             pattern: ^/(_(profiler|wdt)|css|images|js)/
             security: false
-#        api:
-#            pattern: ^/api/
-#            custom_authenticators:
-#                - App\Security\ApiTokenAuthenticator
+        dashboard:
+            lazy: true
+            pattern: ^/dashboard/api
+            provider: app_client_user_provider
+            user_checker: App\Security\DashboardUserChecker
+            json_login:
+                check_path: app_dashboard_login
+            custom_authenticators:
+                - App\Security\DashboardAccessToken
         main:
             lazy: true
-            provider: all_users
-            json_login:
-                check_path: app_api_login
+            provider: app_token_user_provider
             custom_authenticators:
                 - App\Security\ApiTokenAuthenticator
-#            entry_point: security.authenticator.json_login.main
-
             # activate different ways to authenticate
             # https://symfony.com/doc/current/security.html#the-firewall
 
@@ -45,20 +47,22 @@ security:
     # Easy way to control access for large sections of your site
     # Note: Only the *first* access control that matches will be used
     access_control:
-        - { path: '^/api/login', roles: PUBLIC_ACCESS }
-        - { path: '^/api/admin/*', roles: PUBLIC_ACCESS }
+        - { path: '^/dashboard/api/login', roles: PUBLIC_ACCESS }
         - { path: '^/api/docs', roles: PUBLIC_ACCESS }
         - { path: '^/api/docs/*', roles: PUBLIC_ACCESS }
         - { path: '^/api', roles: ROLE_API_USER }
+        - { path: '^/dashboard/api', roles: ROLE_SYSTEM_USER }
         # - { path: ^/profile, roles: ROLE_USER }
     role_hierarchy:
-        ROLE_API_SHOW: ROLE_USER
-        ROLE_API_EDITOR: ROLE_API_SHOW
+        ROLE_SYSTEM_USER: ROLE_USER
+        ROLE_SYSTEM_SHOW: ROLE_SYSTEM_USER
+        ROLE_SYSTEM_EDITOR: ROLE_SYSTEM_SHOW
+        ROLE_SYSTEM_ADMIN: [ROLE_SYSTEM_EDITOR]
         ROLE_COM_API_USER: ROLE_API_USER
         ROLE_REM_API_USER: ROLE_API_USER
         ROLE_COM_API_ADMIN: [ROLE_COM_API_USER]
         ROLE_REM_API_ADMIN: [ROLE_REM_API_USER]
-        ROLE_API_ADMIN: [ROLE_API_EDITOR, ROLE_COM_API_ADMIN, ROLE_REM_API_ADMIN]
+        ROLE_API_ADMIN: [ROLE_API_EDITOR, ROLE_COM_API_ADMIN, ROLE_REM_API_ADMIN, ROLE_SYSTEM_ADMIN]
         ROLE_ADMIN: ROLE_API_ADMIN
         ROLE_SUPER_ADMIN: ROLE_ADMIN
 

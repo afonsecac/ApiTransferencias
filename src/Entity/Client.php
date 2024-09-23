@@ -7,6 +7,7 @@ use DateTimeImmutable;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
 use Symfony\Bridge\Doctrine\Types\UuidType;
+use Symfony\Component\Serializer\Attribute\Groups;
 use Symfony\Component\Uid\Uuid;
 
 #[ORM\Entity(repositoryClass: ClientRepository::class)]
@@ -22,60 +23,79 @@ class Client
     #[ORM\Id]
     #[ORM\GeneratedValue]
     #[ORM\Column]
+    #[Groups(['balance:reading'])]
     private ?int $id = null;
 
     #[ORM\Column(length: 255)]
+    #[Groups(['balance:reading'])]
     private ?string $companyName = null;
 
     #[ORM\Column(type: Types::TEXT, nullable: true)]
+    #[Groups(['balance:reading'])]
     private ?string $companyAddress = null;
 
     #[ORM\Column(length: 3)]
+    #[Groups(['balance:reading'])]
     private ?string $companyCountry = null;
 
     #[ORM\Column(length: 12, nullable: true)]
+    #[Groups(['balance:reading'])]
     private ?string $companyZipCode = null;
 
     #[ORM\Column(length: 120)]
+    #[Groups(['balance:reading'])]
     private ?string $companyEmail = null;
 
     #[ORM\Column(length: 20)]
+    #[Groups(['balance:reading'])]
     private ?string $companyPhoneNumber = null;
 
     #[ORM\Column]
+    #[Groups(['balance:reading'])]
     private ?DateTimeImmutable $createdAt = null;
 
     #[ORM\Column]
+    #[Groups(['balance:reading'])]
     private ?DateTimeImmutable $updatedAt = null;
 
     #[ORM\Column(nullable: true)]
+    #[Groups(['balance:reading'])]
     private ?DateTimeImmutable $removeAt = null;
 
     #[ORM\Column(nullable: true)]
+    #[Groups(['balance:reading'])]
     private ?bool $isActive = null;
 
     #[ORM\Column(nullable: true)]
+    #[Groups(['balance:reading'])]
     private ?DateTimeImmutable $isActiveAt = null;
 
     #[ORM\Column]
+    #[Groups(['balance:reading'])]
     private ?float $discountOfClient = null;
 
     #[ORM\Column(length: 255)]
+    #[Groups(['balance:reading'])]
     private ?string $companyIdentification = null;
 
     #[ORM\Column(length: 255)]
+    #[Groups(['balance:reading'])]
     private ?string $companyIdentificationType = null;
 
     #[ORM\Column(nullable: true)]
+    #[Groups(['balance:reading'])]
     private ?float $minBalance = null;
 
     #[ORM\Column(nullable: true)]
+    #[Groups(['balance:reading'])]
     private ?float $criticalBalance = null;
 
     #[ORM\Column(length: 3, nullable: true)]
+    #[Groups(['balance:reading'])]
     private ?string $currency = null;
 
     #[ORM\Column(nullable: true)]
+    #[Groups(['balance:reading'])]
     private ?bool $isAlert = null;
 
     public function __construct()

@@ -2,11 +2,21 @@
 
 namespace App\Service;
 
-use App\Entity\EnvAuth;
 use App\Entity\Account;
+use App\Entity\EnvAuth;
+use App\Entity\User;
+use App\Entity\UserSession;
 use App\Repository\EnvironmentRepository;
 use App\Repository\SysConfigRepository;
 use Doctrine\ORM\EntityManagerInterface;
+use Jose\Component\Core\JWK;
+use Jose\Component\Encryption\JWEBuilderFactory;
+use Jose\Component\Encryption\JWEDecrypterFactory;
+use Jose\Component\Encryption\Serializer\JWESerializerManagerFactory;
+use Jose\Component\NestedToken\NestedTokenBuilderFactory;
+use Jose\Component\Signature\JWSBuilderFactory;
+use Jose\Component\Signature\JWSVerifierFactory;
+use Jose\Component\Signature\Serializer\JWSSerializerManagerFactory;
 use Psr\Log\LoggerInterface;
 use Symfony\Bundle\SecurityBundle\Security;
 use Symfony\Component\DependencyInjection\ParameterBag\ParameterBagInterface;
@@ -32,10 +42,19 @@ final class AuthService extends CommonService
         EnvironmentRepository $environmentRepository,
         SysConfigRepository $sysConfigRepo,
         SerializerInterface $serializer,
-        private  readonly HttpClientInterface $httpClient
-    )
-    {
-        parent::__construct($em, $security, $parameters, $mailer, $logger, $passwordHasher, $environmentRepository, $sysConfigRepo, $serializer);
+        private readonly HttpClientInterface $httpClient,
+    ) {
+        parent::__construct(
+            $em,
+            $security,
+            $parameters,
+            $mailer,
+            $logger,
+            $passwordHasher,
+            $environmentRepository,
+            $sysConfigRepo,
+            $serializer
+        );
     }
 
 
@@ -47,7 +66,8 @@ final class AuthService extends CommonService
      * @throws RedirectionExceptionInterface
      * @throws ServerExceptionInterface
      */
-    public function start(): string {
+    public function start(): string
+    {
         $envAuth = new EnvAuth();
         $url = "";
 
@@ -69,13 +89,13 @@ final class AuthService extends CommonService
                     'grant_type' => 'client_credentials',
                     'client_id' => $permission->getEnvironment()?->getClientId(),
                     'scope' => $permission->getEnvironment()?->getScope(),
-                    'client_secret' => $permission->getEnvironment()?->getClientSecret()
-                ]
+                    'client_secret' => $permission->getEnvironment()?->getClientSecret(),
+                ],
             ]
         );
         $content = $tokenInfoResponse->getContent();
-        $response = (object) $tokenInfoResponse->toArray();
-        $token  = $response->access_token;
+        $response = (object)$tokenInfoResponse->toArray();
+        $token = $response->access_token;
 
         $envAuth->setTokenAuth($token);
         $envAuth->setPermission($permission);
@@ -84,5 +104,10 @@ final class AuthService extends CommonService
 
 
         return $token;
+    }
+
+    public function getActiveSession(User $user): UserSession|null
+    {
+
     }
 }

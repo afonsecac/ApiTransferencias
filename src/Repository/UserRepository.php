@@ -3,7 +3,9 @@
 namespace App\Repository;
 
 use App\Entity\User;
+use App\EntityPaginator\PaginatorResponse;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
+use Doctrine\ORM\Tools\Pagination\Paginator;
 use Doctrine\Persistence\ManagerRegistry;
 use Symfony\Component\Security\Core\Exception\UnsupportedUserException;
 use Symfony\Component\Security\Core\User\PasswordAuthenticatedUserInterface;
@@ -40,28 +42,26 @@ class UserRepository extends ServiceEntityRepository implements PasswordUpgrader
         $this->getEntityManager()->flush();
     }
 
-//    /**
-//     * @return User[] Returns an array of User objects
-//     */
-//    public function findByExampleField($value): array
-//    {
-//        return $this->createQueryBuilder('u')
-//            ->andWhere('u.exampleField = :val')
-//            ->setParameter('val', $value)
-//            ->orderBy('u.id', 'ASC')
-//            ->setMaxResults(10)
-//            ->getQuery()
-//            ->getResult()
-//        ;
-//    }
+    public function searchAllUsersInCompany(int $companyId = null, bool $isActive = null, int $page = 0, int $limit = 20): PaginatorResponse
+    {
+        $dql = $this->createQueryBuilder('u')
+            ->leftJoin('u.company', 'c');
 
-//    public function findOneBySomeField($value): ?User
-//    {
-//        return $this->createQueryBuilder('u')
-//            ->andWhere('u.exampleField = :val')
-//            ->setParameter('val', $value)
-//            ->getQuery()
-//            ->getOneOrNullResult()
-//        ;
-//    }
+        if ($companyId !== null) {
+            $dql->andWhere('c.id = :companyId')
+                ->setParameter('companyId', $companyId);
+        }
+
+        if ($isActive !== null) {
+            $dql->andWhere('u.isActive = :isActive')
+                ->setParameter('isActive', $isActive);
+        }
+
+        $dql->setMaxResults($limit)
+            ->setFirstResult($page * $limit)
+            ->orderBy('c.companyName');
+        $paginator = new Paginator($dql, fetchJoinCollection: false);
+        $total = count($paginator);
+        return new PaginatorResponse($page, $limit, $total, $paginator->getQuery()->getResult());
+    }
 }

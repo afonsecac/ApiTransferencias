@@ -4,10 +4,14 @@
 # Put parameters here that don't need to change on each machine where the app is deployed
 # https://symfony.com/doc/current/best_practices.html#use-parameters-for-application-configuration
 parameters:
+    app.secret: '%env(APP_SECRET)%'
     app.email.support: '%env(MAILER_DSN)%'
     app.microsoft.url: '%env(MICROSOFT_URL)%'
     app.phoneNumber: '5350499650'
     app.email.from: 'support@sendmundo.com'
+    app.jwt.expired: '%env(JWT_TIMEOUT)%'
+    phrase_key: '%env(JWT_PHRASE_KEY)%'
+
 
 services:
 #    App\State\CreateBeneficiaryCardProcessor:

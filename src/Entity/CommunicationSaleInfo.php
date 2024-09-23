@@ -82,12 +82,12 @@ class CommunicationSaleInfo
     #[ApiProperty(
         identifier: true
     )]
-    #[Groups(['comSales:read'])]
+    #[Groups(['comSales:read', 'balance:reading'])]
     protected ?int $id = null;
 
     #[ORM\Column(length: 15, nullable: true)]
     #[ApiProperty]
-    #[Groups(['comSales:read'])]
+    #[Groups(['comSales:read', 'balance:reading'])]
     protected ?string $transactionOrder = null;
 
     #[ORM\Column(length: 15, nullable: true)]
@@ -97,12 +97,12 @@ class CommunicationSaleInfo
 
     #[ORM\Column]
     #[ApiProperty]
-    #[Groups(['comSales:read'])]
+    #[Groups(['comSales:read', 'balance:reading'])]
     protected ?\DateTimeImmutable $createdAt;
 
     #[ORM\Column]
     #[ApiProperty]
-    #[Groups(['comSales:read'])]
+    #[Groups(['comSales:read'], 'balance:reading')]
     protected ?\DateTimeImmutable $updatedAt = null;
 
     #[ORM\Column(length: 255)]
@@ -110,7 +110,7 @@ class CommunicationSaleInfo
         description: 'The transaction id on system of client, this info is unique',
         required: true
     )]
-    #[Groups(['comSales:read', 'comSales:create'])]
+    #[Groups(['comSales:read', 'comSales:create', 'balance:reading'])]
     #[Assert\NotBlank]
     protected ?string $clientTransactionId = null;
 
@@ -129,7 +129,7 @@ class CommunicationSaleInfo
         ],
         types: 'https://schema.org/priceCurrency'
     )]
-    #[Groups(['comSales:read'])]
+    #[Groups(['comSales:read', 'balance:reading'])]
     #[Assert\Length(min: 3, max: 3)]
     protected ?string $currency = null;
 
@@ -156,27 +156,27 @@ class CommunicationSaleInfo
     protected ?Account $tenant = null;
 
     #[ORM\Column(nullable: true)]
-    #[Groups(['comSales:read'])]
+    #[Groups(['comSales:read', 'balance:reading'])]
     #[ApiProperty]
     protected ?float $discount = 0;
 
     #[ORM\Column(nullable: true)]
-    #[Groups(['comSales:read'])]
+    #[Groups(['comSales:read', 'balance:reading'])]
     #[ApiProperty]
     protected ?float $amountTax = 0;
 
     #[ORM\Column]
-    #[Groups(['comSales:read'])]
+    #[Groups(['comSales:read', 'balance:reading'])]
     #[ApiProperty]
     protected ?float $totalPrice = 0;
 
     #[ORM\Column]
-    #[Groups(['comSales:read'])]
+    #[Groups(['comSales:read', 'balance:reading'])]
     #[ApiProperty]
     protected array $transactionStatus = [];
 
     #[ORM\Column(length: 15)]
-    #[Groups(['comSales:read'])]
+    #[Groups(['comSales:read', 'balance:reading'])]
     #[ApiProperty]
     protected ?CommunicationStateEnum $state = null;
 
@@ -187,7 +187,7 @@ class CommunicationSaleInfo
         ]
     )]
     #[ApiFilter(SearchFilter::class, strategy: SearchFilterInterface::STRATEGY_EXACT)]
-    #[Groups(['comSales:read'])]
+    #[Groups(['comSales:read', 'balance:reading'])]
     public string $type;
 
     #[ORM\ManyToOne]

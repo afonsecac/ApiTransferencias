@@ -4,8 +4,6 @@ namespace App\Repository;
 
 use App\Entity\BalanceOperation;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
-use Doctrine\ORM\NonUniqueResultException;
-use Doctrine\ORM\NoResultException;
 use Doctrine\Persistence\ManagerRegistry;
 
 /**
@@ -39,6 +37,7 @@ class BalanceOperationRepository extends ServiceEntityRepository
             if (is_null($info)) {
                 $info = 0;
             }
+
             return $info;
         } catch (\Exception $e) {
             return 0;
@@ -48,7 +47,7 @@ class BalanceOperationRepository extends ServiceEntityRepository
     /**
      * @throws \Doctrine\ORM\NonUniqueResultException
      */
-    public function getBalanceByTransferId(int $transferId, int $userId): BalanceOperation | null
+    public function getBalanceByTransferId(int $transferId, int $userId): BalanceOperation|null
     {
         return $this->createQueryBuilder('b')
             ->leftJoin('b.tenant', 't')
@@ -60,6 +59,24 @@ class BalanceOperationRepository extends ServiceEntityRepository
             ->setParameter('tenantId', $userId)
             ->setMaxResults(1)
             ->getQuery()->getOneOrNullResult();
+    }
+
+    /**
+     * @param int $limit
+     * @param int|null $companyId
+     * @return BalanceOperation[]
+     */
+    public function getRecentTransactions(int $limit = 5, int $companyId = null): array
+    {
+        $dql = $this->createQueryBuilder('b')
+            ->leftJoin('b.tenant', 't')
+            ->leftJoin('t.client', 'c');
+        if (!is_null($companyId)) {
+            $dql->andWhere('c.id = :companyId')
+                ->setParameter('companyId', $companyId);
+        }
+
+        return $dql->setMaxResults($limit)->orderBy('b.id', 'DESC')->getQuery()->execute();
     }
 
 //    /**

@@ -43,11 +43,11 @@ class Transfer
     #[ORM\GeneratedValue]
     #[ORM\Column]
     #[ApiProperty(identifier: true)]
-    #[Groups(['tx:read'])]
+    #[Groups(['tx:read', 'balance:reading'])]
     private ?int $id = null;
 
     #[ORM\Column]
-    #[Groups(['tx:read', 'tx:write'])]
+    #[Groups(['tx:read', 'tx:write', 'balance:reading'])]
     #[Assert\Positive]
     #[Assert\GreaterThan(value: 50)]
     #[Assert\LessThanOrEqual(value: 2000)]
@@ -55,7 +55,7 @@ class Transfer
     private ?float $amountDeposit = null;
 
     #[ORM\Column(length: 3)]
-    #[Groups(['tx:read', 'tx:write'])]
+    #[Groups(['tx:read', 'tx:write', 'balance:reading'])]
     #[ApiProperty(default: 'USD', types: ['https://schema.org/priceCurrency'])]
     #[Assert\Length(exactly: 3)]
     #[Assert\Currency]
@@ -66,11 +66,11 @@ class Transfer
     private ?string $currency = null;
 
     #[ORM\Column]
-    #[Groups(['tx:read'])]
+    #[Groups(['tx:read', 'balance:reading'])]
     private ?float $amountCommission = null;
 
     #[ORM\Column(length: 3)]
-    #[Groups(['tx:read'])]
+    #[Groups(['tx:read', 'balance:reading'])]
     #[ApiProperty(default: 'USD', types: ['https://schema.org/priceCurrency'])]
     #[Assert\Length(exactly: 3)]
     #[Assert\Currency]
@@ -80,7 +80,7 @@ class Transfer
     private ?string $currencyCommission = null;
 
     #[ORM\Column]
-    #[Groups(['tx:read'])]
+    #[Groups(['tx:read', 'balance:reading'])]
     private ?float $totalAmount = null;
 
     #[ORM\Column(length: 3)]
@@ -94,10 +94,10 @@ class Transfer
     private ?string $currencyTotal = null;
 
     #[ORM\Column]
-    #[Groups(['tx:read'])]
+    #[Groups(['tx:read', 'balance:reading'])]
     private ?float $rateToChange = null;
 
-    #[Groups(['tx:read', 'tx:write'])]
+    #[Groups(['tx:read', 'tx:write', 'balance:reading'])]
     #[ApiProperty(
         openapiContext: [
             'type' => 'string',
@@ -125,15 +125,15 @@ class Transfer
     private ?DateTimeImmutable $createdAt = null;
 
     #[ORM\Column]
-    #[Groups(['tx:read'])]
+    #[Groups(['tx:read', 'balance:reading'])]
     private ?int $statusId = null;
 
     #[ORM\Column(length: 20)]
-    #[Groups(['tx:read'])]
+    #[Groups(['tx:read', 'balance:reading'])]
     private ?string $statusName = null;
 
     #[ORM\Column(type: Types::TEXT, nullable: true)]
-    #[Groups(['tx:read', 'tx:write'])]
+    #[Groups(['tx:read', 'tx:write', 'balance:reading'])]
     private ?string $reasonNote = null;
 
     #[ORM\Column(nullable: true)]

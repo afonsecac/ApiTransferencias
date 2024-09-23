@@ -63,15 +63,15 @@ class BalanceOperation
     #[ORM\GeneratedValue]
     #[ORM\Column]
     #[ApiProperty(identifier: true)]
-    #[Groups(['balance:read'])]
+    #[Groups(['balance:read', 'balance:reading'])]
     private ?int $id = null;
 
     #[ORM\Column]
-    #[Groups(['balance:read'])]
+    #[Groups(['balance:read', 'balance:reading'])]
     private ?float $amount = null;
 
     #[ORM\Column(length: 3)]
-    #[Groups(['balance:read'])]
+    #[Groups(['balance:read', 'balance:reading'])]
     #[ApiProperty(
         default: 'USD',
         openapiContext: [
@@ -88,11 +88,11 @@ class BalanceOperation
     private ?string $currency = null;
 
     #[ORM\Column]
-    #[Groups(['balance:read'])]
+    #[Groups(['balance:read', 'balance:reading'])]
     private ?float $amountTax = null;
 
     #[ORM\Column(length: 3)]
-    #[Groups(['balance:read'])]
+    #[Groups(['balance:read', 'balance:reading'])]
     #[ApiProperty(
         default: 'USD',
         openapiContext: [
@@ -109,11 +109,11 @@ class BalanceOperation
     private ?string $currencyTax = null;
 
     #[ORM\Column]
-    #[Groups(['balance:read'])]
+    #[Groups(['balance:read', 'balance:reading'])]
     private ?float $discount = null;
 
     #[ORM\Column(length: 3)]
-    #[Groups(['balance:read'])]
+    #[Groups(['balance:read', 'balance:reading'])]
     #[ApiProperty(
         default: 'USD',
         openapiContext: [
@@ -130,11 +130,11 @@ class BalanceOperation
     private ?string $currencyDiscount = null;
 
     #[ORM\Column]
-    #[Groups(['balance:read'])]
+    #[Groups(['balance:read', 'balance:reading'])]
     private ?float $totalAmount = null;
 
     #[ORM\Column(length: 3)]
-    #[Groups(['balance:read'])]
+    #[Groups(['balance:read', 'balance:reading'])]
     #[ApiProperty(
         default: 'USD',
         openapiContext: [
@@ -152,6 +152,7 @@ class BalanceOperation
 
     #[ORM\ManyToOne]
     #[ORM\JoinColumn(nullable: false)]
+    #[Groups(['balance:reading'])]
     private ?Account $tenant = null;
 
     #[ORM\ManyToOne]
@@ -165,29 +166,30 @@ class BalanceOperation
     private ?int $transferId = null;
 
     #[ORM\Column]
-    #[Groups(['balance:read'])]
+    #[Groups(['balance:read', 'balance:reading'])]
     private ?\DateTimeImmutable $createdAt = null;
 
     #[ORM\Column]
-    #[Groups(['balance:read'])]
+    #[Groups(['balance:read', 'balance:reading'])]
     private ?\DateTimeImmutable $updatedAt = null;
 
     #[ORM\Column(length: 10)]
-    #[Groups(['balance:read'])]
+    #[Groups(['balance:read', 'balance:reading'])]
     private ?string $state = null;
 
     #[ORM\Column(length: 10, nullable: true)]
-    #[Groups(['balance:read'])]
+    #[Groups(['balance:read', 'balance:reading'])]
     private ?string $operationType = null;
 
     #[ORM\OneToOne(cascade: ['persist', 'remove'])]
-    #[Groups(['balance:read'])]
+    #[Groups(['balance:read', 'balance:reading'])]
     #[ApiProperty(
         schema: ['application/json'],
     )]
     private ?CommunicationSaleInfo $communicationSale = null;
 
     #[ORM\Column(nullable: true)]
+    #[Groups(['balance:reading'])]
     private ?\DateTimeImmutable $disabledAt = null;
 
     public function __construct()

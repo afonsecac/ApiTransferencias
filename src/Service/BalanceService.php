@@ -6,6 +6,7 @@ use App\DTO\AccountBalanceDto;
 use App\Entity\Account;
 use App\Entity\BalanceOperation;
 use App\Entity\EmailNotification;
+use App\Entity\User;
 use App\Message\BalanceMessage;
 use App\Repository\EnvironmentRepository;
 use App\Repository\SysConfigRepository;
@@ -13,6 +14,7 @@ use Doctrine\ORM\EntityManagerInterface;
 use Psr\Log\LoggerInterface;
 use Symfony\Bundle\SecurityBundle\Security;
 use Symfony\Component\DependencyInjection\ParameterBag\ParameterBagInterface;
+use Symfony\Component\Finder\Exception\AccessDeniedException;
 use Symfony\Component\Mailer\MailerInterface;
 use Symfony\Component\Messenger\MessageBusInterface;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
@@ -91,5 +93,19 @@ class BalanceService extends CommonService
             }
         }
         return new AccountBalanceDto($account?->getContractCurrency() ?? 'USD', $balance);
+    }
+
+    /**
+     * @param int $limit
+     * @return BalanceOperation[]
+     */
+    public function recentTransactions(int $limit = 5): array
+    {
+        $user = $this->security->getUser();
+        if (!$user instanceof User) {
+            throw new AccessDeniedException();
+        }
+        $companyId = $user->getCompany()?->getId();
+        return $this->em->getRepository(BalanceOperation::class)->getRecentTransactions($limit, $companyId);
     }
 }

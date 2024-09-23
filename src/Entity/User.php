@@ -81,9 +81,16 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     #[ORM\OneToMany(mappedBy: 'userHistoric', targetEntity: UserPassword::class)]
     private Collection $historicPasswords;
 
+    private ?string $currentIp;
+
     public function __construct()
     {
         $this->historicPasswords = new ArrayCollection();
+    }
+
+    public function setId(?int $id): void
+    {
+        $this->id = $id;
     }
 
     public function getId(): ?int
@@ -390,5 +397,15 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
         $this->isCheckValidation = $isCheckValidation;
 
         return $this;
+    }
+
+    public function getCurrentIp(): ?string
+    {
+        return $this->currentIp;
+    }
+
+    public function setCurrentIp(?string $currentIp): void
+    {
+        $this->currentIp = $currentIp;
     }
 }

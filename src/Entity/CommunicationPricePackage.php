@@ -3,6 +3,8 @@
 namespace App\Entity;
 
 use App\Repository\CommunicationPricePackageRepository;
+use Doctrine\Common\Collections\ArrayCollection;
+use Doctrine\Common\Collections\Collection;
 use Doctrine\ORM\Mapping as ORM;
 
 #[ORM\Entity(repositoryClass: CommunicationPricePackageRepository::class)]
@@ -67,6 +69,15 @@ class CommunicationPricePackage
     #[ORM\ManyToOne]
     private ?Environment $environment = null;
 
+    #[ORM\ManyToOne(targetEntity: self::class)]
+    private ?self $pricePackage = null;
+
+    /**
+     * @var Collection<int, CommunicationPromotions>
+     */
+    #[ORM\ManyToMany(targetEntity: CommunicationPromotions::class, mappedBy: 'packages')]
+    private Collection $communicationPromotions;
+
     public function __construct()
     {
         $this->isActive = true;
@@ -74,6 +85,7 @@ class CommunicationPricePackage
         $this->priceCurrency = 'CUP';
         $this->currency = 'USD';
         $this->dataInfo = [];
+        $this->communicationPromotions = new ArrayCollection();
     }
 
     public function getId(): ?int
@@ -306,6 +318,45 @@ class CommunicationPricePackage
     public function setActive(bool $isActive): static
     {
         $this->isActive = $isActive;
+
+        return $this;
+    }
+
+    public function getPricePackage(): ?self
+    {
+        return $this->pricePackage;
+    }
+
+    public function setPricePackage(?self $pricePackage): static
+    {
+        $this->pricePackage = $pricePackage;
+
+        return $this;
+    }
+
+    /**
+     * @return Collection<int, CommunicationPromotions>
+     */
+    public function getCommunicationPromotions(): Collection
+    {
+        return $this->communicationPromotions;
+    }
+
+    public function addCommunicationPromotion(CommunicationPromotions $communicationPromotion): static
+    {
+        if (!$this->communicationPromotions->contains($communicationPromotion)) {
+            $this->communicationPromotions->add($communicationPromotion);
+            $communicationPromotion->addPackage($this);
+        }
+
+        return $this;
+    }
+
+    public function removeCommunicationPromotion(CommunicationPromotions $communicationPromotion): static
+    {
+        if ($this->communicationPromotions->removeElement($communicationPromotion)) {
+            $communicationPromotion->removePackage($this);
+        }
 
         return $this;
     }

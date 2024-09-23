@@ -3,6 +3,11 @@
 namespace App\EventListener;
 
 use App\Exception\MyCurrentException;
+use MiladRahimi\Jwt\Exceptions\InvalidSignatureException;
+use MiladRahimi\Jwt\Exceptions\InvalidTokenException;
+use MiladRahimi\Jwt\Exceptions\JsonDecodingException;
+use MiladRahimi\Jwt\Exceptions\SigningException;
+use MiladRahimi\Jwt\Exceptions\ValidationException;
 use Symfony\Component\EventDispatcher\Attribute\AsEventListener;
 use Symfony\Component\Finder\Exception\AccessDeniedException;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -35,12 +40,24 @@ class ExceptionListener
                     'code' => $exception->getCodeWork(),
                 ]
             ], Response::HTTP_BAD_REQUEST);
+        } elseif (
+            $exception instanceof InvalidSignatureException ||
+            $exception instanceof InvalidTokenException ||
+            $exception instanceof JsonDecodingException ||
+            $exception instanceof SigningException ||
+            $exception instanceof ValidationException
+        ) {
+            $response = new JsonResponse([
+                'error' => [
+                    'message' => $exception->getMessage()
+                ]
+            ], Response::HTTP_UNAUTHORIZED);
         } elseif ($exception instanceof AccessDeniedException || $exception instanceof InsufficientAuthenticationException || $exception instanceof AccessDeniedHttpException) {
             $response = new JsonResponse([
                 'error' => [
                     'message' => $exception->getMessage()
                 ]
-            ], 403);
+            ], $exception->getCode() ?? Response::HTTP_UNAUTHORIZED);
         } elseif ($exception instanceof HttpExceptionInterface || $exception instanceof \ApiPlatform\Metadata\Exception\HttpExceptionInterface) {
             $response->setStatusCode($exception->getStatusCode());
             $response->headers->replace($exception->getHeaders());

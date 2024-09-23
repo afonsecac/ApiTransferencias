@@ -103,9 +103,16 @@ class CommunicationPromotions
     #[ORM\Column(nullable: true)]
     private ?array $validityInfo = [];
 
+    /**
+     * @var Collection<int, CommunicationPricePackage>
+     */
+    #[ORM\ManyToMany(targetEntity: CommunicationPricePackage::class, inversedBy: 'communicationPromotions')]
+    private Collection $packages;
+
     public function __construct()
     {
         $this->products = new ArrayCollection();
+        $this->packages = new ArrayCollection();
     }
 
     public function getId(): ?int
@@ -310,6 +317,30 @@ class CommunicationPromotions
     public function setValidityInfo(?array $validityInfo): static
     {
         $this->validityInfo = $validityInfo;
+
+        return $this;
+    }
+
+    /**
+     * @return Collection<int, CommunicationPricePackage>
+     */
+    public function getPackages(): Collection
+    {
+        return $this->packages;
+    }
+
+    public function addPackage(CommunicationPricePackage $package): static
+    {
+        if (!$this->packages->contains($package)) {
+            $this->packages->add($package);
+        }
+
+        return $this;
+    }
+
+    public function removePackage(CommunicationPricePackage $package): static
+    {
+        $this->packages->removeElement($package);
 
         return $this;
     }
