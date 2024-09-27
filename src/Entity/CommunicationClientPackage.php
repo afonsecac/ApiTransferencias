@@ -39,7 +39,6 @@ use Symfony\Component\Validator\Constraints as Assert;
     security: "is_granted('ROLE_COM_API_USER')",
 
 )]
-#[ApiFilter(DateFilter::class, properties: ['activeStartAt', 'activeEndAt'])]
 #[ApiFilter(OrderFilter::class, properties: [
     'id',
     'priceClientPackage.amount',

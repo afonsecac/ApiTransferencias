@@ -8,7 +8,7 @@ use App\Repository\CommunicationSaleRechargeRepository;
 use App\Service\CommunicationSaleService;
 use Symfony\Component\Scheduler\Attribute\AsCronTask;
 
-#[AsCronTask("0 0 * * *", "America/Havana")]
+#[AsCronTask("*/5 * * * *", "America/Havana")]
 class SaleRechargeTask
 {
     public function __construct(private readonly CommunicationSaleRechargeRepository $rechargeRepository, private readonly CommunicationSaleService $saleService) {

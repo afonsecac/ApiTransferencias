@@ -27,7 +27,7 @@ class CommunicationPromotionProvider implements ProviderInterface
         $promotions = $this->itemProvider->provide($operation, $uriVariables, $context);
         if ($promotions->count() > 0) {
             $tenant = $this->security->getUser();
-            if (!is_null($tenant) && $tenant instanceof Account) {
+            if ($tenant instanceof Account) {
                 $countPromotion = $promotions->count();
                 for ($i = 0; $i < $countPromotion; $i++) {
                     $promotion = $promotions->getIterator()->offsetGet($i);

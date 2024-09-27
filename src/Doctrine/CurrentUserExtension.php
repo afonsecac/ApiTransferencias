@@ -64,6 +64,7 @@ final class CurrentUserExtension implements QueryCollectionExtensionInterface, Q
 
         if ($user instanceof Account) {
             $rootAlias = $queryBuilder->getRootAliases()[0];
+            $currentDate = new \DateTimeImmutable('now');
             if (in_array(
                 $resourceClass,
                 [
@@ -79,15 +80,30 @@ final class CurrentUserExtension implements QueryCollectionExtensionInterface, Q
                 $environment = $user->getEnvironment();
                 $queryBuilder->andWhere(sprintf('%s.environment = :env', $rootAlias));
                 $queryBuilder->setParameter('env', $environment?->getId());
+                if (CommunicationPromotions::class === $resourceClass) {
+                    $queryBuilder->andWhere(
+                        sprintf(':currentDate BETWEEN %s.createdAt AND %s.endAt', $rootAlias, $rootAlias)
+                    )
+                        ->setParameter('currentDate', $currentDate);
+                }
             } elseif (BankCard::class === $resourceClass) {
                 $queryBuilder->innerJoin(sprintf('%s.beneficiary', $rootAlias), 'b')
                     ->andWhere('b.tenant = :current_user')
                     ->setParameter('current_user', $user->getId());
-            } elseif ($resourceClass !== CommunicationPromotions::class) {
-                $queryBuilder->andWhere(sprintf('%s.tenant = :current_user', $rootAlias));
-                $queryBuilder->setParameter('current_user', $user->getId());
+            } else {
+                $queryBuilder->andWhere(sprintf('%s.tenant = :current_user', $rootAlias))
+                    ->setParameter('current_user', $user->getId());
                 if ($resourceClass === CommunicationClientPackage::class) {
-                    // $queryBuilder->addOrderBy(sprintf('%s.name', $rootAlias));
+                    $queryBuilder->andWhere(
+                        sprintf(
+                            '(%s.activeStartAt <= :currentDate AND %s.activeEndAt IS NULL) OR (:currentDate BETWEEN %s.activeStartAt AND %s.activeEndAt)',
+                            $rootAlias,
+                            $rootAlias,
+                            $rootAlias,
+                            $rootAlias
+                        )
+                    )
+                        ->setParameter('currentDate', $currentDate);
                 }
             }
         }

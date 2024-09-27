@@ -203,7 +203,7 @@
             <tbody class="textBillContent">
             <tr>
                 <th class="textBill">Saldo actual:</th>
-                <td class="textBillInfo"> {{ balance }} </td>
+                <td class="textBillInfo"> {{ balance | round(2, 'floor') }} </td>
             </tr>
             <tr>
                 <th class="textBill">Moneda:</th>

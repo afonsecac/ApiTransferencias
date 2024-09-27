@@ -2,7 +2,6 @@
 
 namespace App\Entity;
 
-use ApiPlatform\Doctrine\Orm\Filter\DateFilter;
 use ApiPlatform\Doctrine\Orm\Filter\OrderFilter;
 use ApiPlatform\Metadata\ApiFilter;
 use ApiPlatform\Metadata\ApiProperty;
@@ -31,7 +30,6 @@ use Symfony\Component\Validator\Constraints as Assert;
     denormalizationContext: ['groups' => ['comProm:create', 'comProm:update']],
     security: "is_granted('ROLE_COM_API_USER')"
 )]
-#[ApiFilter(DateFilter::class, properties: ['createdAt', 'startAt', 'endAt'])]
 #[ApiFilter(OrderFilter::class, properties: [
     'id',
 ], arguments: ['orderParameterName' => 'orderBy'])]
