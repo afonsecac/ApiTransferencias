@@ -2,6 +2,8 @@
 
 namespace App\Controller;
 
+use App\DTO\ForgotPassword;
+use App\DTO\ResetPassword;
 use App\Entity\User;
 use App\Service\UserService;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -32,16 +34,9 @@ class ApiLoginController extends AbstractController
                 ],
             ], Response::HTTP_UNAUTHORIZED);
         }
-        $activeSession = $this->userService->getActiveSession($user->getId());
-        if (!is_null($activeSession) && is_null($activeSession?->getClosedAt())) {
-            return $this->json([
-                "error" => [
-                    'message' => "You have an active session.",
-                ],
-            ], Response::HTTP_UNAUTHORIZED);
-        }
         $user->setCurrentIp($clientIp);
-        $token = $this->userService->createSession($user, $clientIp);
+        $token = $this->userService->createToken($user, null);
+
         return $this->json([
             'token' => $token,
             'user' => $this->userService->createPayloadUser($user),
@@ -65,22 +60,39 @@ class ApiLoginController extends AbstractController
             ], Response::HTTP_UNAUTHORIZED);
         }
         $user->setCurrentIp($clientIp);
-        $activeSession = $this->userService->getActiveSession($user->getId());
-        if (!is_null($activeSession)) {
-            $this->userService->updateActiveSession($activeSession);
-        }
-        $newToken = $this->userService->createToken($user, $activeSession);
+        $newToken = $this->userService->createToken($user, null);
         $myUser = $this->userService->createPayloadUser($user);
+
         return $this->json([
             'token' => $newToken,
             'user' => $myUser,
         ]);
     }
 
+    #[Route('/forgot-password', name: 'app_dashboard_reset', methods: ['POST'])]
+    public function forgot(ForgotPassword $forgotPassword): JsonResponse
+    {
+        $statusType = Response::HTTP_OK;
+        $response = $this->userService->forgotPassword($forgotPassword);
+        if (!$response['send']) {
+            $statusType = Response::HTTP_NOT_FOUND;
+        }
+
+        return $this->json($response, $statusType);
+    }
+
+    #[Route('/reset-password', name: 'app_dashboard_reset_password', methods: ['POST'])]
+    public function reset(ResetPassword $resetPassword): JsonResponse
+    {
+        $response = $this->userService->resetPassword($resetPassword);
+        return $this->json($response, $response['status'] ?? Response::HTTP_OK);
+    }
+
     #[Route('/logout', name: 'app_dashboard_logout')]
     public function logout(): JsonResponse
     {
         $user = $this->getUser();
+
         return $this->json([
             'logout' => $this->userService->closeMySession($user?->getId()),
         ]);

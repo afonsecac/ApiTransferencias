@@ -3,6 +3,7 @@
 namespace App\Service;
 
 use App\DTO\AccountBalanceDto;
+use App\DTO\PaginationResult;
 use App\Entity\Account;
 use App\Entity\BalanceOperation;
 use App\Entity\EmailNotification;
@@ -96,6 +97,18 @@ class BalanceService extends CommonService
     }
 
     /**
+     * @param int|null $clientId
+     * @return array
+     */
+    public function getBalancesByEnvironment(int $clientId = null): array
+    {
+        if (is_null($clientId)) {
+            return [];
+        }
+        return $this->em->getRepository(BalanceOperation::class)->getBalancesInEnvironments($clientId);
+    }
+
+    /**
      * @param int $limit
      * @return BalanceOperation[]
      */
@@ -107,5 +120,21 @@ class BalanceService extends CommonService
         }
         $companyId = $user->getCompany()?->getId();
         return $this->em->getRepository(BalanceOperation::class)->getRecentTransactions($limit, $companyId);
+    }
+
+    /**
+     * @param array $filters
+     * @param string|null $orderBy
+     * @param int $page
+     * @param int $limit
+     * @return \App\DTO\PaginationResult
+     */
+    public function getBalanceOperations(array $filters, string $orderBy = null,  int $page = 0, int $limit = 10): PaginationResult {
+        $user = $this->security->getUser();
+        if (!$user instanceof User) {
+            throw new AccessDeniedException();
+        }
+        $companyId = $user?->getCompany()?->getId();
+        return $this->em->getRepository(BalanceOperation::class)->getAllBalance($filters, $orderBy, $page, $limit, $companyId);
     }
 }

@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace App\Controller;
 
+use ApiPlatform\Symfony\Security\Exception\AccessDeniedException;
+use App\DTO\BudgetInfoDto;
+use App\Entity\User;
 use App\Service\BalanceService;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -23,19 +26,42 @@ class AdminDashboardFinancialController extends AbstractController
 
     }
 
-    #[Route("/recent-transactions", name: "admin_dashboard_financial_recent_txs", methods: ["GET"])]
-    public function recentTransactions(Request $request): JsonResponse
+    #[Route("", name: "admin_dashboard_financial", methods: ["GET"])]
+    public function index(Request $request): JsonResponse
     {
+        $user = $this->getUser();
+        if (!$user instanceof User) {
+            throw new AccessDeniedException('User is not authenticated');
+        }
+        $balances = $this->balanceService->getBalancesByEnvironment($user?->getCompany()?->getId());
         $limit = $request->query->getInt('limit', 5);
-
-        return $this->json(
-            $this->serializer->normalize(
-                $this->balanceService->recentTransactions($limit),
-                'json',
-                [
-                    'groups' => ['balance:reading']
-                ]
-            )
+        $txRecent = $this->serializer->serialize(
+            $this->balanceService->recentTransactions($limit),
+            'json',
+            ['groups' => ['balance:reading']]
         );
+        return $this->json([
+            'recentTransactions' => $txRecent,
+            'balances' => $balances,
+            'accountBalance' => [
+                'growRate' => 0,
+                'ami' => 0,
+                'series' => [
+                    [
+                        'name' => 'Predicted',
+                        'data' => []
+                    ],
+                    [
+                        'name' => 'Actual',
+                        'data' => []
+                    ]
+                 ]
+            ],
+            'budget' => [
+                'expenses' => new BudgetInfoDto(0, 0, 0, 0),
+                'savings' => new BudgetInfoDto(0, 0, 0, 0),
+                'bills' => new BudgetInfoDto(0, 0, 0, 0),
+            ]
+        ]);
     }
 }

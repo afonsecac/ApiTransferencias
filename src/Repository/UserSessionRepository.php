@@ -54,7 +54,10 @@ class UserSessionRepository extends ServiceEntityRepository
     public function sessionUnclosedByUser(int $userId): array
     {
         return $this->createQueryBuilder('us')
+            ->leftJoin('us.userBySession', 'u')
             ->where('us.closedAt IS NULL')
+            ->andWhere('u.id = :userId')
+            ->setParameter('userId', $userId)
             ->getQuery()->execute();
     }
 
