@@ -72,13 +72,9 @@ class ApiLoginController extends AbstractController
     #[Route('/forgot-password', name: 'app_dashboard_reset', methods: ['POST'])]
     public function forgot(ForgotPassword $forgotPassword): JsonResponse
     {
-        $statusType = Response::HTTP_OK;
         $response = $this->userService->forgotPassword($forgotPassword);
-        if (!$response['send']) {
-            $statusType = Response::HTTP_NOT_FOUND;
-        }
 
-        return $this->json($response, $statusType);
+        return $this->json($response, $response['status'] ?? Response::HTTP_OK);
     }
 
     #[Route('/reset-password', name: 'app_dashboard_reset_password', methods: ['POST'])]

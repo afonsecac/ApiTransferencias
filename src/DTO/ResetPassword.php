@@ -2,12 +2,26 @@
 
 namespace App\DTO;
 
-class ResetPassword
+final class ResetPassword implements IInput
 {
     private string $password;
     private string $passwordConfirm;
     private string $code;
     private string $email;
+
+    /**
+     * @param string $password
+     * @param string $passwordConfirm
+     * @param string $code
+     * @param string $email
+     */
+    public function __construct(string $password, string $passwordConfirm, string $code, string $email)
+    {
+        $this->password = $password;
+        $this->passwordConfirm = $passwordConfirm;
+        $this->code = $code;
+        $this->email = $email;
+    }
 
     public function getPassword(): string
     {

@@ -22,16 +22,16 @@ class UserCode
     #[ORM\Column(length: 15, unique: true)]
     private ?string $code = null;
 
-    #[ORM\Column(type: Types::DATETIMETZ_IMMUTABLE)]
+    #[ORM\Column]
     private ?\DateTimeImmutable $createdAt = null;
 
-    #[ORM\Column(type: Types::DATETIMETZ_IMMUTABLE)]
+    #[ORM\Column]
     private ?\DateTimeImmutable $updatedAt = null;
 
-    #[ORM\Column(type: Types::DATETIMETZ_IMMUTABLE, nullable: true)]
+    #[ORM\Column(nullable: true)]
     private ?\DateTimeImmutable $usedAt = null;
 
-    #[ORM\Column(type: Types::DATETIMETZ_IMMUTABLE, nullable: true)]
+    #[ORM\Column(nullable: true)]
     private ?\DateTimeImmutable $invalidAt = null;
 
     #[ORM\Column(nullable: true)]

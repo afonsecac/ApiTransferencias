@@ -5,6 +5,7 @@ namespace App\Repository;
 use App\Entity\UserCode;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Common\Collections\ArrayCollection;
+use Doctrine\ORM\Query\Parameter;
 use Doctrine\Persistence\ManagerRegistry;
 
 /**
@@ -24,8 +25,10 @@ class UserCodeRepository extends ServiceEntityRepository
      */
     public function getByCodeAndEmailNotValidated(string $email, string $code): ?UserCode
     {
+        $currentDate = new \DateTimeImmutable();
+
         return $this->createQueryBuilder('uc')
-            ->leftJoin('uc.user', 'u')
+            ->leftJoin('uc.userInfo', 'u')
             ->where('uc.code = :code')
             ->andWhere('u.email = :email')
             ->andWhere('uc.usedAt IS NULL')
@@ -33,10 +36,10 @@ class UserCodeRepository extends ServiceEntityRepository
             ->andWhere('uc.invalidAt IS NULL OR uc.invalidAt > :currentDate')
             ->setParameters(
                 new ArrayCollection([
-                    'code' => $code,
-                    'email' => $email,
-                    'currentDate' => new \DateTimeImmutable('now'),
-                    'validated' => false,
+                    new Parameter('code', $code),
+                    new Parameter('email', $email),
+                    new Parameter('currentDate', $currentDate),
+                    new Parameter('validated', false),
                 ])
             )
             ->getQuery()
@@ -50,15 +53,15 @@ class UserCodeRepository extends ServiceEntityRepository
      */
     public function getLastCodeByEmail(string $email): ?UserCode
     {
+        $currentDate = new \DateTimeImmutable();
+
         return $this->createQueryBuilder('uc')
-            ->leftJoin('uc.user', 'u')
+            ->leftJoin('uc.userInfo', 'u')
             ->where('u.email = :email')
             ->andWhere('uc.usedAt IS NULL')
             ->andWhere('uc.invalidAt IS NULL OR uc.invalidAt > :currentDate')
-            ->setParameters(new ArrayCollection([
-                'email' => $email,
-                'currentDate' => new \DateTimeImmutable('now'),
-            ]))
+            ->setParameter('email', $email)
+            ->setParameter('currentDate', $currentDate)
             ->orderBy('uc.createdAt', 'DESC')
             ->setMaxResults(1)
             ->getQuery()->getOneOrNullResult();
@@ -71,17 +74,19 @@ class UserCodeRepository extends ServiceEntityRepository
      */
     public function getByCodeAndEmailNotUsed(string $code, string $email): ?UserCode
     {
+        $currentDate = new \DateTimeImmutable();
+
         return $this->createQueryBuilder('uc')
-            ->leftJoin('uc.user', 'u')
+            ->leftJoin('uc.userInfo', 'u')
             ->where('uc.code = :code')
             ->andWhere('u.email = :email')
             ->andWhere('uc.usedAt IS NULL')
             ->andWhere('uc.invalidAt IS NULL OR uc.invalidAt > :currentDate')
             ->setParameters(
                 new ArrayCollection([
-                    'code' => $code,
-                    'email' => $email,
-                    'currentDate' => new \DateTimeImmutable('now'),
+                    new Parameter('code', $code),
+                    new Parameter('email', $email),
+                    new Parameter('currentDate', $currentDate),
                 ])
             )
             ->getQuery()

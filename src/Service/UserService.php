@@ -6,6 +6,7 @@ use App\DTO\ForgotPassword;
 use App\DTO\ResetPassword;
 use App\Entity\User;
 use App\Entity\UserCode;
+use App\Entity\UserPassword;
 use App\Entity\UserSession;
 use App\Repository\EnvironmentRepository;
 use App\Repository\SysConfigRepository;
@@ -189,10 +190,15 @@ class UserService extends CommonService
         ]);
     }
 
+    /**
+     * @param \App\DTO\ForgotPassword $forgotPassword
+     * @return array|true[]
+     */
     public function forgotPassword(ForgotPassword $forgotPassword): array
     {
         $user = $this->em->getRepository(User::class)->findOneBy([
             'email' => $forgotPassword->getEmail(),
+            'isActive' => true,
         ]);
         if (is_null($user)) {
             return [
@@ -200,7 +206,7 @@ class UserService extends CommonService
                 'error' => [
                     'message' => 'User not found',
                 ],
-                'status' => Response::HTTP_NOT_FOUND
+                'status' => Response::HTTP_NOT_FOUND,
             ];
         }
 
@@ -209,6 +215,7 @@ class UserService extends CommonService
             $userCode = new UserCode();
             $userCode->setCode(DashboardUtil::generateUniqueCode());
             $userCode->setUserInfo($user);
+            $userCode->setInvalidAt((new \DateTimeImmutable('now'))->modify('+1 day'));
             $this->em->persist($userCode);
             $this->em->flush();
         }
@@ -232,7 +239,7 @@ class UserService extends CommonService
                 'error' => [
                     'message' => 'The password don\'t match',
                 ],
-                'status' => Response::HTTP_BAD_REQUEST
+                'status' => Response::HTTP_BAD_REQUEST,
             ];
         }
         $userCode = $this->em->getRepository(UserCode::class)->getByCodeAndEmailNotUsed(
@@ -241,6 +248,7 @@ class UserService extends CommonService
         );
         $user = $this->em->getRepository(User::class)->findOneBy([
             'email' => $resetPassword->getEmail(),
+            'isActive' => true,
         ]);
         if (is_null($userCode) || is_null($user)) {
             return [
@@ -248,20 +256,23 @@ class UserService extends CommonService
                 'error' => [
                     'message' => 'User information not found',
                 ],
-                'status' => Response::HTTP_NOT_FOUND
+                'status' => Response::HTTP_NOT_FOUND,
             ];
         }
         $user = $this->em->getRepository(User::class)->findOneBy([
             'email' => $resetPassword->getEmail(),
         ]);
         $codifiedPassword = $this->passwordHasher->hashPassword($user, $resetPassword->getPassword());
+        $userPassword = new UserPassword();
+        $userPassword->setUserHistoric($user);
+        $userPassword->setHistoricPassword($user->getPassword());
+        $this->em->persist($userPassword);
         $user->setPassword($codifiedPassword);
         $user->setCheckValidation(true);
+        $user->setIsActive(true);
+        $userCode->setEmailValidated(true);
         $userCode->setUsedAt(new \DateTimeImmutable('now'));
         $this->em->flush();
-
-
-        $userCode->setUsedAt(new \DateTimeImmutable('now'));
 
         return [
             'changed' => true,
