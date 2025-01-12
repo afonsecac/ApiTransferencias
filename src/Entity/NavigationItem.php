@@ -2,6 +2,7 @@
 
 namespace App\Entity;
 
+use App\Enums\NavigationTypeEnum;
 use App\Repository\NavigationItemRepository;
 use Doctrine\Common\Collections\ArrayCollection;
 use Doctrine\Common\Collections\Collection;
@@ -22,7 +23,7 @@ class NavigationItem
     private ?string $subtitle = null;
 
     #[ORM\Column(length: 20, nullable: true)]
-    private ?string $type = null;
+    private ?NavigationTypeEnum $type = null;
 
     #[ORM\Column(length: 80, nullable: true)]
     private ?string $icon = null;
@@ -42,8 +43,8 @@ class NavigationItem
     #[ORM\OneToMany(targetEntity: self::class, mappedBy: 'parent')]
     private Collection $children;
 
-    #[ORM\Column]
-    private ?bool $isActive = null;
+    #[ORM\Column(name: 'is_active', type: 'boolean')]
+    private ?bool $active = null;
 
     #[ORM\Column]
     private ?\DateTimeImmutable $createdAt = null;
@@ -56,6 +57,42 @@ class NavigationItem
 
     #[ORM\Column(length: 5, nullable: true)]
     private ?string $orderValue = null;
+
+    #[ORM\Column(length: 255, nullable: true)]
+    private ?string $fragment = null;
+
+    #[ORM\Column(nullable: true)]
+    private ?bool $preserveFragment = null;
+
+    #[ORM\Column(length: 255, nullable: true)]
+    private ?string $queryParams = null;
+
+    #[ORM\Column(length: 255, nullable: true)]
+    private ?string $queryParamsHandling = null;
+
+    #[ORM\Column(length: 255, nullable: true)]
+    private ?bool $externalLink = null;
+
+    #[ORM\Column(length: 255, nullable: true)]
+    private ?string $target = null;
+
+    #[ORM\Column(nullable: true)]
+    private ?bool $exactMatch = null;
+
+    #[ORM\Column(nullable: true)]
+    private ?array $isActiveMatchOptions = null;
+
+    #[ORM\Column(length: 255, nullable: true)]
+    private ?string $function = null;
+
+    #[ORM\Column(nullable: true)]
+    private ?array $classes = null;
+
+    #[ORM\Column(nullable: true)]
+    private ?array $meta = null;
+
+    #[ORM\Column(nullable: true)]
+    private ?bool $disabled = null;
 
     public function __construct()
     {
@@ -91,12 +128,12 @@ class NavigationItem
         return $this;
     }
 
-    public function getType(): ?string
+    public function getType(): ?NavigationTypeEnum
     {
         return $this->type;
     }
 
-    public function setType(?string $type): static
+    public function setType(?NavigationTypeEnum $type): static
     {
         $this->type = $type;
 
@@ -181,14 +218,14 @@ class NavigationItem
         return $this;
     }
 
-    public function isActive(): ?bool
+    public function active(): ?bool
     {
-        return $this->isActive;
+        return $this->active;
     }
 
     public function setActive(bool $isActive): static
     {
-        $this->isActive = $isActive;
+        $this->active = $isActive;
 
         return $this;
     }
@@ -237,6 +274,150 @@ class NavigationItem
     public function setOrderValue(?string $orderValue): static
     {
         $this->orderValue = $orderValue;
+
+        return $this;
+    }
+
+    public function getFragment(): ?string
+    {
+        return $this->fragment;
+    }
+
+    public function setFragment(?string $fragment): static
+    {
+        $this->fragment = $fragment;
+
+        return $this;
+    }
+
+    public function isPreserveFragment(): ?bool
+    {
+        return $this->preserveFragment;
+    }
+
+    public function setPreserveFragment(?bool $preserveFragment): static
+    {
+        $this->preserveFragment = $preserveFragment;
+
+        return $this;
+    }
+
+    public function getQueryParams(): ?string
+    {
+        return $this->queryParams;
+    }
+
+    public function setQueryParams(?string $queryParams): static
+    {
+        $this->queryParams = $queryParams;
+
+        return $this;
+    }
+
+    public function getQueryParamsHandling(): ?string
+    {
+        return $this->queryParamsHandling;
+    }
+
+    public function setQueryParamsHandling(?string $queryParamsHandling): static
+    {
+        $this->queryParamsHandling = $queryParamsHandling;
+
+        return $this;
+    }
+
+    public function getExternalLink(): ?bool
+    {
+        return $this->externalLink;
+    }
+
+    public function setExternalLink(?bool $externalLink): static
+    {
+        $this->externalLink = $externalLink;
+
+        return $this;
+    }
+
+    public function getTarget(): ?string
+    {
+        return $this->target;
+    }
+
+    public function setTarget(?string $target): static
+    {
+        $this->target = $target;
+
+        return $this;
+    }
+
+    public function exactMatch(): ?bool
+    {
+        return $this->exactMatch;
+    }
+
+    public function setExactMatch(?bool $exactMatch): static
+    {
+        $this->exactMatch = $exactMatch;
+
+        return $this;
+    }
+
+    public function getIsActiveMatchOptions(): ?array
+    {
+        return $this->isActiveMatchOptions;
+    }
+
+    public function setIsActiveMatchOptions(?array $isActiveMatchOptions): static
+    {
+        $this->isActiveMatchOptions = $isActiveMatchOptions;
+
+        return $this;
+    }
+
+    public function getFunction(): ?string
+    {
+        return $this->function;
+    }
+
+    public function setFunction(?string $function): static
+    {
+        $this->function = $function;
+
+        return $this;
+    }
+
+    public function getClasses(): ?array
+    {
+        return $this->classes;
+    }
+
+    public function setClasses(?array $classes): static
+    {
+        $this->classes = $classes;
+
+        return $this;
+    }
+
+    public function getMeta(): ?array
+    {
+        return $this->meta;
+    }
+
+    public function setMeta(?array $meta): static
+    {
+        $this->meta = $meta;
+
+        return $this;
+    }
+
+    public function disabled(): ?bool
+    {
+        return $this->disabled;
+    }
+
+    public function setDisabled(?bool $disabled): static
+    {
+        $this->disabled = $disabled;
 
         return $this;
     }

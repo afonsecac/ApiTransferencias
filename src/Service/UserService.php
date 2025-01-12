@@ -20,6 +20,7 @@ use MiladRahimi\Jwt\Validator\DefaultValidator;
 use MiladRahimi\Jwt\Validator\Rules\IdenticalTo;
 use MiladRahimi\Jwt\Validator\Rules\NewerThan;
 use MiladRahimi\Jwt\Validator\Rules\OlderThan;
+use MiladRahimi\Jwt\Validator\Rules\OlderThanOrSame;
 use Psr\Log\LoggerInterface;
 use Symfony\Bundle\SecurityBundle\Security;
 use Symfony\Component\DependencyInjection\ParameterBag\ParameterBagInterface;
@@ -296,8 +297,8 @@ class UserService extends CommonService
             $currentTime = new \DateTimeImmutable('now');
 
             $validator->addRequiredRule('exp', new NewerThan($currentTime->getTimestamp()));
-            $validator->addRequiredRule('nbf', new OlderThan($currentTime->getTimestamp()));
-            $validator->addRequiredRule('iat', new OlderThan($currentTime->getTimestamp()));
+            $validator->addRequiredRule('nbf', new OlderThanOrSame($currentTime->getTimestamp()));
+            $validator->addRequiredRule('iat', new OlderThanOrSame($currentTime->getTimestamp()));
             $validator->addRequiredRule('iss', new IdenticalTo(self::$ISS_VALUE));
             $validator->addRequiredRule('aud', new IdenticalTo(self::$AUD_VALUE));
             $parser = $this->parserJwt($validator);
@@ -317,7 +318,7 @@ class UserService extends CommonService
             $tokenSplit = explode('.', $token);
             $dataCode = base64_decode($tokenSplit[1]);
             $objectDecode = $this->serializer->decode($dataCode, 'json');
-            if (is_numeric($objectDecode['jti'])) {
+            if (is_object($objectDecode) && property_exists($objectDecode, 'jti') && is_numeric($objectDecode['jti'])) {
                 $session = $this->em->getRepository(UserSession::class)->find($objectDecode['jti']);
                 if (!is_null($session)) {
                     $this->closeAllSessions([$session]);

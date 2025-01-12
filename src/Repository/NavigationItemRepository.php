@@ -16,6 +16,24 @@ class NavigationItemRepository extends ServiceEntityRepository
         parent::__construct($registry, NavigationItem::class);
     }
 
+    /**
+     * @return NavigationItem[]
+     */
+    public function getNavigationItems(): array {
+        return $this->createQueryBuilder('ni')
+            ->select('ni')
+            ->leftJoin('ni.children', 'c')
+            ->addSelect('c')
+            ->where('ni.parent IS NULL OR c.parent IS NOT NULL')
+            ->andWhere('ni.active = :is_active')
+            ->setParameter('is_active', true)
+            ->orderBy('ni.orderValue', 'ASC')
+            ->addOrderBy('ni.title', 'ASC')
+            ->getQuery()
+            ->getResult();
+
+    }
+
     //    /**
     //     * @return NavigationItem[] Returns an array of NavigationItem objects
     //     */
