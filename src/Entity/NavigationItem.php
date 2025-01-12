@@ -94,6 +94,12 @@ class NavigationItem
     #[ORM\Column(nullable: true)]
     private ?bool $disabled = null;
 
+    #[ORM\Column(nullable: true)]
+    private ?array $translateName = null;
+
+    #[ORM\Column(nullable: true)]
+    private ?array $translateSubTitle = null;
+
     public function __construct()
     {
         $this->children = new ArrayCollection();
@@ -418,6 +424,30 @@ class NavigationItem
     public function setDisabled(?bool $disabled): static
     {
         $this->disabled = $disabled;
+
+        return $this;
+    }
+
+    public function getTranslateName(): ?array
+    {
+        return $this->translateName;
+    }
+
+    public function setTranslateName(?array $translateName): static
+    {
+        $this->translateName = $translateName;
+
+        return $this;
+    }
+
+    public function getTranslateSubTitle(): ?array
+    {
+        return $this->translateSubTitle;
+    }
+
+    public function setTranslateSubTitle(?array $translateSubTitle): static
+    {
+        $this->translateSubTitle = $translateSubTitle;
 
         return $this;
     }
