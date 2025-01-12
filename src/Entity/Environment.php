@@ -25,11 +25,11 @@ class Environment
     #[ORM\Id]
     #[ORM\GeneratedValue]
     #[ORM\Column]
-    #[Groups(['balance:reading'])]
+    #[Groups(['balance:reading', 'user'])]
     private ?int $id = null;
 
     #[ORM\Column(length: 10)]
-    #[Groups(['balance:reading'])]
+    #[Groups(['balance:reading', 'user'])]
     private ?string $type = null;
 
     #[ORM\Column(length: 255)]

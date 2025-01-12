@@ -23,6 +23,55 @@ class BalanceOperationRepository extends ServiceEntityRepository
         parent::__construct($registry, BalanceOperation::class);
     }
 
+    public function getLastMarkedAsReported(int $userId = null): ?BalanceOperation
+    {
+        $query = $this->createQueryBuilder('b')
+            ->leftJoin('b.tenant', 't')
+            ->where('b.markAsReported = :report')
+            ->andWhere('b.state = :completed')
+            ->setParameter('report', true)
+            ->setParameter('completed', 'COMPLETED');
+        if ($userId) {
+            $query->andWhere('t.id = :userId')
+                ->setParameter('userId', $userId);
+        }
+        $query->orderBy('b.id', 'DESC')
+            ->setMaxResults(1);
+
+        return $query->getQuery()->getOneOrNullResult();
+    }
+
+    public function getReportBalanceOperation(
+        int $userId,
+        bool $showAll = false,
+        int $page = 0,
+        int $limit = 20
+    ): PaginationResult {
+        $last = $this->getLastMarkedAsReported($userId);
+        $dql = $this->createQueryBuilder('b')
+            ->leftJoin('b.tenant', 't')
+            ->leftJoin('t.client', 'c')
+            ->leftJoin('b.communicationSale', 'cs')
+            ->leftJoin('cs.package', 'p')
+            ->where('b.markAsReported = :report')
+            ->setParameter('report', false);
+        if ($userId) {
+            $dql->andWhere('t.id = :userId')
+                ->setParameter('userId', $userId);
+        }
+        if (!is_null($last)) {
+            $dql->andWhere('b.id > :lastId')->setParameter('lastId', $last->getId());
+        }
+        $dql->orderBy('b.id', 'ASC');
+        if (!$showAll) {
+            $dql->setMaxResults($limit)->setFirstResult($page * $limit);
+        }
+        $paginator = new Paginator($dql, fetchJoinCollection: false);
+        $total = count($paginator);
+
+        return new PaginationResult($total, $page, $limit, $paginator->getQuery()->execute());
+    }
+
     public function getBalanceOutput(int $userId): float
     {
         try {
@@ -116,8 +165,13 @@ class BalanceOperationRepository extends ServiceEntityRepository
      * @param int|null $companyId
      * @return \App\DTO\PaginationResult
      */
-    public function getAllBalance(array $filters = [], string $orderBy = 'createdAt DESC', int $page = 0, int $limit = 10, int $companyId = null): PaginationResult
-    {
+    public function getAllBalance(
+        array $filters = [],
+        string $orderBy = 'createdAt DESC',
+        int $page = 0,
+        int $limit = 10,
+        int $companyId = null
+    ): PaginationResult {
         $dql = $this->createQueryBuilder('b')
             ->leftJoin('b.tenant', 't')
             ->leftJoin('t.client', 'c');
@@ -128,13 +182,30 @@ class BalanceOperationRepository extends ServiceEntityRepository
             $dql->andWhere('c.id = :companyId')
                 ->setParameter('companyId', $companyId);
         }
+        if (count($filters) > 0) {
+            $filterObject = (object)$filters;
+            if (property_exists($filterObject, 'operationType') && !empty($filterObject->operationType)) {
+                $dql->andWhere('b.operationType = :operationType')
+                    ->setParameter('operationType', $filterObject->operationType);
+            }
+            if (property_exists($filterObject, 'state') && !empty($filterObject->state)) {
+                $dql->andWhere('b.state = :state')
+                    ->setParameter('state', $filterObject->state);
+            }
+            if (property_exists($filterObject, 'environment') && !empty($filterObject->environment)) {
+                $dql->leftJoin('t.environment', 'e')
+                    ->andWhere('e.type = :environment')
+                    ->setParameter('environment', $filterObject->environment);
+            }
+        }
         $dql->setMaxResults($limit)
             ->setFirstResult($page * $limit)
             ->orderBy(sprintf('b.%s', $orderField), $orderSort);
 
         $paginator = new Paginator($dql, fetchJoinCollection: false);
         $total = count($paginator);
-        return new PaginationResult($total, $page, $limit, $paginator->getQuery()->execute());
+
+        return new PaginationResult($total, $page, $limit, $paginator->getQuery()->getResult());
     }
 
 //    /**

@@ -131,9 +131,9 @@ class BalanceService extends CommonService
      */
     public function getBalanceOperations(array $filters, string $orderBy = null,  int $page = 0, int $limit = 10): PaginationResult {
         $user = $this->security->getUser();
-        if (!$user instanceof User) {
-            throw new AccessDeniedException();
-        }
+//        if (!$user instanceof User) {
+//            throw new AccessDeniedException();
+//        }
         $companyId = $user?->getCompany()?->getId();
         return $this->em->getRepository(BalanceOperation::class)->getAllBalance($filters, $orderBy, $page, $limit, $companyId);
     }

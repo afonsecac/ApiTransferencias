@@ -108,6 +108,6 @@ final class AuthService extends CommonService
 
     public function getActiveSession(User $user): UserSession|null
     {
-
+        return null;
     }
 }

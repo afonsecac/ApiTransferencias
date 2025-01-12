@@ -27,21 +27,20 @@ class NavigationController extends AbstractController
     #[Route(name: 'navigation', methods: ['GET'])]
     public function navigation(): JsonResponse
     {
-        $serializerInfo = $this->serializer->serialize(
+        $serializerArray = $this->serializer->normalize(
             $this->navigationService->getNavigationItems(),
             'json',
             [
-                AbstractNormalizer::IGNORED_ATTRIBUTES => ['orderValue', 'createdAt', 'updatedAt', 'parent'],
-                AbstractObjectNormalizer::SKIP_NULL_VALUES => true
+                'groups' => ['navigation'],
+                AbstractObjectNormalizer::SKIP_NULL_VALUES => true,
             ]
         );
-        $serializerArray = json_decode($serializerInfo, true, 512, JSON_THROW_ON_ERROR);
 
         return $this->json([
             'compact' => $serializerArray,
             'default' => $serializerArray,
             'futuristic' => $serializerArray,
-            'horizontal' => $serializerArray
+            'horizontal' => $serializerArray,
         ]);
     }
 }

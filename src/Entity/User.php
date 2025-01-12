@@ -2,31 +2,34 @@
 
 namespace App\Entity;
 
+use App\DTO\IInput;
 use App\Repository\UserRepository;
 use DateTimeImmutable;
 use Doctrine\Common\Collections\ArrayCollection;
 use Doctrine\Common\Collections\Collection;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
-use Symfony\Bridge\Doctrine\Types\UuidType;
 use Symfony\Component\Security\Core\User\PasswordAuthenticatedUserInterface;
 use Symfony\Component\Security\Core\User\UserInterface;
-use Symfony\Component\Uid\Uuid;
+use Symfony\Component\Serializer\Attribute\Groups;
 
 #[ORM\Entity(repositoryClass: UserRepository::class)]
 #[ORM\Table(name: '`user`')]
 #[ORM\HasLifecycleCallbacks]
-class User implements UserInterface, PasswordAuthenticatedUserInterface
+class User implements UserInterface, PasswordAuthenticatedUserInterface, IInput
 {
     #[ORM\Id]
     #[ORM\GeneratedValue]
     #[ORM\Column]
+    #[Groups(['profile'])]
     private ?int $id = null;
 
     #[ORM\Column(length: 180, unique: true)]
+    #[Groups(['profile'])]
     private ?string $email = null;
 
     #[ORM\Column]
+    #[Groups(['profile'])]
     private array $roles = [];
 
     /**
@@ -37,24 +40,31 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
 
     #[ORM\ManyToOne]
     #[ORM\JoinColumn(nullable: true)]
+    #[Groups(['profile'])]
     private ?Client $company = null;
 
     #[ORM\Column(type: Types::JSON)]
+    #[Groups(['profile'])]
     private array $permission = [];
 
     #[ORM\Column(length: 60)]
+    #[Groups(['profile'])]
     private ?string $firstName = null;
 
     #[ORM\Column(length: 60, nullable: true)]
+    #[Groups(['profile'])]
     private ?string $middleName = null;
 
     #[ORM\Column(length: 120)]
+    #[Groups(['profile'])]
     private ?string $lastName = null;
 
     #[ORM\Column(length: 255, nullable: true)]
+    #[Groups(['profile'])]
     private ?string $jobTitle = null;
 
     #[ORM\Column]
+    #[Groups(['profile'])]
     private ?DateTimeImmutable $createdAt = null;
 
     #[ORM\Column]
@@ -76,15 +86,18 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     private ?DateTimeImmutable $removedAt = null;
 
     #[ORM\Column(length: 20, nullable: true)]
+    #[Groups(['profile'])]
     private ?string $phoneNumber = null;
 
     #[ORM\OneToMany(mappedBy: 'userHistoric', targetEntity: UserPassword::class)]
     private Collection $historicPasswords;
-
     private ?string $currentIp;
 
     #[ORM\Column(length: 255, nullable: true)]
     private ?string $status = null;
+
+    #[ORM\Column(length: 2, nullable: true)]
+    private ?string $langPreference = null;
 
     public function __construct()
     {
@@ -365,7 +378,7 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     }
 
     #[ORM\PrePersist]
-    public function setCreated(): void
+    public function setCreatedAtNow(): void
     {
         $this->createdAt = new DateTimeImmutable('now');
     }
@@ -373,7 +386,7 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     #[ORM\PostPersist]
     #[ORM\PostUpdate]
     #[ORM\PreFlush]
-    public function setUpdated(): void
+    public function setUpdatedAtNow(): void
     {
         $this->updatedAt = new DateTimeImmutable('now');
     }
@@ -420,6 +433,18 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     public function setStatus(?string $status): static
     {
         $this->status = $status;
+
+        return $this;
+    }
+
+    public function getLangPreference(): ?string
+    {
+        return $this->langPreference;
+    }
+
+    public function setLangPreference(?string $langPreference): static
+    {
+        $this->langPreference = $langPreference;
 
         return $this;
     }

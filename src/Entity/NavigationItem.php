@@ -7,6 +7,7 @@ use App\Repository\NavigationItemRepository;
 use Doctrine\Common\Collections\ArrayCollection;
 use Doctrine\Common\Collections\Collection;
 use Doctrine\ORM\Mapping as ORM;
+use Symfony\Component\Serializer\Attribute\Groups;
 
 #[ORM\Entity(repositoryClass: NavigationItemRepository::class)]
 class NavigationItem
@@ -14,24 +15,31 @@ class NavigationItem
     #[ORM\Id]
     #[ORM\GeneratedValue]
     #[ORM\Column]
+    #[Groups('navigation')]
     private ?int $id = null;
 
     #[ORM\Column(length: 255)]
+    #[Groups('navigation')]
     private ?string $title = null;
 
     #[ORM\Column(length: 255, nullable: true)]
+    #[Groups('navigation')]
     private ?string $subtitle = null;
 
     #[ORM\Column(length: 20, nullable: true)]
+    #[Groups('navigation')]
     private ?NavigationTypeEnum $type = null;
 
     #[ORM\Column(length: 80, nullable: true)]
+    #[Groups('navigation')]
     private ?string $icon = null;
 
     #[ORM\Column(length: 255, nullable: true)]
+    #[Groups('navigation')]
     private ?string $link = null;
 
     #[ORM\Column(nullable: true)]
+    #[Groups('navigation')]
     private ?array $badge = null;
 
     #[ORM\ManyToOne(targetEntity: self::class, inversedBy: 'children')]
@@ -41,6 +49,7 @@ class NavigationItem
      * @var Collection<int, self>
      */
     #[ORM\OneToMany(targetEntity: self::class, mappedBy: 'parent')]
+    #[Groups('navigation')]
     private Collection $children;
 
     #[ORM\Column(name: 'is_active', type: 'boolean')]
@@ -53,45 +62,58 @@ class NavigationItem
     private ?\DateTimeImmutable $updatedAt = null;
 
     #[ORM\Column(nullable: true)]
+    #[Groups('navigation')]
     private ?array $data = null;
 
     #[ORM\Column(length: 5, nullable: true)]
     private ?string $orderValue = null;
 
     #[ORM\Column(length: 255, nullable: true)]
+    #[Groups('navigation')]
     private ?string $fragment = null;
 
     #[ORM\Column(nullable: true)]
+    #[Groups('navigation')]
     private ?bool $preserveFragment = null;
 
     #[ORM\Column(length: 255, nullable: true)]
+    #[Groups('navigation')]
     private ?string $queryParams = null;
 
     #[ORM\Column(length: 255, nullable: true)]
+    #[Groups('navigation')]
     private ?string $queryParamsHandling = null;
 
     #[ORM\Column(length: 255, nullable: true)]
+    #[Groups('navigation')]
     private ?bool $externalLink = null;
 
     #[ORM\Column(length: 255, nullable: true)]
+    #[Groups('navigation')]
     private ?string $target = null;
 
     #[ORM\Column(nullable: true)]
+    #[Groups('navigation')]
     private ?bool $exactMatch = null;
 
     #[ORM\Column(nullable: true)]
+    #[Groups('navigation')]
     private ?array $isActiveMatchOptions = null;
 
     #[ORM\Column(length: 255, nullable: true)]
+    #[Groups('navigation')]
     private ?string $function = null;
 
     #[ORM\Column(nullable: true)]
+    #[Groups('navigation')]
     private ?array $classes = null;
 
     #[ORM\Column(nullable: true)]
+    #[Groups('navigation')]
     private ?array $meta = null;
 
     #[ORM\Column(nullable: true)]
+    #[Groups('navigation')]
     private ?bool $disabled = null;
 
     #[ORM\Column(nullable: true)]
@@ -99,6 +121,9 @@ class NavigationItem
 
     #[ORM\Column(nullable: true)]
     private ?array $translateSubTitle = null;
+
+    #[ORM\Column(nullable: true)]
+    private ?array $permissions = null;
 
     public function __construct()
     {
@@ -448,6 +473,18 @@ class NavigationItem
     public function setTranslateSubTitle(?array $translateSubTitle): static
     {
         $this->translateSubTitle = $translateSubTitle;
+
+        return $this;
+    }
+
+    public function getPermissions(): ?array
+    {
+        return $this->permissions;
+    }
+
+    public function setPermissions(?array $permissions): static
+    {
+        $this->permissions = $permissions;
 
         return $this;
     }

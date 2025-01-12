@@ -41,7 +41,7 @@ class AdminDashboardFinancialController extends AbstractController
             ['groups' => ['balance:reading']]
         );
         return $this->json([
-            'recentTransactions' => $txRecent,
+            'recentTransactions' => json_decode($txRecent, true, 512, JSON_THROW_ON_ERROR),
             'balances' => $balances,
             'accountBalance' => [
                 'growRate' => 0,

@@ -4,6 +4,8 @@ namespace App\Entity;
 
 use App\Repository\ClientRepository;
 use DateTimeImmutable;
+use Doctrine\Common\Collections\ArrayCollection;
+use Doctrine\Common\Collections\Collection;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
 use Symfony\Bridge\Doctrine\Types\UuidType;
@@ -23,47 +25,47 @@ class Client
     #[ORM\Id]
     #[ORM\GeneratedValue]
     #[ORM\Column]
-    #[Groups(['balance:reading'])]
+    #[Groups(['balance:reading', 'user'])]
     private ?int $id = null;
 
     #[ORM\Column(length: 255)]
-    #[Groups(['balance:reading'])]
+    #[Groups(['balance:reading', 'user'])]
     private ?string $companyName = null;
 
     #[ORM\Column(type: Types::TEXT, nullable: true)]
-    #[Groups(['balance:reading'])]
+    #[Groups(['balance:reading', 'user'])]
     private ?string $companyAddress = null;
 
     #[ORM\Column(length: 3)]
-    #[Groups(['balance:reading'])]
+    #[Groups(['balance:reading', 'user'])]
     private ?string $companyCountry = null;
 
     #[ORM\Column(length: 12, nullable: true)]
-    #[Groups(['balance:reading'])]
+    #[Groups(['balance:reading', 'user'])]
     private ?string $companyZipCode = null;
 
     #[ORM\Column(length: 120)]
-    #[Groups(['balance:reading'])]
+    #[Groups(['balance:reading', 'user'])]
     private ?string $companyEmail = null;
 
     #[ORM\Column(length: 20)]
-    #[Groups(['balance:reading'])]
+    #[Groups(['balance:reading', 'user'])]
     private ?string $companyPhoneNumber = null;
 
     #[ORM\Column]
-    #[Groups(['balance:reading'])]
+    #[Groups(['client:reading'])]
     private ?DateTimeImmutable $createdAt = null;
 
     #[ORM\Column]
-    #[Groups(['balance:reading'])]
+    #[Groups(['client:reading'])]
     private ?DateTimeImmutable $updatedAt = null;
 
     #[ORM\Column(nullable: true)]
-    #[Groups(['balance:reading'])]
+    #[Groups(['client:reading'])]
     private ?DateTimeImmutable $removeAt = null;
 
     #[ORM\Column(nullable: true)]
-    #[Groups(['balance:reading'])]
+    #[Groups(['balance:reading', 'user'])]
     private ?bool $isActive = null;
 
     #[ORM\Column(nullable: true)]
@@ -71,11 +73,11 @@ class Client
     private ?DateTimeImmutable $isActiveAt = null;
 
     #[ORM\Column]
-    #[Groups(['balance:reading'])]
+    #[Groups(['client:reading', 'user'])]
     private ?float $discountOfClient = null;
 
     #[ORM\Column(length: 255)]
-    #[Groups(['balance:reading'])]
+    #[Groups(['balance:reading', 'user'])]
     private ?string $companyIdentification = null;
 
     #[ORM\Column(length: 255)]
@@ -83,11 +85,11 @@ class Client
     private ?string $companyIdentificationType = null;
 
     #[ORM\Column(nullable: true)]
-    #[Groups(['balance:reading'])]
+    #[Groups(['client:reading'])]
     private ?float $minBalance = null;
 
     #[ORM\Column(nullable: true)]
-    #[Groups(['balance:reading'])]
+    #[Groups(['client:reading'])]
     private ?float $criticalBalance = null;
 
     #[ORM\Column(length: 3, nullable: true)]
@@ -98,9 +100,16 @@ class Client
     #[Groups(['balance:reading'])]
     private ?bool $isAlert = null;
 
+    /**
+     * @var Collection<int, Account>
+     */
+    #[ORM\OneToMany(targetEntity: Account::class, mappedBy: 'client')]
+    private Collection $accounts;
+
     public function __construct()
     {
         $this->isActive = false;
+        $this->accounts = new ArrayCollection();
     }
 
     public function getId(): ?int
@@ -347,6 +356,36 @@ class Client
     public function setAlert(?bool $isAlert): static
     {
         $this->isAlert = $isAlert;
+
+        return $this;
+    }
+
+    /**
+     * @return Collection<int, Account>
+     */
+    public function getAccounts(): Collection
+    {
+        return $this->accounts;
+    }
+
+    public function addAccount(Account $account): static
+    {
+        if (!$this->accounts->contains($account)) {
+            $this->accounts->add($account);
+            $account->setClient($this);
+        }
+
+        return $this;
+    }
+
+    public function removeAccount(Account $account): static
+    {
+        if ($this->accounts->removeElement($account)) {
+            // set the owning side to null (unless already changed)
+            if ($account->getClient() === $this) {
+                $account->setClient(null);
+            }
+        }
 
         return $this;
     }

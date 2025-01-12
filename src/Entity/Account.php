@@ -2,15 +2,17 @@
 
 namespace App\Entity;
 
+use AllowDynamicProperties;
 use App\Repository\AccountRepository;
 use DateTimeImmutable;
 use Doctrine\ORM\Mapping as ORM;
 use Symfony\Bridge\Doctrine\Types\UuidType;
 use Symfony\Component\Security\Core\User\UserInterface;
+use Symfony\Component\Serializer\Annotation\Ignore;
 use Symfony\Component\Serializer\Attribute\Groups;
 use Symfony\Component\Uid\Uuid;
 
-#[ORM\Entity(repositoryClass: AccountRepository::class)]
+#[AllowDynamicProperties] #[ORM\Entity(repositoryClass: AccountRepository::class)]
 #[ORM\HasLifecycleCallbacks]
 #[ORM\UniqueConstraint(
     name: "unique_environment_by_client", fields: ["environment", "client"]
@@ -31,13 +33,8 @@ class Account implements UserInterface
 
     #[ORM\ManyToOne]
     #[ORM\JoinColumn(nullable: false)]
-    #[Groups(['balance:reading'])]
+    #[Groups(['balance:reading', 'user'])]
     private ?Environment $environment = null;
-
-    #[ORM\ManyToOne]
-    #[ORM\JoinColumn(nullable: false)]
-    #[Groups(['balance:reading'])]
-    private ?Client $client = null;
 
     #[ORM\Column]
     private ?float $discount = null;
@@ -77,6 +74,11 @@ class Account implements UserInterface
 
     #[ORM\Column(nullable: true)]
     private ?float $criticalBalance = null;
+
+    #[ORM\ManyToOne(inversedBy: 'accounts')]
+    #[ORM\JoinColumn(nullable: false)]
+    #[Groups(['balance:reading', 'user'])]
+    private ?Client $client = null;
 
     public function __construct()
     {
@@ -149,18 +151,6 @@ class Account implements UserInterface
     public function setEnvironment(?Environment $environment): static
     {
         $this->environment = $environment;
-
-        return $this;
-    }
-
-    public function getClient(): ?Client
-    {
-        return $this->client;
-    }
-
-    public function setClient(?Client $client): static
-    {
-        $this->client = $client;
 
         return $this;
     }
@@ -345,6 +335,18 @@ class Account implements UserInterface
     public function setCriticalBalance(?float $criticalBalance): static
     {
         $this->criticalBalance = $criticalBalance;
+
+        return $this;
+    }
+
+    public function getClient(): ?Client
+    {
+        return $this->client;
+    }
+
+    public function setClient(?Client $client): static
+    {
+        $this->client = $client;
 
         return $this;
     }

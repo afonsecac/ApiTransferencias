@@ -61,6 +61,23 @@ class UserService extends CommonService
         );
     }
 
+    public function findByEmail(string $email): ?User
+    {
+        return $this->em->getRepository(User::class)->findOneBy(['email' => $email]);
+    }
+
+    public function update(User $user): User
+    {
+        $userAuth = $this->security->getUser();
+        if (!$userAuth instanceof User || $userAuth->getId() !== $user->getId()) {
+            throw new AccessDeniedException();
+        }
+        $currentUser = $this->em->getRepository(User::class)->find($userAuth->getId());
+        $currentUser?->setLangPreference($userAuth->getLangPreference());
+        $this->em->flush();
+        return $user;
+    }
+
     /**
      * @return \MiladRahimi\Jwt\Cryptography\Algorithms\Hmac\HS512
      */
@@ -132,6 +149,7 @@ class UserService extends CommonService
             'permission' => $user->getPermission(),
             'currentIp' => $user->getCurrentIp(),
             'status' => 'online',
+            'langPreference' => $user->getLangPreference() ?? 'en',
             'name' => $user->getFirstName().' '.$user->getLastName(),
         ];
     }
@@ -178,7 +196,9 @@ class UserService extends CommonService
         $timeToExpire = $this->parameters->get('app.jwt.expired');
         $currentTime = new \DateTimeImmutable('now');
         $payloadUser = $this->createPayloadUser($user);
-        $payload = $this->serializer->serialize($payloadUser, 'json');
+        $payload = $this->serializer->serialize($payloadUser, 'json', [
+            'groups' => ['user'],
+        ]);
 
         return $generator->generate([
             'data' => $payload,
@@ -194,6 +214,8 @@ class UserService extends CommonService
     /**
      * @param \App\DTO\ForgotPassword $forgotPassword
      * @return array|true[]
+     * @throws \DateMalformedStringException
+     * @throws \Random\RandomException
      */
     public function forgotPassword(ForgotPassword $forgotPassword): array
     {

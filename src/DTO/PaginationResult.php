@@ -42,4 +42,9 @@ class PaginationResult
     {
         return $this->results;
     }
+
+    public function setResults(array $results): void
+    {
+        $this->results = $results;
+    }
 }
