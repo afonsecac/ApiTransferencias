@@ -2,9 +2,11 @@
 
 namespace App\Controller;
 
+use App\DTO\BalanceInDto;
 use App\Service\BalanceService;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
+use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Attribute\MapQueryParameter;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Serializer\Normalizer\AbstractObjectNormalizer;
@@ -25,17 +27,72 @@ class AdminBalanceOperationController extends AbstractController
         #[MapQueryParameter] int $page = 0,
         #[MapQueryParameter] int $limit = 10,
         #[MapQueryParameter] string $orderBy = 'createdAt ASC',
-        #[MapQueryParameter] array $filters = [],
+        #[MapQueryParameter] array $filter = [],
     ): JsonResponse {
-        $response = $this->balanceService->getBalanceOperations($filters, $orderBy, $page, $limit);
+        $response = $this->balanceService->getBalanceOperations($filter, $orderBy, $page, $limit);
         $results = $this->serializer->normalize($response->getResults(), 'json', context: [
             AbstractObjectNormalizer::SKIP_NULL_VALUES => true,
             'groups' => [
-                'balance:reading'
-            ]
+                'balance:reading',
+            ],
         ]);
         $response->setResults($results);
 
         return $this->json($response);
+    }
+
+    /**
+     * @throws \App\Exception\MyCurrentException
+     */
+    #[Route("/{id}", name: 'admin_balance_operation_update', methods: ['PUT', 'PATCH'])]
+    public function update(int $id, BalanceInDto $balance): JsonResponse
+    {
+        return $this->json(
+            $this->serializer->normalize(
+                $this->balanceService->update($id, $balance),
+                'json',
+                [
+                    'groups' => [
+                        'balance:reading',
+                    ],
+                ]
+            )
+        );
+    }
+
+    /**
+     * @throws \App\Exception\MyCurrentException
+     */
+    #[Route(name: 'admin_balance_operation_create', methods: ['POST'])]
+    public function createBalance(BalanceInDto $balance): JsonResponse
+    {
+        return $this->json(
+            $this->serializer->normalize(
+                $this->balanceService->create($balance),
+                'json',
+                [
+                    'groups' => [
+                        'balance:reading',
+                    ],
+                ]
+            )
+        );
+    }
+
+    #[Route("/export", name: 'admin_balance_operation_export', methods: ['GET'])]
+    public function exportBalance(
+        #[MapQueryParameter] int $accountId
+    ) {
+        $operations = $this->balanceService->exportToExcel($accountId);
+        return $this->json($operations);
+
+//        return new Response(
+//            $this->serializer->serialize($operations, 'csv'),
+//            Response::HTTP_OK,
+//            [
+//                'Content-Type' => 'application/vnd.ms-excel',
+//                'Content-Disposition' => 'attachment; filename="reports.xls"',
+//            ]
+//        );
     }
 }

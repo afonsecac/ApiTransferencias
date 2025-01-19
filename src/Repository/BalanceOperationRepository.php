@@ -5,6 +5,8 @@ namespace App\Repository;
 use App\DTO\PaginationResult;
 use App\Entity\BalanceOperation;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
+use Doctrine\Common\Collections\ArrayCollection;
+use Doctrine\ORM\Query\Parameter;
 use Doctrine\ORM\Tools\Pagination\Paginator;
 use Doctrine\Persistence\ManagerRegistry;
 
@@ -21,6 +23,41 @@ class BalanceOperationRepository extends ServiceEntityRepository
     public function __construct(ManagerRegistry $registry)
     {
         parent::__construct($registry, BalanceOperation::class);
+    }
+
+    public function getPreviousAmount(int $accountId): float | null
+    {
+        return $this->createQueryBuilder('b')
+            ->select('SUM(b.totalAmount) as total')
+            ->leftJoin('b.tenant', 't')
+            ->where('t.id = :accountId')
+            ->andWhere('b.markAsReported = :report')
+            ->andWhere('b.state = :completed')
+            ->setParameter('accountId', $accountId)
+            ->setParameter('report', true)
+            ->setParameter('completed', 'COMPLETED')
+            ->getQuery()->getSingleScalarResult();
+    }
+
+    /**
+     * @param int $accountId
+     * @return BalanceOperation[]
+     */
+    public function filterNoMarkedTransactions(int $accountId): array
+    {
+        return $this->createQueryBuilder('b')
+            ->leftJoin('b.tenant', 't')
+            ->leftJoin('b.communicationSale', 'cs')
+            ->where('b.markAsReported = :report OR b.markAsReported IS NULL')
+            ->andWhere('b.state = :completed')
+            ->andWhere('t.id = :accountId')
+            ->setParameters(new ArrayCollection([
+                new Parameter('report', false),
+                new Parameter('completed', 'COMPLETED'),
+                new Parameter('accountId', $accountId),
+            ]))
+            ->orderBy('b.id', 'ASC')
+            ->getQuery()->execute();
     }
 
     public function getLastMarkedAsReported(int $userId = null): ?BalanceOperation
@@ -164,6 +201,7 @@ class BalanceOperationRepository extends ServiceEntityRepository
      * @param int $limit
      * @param int|null $companyId
      * @return \App\DTO\PaginationResult
+     * @throws \DateMalformedStringException
      */
     public function getAllBalance(
         array $filters = [],
@@ -174,7 +212,8 @@ class BalanceOperationRepository extends ServiceEntityRepository
     ): PaginationResult {
         $dql = $this->createQueryBuilder('b')
             ->leftJoin('b.tenant', 't')
-            ->leftJoin('t.client', 'c');
+            ->leftJoin('t.client', 'c')
+            ->leftJoin('b.communicationSale', 'cs');
         $orderSplit = explode(' ', $orderBy);
         $orderField = $orderSplit[0];
         $orderSort = $orderSplit[1] ?? 'ASC';
@@ -192,15 +231,29 @@ class BalanceOperationRepository extends ServiceEntityRepository
                 $dql->andWhere('b.state = :state')
                     ->setParameter('state', $filterObject->state);
             }
-            if (property_exists($filterObject, 'environment') && !empty($filterObject->environment)) {
-                $dql->leftJoin('t.environment', 'e')
-                    ->andWhere('e.type = :environment')
-                    ->setParameter('environment', $filterObject->environment);
+            if (property_exists($filterObject, 'env') && !empty($filterObject->env)) {
+                if (is_numeric($filterObject->env)) {
+                    $dql->leftJoin('t.environment', 'e')
+                        ->andWhere('e.id = :environment')
+                        ->setParameter('environment', $filterObject->env);
+                }
+            }
+            if (property_exists(
+                    $filterObject,
+                    'start'
+                ) && !empty($filterObject->start) && $filterObject->start !== 'null') {
+                $startDate = new \DateTimeImmutable($filterObject->start);
+                $dql->andWhere('b.createdAt >= :start')->setParameter('start', $startDate);
+            }
+            if (property_exists($filterObject, 'end') && !empty($filterObject->end) && $filterObject->end !== 'null') {
+                $endDate = new \DateTimeImmutable($filterObject->end);
+                $dql->andWhere('b.createdAt <= :end')->setParameter('end', $endDate);
             }
         }
+        $myOrderField = str_contains($orderField, '.') ? $orderField : sprintf('b.%s', $orderField);
         $dql->setMaxResults($limit)
             ->setFirstResult($page * $limit)
-            ->orderBy(sprintf('b.%s', $orderField), $orderSort);
+            ->orderBy($myOrderField, $orderSort)->addOrderBy('b.createdAt', 'DESC');
 
         $paginator = new Paginator($dql, fetchJoinCollection: false);
         $total = count($paginator);

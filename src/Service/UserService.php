@@ -2,8 +2,12 @@
 
 namespace App\Service;
 
+use App\DTO\AccountPermission;
 use App\DTO\ForgotPassword;
 use App\DTO\ResetPassword;
+use App\Entity\Account;
+use App\Entity\Client;
+use App\Entity\Environment;
 use App\Entity\User;
 use App\Entity\UserCode;
 use App\Entity\UserPassword;
@@ -19,7 +23,6 @@ use MiladRahimi\Jwt\Parser;
 use MiladRahimi\Jwt\Validator\DefaultValidator;
 use MiladRahimi\Jwt\Validator\Rules\IdenticalTo;
 use MiladRahimi\Jwt\Validator\Rules\NewerThan;
-use MiladRahimi\Jwt\Validator\Rules\OlderThan;
 use MiladRahimi\Jwt\Validator\Rules\OlderThanOrSame;
 use Psr\Log\LoggerInterface;
 use Symfony\Bundle\SecurityBundle\Security;
@@ -75,6 +78,7 @@ class UserService extends CommonService
         $currentUser = $this->em->getRepository(User::class)->find($userAuth->getId());
         $currentUser?->setLangPreference($userAuth->getLangPreference());
         $this->em->flush();
+
         return $user;
     }
 
@@ -197,7 +201,7 @@ class UserService extends CommonService
         $currentTime = new \DateTimeImmutable('now');
         $payloadUser = $this->createPayloadUser($user);
         $payload = $this->serializer->serialize($payloadUser, 'json', [
-            'groups' => ['user'],
+            'groups' => ['profile'],
         ]);
 
         return $generator->generate([
@@ -406,5 +410,52 @@ class UserService extends CommonService
         $active = !is_null($companyId) ? true : null;
 
         return $this->em->getRepository(User::class)->searchAllUsersInCompany($companyId, $active, $page, $limit);
+    }
+
+    public function getPermissionUsed(): AccountPermission
+    {
+        $user = $this->security->getUser();
+        if (!$user instanceof User) {
+            throw new AccessDeniedException();
+        }
+        if ($this->security->isGranted('ROLE_ADMIN')) {
+            $clients = $this->em->getRepository(Client::class)->findBy([], [
+                'companyName' => 'ASC',
+            ]);
+            $accounts = $this->em->getRepository(Account::class)->getAccounts();
+            $environments = $this->em->getRepository(Environment::class)->findBy([], [
+                'opType' => 'ASC',
+                'providerName' => 'ASC',
+                'isPreferAdmin' => 'ASC',
+            ]);
+            $preferEnvironment = null;
+            foreach ($environments as $environment) {
+                if ($environment->isPreferAdmin()) {
+                    $preferEnvironment = $environment;
+                    break;
+                }
+            }
+
+            return new AccountPermission($accounts, $environments, $clients, $preferEnvironment, null);
+        }
+        if ($this->security->isGranted('ROLE_SYSTEM_USER')) {
+            $client = $this->em->getRepository(Client::class)->find($user->getCompany()?->getId());
+            $accounts = $this->em->getRepository(Account::class)->findBy([
+                'client' => $client,
+                'isActive' => true,
+            ]);
+            $preferAccount = null;
+            $preferEnvironment = null;
+            $environments = [];
+            foreach ($accounts as $account) {
+                if ($account->isPreferAdmin()) {
+                    $preferAccount = $account;
+                    $preferEnvironment = $account->getEnvironment();
+                }
+                $environments[] = $account->getEnvironment();
+            }
+
+            return new AccountPermission($accounts, $environments, [$client], $preferEnvironment, $preferAccount);
+        }
     }
 }

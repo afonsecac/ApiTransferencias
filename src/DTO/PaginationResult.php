@@ -2,11 +2,17 @@
 
 namespace App\DTO;
 
+use Symfony\Component\Serializer\Attribute\Groups;
+
 class PaginationResult
 {
+    #[Groups(['reports:list'])]
     private int $total;
+    #[Groups(['reports:list'])]
     private int $page;
+    #[Groups(['reports:list'])]
     private int $perPage;
+    #[Groups(['reports:list'])]
     private array $results;
 
     /**

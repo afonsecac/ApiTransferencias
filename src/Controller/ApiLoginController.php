@@ -12,10 +12,13 @@ use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Annotation\Route;
 use Symfony\Component\Security\Http\Attribute\CurrentUser;
+use Symfony\Component\Serializer\SerializerInterface;
 
 class ApiLoginController extends AbstractController
 {
-    public function __construct(private readonly UserService $userService)
+    public function __construct(private readonly UserService $userService,
+        private readonly SerializerInterface $serializer
+    )
     {
     }
 
@@ -36,10 +39,13 @@ class ApiLoginController extends AbstractController
         }
         $user->setCurrentIp($clientIp);
         $token = $this->userService->createToken($user, null);
+        $currentUser = $this->userService->createPayloadUser($user);
 
         return $this->json([
             'token' => $token,
-            'user' => $this->userService->createPayloadUser($user),
+            'user' => $this->serializer->normalize($currentUser, 'json', [
+                'groups' => ['profile'],
+            ]),
         ]);
     }
 
@@ -65,7 +71,9 @@ class ApiLoginController extends AbstractController
 
         return $this->json([
             'token' => $newToken,
-            'user' => $myUser,
+            'user' => $this->serializer->normalize($myUser, 'json', [
+                'groups' => ['profile'],
+            ]),
         ]);
     }
 

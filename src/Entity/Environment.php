@@ -2,6 +2,7 @@
 
 namespace App\Entity;
 
+use App\Enums\PlatformTypeEnum;
 use App\Repository\EnvironmentRepository;
 use DateTimeImmutable;
 use Doctrine\ORM\Mapping as ORM;
@@ -25,11 +26,11 @@ class Environment
     #[ORM\Id]
     #[ORM\GeneratedValue]
     #[ORM\Column]
-    #[Groups(['balance:reading', 'user'])]
+    #[Groups(['balance:reading', 'profile', 'accounts:read'])]
     private ?int $id = null;
 
     #[ORM\Column(length: 10)]
-    #[Groups(['balance:reading', 'user'])]
+    #[Groups(['balance:reading', 'profile', 'accounts:read'])]
     private ?string $type = null;
 
     #[ORM\Column(length: 255)]
@@ -57,6 +58,7 @@ class Environment
     private ?DateTimeImmutable $updatedAt = null;
 
     #[ORM\Column(nullable: true)]
+    #[Groups(['accounts:read'])]
     private ?bool $isActive = null;
 
     #[ORM\Column(nullable: true)]
@@ -67,6 +69,14 @@ class Environment
 
     #[ORM\Column(length: 3)]
     private ?string $discountType = null;
+
+    #[ORM\Column(nullable: true, enumType: PlatformTypeEnum::class)]
+    #[Groups(['profile', 'accounts:read'])]
+    private ?PlatformTypeEnum $opType = null;
+
+    #[ORM\Column(nullable: true)]
+    #[Groups(['profile', 'accounts:read'])]
+    private ?bool $isPreferAdmin = null;
 
     public function __construct()
     {
@@ -257,6 +267,30 @@ class Environment
     public function setActive(?bool $isActive): static
     {
         $this->isActive = $isActive;
+
+        return $this;
+    }
+
+    public function getOpType(): ?PlatformTypeEnum
+    {
+        return $this->opType;
+    }
+
+    public function setOpType(?PlatformTypeEnum $opType): static
+    {
+        $this->opType = $opType;
+
+        return $this;
+    }
+
+    public function isPreferAdmin(): ?bool
+    {
+        return $this->isPreferAdmin;
+    }
+
+    public function setPreferAdmin(?bool $isPreferAdmin): static
+    {
+        $this->isPreferAdmin = $isPreferAdmin;
 
         return $this;
     }

@@ -92,7 +92,7 @@ class CommunicationSaleInfo
 
     #[ORM\Column(length: 15, nullable: true)]
     #[ApiProperty]
-    #[Groups(['comSales:read'])]
+    #[Groups(['comSales:read', 'balance:reading'])]
     protected ?string $transactionId = null;
 
     #[ORM\Column]
@@ -205,13 +205,17 @@ class CommunicationSaleInfo
     #[Groups(['comSales:read'])]
     private Collection $historical;
 
-    public function __construct()
-    {
+    public function __construct() {
         $this->discount = 0;
         $this->amountTax = 0;
         $this->createdAt = new \DateTimeImmutable('now');
         $this->transactionStatus = [];
         $this->historical = new ArrayCollection();
+    }
+
+    public function toId(?int $id): void
+    {
+        $this->id = $id;
     }
 
     public function getId(): ?int
@@ -315,7 +319,7 @@ class CommunicationSaleInfo
         return $this;
     }
 
-   public function getTenant(): ?Account
+    public function getTenant(): ?Account
     {
         return $this->tenant;
     }

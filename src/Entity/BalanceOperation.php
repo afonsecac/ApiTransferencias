@@ -157,7 +157,7 @@ class BalanceOperation
     private ?Account $tenant = null;
 
     #[ORM\ManyToOne]
-    #[Groups(['balance:read'])]
+    #[Groups(['balance:read', 'balance:reading'])]
     #[ApiProperty(
         schema: ['application/json'],
     )]
@@ -207,6 +207,14 @@ class BalanceOperation
     #[ORM\Column(type: Types::DATETIMETZ_IMMUTABLE, nullable: true)]
     #[Groups(['balance:reading'])]
     private ?\DateTimeImmutable $reportedDateAt = null;
+
+    #[ORM\Column(length: 500, nullable: true)]
+    #[Groups(['balance:reading'])]
+    private ?string $comment = null;
+
+    #[ORM\Column(length: 500, nullable: true)]
+    #[Groups(['balance:reading'])]
+    private ?string $commentToImpugned = null;
 
     public function __construct()
     {
@@ -491,6 +499,30 @@ class BalanceOperation
     public function setReportedDateAt(?\DateTimeImmutable $reportedDateAt): static
     {
         $this->reportedDateAt = $reportedDateAt;
+
+        return $this;
+    }
+
+    public function getComment(): ?string
+    {
+        return $this->comment;
+    }
+
+    public function setComment(?string $comment): static
+    {
+        $this->comment = $comment;
+
+        return $this;
+    }
+
+    public function getCommentToImpugned(): ?string
+    {
+        return $this->commentToImpugned;
+    }
+
+    public function setCommentToImpugned(?string $commentToImpugned): static
+    {
+        $this->commentToImpugned = $commentToImpugned;
 
         return $this;
     }
