@@ -4,11 +4,11 @@ namespace App\Entity;
 
 use App\Repository\ClientRepository;
 use DateTimeImmutable;
+use Doctrine\Common\Collections\ArrayCollection;
+use Doctrine\Common\Collections\Collection;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
-use Symfony\Bridge\Doctrine\Types\UuidType;
 use Symfony\Component\Serializer\Attribute\Groups;
-use Symfony\Component\Uid\Uuid;
 
 #[ORM\Entity(repositoryClass: ClientRepository::class)]
 #[ORM\HasLifecycleCallbacks]
@@ -23,84 +23,91 @@ class Client
     #[ORM\Id]
     #[ORM\GeneratedValue]
     #[ORM\Column]
-    #[Groups(['balance:reading'])]
+    #[Groups(['balance:reading', 'profile', 'accounts:read', 'reports:list', 'report:read'])]
     private ?int $id = null;
 
     #[ORM\Column(length: 255)]
-    #[Groups(['balance:reading'])]
+    #[Groups(['balance:reading', 'profile', 'accounts:read', 'reports:list', 'report:read'])]
     private ?string $companyName = null;
 
     #[ORM\Column(type: Types::TEXT, nullable: true)]
-    #[Groups(['balance:reading'])]
+    #[Groups(['balance:reading', 'profile', 'accounts:read'])]
     private ?string $companyAddress = null;
 
     #[ORM\Column(length: 3)]
-    #[Groups(['balance:reading'])]
+    #[Groups(['balance:reading', 'profile', 'accounts:read'])]
     private ?string $companyCountry = null;
 
     #[ORM\Column(length: 12, nullable: true)]
-    #[Groups(['balance:reading'])]
+    #[Groups(['balance:reading', 'profile', 'accounts:read'])]
     private ?string $companyZipCode = null;
 
     #[ORM\Column(length: 120)]
-    #[Groups(['balance:reading'])]
+    #[Groups(['balance:reading', 'profile', 'accounts:read'])]
     private ?string $companyEmail = null;
 
     #[ORM\Column(length: 20)]
-    #[Groups(['balance:reading'])]
+    #[Groups(['balance:reading', 'profile', 'accounts:read'])]
     private ?string $companyPhoneNumber = null;
 
     #[ORM\Column]
-    #[Groups(['balance:reading'])]
+    #[Groups(['client:reading', 'accounts:read'])]
     private ?DateTimeImmutable $createdAt = null;
 
     #[ORM\Column]
-    #[Groups(['balance:reading'])]
+    #[Groups(['client:reading'])]
     private ?DateTimeImmutable $updatedAt = null;
 
     #[ORM\Column(nullable: true)]
-    #[Groups(['balance:reading'])]
+    #[Groups(['client:reading'])]
     private ?DateTimeImmutable $removeAt = null;
 
     #[ORM\Column(nullable: true)]
-    #[Groups(['balance:reading'])]
+    #[Groups(['balance:reading', 'profile', 'accounts:read', 'reports:list', 'report:read'])]
     private ?bool $isActive = null;
 
     #[ORM\Column(nullable: true)]
-    #[Groups(['balance:reading'])]
+    #[Groups(['balance:reading', 'accounts:read'])]
     private ?DateTimeImmutable $isActiveAt = null;
 
     #[ORM\Column]
-    #[Groups(['balance:reading'])]
+    #[Groups(['client:reading', 'profile', 'accounts:read'])]
     private ?float $discountOfClient = null;
 
     #[ORM\Column(length: 255)]
-    #[Groups(['balance:reading'])]
+    #[Groups(['balance:reading', 'profile', 'accounts:read'])]
     private ?string $companyIdentification = null;
 
     #[ORM\Column(length: 255)]
-    #[Groups(['balance:reading'])]
+    #[Groups(['balance:reading', 'accounts:read'])]
     private ?string $companyIdentificationType = null;
 
     #[ORM\Column(nullable: true)]
-    #[Groups(['balance:reading'])]
+    #[Groups(['client:reading', 'accounts:read'])]
     private ?float $minBalance = null;
 
     #[ORM\Column(nullable: true)]
-    #[Groups(['balance:reading'])]
+    #[Groups(['client:reading', 'accounts:read'])]
     private ?float $criticalBalance = null;
 
     #[ORM\Column(length: 3, nullable: true)]
-    #[Groups(['balance:reading'])]
+    #[Groups(['balance:reading', 'profile', 'accounts:read'])]
     private ?string $currency = null;
 
     #[ORM\Column(nullable: true)]
-    #[Groups(['balance:reading'])]
+    #[Groups(['balance:reading', 'accounts:read'])]
     private ?bool $isAlert = null;
+
+    /**
+     * @var Collection<int, Account>
+     */
+    #[ORM\OneToMany(targetEntity: Account::class, mappedBy: 'client')]
+    private Collection $accounts;
 
     public function __construct()
     {
         $this->isActive = false;
+        $this->accounts = new ArrayCollection();
     }
 
     public function getId(): ?int
@@ -347,6 +354,49 @@ class Client
     public function setAlert(?bool $isAlert): static
     {
         $this->isAlert = $isAlert;
+
+        return $this;
+    }
+
+    /**
+     * @return Collection
+     */
+    #[Groups(['profile'])]
+    public function getProfileAccounts(): Collection
+    {
+        return $this->getAccounts()->filter(function (Account $account) {
+            return $account->isActive();
+        })->map(function (Account $account) {
+            return $account;
+        });
+    }
+
+    /**
+     * @return Collection<int, Account>
+     */
+    public function getAccounts(): Collection
+    {
+        return $this->accounts;
+    }
+
+    public function addAccount(Account $account): static
+    {
+        if (!$this->accounts->contains($account)) {
+            $this->accounts->add($account);
+            $account->setClient($this);
+        }
+
+        return $this;
+    }
+
+    public function removeAccount(Account $account): static
+    {
+        if ($this->accounts->removeElement($account)) {
+            // set the owning side to null (unless already changed)
+            if ($account->getClient() === $this) {
+                $account->setClient(null);
+            }
+        }
 
         return $this;
     }

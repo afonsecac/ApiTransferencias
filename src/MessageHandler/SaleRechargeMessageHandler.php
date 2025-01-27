@@ -19,6 +19,6 @@ final class SaleRechargeMessageHandler
      * @throws \Symfony\Contracts\HttpClient\Exception\DecodingExceptionInterface
      */
     public function __invoke(SaleRechargeMessage $message): void {
-        $this->saleService->invokeRechargeCommunication($message->getSale(), $message->getSaleId());
+        $this->saleService->invokeRechargeCommunication($message->getSaleId());
     }
 }

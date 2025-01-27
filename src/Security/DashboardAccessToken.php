@@ -33,6 +33,7 @@ class DashboardAccessToken extends AbstractAuthenticator
      * @throws \MiladRahimi\Jwt\Exceptions\ValidationException
      * @throws \MiladRahimi\Jwt\Exceptions\InvalidSignatureException
      * @throws \MiladRahimi\Jwt\Exceptions\JsonDecodingException
+     * @throws \DateMalformedStringException
      */
     public function authenticate(Request $request): Passport
     {

@@ -256,12 +256,17 @@ class CommunicationSaleService extends CommonService
 
             $this->messageBus->dispatch(
                 new SaleRechargeMessage(
-                    $recharge->getId(),
-                    $recharge
+                    $recharge->getId()
                 )
             );
         } catch (\Exception $ex) {
             if (str_contains($ex->getMessage(), "unique_identification_client")) {
+                throw new MyCurrentException(
+                    "103",
+                    mb_convert_encoding(self::ETECSA_INFO_ERROR['103'], 'ISO-8859-1', 'UTF-8')
+                );
+            }
+            if (str_contains($ex->getMessage(), "unique_transaction_id")) {
                 throw new MyCurrentException(
                     "103",
                     mb_convert_encoding(self::ETECSA_INFO_ERROR['103'], 'ISO-8859-1', 'UTF-8')
@@ -298,7 +303,7 @@ class CommunicationSaleService extends CommonService
      * @throws \Symfony\Contracts\HttpClient\Exception\DecodingExceptionInterface
      * @throws \Symfony\Component\Messenger\Exception\ExceptionInterface
      */
-    public function invokeRechargeCommunication(CommunicationSaleRecharge $recharge, int $saleId): void
+    public function invokeRechargeCommunication(int $saleId): void
     {
         $orderId = null;
         $body = [];
@@ -324,7 +329,7 @@ class CommunicationSaleService extends CommonService
             try {
                 $balance = $this->balanceService->balance($user->getId());
                 $package = $this->em->getRepository(CommunicationClientPackage::class)->getPackageById(
-                    $recharge->getPackageId(),
+                    $saleRecharge->getPackageId(),
                     $user
                 );
                 if ($balance->amount < $package?->getAmount()) {
@@ -355,14 +360,14 @@ class CommunicationSaleService extends CommonService
                 }
                 $urlRecharge = $environment?->getBasePath().'/sale/recharge';
                 $productCode = $package?->getPriceClientPackage()?->getProduct()?->getPackageId();
-                if (!is_null($recharge->getPromotionId())) {
+                if (!is_null($saleRecharge->getPromotionId())) {
                     $promotion = $this->em->getRepository(CommunicationPromotions::class)->getActivePromotionById(
-                        $recharge->getPromotionId()
+                        $saleRecharge->getPromotionId()
                     );
                     if (!is_null($promotion)) {
                         $productCode = $promotion->getProduct()?->getPackageId();
                     }
-                    $saleRecharge->setPromotionId($recharge->getPromotionId());
+                    $saleRecharge->setPromotionId($saleRecharge->getPromotionId());
                     $saleRecharge->setPromotion($promotion);
                 } elseif ($package?->getPromotionItems()->count() === 1) {
                     $promotion = $package?->getPromotionItems()->first();
@@ -373,13 +378,13 @@ class CommunicationSaleService extends CommonService
 
                 $destination = (object)$package?->getDestination();
 
-                $phoneLength = strlen($recharge->getPhoneNumber());
-                $checkPhone = substr($recharge->getPhoneNumber(), $phoneLength - 2, $phoneLength);
-                $phoneNumber = $recharge->getPhoneNumber();
+                $phoneLength = strlen($saleRecharge->getPhoneNumber());
+                $checkPhone = substr($saleRecharge->getPhoneNumber(), $phoneLength - 2, $phoneLength);
+                $phoneNumber = $saleRecharge->getPhoneNumber();
                 if ($environment?->getType() === 'TEST') {
                     $phoneNumber = $checkPhone === "60" ? $this->parameters->get(
                         'app.phoneNumber'
-                    ) : $recharge->getPhoneNumber();
+                    ) : $saleRecharge->getPhoneNumber();
                     $productCode = "100";
                 }
 
@@ -432,10 +437,10 @@ class CommunicationSaleService extends CommonService
                     $balanceOperation->getCalculateTotal();
                     $balanceOperation->setTotalAmount($balanceOperation->getTotalAmount() * -1);
                     $balanceOperation->setTotalCurrency($package?->getCurrency());
-                    $balanceOperation->setCommunicationSale($recharge);
+                    $balanceOperation->setCommunicationSale($saleRecharge);
                     $this->em->persist($balanceOperation);
                     $this->historicalSaleService->createHistoricalCommunication(
-                        $recharge->getId(),
+                        $saleId,
                         CommunicationStateEnum::COMPLETED
                     );
                 } elseif ((int)$rechargeResult->code !== -1) {
@@ -444,9 +449,9 @@ class CommunicationSaleService extends CommonService
                     if (is_numeric($code)) {
                         $errMsg = self::ETECSA_INFO_ERROR[$code];
                     }
-                    $recharge->setState(CommunicationStateEnum::REJECTED);
+                    $saleRecharge->setState(CommunicationStateEnum::REJECTED);
                     $this->historicalSaleService->createHistoricalCommunication(
-                        $recharge->getId(),
+                        $saleRecharge->getId(),
                         CommunicationStateEnum::REJECTED
                     );
 
@@ -492,7 +497,7 @@ class CommunicationSaleService extends CommonService
                     ],
                 ];
                 $this->historicalSaleService->createHistoricalCommunication(
-                    $recharge->getId(),
+                    $saleId,
                     CommunicationStateEnum::FAILED,
                     $comInfo
                 );
@@ -510,7 +515,7 @@ class CommunicationSaleService extends CommonService
                     ],
                 ];
                 $this->historicalSaleService->createHistoricalCommunication(
-                    $recharge->getId(),
+                    $saleId,
                     CommunicationStateEnum::FAILED,
                     $comInfo
                 );
@@ -529,7 +534,7 @@ class CommunicationSaleService extends CommonService
                 ];
                 $saleRecharge->setTransactionStatus($comInfo);
                 $this->historicalSaleService->createHistoricalCommunication(
-                    $recharge->getId(),
+                    $saleId,
                     CommunicationStateEnum::FAILED
                 );
                 if ($ex instanceof Exception\UniqueConstraintViolationException) {

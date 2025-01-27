@@ -14,7 +14,7 @@ use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
 
-#[AsCommand(name: 'app:try_approved_balance', description: 'Hello PhpStorm')]
+    #[AsCommand(name: 'app:try_approved_balance', description: 'Hello PhpStorm')]
 class TryApprovedBalanceCommand extends Command
 {
     public function __construct(

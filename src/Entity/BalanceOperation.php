@@ -15,6 +15,7 @@ use App\DTO\CreateOperationDto;
 use App\Repository\BalanceOperationRepository;
 use App\State\BalanceProvider;
 use App\State\CreateOperationProcessor;
+use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
 use Symfony\Component\Serializer\Attribute\Groups;
 use Symfony\Component\Validator\Constraints as Assert;
@@ -156,7 +157,7 @@ class BalanceOperation
     private ?Account $tenant = null;
 
     #[ORM\ManyToOne]
-    #[Groups(['balance:read'])]
+    #[Groups(['balance:read', 'balance:reading'])]
     #[ApiProperty(
         schema: ['application/json'],
     )]
@@ -191,6 +192,29 @@ class BalanceOperation
     #[ORM\Column(nullable: true)]
     #[Groups(['balance:reading'])]
     private ?\DateTimeImmutable $disabledAt = null;
+
+    #[ORM\Column(nullable: true)]
+    #[Groups(['balance:reading'])]
+    private ?bool $isPreviousAmount = null;
+
+    #[ORM\Column(nullable: true)]
+    private ?array $userInfo = null;
+
+    #[ORM\Column(nullable: true)]
+    #[Groups(['balance:reading'])]
+    private ?bool $markAsReported = null;
+
+    #[ORM\Column(type: Types::DATETIMETZ_IMMUTABLE, nullable: true)]
+    #[Groups(['balance:reading'])]
+    private ?\DateTimeImmutable $reportedDateAt = null;
+
+    #[ORM\Column(length: 500, nullable: true)]
+    #[Groups(['balance:reading'])]
+    private ?string $comment = null;
+
+    #[ORM\Column(length: 500, nullable: true)]
+    #[Groups(['balance:reading'])]
+    private ?string $commentToImpugned = null;
 
     public function __construct()
     {
@@ -427,6 +451,78 @@ class BalanceOperation
     public function setDisabledAt(?\DateTimeImmutable $disabledAt): static
     {
         $this->disabledAt = $disabledAt;
+
+        return $this;
+    }
+
+    public function isPreviousAmount(): ?bool
+    {
+        return $this->isPreviousAmount;
+    }
+
+    public function setPreviousAmount(?bool $isPreviousAmount): static
+    {
+        $this->isPreviousAmount = $isPreviousAmount;
+
+        return $this;
+    }
+
+    public function getUserInfo(): ?array
+    {
+        return $this->userInfo;
+    }
+
+    public function setUserInfo(?array $userInfo): static
+    {
+        $this->userInfo = $userInfo;
+
+        return $this;
+    }
+
+    public function isMarkAsReported(): ?bool
+    {
+        return $this->markAsReported;
+    }
+
+    public function setMarkAsReported(?bool $markAsReported): static
+    {
+        $this->markAsReported = $markAsReported;
+
+        return $this;
+    }
+
+    public function getReportedDateAt(): ?\DateTimeImmutable
+    {
+        return $this->reportedDateAt;
+    }
+
+    public function setReportedDateAt(?\DateTimeImmutable $reportedDateAt): static
+    {
+        $this->reportedDateAt = $reportedDateAt;
+
+        return $this;
+    }
+
+    public function getComment(): ?string
+    {
+        return $this->comment;
+    }
+
+    public function setComment(?string $comment): static
+    {
+        $this->comment = $comment;
+
+        return $this;
+    }
+
+    public function getCommentToImpugned(): ?string
+    {
+        return $this->commentToImpugned;
+    }
+
+    public function setCommentToImpugned(?string $commentToImpugned): static
+    {
+        $this->commentToImpugned = $commentToImpugned;
 
         return $this;
     }

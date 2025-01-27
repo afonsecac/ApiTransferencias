@@ -4,7 +4,9 @@ namespace App\Entity;
 
 use ApiPlatform\Metadata\ApiProperty;
 use ApiPlatform\Metadata\ApiResource;
+use App\Enums\CommunicationStateEnum;
 use App\Repository\CommunicationSaleRechargeRepository;
+use Doctrine\Common\Collections\Collection;
 use Doctrine\ORM\Mapping as ORM;
 use Symfony\Component\Serializer\Annotation\Groups;
 use Symfony\Component\Validator\Constraints as Assert;
@@ -41,6 +43,7 @@ class CommunicationSaleRecharge extends CommunicationSaleInfo
     #[Assert\Length(min: 8, max: 10)]
     #[Groups(['comSales:read', 'comSales:create'])]
     private string $phoneNumber;
+
 
     public function getPhoneNumber(): string
     {

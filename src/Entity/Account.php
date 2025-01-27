@@ -2,15 +2,18 @@
 
 namespace App\Entity;
 
+use AllowDynamicProperties;
 use App\Repository\AccountRepository;
 use DateTimeImmutable;
 use Doctrine\ORM\Mapping as ORM;
 use Symfony\Bridge\Doctrine\Types\UuidType;
 use Symfony\Component\Security\Core\User\UserInterface;
+use Symfony\Component\Serializer\Annotation\Ignore;
 use Symfony\Component\Serializer\Attribute\Groups;
+use Symfony\Component\Serializer\Attribute\MaxDepth;
 use Symfony\Component\Uid\Uuid;
 
-#[ORM\Entity(repositoryClass: AccountRepository::class)]
+#[AllowDynamicProperties] #[ORM\Entity(repositoryClass: AccountRepository::class)]
 #[ORM\HasLifecycleCallbacks]
 #[ORM\UniqueConstraint(
     name: "unique_environment_by_client", fields: ["environment", "client"]
@@ -20,7 +23,7 @@ class Account implements UserInterface
     #[ORM\Id]
     #[ORM\GeneratedValue]
     #[ORM\Column]
-    #[Groups(['balance:reading'])]
+    #[Groups(['balance:reading', 'profile', 'accounts:read'])]
     private ?int $id = null;
 
     #[ORM\Column]
@@ -31,36 +34,38 @@ class Account implements UserInterface
 
     #[ORM\ManyToOne]
     #[ORM\JoinColumn(nullable: false)]
-    #[Groups(['balance:reading'])]
+    #[Groups(['balance:reading', 'profile', 'accounts:read'])]
+    #[MaxDepth(1)]
     private ?Environment $environment = null;
 
-    #[ORM\ManyToOne]
-    #[ORM\JoinColumn(nullable: false)]
-    #[Groups(['balance:reading'])]
-    private ?Client $client = null;
-
     #[ORM\Column]
+    #[Groups(['accounts:read'])]
     private ?float $discount = null;
 
     #[ORM\Column(length: 3)]
+    #[Groups(['accounts:read'])]
     private ?string $discountUnit = null;
 
     #[ORM\Column]
+    #[Groups(['accounts:read'])]
     private ?float $commission = null;
 
     #[ORM\Column]
+    #[Groups(['accounts:read'])]
     private ?bool $isActive = null;
 
     #[ORM\Column]
     private ?DateTimeImmutable $createdAt = null;
 
     #[ORM\Column(nullable: true)]
+    #[Groups(['accounts:read'])]
     private ?DateTimeImmutable $isActiveAt = null;
 
     #[ORM\Column]
     private ?DateTimeImmutable $updatedAt = null;
 
     #[ORM\Column(length: 255)]
+    #[Groups(['accounts:read'])]
     private ?string $origin = null;
 
     #[ORM\Column(nullable: true)]
@@ -70,13 +75,26 @@ class Account implements UserInterface
     private ?string $environmentName = null;
 
     #[ORM\Column(length: 3, nullable: true)]
+    #[Groups(['balance:reading',  'profile', 'accounts:read'])]
     private ?string $contractCurrency = null;
 
     #[ORM\Column(nullable: true)]
+    #[Groups(['accounts:read'])]
     private ?float $minBalance = null;
 
     #[ORM\Column(nullable: true)]
+    #[Groups(['account:read'])]
     private ?float $criticalBalance = null;
+
+    #[ORM\ManyToOne(inversedBy: 'accounts')]
+    #[ORM\JoinColumn(nullable: false)]
+    #[Groups(['balance:reading', 'accounts:read'])]
+    #[MaxDepth(1)]
+    private ?Client $client = null;
+
+    #[ORM\Column(nullable: true)]
+    #[Groups(['profile', 'accounts:read'])]
+    private ?bool $isPreferAdmin = null;
 
     public function __construct()
     {
@@ -149,18 +167,6 @@ class Account implements UserInterface
     public function setEnvironment(?Environment $environment): static
     {
         $this->environment = $environment;
-
-        return $this;
-    }
-
-    public function getClient(): ?Client
-    {
-        return $this->client;
-    }
-
-    public function setClient(?Client $client): static
-    {
-        $this->client = $client;
 
         return $this;
     }
@@ -345,6 +351,30 @@ class Account implements UserInterface
     public function setCriticalBalance(?float $criticalBalance): static
     {
         $this->criticalBalance = $criticalBalance;
+
+        return $this;
+    }
+
+    public function getClient(): ?Client
+    {
+        return $this->client;
+    }
+
+    public function setClient(?Client $client): static
+    {
+        $this->client = $client;
+
+        return $this;
+    }
+
+    public function isPreferAdmin(): ?bool
+    {
+        return $this->isPreferAdmin;
+    }
+
+    public function setPreferAdmin(?bool $isPreferAdmin): static
+    {
+        $this->isPreferAdmin = $isPreferAdmin;
 
         return $this;
     }
