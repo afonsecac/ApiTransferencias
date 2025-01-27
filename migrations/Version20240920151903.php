@@ -21,7 +21,7 @@ final class Version20240920151903 extends AbstractMigration
     {
         // this up() migration is auto-generated, please modify it to your needs
         $this->addSql('DROP SEQUENCE identification_type_id_seq CASCADE');
-        $this->addSql('DROP TABLE identification_type');
+        $this->addSql('DROP TABLE IF EXISTS identification_type');
         $this->addSql('ALTER TABLE communication_price_package ADD price_package_id INT DEFAULT NULL');
         $this->addSql('ALTER TABLE communication_price_package ADD CONSTRAINT FK_1858BD6A40C4A4FB FOREIGN KEY (price_package_id) REFERENCES communication_price_package (id) NOT DEFERRABLE INITIALLY IMMEDIATE');
         $this->addSql('CREATE INDEX IDX_1858BD6A40C4A4FB ON communication_price_package (price_package_id)');
