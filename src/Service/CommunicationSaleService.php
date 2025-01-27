@@ -266,6 +266,12 @@ class CommunicationSaleService extends CommonService
                     mb_convert_encoding(self::ETECSA_INFO_ERROR['103'], 'ISO-8859-1', 'UTF-8')
                 );
             }
+            if (str_contains($ex->getMessage(), "unique_transaction_id")) {
+                throw new MyCurrentException(
+                    "103",
+                    mb_convert_encoding(self::ETECSA_INFO_ERROR['103'], 'ISO-8859-1', 'UTF-8')
+                );
+            }
         }
 
         return $recharge;

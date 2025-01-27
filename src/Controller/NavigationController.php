@@ -2,12 +2,10 @@
 
 namespace App\Controller;
 
-use App\Entity\NavigationItem;
 use App\Service\NavigationService;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\Routing\Attribute\Route;
-use Symfony\Component\Serializer\Normalizer\AbstractNormalizer;
 use Symfony\Component\Serializer\Normalizer\AbstractObjectNormalizer;
 use Symfony\Component\Serializer\SerializerInterface;
 
@@ -28,7 +26,7 @@ class NavigationController extends AbstractController
     public function navigation(): JsonResponse
     {
         $serializerArray = $this->serializer->normalize(
-            $this->navigationService->getNavigationItems(),
+            $this->navigationService->getNavigationForUsers(),
             'json',
             [
                 'groups' => ['navigation'],

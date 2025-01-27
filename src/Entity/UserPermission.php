@@ -19,10 +19,6 @@ class UserPermission
     #[ORM\ManyToOne]
     private ?User $userInfo = null;
 
-    #[ORM\ManyToOne]
-    #[ORM\JoinColumn(nullable: false)]
-    private ?NavigationItem $item = null;
-
     #[ORM\Column]
     private ?\DateTimeImmutable $createdAt = null;
 
@@ -34,6 +30,10 @@ class UserPermission
 
     #[ORM\Column(length: 50)]
     private ?string $minRoleRequired = null;
+
+    #[ORM\ManyToOne(inversedBy: 'userPermissions')]
+    #[ORM\JoinColumn(nullable: false)]
+    private ?NavigationItem $item = null;
 
     public function getId(): ?int
     {
@@ -60,18 +60,6 @@ class UserPermission
     public function setUserInfo(?User $userInfo): static
     {
         $this->userInfo = $userInfo;
-
-        return $this;
-    }
-
-    public function getItem(): ?NavigationItem
-    {
-        return $this->item;
-    }
-
-    public function setItem(?NavigationItem $item): static
-    {
-        $this->item = $item;
 
         return $this;
     }
@@ -120,6 +108,18 @@ class UserPermission
     public function setMinRoleRequired(string $minRoleRequired): static
     {
         $this->minRoleRequired = $minRoleRequired;
+
+        return $this;
+    }
+
+    public function getItem(): ?NavigationItem
+    {
+        return $this->item;
+    }
+
+    public function setItem(?NavigationItem $item): static
+    {
+        $this->item = $item;
 
         return $this;
     }

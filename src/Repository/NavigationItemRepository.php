@@ -19,7 +19,8 @@ class NavigationItemRepository extends ServiceEntityRepository
     /**
      * @return NavigationItem[]
      */
-    public function getNavigationItems(): array {
+    public function getNavigationItems(): array
+    {
         return $this->createQueryBuilder('ni')
             ->select('ni')
             ->leftJoin('ni.children', 'c')
@@ -32,6 +33,44 @@ class NavigationItemRepository extends ServiceEntityRepository
             ->getQuery()
             ->getResult();
 
+    }
+
+    public function getNavigationByUserAndClient(array $roles, int $clientId = null, int $userId = null): array
+    {
+        $dql = $this->createQueryBuilder('ni')
+            ->select('ni')
+            ->leftJoin('ni.children', 'c')
+            ->leftJoin('ni.userPermissions', 'up')
+            ->where('ni.parent IS NULL AND c.parent IS NOT NULL')
+            ->andWhere('ni.active = :is_active')
+            ->andWhere('up.isActive = :is_active')
+            ->setParameter('is_active', true);
+
+        return $this->extracted($clientId, $dql, $userId, $roles)->orderBy('ni.orderValue', 'ASC')
+            ->addOrderBy('c.orderValue', 'ASC')
+            ->addOrderBy('ni.title', 'ASC')
+            ->addOrderBy('c.title', 'ASC')
+            ->getQuery()->getResult();
+    }
+
+    /**
+     * @param array $roles
+     * @param int|null $clientId
+     * @param int|null $userId
+     * @return array
+     */
+    public function accessIds(array $roles, int $clientId = null, int $userId = null): array
+    {
+        $dql = $this->createQueryBuilder('ni')
+            ->select('ni.id as parentId, c.id as childId')
+            ->leftJoin('ni.children', 'c')
+            ->leftJoin('ni.userPermissions', 'up')
+            ->where('ni.parent IS NULL AND c.parent IS NOT NULL')
+            ->andWhere('ni.active = :is_active')
+            ->andWhere('up.isActive = :is_active')
+            ->setParameter('is_active', true);
+
+        return $this->extracted($clientId, $dql, $userId, $roles)->getQuery()->getScalarResult();
     }
 
     //    /**
@@ -58,4 +97,27 @@ class NavigationItemRepository extends ServiceEntityRepository
     //            ->getOneOrNullResult()
     //        ;
     //    }
+    /**
+     * @param int|null $clientId
+     * @param \Doctrine\ORM\QueryBuilder $dql
+     * @param int|null $userId
+     * @param array $roles
+     * @return mixed
+     */
+    public function extracted(?int $clientId, \Doctrine\ORM\QueryBuilder $dql, ?int $userId, array $roles): mixed
+    {
+        if (!is_null($clientId)) {
+            $dql->leftJoin('up.client', 'cl')
+                ->andWhere('cl.id = :clientId OR up.minRoleRequired IN (:roles)')
+                ->setParameter('clientId', $clientId);
+        }
+        if (!is_null($userId)) {
+            $dql->leftJoin('up.userInfo', 'u')
+                ->andWhere('u.id = :userId OR up.minRoleRequired IN (:roles)')
+                ->setParameter('userId', $userId);
+        } else {
+            $dql->andWhere('up.minRoleRequired IN (:roles)');
+        }
+        return $dql->setParameter('roles', $roles);
+    }
 }

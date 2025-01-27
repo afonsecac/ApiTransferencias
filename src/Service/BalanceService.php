@@ -123,7 +123,14 @@ class BalanceService extends CommonService
             return [];
         }
 
-        return $this->em->getRepository(BalanceOperation::class)->getBalancesInEnvironments($clientId);
+        $balancesAvailabilities = $this->em->getRepository(BalanceOperation::class)->getBalancesInEnvironments($clientId);
+        $balances = [];
+        foreach ($balancesAvailabilities as $balanceItem) {
+            $balanceItem['currentBalance'] = round($balanceItem['currentBalance'], 2);
+            $balances[] = $balanceItem;
+        }
+
+        return $balances;
     }
 
     /**

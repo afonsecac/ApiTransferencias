@@ -125,9 +125,16 @@ class NavigationItem
     #[ORM\Column(nullable: true)]
     private ?array $permissions = null;
 
+    /**
+     * @var Collection<int, UserPermission>
+     */
+    #[ORM\OneToMany(targetEntity: UserPermission::class, mappedBy: 'item')]
+    private Collection $userPermissions;
+
     public function __construct()
     {
         $this->children = new ArrayCollection();
+        $this->userPermissions = new ArrayCollection();
     }
 
     public function getId(): ?int
@@ -485,6 +492,36 @@ class NavigationItem
     public function setPermissions(?array $permissions): static
     {
         $this->permissions = $permissions;
+
+        return $this;
+    }
+
+    /**
+     * @return Collection<int, UserPermission>
+     */
+    public function getUserPermissions(): Collection
+    {
+        return $this->userPermissions;
+    }
+
+    public function addUserPermission(UserPermission $userPermission): static
+    {
+        if (!$this->userPermissions->contains($userPermission)) {
+            $this->userPermissions->add($userPermission);
+            $userPermission->setItem($this);
+        }
+
+        return $this;
+    }
+
+    public function removeUserPermission(UserPermission $userPermission): static
+    {
+        if ($this->userPermissions->removeElement($userPermission)) {
+            // set the owning side to null (unless already changed)
+            if ($userPermission->getItem() === $this) {
+                $userPermission->setItem(null);
+            }
+        }
 
         return $this;
     }

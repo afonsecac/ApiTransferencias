@@ -51,8 +51,12 @@ class AccountRepository extends ServiceEntityRepository
      */
     public function getAccounts(): array
     {
-        return $this->createQueryBuilder('a')->leftJoin('a.client', 'c')
-            ->orderBy('c.companyName')->getQuery()->execute();
+        return $this->createQueryBuilder('a')
+            ->leftJoin('a.client', 'c')
+            ->where('a.isActive = true')
+            ->andWhere('c.isActive = true')
+            ->orderBy('c.companyName')
+            ->getQuery()->execute();
     }
 //    /**
 //     * @return Account[] Returns an array of Account objects

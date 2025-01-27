@@ -8,6 +8,7 @@ use App\DTO\ResetPassword;
 use App\Entity\Account;
 use App\Entity\Client;
 use App\Entity\Environment;
+use App\Entity\NavigationItem;
 use App\Entity\User;
 use App\Entity\UserCode;
 use App\Entity\UserPassword;
@@ -134,6 +135,22 @@ class UserService extends CommonService
         $userRoles = [];
         try {
             $userRoles = $this->roleHierarchy->getReachableRoleNames($roles);
+            $clientId = $user->getCompany()?->getId();
+            $userId = $user->getId();
+            if (!$this->security->isGranted('ROLE_ADMIN')) {
+                $clientId = null;
+                $userId = null;
+            }
+            $allIds = $this->em->getRepository(NavigationItem::class)->accessIds($userRoles, $clientId, $userId);
+            $accessIds = [];
+            foreach ($allIds as $itemIds) {
+                if (!in_array($itemIds['parentId'], $accessIds, true)) {
+                    $accessIds[] = $itemIds['parentId'];
+                }
+                if (!in_array($itemIds['childId'], $accessIds, true)) {
+                    $accessIds[] = $itemIds['childId'];
+                }
+            }
         } catch (\Exception $e) {
             $this->logger->error($e->getMessage());
         }
@@ -155,13 +172,12 @@ class UserService extends CommonService
             'status' => 'online',
             'langPreference' => $user->getLangPreference() ?? 'en',
             'name' => $user->getFirstName().' '.$user->getLastName(),
+            'accessIds' => $accessIds
         ];
     }
 
     public function createUserFromPayload(string $payload): User
     {
-        $user = new User();
-
         return $this->serializer->deserialize($payload, User::class, 'json');
     }
 
@@ -419,7 +435,9 @@ class UserService extends CommonService
             throw new AccessDeniedException();
         }
         if ($this->security->isGranted('ROLE_ADMIN')) {
-            $clients = $this->em->getRepository(Client::class)->findBy([], [
+            $clients = $this->em->getRepository(Client::class)->findBy([
+                'isActive' => true,
+            ], [
                 'companyName' => 'ASC',
             ]);
             $accounts = $this->em->getRepository(Account::class)->getAccounts();
