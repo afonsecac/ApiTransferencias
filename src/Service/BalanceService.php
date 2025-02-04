@@ -7,6 +7,7 @@ use App\DTO\BalanceInDto;
 use App\DTO\PaginationResult;
 use App\Entity\Account;
 use App\Entity\BalanceOperation;
+use App\Entity\Client;
 use App\Entity\CommunicationSaleRecharge;
 use App\Entity\EmailNotification;
 use App\Entity\ReportMarked;
@@ -266,7 +267,16 @@ class BalanceService extends CommonService
             throw new AccessDeniedException();
         }
         $account = $this->em->getRepository(Account::class)->find($accountId);
-        $isMyAccount = $user->getCompany()?->getAccounts()->contains($accountId);
+        $company = $user->getCompany();
+        $isMyAccount = false;
+        if (!is_null($company)) {
+            $companyUser = $this->em->getRepository(Client::class)->find($company->getId());
+            if (!is_null($companyUser)) {
+                $accounts = $companyUser->getAccounts();
+                $isMyAccount = $accounts->contains($account);
+            }
+        }
+
         if (!$isMyAccount && !$this->security->isGranted('ROLE_ADMIN')) {
             throw new AccessDeniedException();
         }
