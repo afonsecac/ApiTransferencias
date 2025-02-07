@@ -128,6 +128,9 @@ class BalanceService extends CommonService
         $balances = [];
         foreach ($balancesAvailabilities as $balanceItem) {
             $balanceItem['currentBalance'] = round($balanceItem['currentBalance'], 2);
+            $lastPaid = $this->em->getRepository(BalanceOperation::class)->getLastDateBalance($balanceItem['id']);
+            $balanceItem['lastPaid'] = $lastPaid?->getCreatedAt();
+            $balanceItem['lastPaidIsAdvance'] = $lastPaid?->isPreviousAmount();
             $balances[] = $balanceItem;
         }
 

@@ -4,6 +4,8 @@ namespace App\Repository;
 
 use App\DTO\PaginationResult;
 use App\Entity\BalanceOperation;
+use App\Enums\BalanceOperationEnum;
+use App\Enums\BalanceStateEnum;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Common\Collections\ArrayCollection;
 use Doctrine\ORM\Query\Parameter;
@@ -25,7 +27,7 @@ class BalanceOperationRepository extends ServiceEntityRepository
         parent::__construct($registry, BalanceOperation::class);
     }
 
-    public function getPreviousAmount(int $accountId): float | null
+    public function getPreviousAmount(int $accountId): float|null
     {
         return $this->createQueryBuilder('b')
             ->select('SUM(b.totalAmount) as total')
@@ -51,11 +53,13 @@ class BalanceOperationRepository extends ServiceEntityRepository
             ->where('b.markAsReported = :report OR b.markAsReported IS NULL')
             ->andWhere('b.state = :completed')
             ->andWhere('t.id = :accountId')
-            ->setParameters(new ArrayCollection([
-                new Parameter('report', false),
-                new Parameter('completed', 'COMPLETED'),
-                new Parameter('accountId', $accountId),
-            ]))
+            ->setParameters(
+                new ArrayCollection([
+                    new Parameter('report', false),
+                    new Parameter('completed', 'COMPLETED'),
+                    new Parameter('accountId', $accountId),
+                ])
+            )
             ->orderBy('b.id', 'ASC')
             ->getQuery()->execute();
     }
@@ -133,12 +137,39 @@ class BalanceOperationRepository extends ServiceEntityRepository
     }
 
     /**
-     * @param int $clientId
+     * @param int|null $clientId
+     * @return \App\Entity\BalanceOperation|null
+     */
+    public function getLastDateBalance(int $clientId = null): ?BalanceOperation
+    {
+        $dql = $this->createQueryBuilder('bo')
+            ->leftJoin('bo.tenant', 't')
+            ->leftJoin('t.client', 'c')
+            ->where('t.isActive = :isActive')
+            ->andWhere('bo.operationType = :operationType')
+            ->andWhere('c.isActive = :isActive')
+            ->andWhere('bo.state = :completed')
+            ->setParameter('completed', BalanceStateEnum::COMPLETED->value)
+            ->setParameter('isActive', true)
+            ->setParameter('operationType', BalanceOperationEnum::CREDIT->value);
+        if ($clientId) {
+            $dql->andWhere('t.id = :clientId')->setParameter('clientId', $clientId);
+        }
+        $dql->orderBy('bo.createdAt', 'DESC')
+            ->setMaxResults(1);
+
+        return $dql->getQuery()
+            ->getOneOrNullResult();
+
+    }
+
+    /**
+     * @param int|null $clientId
      * @return array
      */
-    public function getBalancesInEnvironments(int $clientId): array
+    public function getBalancesInEnvironments(int $clientId = null): array
     {
-        return $this->createQueryBuilder('bo')
+        $dql = $this->createQueryBuilder('bo')
             ->leftJoin('bo.tenant', 't')
             ->leftJoin('t.environment', 'e')
             ->leftJoin('t.client', 'c')
@@ -147,15 +178,19 @@ class BalanceOperationRepository extends ServiceEntityRepository
             ->addSelect('t.minBalance as minimumBalance')
             ->addSelect('t.criticalBalance as criticalBalance')
             ->addSelect('e.providerName as env')
+            ->addSelect('c.companyName as clientName')
             ->addSelect('e.id as id')
-            ->where('c.id = :clientId')
-            ->andWhere('t.isActive = :isActive')
+            ->where('t.isActive = :isActive')
             ->andWhere('c.isActive = :isActive')
-            ->setParameter('clientId', $clientId)
-            ->setParameter('isActive', true)
-            ->orderBy('e.providerName', 'ASC')
+            ->setParameter('isActive', true);
+        if (is_numeric($clientId)) {
+            $dql->andWhere('c.id = :clientId')->setParameter('clientId', $clientId);
+        }
+
+        return $dql->orderBy('e.providerName', 'ASC')
             ->groupBy('bo.totalCurrency')
             ->addGroupBy('e.providerName')
+            ->addGroupBy('c.companyName')
             ->addGroupBy('t.minBalance')
             ->addGroupBy('t.criticalBalance')
             ->addGroupBy('e.id')
@@ -235,11 +270,15 @@ class BalanceOperationRepository extends ServiceEntityRepository
                     ->setParameter('state', $filterObject->state);
             }
             if (property_exists($filterObject, 'env') && !empty($filterObject->env)) {
-                if (is_numeric($filterObject->env)) {
-                    $dql->leftJoin('t.environment', 'e')
-                        ->andWhere('e.id = :environment')
-                        ->setParameter('environment', $filterObject->env);
-                }
+                $dql->leftJoin('t.environment', 'e')
+                    ->andWhere('e.type = :environment')
+                    ->setParameter('environment', $filterObject->env);
+            }
+            if (property_exists($filterObject, 'accountId') && !empty($filterObject->accountId) && is_numeric(
+                    $filterObject->accountId
+                )) {
+                $dql->andWhere('t.id = :accountId')
+                    ->setParameter('accountId', $filterObject->accountId);
             }
             if (property_exists(
                     $filterObject,
