@@ -124,7 +124,9 @@ class BalanceService extends CommonService
             return [];
         }
 
-        $balancesAvailabilities = $this->em->getRepository(BalanceOperation::class)->getBalancesInEnvironments($clientId);
+        $balancesAvailabilities = $this->em->getRepository(BalanceOperation::class)->getBalancesInEnvironments(
+            $clientId
+        );
         $balances = [];
         foreach ($balancesAvailabilities as $balanceItem) {
             $balanceItem['currentBalance'] = round($balanceItem['currentBalance'], 2);
@@ -160,7 +162,7 @@ class BalanceService extends CommonService
      * @return \App\DTO\PaginationResult
      */
     public function getBalanceOperations(
-        array  $filters = [],
+        array $filters = [],
         string $orderBy = null,
         int $page = 0,
         int $limit = 10
@@ -176,7 +178,7 @@ class BalanceService extends CommonService
             $orderBy,
             $page,
             $limit,
-            $companyId
+            $this->security->isGranted('ROLE_ADMIN') ? null : $companyId
         );
     }
 
@@ -202,14 +204,16 @@ class BalanceService extends CommonService
             }
             if ($this->security->isGranted('ROLE_SYSTEM_EDITOR') && !$this->security->isGranted('ROLE_ADMIN')) {
                 $currentUser = $this->security->getUser();
-                if (!$currentUser instanceof User || $account->getClient()?->getId() !== $currentUser->getCompany()?->getId()) {
+                if (!$currentUser instanceof User || $account->getClient()?->getId() !== $currentUser->getCompany(
+                    )?->getId()) {
                     throw new AccessDeniedException();
                 }
             }
         } elseif ($this->security->isGranted('ROLE_ADMIN')) {
             throw new MyCurrentException('BAL003', 'You must select an account');
         }
-        if ($balanceInDto->getAmount() < $account->getMinBalance() && $balanceInDto->getAmount() < $account->getClient()?->getMinBalance()) {
+        if ($balanceInDto->getAmount() < $account->getMinBalance() && $balanceInDto->getAmount() < $account->getClient(
+            )?->getMinBalance()) {
             throw new MyCurrentException('BAL004', 'The amount is less than the minimum balance');
         }
         $balance->setTenant($account);
@@ -253,6 +257,7 @@ class BalanceService extends CommonService
             $balance->setTotalCurrency($balanceInDto->getCurrencyApproved());
             $this->em->flush();
         }
+
         return $balance;
     }
 
@@ -308,8 +313,11 @@ class BalanceService extends CommonService
             $operation?->setMarkAsReported(true);
             $operation?->setReportedDateAt($currentTime);
             $phone = '';
-            if ($operation->getOperationType() === BalanceOperationEnum::DEBIT->value && $operation->getCommunicationSale()) {
-                $comSaleRecharge = $this->em->getRepository(CommunicationSaleRecharge::class)->find($operation->getCommunicationSale()->getId());
+            if ($operation->getOperationType(
+                ) === BalanceOperationEnum::DEBIT->value && $operation->getCommunicationSale()) {
+                $comSaleRecharge = $this->em->getRepository(CommunicationSaleRecharge::class)->find(
+                    $operation->getCommunicationSale()->getId()
+                );
                 $phone = $comSaleRecharge?->getPhoneNumber();
             }
             $opItems[] = [
