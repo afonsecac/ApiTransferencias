@@ -179,7 +179,7 @@ class BalanceOperationRepository extends ServiceEntityRepository
             ->addSelect('t.criticalBalance as criticalBalance')
             ->addSelect('e.providerName as env')
             ->addSelect('c.companyName as clientName')
-            ->addSelect('e.id as id')
+            ->addSelect('c.id as id')
             ->where('t.isActive = :isActive')
             ->andWhere('c.isActive = :isActive')
             ->setParameter('isActive', true);
@@ -193,7 +193,7 @@ class BalanceOperationRepository extends ServiceEntityRepository
             ->addGroupBy('c.companyName')
             ->addGroupBy('t.minBalance')
             ->addGroupBy('t.criticalBalance')
-            ->addGroupBy('e.id')
+            ->addGroupBy('c.id')
             ->getQuery()->getScalarResult();
     }
 
