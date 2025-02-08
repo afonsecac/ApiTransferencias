@@ -6,16 +6,16 @@ class ForgotPasswordMessage
 {
     private string $email;
     private string $code;
-    private string $origin;
-    private string $name;
+    private ?string $origin;
+    private ?string $name;
 
     /**
      * @param string $email
      * @param string $code
-     * @param string $origin
-     * @param string $name
+     * @param string|null $origin
+     * @param string|null $name
      */
-    public function __construct(string $email, string $code, string $origin, string $name)
+    public function __construct(string $email, string $code, ?string $origin, ?string $name)
     {
         $this->email = $email;
         $this->code = $code;
@@ -33,13 +33,15 @@ class ForgotPasswordMessage
         return $this->code;
     }
 
-    public function getOrigin(): string
+    public function getOrigin(): ?string
     {
         return $this->origin;
     }
 
-    public function getName(): string
+    public function getName(): ?string
     {
         return $this->name;
     }
+
+
 }

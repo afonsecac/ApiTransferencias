@@ -13,6 +13,20 @@ framework:
             # async: '%env(MESSENGER_TRANSPORT_DSN)%'
             failed: '%env(MESSENGER_TRANSPORT_FAILURE)%'
             # sync: 'sync://'
+            async_notifications_high:
+              dsn: '%env(MESSENGER_TRANSPORT_DSN)%'
+              serializer: messenger.transport.symfony_serializer
+              options:
+                  vhost: '%env(MESSENGER_TRANSPORT_VHOST)%'
+                  exchange:
+                    name: high
+                  queues:
+                    notifications_send_emails:
+                      binding_keys: [ notifications_send_emails ]
+              retry_strategy:
+                  max_retries: 5
+                  delay: 1000
+                  multiplier: 3
             async_clients_high:
                dsn: '%env(MESSENGER_TRANSPORT_DSN)%'
                serializer: messenger.transport.symfony_serializer
@@ -78,6 +92,7 @@ framework:
              'App\Message\CheckSaleMessage': async_check_status
              'App\Message\BalanceMessage': async_send_notification
              'App\Message\SalePackageMessage': async_send_sale_package
+             'App\Message\ForgotPasswordMessage': async_notifications_high
 
 # when@test:
 #    framework:
