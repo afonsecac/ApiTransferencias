@@ -271,7 +271,7 @@ class BalanceOperationRepository extends ServiceEntityRepository
             }
             if (property_exists($filterObject, 'env') && !empty($filterObject->env)) {
                 $dql->leftJoin('t.environment', 'e')
-                    ->andWhere('e.type = :environment')
+                    ->andWhere('e.id = :environment')
                     ->setParameter('environment', $filterObject->env);
             }
             if (property_exists($filterObject, 'accountId') && !empty($filterObject->accountId) && is_numeric(
