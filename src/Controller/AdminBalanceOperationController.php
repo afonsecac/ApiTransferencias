@@ -66,14 +66,15 @@ class AdminBalanceOperationController extends AbstractController
     #[Route(name: 'admin_balance_operation_create', methods: ['POST'])]
     public function createBalance(BalanceInDto $balance): JsonResponse
     {
+        $newBalance = $this->balanceService->create($balance);
         return $this->json(
             $this->serializer->normalize(
-                $this->balanceService->create($balance),
+                $newBalance,
                 'json',
                 [
                     'groups' => [
                         'balance:reading',
-                    ],
+                    ]
                 ]
             )
         );

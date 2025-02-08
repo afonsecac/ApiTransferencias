@@ -9,8 +9,9 @@ class BalanceInDto implements IInput
     protected ?int $id;
     protected ?float $amount;
     protected ?string $currency;
-    protected bool $isAdvance;
+    protected ?bool $isAdvance;
     protected ?bool $isRequired;
+    protected ?bool $isImpugned;
     protected ?string $comment;
     protected ?float $amountApproved;
     protected ?string $currencyApproved;
@@ -21,8 +22,9 @@ class BalanceInDto implements IInput
      * @param int|null $id
      * @param float|null $amount
      * @param string|null $currency
-     * @param bool $isAdvance
+     * @param bool|null $isAdvance
      * @param bool|null $isRequired
+     * @param bool|null $isImpugned
      * @param string|null $comment
      * @param float|null $amountApproved
      * @param string|null $currencyApproved
@@ -33,8 +35,9 @@ class BalanceInDto implements IInput
         ?int $id,
         ?float $amount,
         ?string $currency,
-        bool $isAdvance,
+        ?bool $isAdvance,
         ?bool $isRequired,
+        ?bool $isImpugned,
         ?string $comment,
         ?float $amountApproved,
         ?string $currencyApproved,
@@ -46,6 +49,7 @@ class BalanceInDto implements IInput
         $this->currency = $currency;
         $this->isAdvance = $isAdvance;
         $this->isRequired = $isRequired;
+        $this->isImpugned = $isImpugned;
         $this->comment = $comment;
         $this->amountApproved = $amountApproved;
         $this->currencyApproved = $currencyApproved;
@@ -83,12 +87,12 @@ class BalanceInDto implements IInput
         $this->currency = $currency;
     }
 
-    public function isAdvance(): bool
+    public function getIsAdvance(): ?bool
     {
         return $this->isAdvance;
     }
 
-    public function setIsAdvance(bool $isAdvance): void
+    public function setIsAdvance(?bool $isAdvance): void
     {
         $this->isAdvance = $isAdvance;
     }
@@ -101,6 +105,16 @@ class BalanceInDto implements IInput
     public function setIsRequired(?bool $isRequired): void
     {
         $this->isRequired = $isRequired;
+    }
+
+    public function getIsImpugned(): ?bool
+    {
+        return $this->isImpugned;
+    }
+
+    public function setIsImpugned(?bool $isImpugned): void
+    {
+        $this->isImpugned = $isImpugned;
     }
 
     public function getComment(): ?string
@@ -152,4 +166,6 @@ class BalanceInDto implements IInput
     {
         $this->environmentId = $environmentId;
     }
+
+
 }

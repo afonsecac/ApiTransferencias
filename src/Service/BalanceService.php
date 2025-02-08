@@ -222,6 +222,9 @@ class BalanceService extends CommonService
             ) && $balanceInDto->getAmountApproved() > 0) {
             throw new AccessDeniedException();
         }
+        if (!empty($balanceInDto->getComment())) {
+            $balance->setComment($balanceInDto->getComment());
+        }
         if (!is_null($balanceInDto->getAmountApproved()) && $balanceInDto->getAmountApproved() > 0) {
             $balance->setState(BalanceStateEnum::COMPLETED->value);
             $balance->setTotalAmount($balanceInDto->getAmountApproved());
