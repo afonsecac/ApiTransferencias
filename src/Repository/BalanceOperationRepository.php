@@ -289,7 +289,8 @@ class BalanceOperationRepository extends ServiceEntityRepository
             }
             if (property_exists($filterObject, 'end') && !empty($filterObject->end) && $filterObject->end !== 'null') {
                 $endDate = new \DateTimeImmutable($filterObject->end);
-                $dql->andWhere('b.createdAt <= :end')->setParameter('end', $endDate);
+                $newDate = $endDate->modify('+1 day');
+                $dql->andWhere('b.createdAt <= :end')->setParameter('end', $newDate);
             }
         }
         $myOrderField = str_contains($orderField, '.') ? $orderField : sprintf('b.%s', $orderField);
