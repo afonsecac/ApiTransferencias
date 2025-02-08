@@ -104,6 +104,9 @@ class Client
     #[ORM\OneToMany(targetEntity: Account::class, mappedBy: 'client')]
     private Collection $accounts;
 
+    #[ORM\Column(length: 255, nullable: true)]
+    private ?string $contractWith = null;
+
     public function __construct()
     {
         $this->isActive = false;
@@ -397,6 +400,18 @@ class Client
                 $account->setClient(null);
             }
         }
+
+        return $this;
+    }
+
+    public function getContractWith(): ?string
+    {
+        return $this->contractWith;
+    }
+
+    public function setContractWith(?string $contractWith): static
+    {
+        $this->contractWith = $contractWith;
 
         return $this;
     }
