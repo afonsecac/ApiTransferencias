@@ -13,6 +13,7 @@ use App\Entity\User;
 use App\Entity\UserCode;
 use App\Entity\UserPassword;
 use App\Entity\UserSession;
+use App\Message\ForgotPasswordMessage;
 use App\Repository\EnvironmentRepository;
 use App\Repository\SysConfigRepository;
 use App\Util\DashboardUtil;
@@ -30,6 +31,7 @@ use Symfony\Bundle\SecurityBundle\Security;
 use Symfony\Component\DependencyInjection\ParameterBag\ParameterBagInterface;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Mailer\MailerInterface;
+use Symfony\Component\Messenger\MessageBusInterface;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 use Symfony\Component\Security\Core\Exception\AccessDeniedException;
 use Symfony\Component\Security\Core\Role\RoleHierarchyInterface;
@@ -51,6 +53,7 @@ class UserService extends CommonService
         SysConfigRepository $sysConfigRepo,
         SerializerInterface $serializer,
         protected readonly RoleHierarchyInterface $roleHierarchy,
+        protected readonly MessageBusInterface $messageBus
     ) {
         parent::__construct(
             $em,
@@ -172,7 +175,7 @@ class UserService extends CommonService
             'status' => 'online',
             'langPreference' => $user->getLangPreference() ?? 'en',
             'name' => $user->getFirstName().' '.$user->getLastName(),
-            'accessIds' => $accessIds
+            'accessIds' => $accessIds,
         ];
     }
 
@@ -236,6 +239,7 @@ class UserService extends CommonService
      * @return array|true[]
      * @throws \DateMalformedStringException
      * @throws \Random\RandomException
+     * @throws \Symfony\Component\Messenger\Exception\ExceptionInterface
      */
     public function forgotPassword(ForgotPassword $forgotPassword): array
     {
@@ -263,7 +267,14 @@ class UserService extends CommonService
             $this->em->flush();
         }
 
-        // TO-DO: SendEmail
+        $this->messageBus->dispatch(
+            new ForgotPasswordMessage(
+                $user->getEmail(),
+                $userCode->getCode(),
+                $user->getCompany()?->getContractWith(),
+                $user->getFirstName()
+            )
+        );
 
         return [
             'send' => true,
