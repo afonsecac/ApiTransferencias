@@ -1,9 +1,7 @@
-<!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-    <title>Bienvenido</title>
     <style>
         body {
             font-size: 16px;
@@ -47,20 +45,34 @@
             font-family: Arial, Helvetica, sans-serif;
         }
 
-        .content-code {
-            border: 2px solid gray;
-            border-radius: 25px;
-            gap: 20px;
-            max-width: 150px;
-            margin: auto;
+        .inline {
+            display: block;
+            margin-left: auto;
+            margin-right: auto;
         }
 
-        .code-text {
-            text-align: center;
+        .inline div {
+            min-width: 150px;
+            min-height: 50px;
+            display: inline;
             vertical-align: middle;
-            text-transform: uppercase;
         }
 
+        .inline .left {
+            text-align: right;
+        }
+
+        .inline .right {
+            text-align: left;
+            padding-left: 10px;
+        }
+
+        .line {
+            display: block;
+            width: 90%;
+            margin: 0 auto;
+            border: 1px solid gray;
+        }
 
         .footerContent {
             width: 100%;
@@ -96,27 +108,64 @@
         </div>
     </div>
     <div class="content">
-        <h3>Cambio de contraseña / Change password</h3>
-    </div>
-    <div class="content">
-        <p class="subTitleText">
-            Hemos recibido una solicitud de cambio de contraseña. El código de validación de su cuenta es:
-            <br/>
-            We have received a request to change your password. The validation code for your account is:
+        <p>
+        <h3>¡SALDO EN ESTADO {{ status_es }}!</h3>
+        </p>
+        <p>
+        <h3>{{ status_en }} STATE BALANCE!</h3>
         </p>
     </div>
-    <div class="content">
-        <!-- Here is the code that is sent in the email -->
-        <div class="content-code">
-            <p class="code-text">{{ code }}</p>
-        </div>
-    </div>
+    <br>
     <div class="content">
         <p>
-            Si no ha sido usted el que ha realizado la solicitud de cambio, no es necesario que realice ninguna acción.
+            Estimado cliente {{ name }}, el motivo de este correo electrónico es para ponerlo al tanto del estado de su
+            saldo en nuestra plataforma. Sugerimos realizar un depósito para que sus operaciones no se vean afectadas.
             <br/>
-            If you did not make the change request, you do not need to take any action.
+            Dear customer {{ name }}, the purpose of this email is to inform you about the status of your
+            balance on our platform. We suggest making a deposit so that your operations are not affected.
         </p>
+    </div>
+    <br>
+    <div class="content">
+        <p>
+            La plataforma que se verá afectada para realizar las operaciones será la de {{ platform }}.
+            <br/>
+            The platform that will be affected to carry out the operations will be {{ platform }}.
+        </p>
+    </div>
+    <div class="content">
+        <div class="inline">
+            <div class="left">
+                Saldo Actual / Current Amount:
+            </div>
+            <div class="right">
+                {{ balance | round(2, 'floor') }}
+            </div>
+        </div>
+        <div class="inline">
+            <div class="left">
+                Moneda / Currency
+            </div>
+            <div class="right">
+                {{ balance | round(2, 'floor') }}
+            </div>
+        </div>
+        <div class="inline">
+            <div class="left">
+                Fecha / Date
+            </div>
+            <div class="right">
+                {{ 'now' | date('d/m/Y') }}
+            </div>
+        </div>
+    </div>
+    <div class="line"></div>
+    <div class="content">
+        <p>¡Muchas gracias por elegirnos!</p>
+        <br>
+        <p>Contáctenos a</p>
+        <br>
+        <a href="mailto:{{ mail }}">{{ mail }}</a>
     </div>
     <div class="content footerContent">
         <p>Comremit Solutions SL</p>
@@ -125,7 +174,7 @@
         </p>
         <p>CIF: B10583565</p>
         <p>
-            <a href="https://dashboard.comremit.com/reset-password">
+            <a href="https://dashboard.comremit.com">
                 dashboard.comremit.com
             </a>
         </p>

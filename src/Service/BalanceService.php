@@ -195,7 +195,7 @@ class BalanceService extends CommonService
         $balance->setCurrency($balanceInDto->getCurrency());
         $balance->setOperationType(BalanceOperationEnum::CREDIT->value);
         $balance->setState(BalanceStateEnum::PENDING->value);
-        $balance->setPreviousAmount($balanceInDto->isAdvance());
+        $balance->setPreviousAmount($balanceInDto->getIsAdvance());
         $account = null;
         if (!is_null($balanceInDto->getAccountId())) {
             $account = $this->em->getRepository(Account::class)->find($balanceInDto->getAccountId());
@@ -234,6 +234,15 @@ class BalanceService extends CommonService
         $this->em->flush();
 
         return $balance;
+    }
+
+    public function balanceImpugned(int $id, BalanceInDto $balanceInDto): ?BalanceOperation
+    {
+        if (!$this->security->isGranted('ROLE_SYSTEM_EDITOR')) {
+            throw new AccessDeniedException();
+        }
+        $balance = $this->em->getRepository(BalanceOperation::class)->find($id);
+        return null;
     }
 
     public function update(int $id, BalanceInDto $balanceInDto): BalanceOperation
