@@ -24,7 +24,7 @@ framework:
                     notifications_send_emails:
                       binding_keys: [ notifications_send_emails ]
               retry_strategy:
-                  max_retries: 5
+                  max_retries: 2
                   delay: 1000
                   multiplier: 3
             async_clients_high:
