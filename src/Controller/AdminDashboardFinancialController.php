@@ -11,6 +11,7 @@ use App\Service\BalanceService;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\HttpKernel\Attribute\MapQueryParameter;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Http\Attribute\IsGranted;
 use Symfony\Component\Serializer\SerializerInterface;
@@ -27,21 +28,18 @@ class AdminDashboardFinancialController extends AbstractController
     }
 
     #[Route("", name: "admin_dashboard_financial", methods: ["GET"])]
-    public function index(Request $request): JsonResponse
+    public function index(
+        #[MapQueryParameter] int $clientId = null,
+        #[MapQueryParameter] int $limit = 5,
+    ): JsonResponse
     {
-        $user = $this->getUser();
-        if (!$user instanceof User) {
-            throw new AccessDeniedException('User is not authenticated');
-        }
-        $balances = $this->balanceService->getBalancesByEnvironment($user?->getCompany()?->getId());
-        $limit = $request->query->getInt('limit', 5);
-        $txRecent = $this->serializer->serialize(
-            $this->balanceService->recentTransactions($limit),
-            'json',
-            ['groups' => ['balance:reading']]
-        );
+        $balances = $this->balanceService->getBalancesByEnvironment($clientId);
         return $this->json([
-            'recentTransactions' => json_decode($txRecent, true, 512, JSON_THROW_ON_ERROR),
+            'recentTransactions' => $this->serializer->serialize(
+                $this->balanceService->recentTransactions($limit),
+                'json',
+                ['groups' => ['balance:reading']]
+            ),
             'balances' => $balances,
             'accountBalance' => [
                 'growRate' => 0,

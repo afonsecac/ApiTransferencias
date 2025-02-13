@@ -115,13 +115,21 @@ class BalanceService extends CommonService
     }
 
     /**
+     *
      * @param int|null $clientId
      * @return array
      */
     public function getBalancesByEnvironment(int $clientId = null): array
     {
-        if (is_null($clientId)) {
+        $user = $this->security->getUser();
+        if (!$user instanceof User) {
             return [];
+        }
+        if (is_null($clientId)) {
+            $clientId = $user->getCompany()?->getId();
+        }
+        if (!$this->security->isGranted('ROLE_ADMIN') && $clientId !== $user->getCompany()?->getId()) {
+            throw new AccessDeniedException();
         }
 
         $balancesAvailabilities = $this->em->getRepository(BalanceOperation::class)->getBalancesInEnvironments(
