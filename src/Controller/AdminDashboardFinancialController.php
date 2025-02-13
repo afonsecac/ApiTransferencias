@@ -35,7 +35,7 @@ class AdminDashboardFinancialController extends AbstractController
     {
         $balances = $this->balanceService->getBalancesByEnvironment($clientId);
         return $this->json([
-            'recentTransactions' => $this->serializer->serialize(
+            'recentTransactions' => $this->serializer->normalize(
                 $this->balanceService->recentTransactions($limit),
                 'json',
                 ['groups' => ['balance:reading']]
