@@ -5,7 +5,7 @@ namespace App\Schedule\Task;
 use App\Service\CommunicationSaleService;
 use Symfony\Component\Scheduler\Attribute\AsCronTask;
 
-#[AsCronTask("0 1 * * *", "America/Havana")]
+#[AsCronTask("0 * * * *", "America/Havana")]
 class CheckStatusTask
 {
     public function __construct(
@@ -19,6 +19,7 @@ class CheckStatusTask
      * @throws \Symfony\Contracts\HttpClient\Exception\RedirectionExceptionInterface
      * @throws \Symfony\Contracts\HttpClient\Exception\ServerExceptionInterface
      * @throws \Symfony\Contracts\HttpClient\Exception\TransportExceptionInterface
+     * @throws \Symfony\Component\Messenger\Exception\ExceptionInterface
      */
     public function __invoke(): void
     {

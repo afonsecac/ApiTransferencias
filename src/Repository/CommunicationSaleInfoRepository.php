@@ -24,6 +24,7 @@ class CommunicationSaleInfoRepository extends ServiceEntityRepository
 
     /**
      * @return CommunicationSaleInfo[]
+     * @throws \DateMalformedStringException
      */
     public function getLastPending(): array
     {
