@@ -30,7 +30,8 @@ class AdminDashboardFinancialController extends AbstractController
     #[Route("", name: "admin_dashboard_financial", methods: ["GET"])]
     public function index(Request $request): JsonResponse
     {
-        $clientId = $request->query->get('clientId', null);
+        $clientId = $request->query->getInt('clientId');
+        $clientId = $clientId !== 0 ? $clientId : null;
         $limit = $request->query->getInt('limit', 5);
         $balances = $this->balanceService->getBalancesByEnvironment($clientId);
         return $this->json([

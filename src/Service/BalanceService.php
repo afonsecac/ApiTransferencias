@@ -119,7 +119,7 @@ class BalanceService extends CommonService
      * @param int|null $clientId
      * @return array
      */
-    public function getBalancesByEnvironment(int $clientId = null): array
+    public function getBalancesByEnvironment(?int $clientId): array
     {
         $user = $this->security->getUser();
         if (!$user instanceof User) {
