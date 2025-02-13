@@ -42,7 +42,7 @@ class BalanceMessageHandler
             $account = $this->em->getRepository(Account::class)->find($message->getAccountId());
             if (!is_null($account) && $account->getClient()?->getCompanyEmail()) {
                 $contractWith = $account->getClient()?->getContractWith() ?? 'comremit';
-                $emailContact = $contractWith === 'comremit' ? 'admin@comremit.com' : 'support@sendmundo.com';
+                $emailContact = $contractWith === 'comremit' ? 'administrador@comremit.com' : 'support@sendmundo.com';
                 $this->logger->info("The send notification to low balance");
                 $mail = (new TemplatedEmail())->from(new Address($this->parameterBag->get('app.email.from'), 'Support Account'))
                     ->to(new Address($account->getClient()?->getCompanyEmail(), $account->getClient()?->getCompanyName()))
