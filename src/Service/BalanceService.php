@@ -149,15 +149,21 @@ class BalanceService extends CommonService
 
     /**
      * @param int $limit
+     * @param int|null $companyId
      * @return BalanceOperation[]
      */
-    public function recentTransactions(int $limit = 5): array
+    public function recentTransactions(int $limit = 5, int $companyId = null): array
     {
         $user = $this->security->getUser();
         if (!$user instanceof User) {
             throw new AccessDeniedException();
         }
-        $companyId = $user->getCompany()?->getId();
+        if (is_null($companyId)) {
+            $companyId = $user->getCompany()?->getId();
+        }
+        if (!$this->security->isGranted('ROLE_ADMIN') && $companyId !== $user->getCompany()?->getId()) {
+            throw new AccessDeniedException();
+        }
 
         return $this->em->getRepository(BalanceOperation::class)->getRecentTransactions($limit, $companyId);
     }

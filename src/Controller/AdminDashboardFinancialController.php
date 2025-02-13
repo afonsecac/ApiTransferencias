@@ -28,15 +28,14 @@ class AdminDashboardFinancialController extends AbstractController
     }
 
     #[Route("", name: "admin_dashboard_financial", methods: ["GET"])]
-    public function index(
-        #[MapQueryParameter] int $clientId = null,
-        #[MapQueryParameter] int $limit = 5,
-    ): JsonResponse
+    public function index(Request $request): JsonResponse
     {
+        $clientId = $request->query->getInt('clientId');
+        $limit = $request->query->getInt('limit', 5);
         $balances = $this->balanceService->getBalancesByEnvironment($clientId);
         return $this->json([
             'recentTransactions' => $this->serializer->normalize(
-                $this->balanceService->recentTransactions($limit),
+                $this->balanceService->recentTransactions($limit, $clientId),
                 'json',
                 ['groups' => ['balance:reading']]
             ),
