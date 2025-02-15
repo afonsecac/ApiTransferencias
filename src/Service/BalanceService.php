@@ -365,7 +365,7 @@ class BalanceService extends CommonService
         $arrayToExcelExport = array_merge($arrayToExcelExport, $opItems);
         $name = 'Report_'.$currentTime->format('c').'_'.$account?->getEnvironment()?->getType();
         $arrayResponse = [
-            'name' => $name.'.xlsx',
+            'name' => $name.'.csv',
             'operations' => $arrayToExcelExport,
         ];
         if (!is_null($lastId)) {
