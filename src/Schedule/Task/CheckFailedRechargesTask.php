@@ -8,7 +8,7 @@ use App\Service\CommunicationSaleService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\Scheduler\Attribute\AsCronTask;
 
-#[AsCronTask("*/2 * * * *", "America/Havana")]
+#[AsCronTask("* * * * *", "America/Havana")]
 class CheckFailedRechargesTask
 {
     public function __construct(
