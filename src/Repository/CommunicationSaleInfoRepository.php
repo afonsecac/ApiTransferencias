@@ -30,10 +30,7 @@ class CommunicationSaleInfoRepository extends ServiceEntityRepository
     {
         $currentDate = (new \DateTimeImmutable('now'))->modify('-5 seconds');
         return $this->createQueryBuilder('csi')
-            ->where('csi.createdAt <= :currentDate')
-            ->andWhere('csi.updatedAt <= :currentDate')
             ->andWhere('csi.state = :status')
-            ->setParameter('currentDate', $currentDate)
             ->setParameter('status', CommunicationStateEnum::PENDING)
             ->getQuery()->execute();
     }
