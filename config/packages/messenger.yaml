@@ -63,7 +63,7 @@ framework:
                options:
                    vhost: '%env(MESSENGER_TRANSPORT_VHOST)%'
                    exchange:
-                     name: low
+                     name: highest
                    queues:
                       check_status_recharge:
                         binding_keys: [ check_status_recharge ]
