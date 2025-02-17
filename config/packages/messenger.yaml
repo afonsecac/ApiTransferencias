@@ -69,7 +69,7 @@ framework:
                         binding_keys: [ check_status_recharge ]
                retry_strategy:
                    max_retries: 5
-                   delay: 10000
+                   delay: 120000
                    multiplier: 2
 
             async_send_notification:
