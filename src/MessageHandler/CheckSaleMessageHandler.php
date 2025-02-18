@@ -33,8 +33,11 @@ final class CheckSaleMessageHandler
     {
         $this->communicationSaleService->checkStatusSaleInfo($message->getSaleId());
         $sale = $this->em->getRepository(CommunicationSaleInfo::class)->find($message->getSaleId());
-        if (is_null($sale) || $sale->getState() === CommunicationStateEnum::PENDING || $sale->getState() === CommunicationStateEnum::FAILED) {
-            throw new MyCurrentException('500', 'Check again');
+        if (is_null($sale) || $sale->getState() === CommunicationStateEnum::PENDING) {
+            throw new MyCurrentException('501', 'Check again');
+        }
+        if ($sale->getState() === CommunicationStateEnum::FAILED) {
+            throw new MyCurrentException('501', 'Failed to process the check sale');
         }
     }
 
