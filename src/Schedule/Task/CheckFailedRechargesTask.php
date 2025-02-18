@@ -12,7 +12,7 @@ use Symfony\Component\Scheduler\Attribute\AsCronTask;
 class CheckFailedRechargesTask
 {
     public function __construct(
-        private readonly EntityManagerInterface $entityManager,
+        private readonly EntityManagerInterface $em,
     )
     {
 
@@ -20,7 +20,7 @@ class CheckFailedRechargesTask
 
     public function __invoke(): void
     {
-        $sales = $this->entityManager->getRepository(CommunicationSaleInfo::class)->find([
+        $sales = $this->em->getRepository(CommunicationSaleInfo::class)->findBy([
             'state' => CommunicationStateEnum::FAILED,
         ], [
             'id' => 'DESC',
