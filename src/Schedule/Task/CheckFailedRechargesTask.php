@@ -31,7 +31,7 @@ class CheckFailedRechargesTask
             $isUpdated = true;
         }
         if ($isUpdated) {
-            $this->entityManager->flush();
+            $this->em->flush();
         }
     }
 }
