@@ -23,7 +23,7 @@ class CheckFailedRechargesTask
         $sales = $this->entityManager->getRepository(CommunicationSaleInfo::class)->find([
             'state' => CommunicationStateEnum::FAILED,
         ], [
-            'createdAt' => 'DESC',
+            'id' => 'DESC',
         ]);
         $isUpdated = false;
         foreach ($sales as $sale) {
