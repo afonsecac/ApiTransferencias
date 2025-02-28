@@ -892,7 +892,8 @@ class CommunicationSaleService extends CommonService
             $message = $e->getMessage();
             $this->logger->error($rechargeResponse->getContent(false), $infoResponse);
             if ($e instanceof ClientException && $e->getCode() === 404 && $isProcess) {
-                $this->tryAgainWithTransaction($saleId);
+                // TO-DO: Recheck info to process
+                // $this->tryAgainWithTransaction($saleId);
             } elseif ($e->getCode() === 400) {
                 $comInfo = [
                     'status' => [
@@ -907,7 +908,7 @@ class CommunicationSaleService extends CommonService
                 $sale->setTransactionStatus($comInfo);
                 $this->historicalSaleService->createHistoricalCommunication(
                     $sale->getId(),
-                    CommunicationStateEnum::FAILED,
+                    CommunicationStateEnum::PENDING,
                     $comInfo
                 );
                 $this->em->flush();
@@ -925,7 +926,7 @@ class CommunicationSaleService extends CommonService
                 ];
                 $this->historicalSaleService->createHistoricalCommunication(
                     $sale->getId(),
-                    CommunicationStateEnum::FAILED,
+                    CommunicationStateEnum::PENDING,
                     $comInfo
                 );
                 $this->em->flush();
