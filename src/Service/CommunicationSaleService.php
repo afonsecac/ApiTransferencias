@@ -315,7 +315,7 @@ class CommunicationSaleService extends CommonService
         if ($saleRecharge instanceof CommunicationSaleRecharge) {
             $user = $saleRecharge->getTenant();
             if (!$user instanceof Account) {
-                $saleRecharge->setState(CommunicationStateEnum::FAILED);
+                $saleRecharge->setState(CommunicationStateEnum::PENDING);
                 $rechargeInfo = [
                     'result' => [
                         'message' => 'Unexpected user',
@@ -463,7 +463,7 @@ class CommunicationSaleService extends CommonService
                         'error' => [
                             'message' => sprintf(
                                 "action=Recharge, Message=%s",
-                                $errMsg ?? 'Unexpected message'
+                                $errMsg ?? 'Unexpected message during the sale'
                             ),
                             'orderID' => $orderId,
                             'code' => sprintf(
@@ -482,7 +482,7 @@ class CommunicationSaleService extends CommonService
                 $this->em->flush();
                 $this->messageBus->dispatch(new CheckSaleMessage($saleId));
             } catch (ClientExceptionInterface|TimeoutException $exc) {
-                $saleRecharge->setState(CommunicationStateEnum::FAILED);
+                $saleRecharge->setState(CommunicationStateEnum::PENDING);
                 $comInfo = [
                     'error' => [
                         'message' => sprintf(
@@ -498,17 +498,17 @@ class CommunicationSaleService extends CommonService
                 ];
                 $this->historicalSaleService->createHistoricalCommunication(
                     $saleId,
-                    CommunicationStateEnum::FAILED,
+                    CommunicationStateEnum::PENDING,
                     $comInfo
                 );
                 $saleRecharge->setTransactionStatus($comInfo);
             } catch (RedirectionExceptionInterface|ServerExceptionInterface|TransportExceptionInterface $exc) {
-                $saleRecharge->setState(CommunicationStateEnum::FAILED);
+                $saleRecharge->setState(CommunicationStateEnum::PENDING);
                 $comInfo = [
                     'error' => [
                         'message' => sprintf(
                             "action=Recharge, Message=%s",
-                            'Unexpected error'
+                            'Unexpected error during sale'
                         ),
                         'code' => 'COM000',
                         'transactionID' => $saleRecharge->getTransactionId(),
@@ -516,12 +516,12 @@ class CommunicationSaleService extends CommonService
                 ];
                 $this->historicalSaleService->createHistoricalCommunication(
                     $saleId,
-                    CommunicationStateEnum::FAILED,
+                    CommunicationStateEnum::PENDING,
                     $comInfo
                 );
                 $saleRecharge->setTransactionStatus($comInfo);
             } catch (\Exception $ex) {
-                $saleRecharge->setState(CommunicationStateEnum::FAILED);
+                $saleRecharge->setState(CommunicationStateEnum::PENDING);
                 $comInfo = [
                     'error' => [
                         'message' => sprintf(
@@ -535,7 +535,7 @@ class CommunicationSaleService extends CommonService
                 $saleRecharge->setTransactionStatus($comInfo);
                 $this->historicalSaleService->createHistoricalCommunication(
                     $saleId,
-                    CommunicationStateEnum::FAILED
+                    CommunicationStateEnum::PENDING
                 );
                 if ($ex instanceof Exception\UniqueConstraintViolationException) {
                     if (strpos($ex->getPrevious()?->getMessage(), "unique_identification_client") >= 0) {
@@ -815,7 +815,7 @@ class CommunicationSaleService extends CommonService
             $responseInfo = (object)$response;
             $result = (object)$responseInfo->result;
             $sale->setTransactionStatus($response);
-            if (property_exists($responseInfo, 'orderId') && isset($responseInfo->orderId) && $result->valueOk) {
+            if (property_exists($responseInfo, 'orderId') && isset($responseInfo->orderId)) {
                 $orderId = $responseInfo->orderId;
                 $sale->setTransactionOrder($orderId);
                 if ($sale instanceof CommunicationSaleRecharge) {
