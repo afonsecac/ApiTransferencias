@@ -40,9 +40,11 @@ class CommunicationSaleProvider implements ProviderInterface
         if ($communicationSale instanceof CommunicationSaleInfo && $communicationSale->getState() === CommunicationStateEnum::PENDING) {
             $currentDate = new \DateTimeImmutable('now');
             $updatedAt = $communicationSale->getUpdatedAt();
-            $updatedAtDiff = $currentDate->diff($updatedAt);
-            if ($updatedAtDiff->i >= 1) {
-                $communicationSale = $this->saleService->checkSaleInfo($communicationSale->getId());
+            if ($updatedAt !== null) {
+                $updatedAtDiff = $currentDate->diff($updatedAt);
+                if ($updatedAtDiff->i >= 15) {
+                    $communicationSale = $this->saleService->checkSaleInfo($communicationSale->getId());
+                }
             }
         }
 
