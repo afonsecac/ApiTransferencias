@@ -6,6 +6,7 @@ namespace App\Command;
 
 use App\Entity\BalanceOperation;
 use App\Entity\EmailNotification;
+use App\Service\BalanceService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
@@ -19,6 +20,7 @@ class TryApprovedBalanceCommand extends Command
 {
     public function __construct(
         private readonly EntityManagerInterface $em,
+        private readonly BalanceService $balanceService,
     )
     {
         parent::__construct();
@@ -48,17 +50,7 @@ class TryApprovedBalanceCommand extends Command
                 $balance->setCurrency($currency);
                 $balance->setState('COMPLETED');
                 if (!is_null($account)) {
-                    $lastNotification = $this->em->getRepository(EmailNotification::class)->getLastNotification($account?->getId());
-                    if (!is_null($lastNotification)) {
-                        $lastNotification->setBalanceIn($balance);
-                        $lastNotification->setActive(false);
-                        $lastNotification->setClosedAt(new \DateTimeImmutable('now'));
-                    }
-                    $notification = new EmailNotification();
-                    $notification->setBalanceIn($balance);
-                    $notification->setAccount($account);
-                    $notification->setActive(true);
-                    $this->em->persist($notification);
+                    $this->balanceService->closeNotification($account->getId(), $balance);
                 }
                 $this->em->flush();
                 $io->success('Completed approbation balance');

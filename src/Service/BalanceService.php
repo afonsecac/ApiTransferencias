@@ -243,6 +243,7 @@ class BalanceService extends CommonService
             $balance->setState(BalanceStateEnum::COMPLETED->value);
             $balance->setTotalAmount($balanceInDto->getAmountApproved());
             $balance->setTotalCurrency($balanceInDto->getCurrencyApproved());
+            $this->closeNotification($account?->getId(), $balance);
         }
         $this->em->persist($balance);
         $this->em->flush();
@@ -281,10 +282,30 @@ class BalanceService extends CommonService
             $balance->setState(BalanceStateEnum::COMPLETED->value);
             $balance->setTotalAmount($balanceInDto->getAmountApproved());
             $balance->setTotalCurrency($balanceInDto->getCurrencyApproved());
+            if (!is_null($balance->getTenant())) {
+                $account = $balance->getTenant();
+                $this->closeNotification($account?->getId(), $balance);
+            }
             $this->em->flush();
         }
 
         return $balance;
+    }
+
+    public function closeNotification(int $accountId, BalanceOperation $balance): void
+    {
+        $account = $this->em->getRepository(Account::class)->find($accountId);
+        $lastNotification = $this->em->getRepository(EmailNotification::class)->getLastNotification($accountId);
+        if (!is_null($lastNotification)) {
+            $lastNotification->setBalanceIn($balance);
+            $lastNotification->setActive(false);
+            $lastNotification->setClosedAt(new \DateTimeImmutable('now'));
+        }
+        $notification = new EmailNotification();
+        $notification->setBalanceIn($balance);
+        $notification->setAccount($account);
+        $notification->setActive(true);
+        $this->em->persist($notification);
     }
 
     /**
