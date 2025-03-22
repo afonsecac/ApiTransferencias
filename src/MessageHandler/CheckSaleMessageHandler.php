@@ -8,13 +8,18 @@ use App\Exception\MyCurrentException;
 use App\Message\CheckSaleMessage;
 use App\Service\CommunicationSaleService;
 use Doctrine\ORM\EntityManagerInterface;
+use Psr\Log\LoggerInterface;
 use Symfony\Component\Messenger\Attribute\AsMessageHandler;
+use Symfony\Component\Messenger\MessageBusInterface;
 
 #[AsMessageHandler]
 final class CheckSaleMessageHandler
 {
 
-    public function __construct(private readonly CommunicationSaleService $communicationSaleService, private readonly EntityManagerInterface $em)
+    public function __construct(
+        private readonly CommunicationSaleService $communicationSaleService,
+        private readonly EntityManagerInterface $em
+    )
     {
     }
 

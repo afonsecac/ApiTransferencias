@@ -205,6 +205,9 @@ class CommunicationSaleInfo
     #[Groups(['comSales:read'])]
     private Collection $historical;
 
+    #[ORM\Column(length: 20, nullable: true)]
+    private ?string $stateProcess = null;
+
     public function __construct() {
         $this->discount = 0;
         $this->amountTax = 0;
@@ -375,6 +378,13 @@ class CommunicationSaleInfo
         $this->updatedAt = new \DateTimeImmutable('now');
     }
 
+    #[ORM\PrePersist]
+    public function setCreated(): void
+    {
+        $this->createdAt = new \DateTimeImmutable('now');
+        $this->stateProcess = CommunicationStateEnum::CREATED->value;
+    }
+
     public function getTransactionStatus(): array
     {
         return $this->transactionStatus;
@@ -464,6 +474,18 @@ class CommunicationSaleInfo
                 $historical->setSale(null);
             }
         }
+
+        return $this;
+    }
+
+    public function getStateProcess(): ?string
+    {
+        return $this->stateProcess;
+    }
+
+    public function setStateProcess(?string $stateProcess): static
+    {
+        $this->stateProcess = $stateProcess;
 
         return $this;
     }

@@ -196,6 +196,22 @@ class BalanceService extends CommonService
         );
     }
 
+    public function createSaleBalance(Account $tenant, CommunicationSaleRecharge $sale)
+    {
+        $balance = new BalanceOperation();
+        $balance->setTenant($tenant);
+        $balance->setAmount($sale->getTotalPrice());
+        $balance->setCurrency($sale->getCurrency());
+        $balance->setState(BalanceStateEnum::COMPLETED->value);
+        $balance->setOperationType(BalanceOperationEnum::DEBIT->value);
+        $balance->getCalculateTotal();
+        $balance->setTotalAmount($balance->getTotalAmount() * -1);
+        $balance->setTotalCurrency($sale->getCurrency());
+        $balance->setCommunicationSale($sale);
+
+        $this->em->persist($balance);
+    }
+
     /**
      * @throws \App\Exception\MyCurrentException
      */

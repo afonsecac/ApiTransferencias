@@ -326,6 +326,9 @@ class CommunicationSaleService extends CommonService
 
                 return;
             }
+            if ($saleRecharge->getStateProcess() !== CommunicationStateEnum::CREATED->value) {
+                return;
+            }
             try {
                 $balance = $this->balanceService->balance($user->getId());
                 $package = $this->em->getRepository(CommunicationClientPackage::class)->getPackageById(
@@ -334,6 +337,7 @@ class CommunicationSaleService extends CommonService
                 );
                 if ($balance->amount < $package?->getAmount()) {
                     $saleRecharge->setState(CommunicationStateEnum::REJECTED);
+                    $saleRecharge->setStateProcess(CommunicationStateEnum::REJECTED->value);
                     $rechargeInfo = [
                         'result' => [
                             'message' => 'The balance aren`t sufficient',
@@ -345,9 +349,13 @@ class CommunicationSaleService extends CommonService
                     return;
 
                 }
+                $saleRecharge->setStateProcess(CommunicationStateEnum::PENDING->value);
+                $this->em->flush();
+                $saleRecharge = $this->em->getRepository(CommunicationSaleRecharge::class)->find($saleId);
                 $environment = $this->em->getRepository(Environment::class)->find($user->getEnvironment()?->getId());
                 if (is_null($environment)) {
                     $saleRecharge->setState(CommunicationStateEnum::FAILED);
+                    $saleRecharge->setStateProcess(CommunicationStateEnum::FAILED->value);
                     $rechargeInfo = [
                         'result' => [
                             'message' => 'Unexpected environment',
@@ -408,42 +416,10 @@ class CommunicationSaleService extends CommonService
                     ]
                 );
                 $rechargeInfo = $rechargeResponse->toArray();
+                $saleRecharge->setTransactionStatus($rechargeInfo);
+                $saleRecharge->setStateProcess(CommunicationStateEnum::PENDING->value);
                 $rechargeResult = (object)((object)$rechargeInfo)->result;
-                $txStatus = (boolean)$rechargeResult->valueOk;
-                if ($txStatus) {
-                    try {
-                        $orderId = ((object)$rechargeInfo)->orderId;
-                    } catch (\Exception $e) {
-                        $orderId = null;
-                    }
-
-                    $bodyCheck = [
-                        'orderId' => $orderId,
-                        'transactionId' => $saleRecharge->getTransactionId(),
-                        'environment' => $environment?->getType(),
-                    ];
-                    $saleRecharge->setState(CommunicationStateEnum::COMPLETED);
-                    $comInfo = [
-                        'info' => $rechargeInfo,
-                    ];
-                    $saleRecharge->setTransactionStatus($comInfo);
-
-                    $balanceOperation = new BalanceOperation();
-                    $balanceOperation->setTenant($user);
-                    $balanceOperation->setAmount($package?->getAmount());
-                    $balanceOperation->setCurrency($package?->getCurrency());
-                    $balanceOperation->setState('COMPLETED');
-                    $balanceOperation->setOperationType('DEBIT');
-                    $balanceOperation->getCalculateTotal();
-                    $balanceOperation->setTotalAmount($balanceOperation->getTotalAmount() * -1);
-                    $balanceOperation->setTotalCurrency($package?->getCurrency());
-                    $balanceOperation->setCommunicationSale($saleRecharge);
-                    $this->em->persist($balanceOperation);
-                    $this->historicalSaleService->createHistoricalCommunication(
-                        $saleId,
-                        CommunicationStateEnum::COMPLETED
-                    );
-                } elseif ((int)$rechargeResult->code !== -1) {
+                if ((int)$rechargeResult->code !== -1) {
                     $code = $rechargeResult->code;
                     $errMsg = null;
                     if (is_numeric($code)) {
@@ -477,12 +453,11 @@ class CommunicationSaleService extends CommonService
                     ];
                     $saleRecharge->setTransactionStatus($comInfo);
                 }
-
-
                 $this->em->flush();
                 $this->messageBus->dispatch(new CheckSaleMessage($saleId));
             } catch (ClientExceptionInterface|TimeoutException $exc) {
                 $saleRecharge->setState(CommunicationStateEnum::PENDING);
+                $saleRecharge->setStateProcess(CommunicationStateEnum::CREATED->value);
                 $comInfo = [
                     'error' => [
                         'message' => sprintf(
@@ -504,6 +479,7 @@ class CommunicationSaleService extends CommonService
                 $saleRecharge->setTransactionStatus($comInfo);
             } catch (RedirectionExceptionInterface|ServerExceptionInterface|TransportExceptionInterface $exc) {
                 $saleRecharge->setState(CommunicationStateEnum::PENDING);
+                $saleRecharge->setStateProcess(CommunicationStateEnum::CREATED->value);
                 $comInfo = [
                     'error' => [
                         'message' => sprintf(
@@ -522,6 +498,7 @@ class CommunicationSaleService extends CommonService
                 $saleRecharge->setTransactionStatus($comInfo);
             } catch (\Exception $ex) {
                 $saleRecharge->setState(CommunicationStateEnum::PENDING);
+                $saleRecharge->setStateProcess(CommunicationStateEnum::CREATED->value);
                 $comInfo = [
                     'error' => [
                         'message' => sprintf(
@@ -787,11 +764,16 @@ class CommunicationSaleService extends CommonService
     public function checkStatusOrder(int $saleId, bool $isProcess = null): void
     {
         $sale = $this->em->getRepository(CommunicationSaleInfo::class)->find($saleId);
-        if (is_null($sale) || $sale->getState() !== CommunicationStateEnum::PENDING) {
+        if (is_null($sale) ||
+            $sale->getState() !== CommunicationStateEnum::PENDING ||
+            $sale->getStateProcess() === CommunicationStateEnum::CREATED->value) {
             return;
         }
         $tenant = $sale->getTenant();
-        $url = $tenant?->getEnvironment()?->getBasePath().'/sale/sale-info';
+        if (is_null($tenant)) {
+            return;
+        }
+        $url = $tenant->getEnvironment()?->getBasePath().'/sale/sale-info';
 
         $body = [
             'environment' => $tenant?->getEnvironment()?->getType(),
@@ -820,23 +802,15 @@ class CommunicationSaleService extends CommonService
                 $sale->setTransactionOrder($orderId);
                 if ($sale instanceof CommunicationSaleRecharge) {
                     $sale->setState(CommunicationStateEnum::COMPLETED);
+                    $sale->setStateProcess(CommunicationStateEnum::COMPLETED->value);
                 } elseif (isset($responseInfo->fullResponse['Sale']) && $sale instanceof CommunicationSalePackage) {
                     $sale->setState(CommunicationStateEnum::COMPLETED);
+                    $sale->setStateProcess(CommunicationStateEnum::COMPLETED->value);
                 } else {
                     return;
                 }
 
-                $balanceOperation = new BalanceOperation();
-                $balanceOperation->setTenant($tenant);
-                $balanceOperation->setAmount($sale->getTotalPrice());
-                $balanceOperation->setCurrency($sale->getCurrency());
-                $balanceOperation->setState('COMPLETED');
-                $balanceOperation->setOperationType('DEBIT');
-                $balanceOperation->getCalculateTotal();
-                $balanceOperation->setTotalAmount($balanceOperation->getTotalAmount() * -1);
-                $balanceOperation->setTotalCurrency($sale->getCurrency());
-                $balanceOperation->setCommunicationSale($sale);
-                $this->em->persist($balanceOperation);
+                $this->balanceService->createSaleBalance($tenant, $sale);
                 $this->historicalSaleService->createHistoricalCommunication(
                     $sale->getId(),
                     CommunicationStateEnum::COMPLETED,
@@ -844,6 +818,7 @@ class CommunicationSaleService extends CommonService
                 );
             } elseif (!is_null($result) && isset($responseInfo->status) && $result->valueOk && $responseInfo->status === CommunicationStateEnum::REJECTED->value) {
                 $sale->setState(CommunicationStateEnum::REJECTED);
+                $sale->setStateProcess(CommunicationStateEnum::REJECTED->value);
                 $this->historicalSaleService->createHistoricalCommunication(
                     $sale->getId(),
                     CommunicationStateEnum::REJECTED,
@@ -856,6 +831,7 @@ class CommunicationSaleService extends CommonService
                     $sale->setTransactionStatus($response);
                     if (in_array($result->code, ['151', '152', '153', '198', '199', '200'], true)) {
                         $sale->setState(CommunicationStateEnum::REJECTED);
+                        $sale->setStateProcess(CommunicationStateEnum::REJECTED->value);
                         $this->historicalSaleService->createHistoricalCommunication(
                             $sale->getId(),
                             CommunicationStateEnum::REJECTED,
@@ -863,6 +839,7 @@ class CommunicationSaleService extends CommonService
                         );
                     } elseif ((int)$result->code !== -1) {
                         $sale->setState(CommunicationStateEnum::PENDING);
+                        $sale->setStateProcess(CommunicationStateEnum::PENDING->value);
                         $this->historicalSaleService->createHistoricalCommunication(
                             $sale->getId(),
                             CommunicationStateEnum::PENDING,
@@ -871,6 +848,7 @@ class CommunicationSaleService extends CommonService
                     }
                 } else {
                     $sale->setState(CommunicationStateEnum::REJECTED);
+                    $sale->setStateProcess(CommunicationStateEnum::REJECTED->value);
                     $this->historicalSaleService->createHistoricalCommunication(
                         $sale->getId(),
                         CommunicationStateEnum::PENDING,
@@ -880,6 +858,7 @@ class CommunicationSaleService extends CommonService
             } else {
                 if (is_null($result)) {
                     $sale->setState(CommunicationStateEnum::PENDING);
+                    $sale->setStateProcess(CommunicationStateEnum::PENDING->value);
                     $this->historicalSaleService->createHistoricalCommunication(
                         $sale->getId(),
                         CommunicationStateEnum::PENDING
@@ -894,6 +873,8 @@ class CommunicationSaleService extends CommonService
             if ($e instanceof ClientException && $e->getCode() === 404 && $isProcess) {
                 // TO-DO: Recheck info to process
                 // $this->tryAgainWithTransaction($saleId);
+                $sale->setStateProcess(CommunicationStateEnum::FAILED->value);
+                $this->em->flush();
             } elseif ($e->getCode() === 400) {
                 $comInfo = [
                     'status' => [
