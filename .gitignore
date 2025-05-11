@@ -4,6 +4,8 @@
 /.env.local.php
 /.env.*.local
 /.env
+/.env.prod.php
+/.env.test
 /config/secrets/prod/prod.decrypt.private.php
 /public/bundles/
 /var/
@@ -20,3 +22,9 @@ composer.lock
 *.sublime-workspace
 ###< symfony/framework-bundle ###
 !/composer.lock
+docker-compose.yaml
+
+###> symfony/phpunit-bridge ###
+.phpunit.result.cache
+/phpunit.xml
+###< symfony/phpunit-bridge ###

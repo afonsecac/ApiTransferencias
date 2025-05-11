@@ -1,0 +1,35 @@
+services:
+  php-fpm:
+    build:
+      context: ./docker/php-fpm
+    environment:
+      - APP_ENV=${APP_ENV}
+      - APP_SECRET=${APP_SECRET}
+      - DATABASE_URL=${DATABASE_URL}
+      - CORS_ALLOW_ORIGIN=${CORS_ALLOW_ORIGIN}
+      - MAILER_DSN=${MAILER_DSN}
+      - MESSENGER_TRANSPORT_DSN=${MESSENGER_TRANSPORT_DSN}
+      - MESSENGER_TRANSPORT_VHOST=${MESSENGER_TRANSPORT_VHOST}
+      - MESSENGER_TRANSPORT_FAILURE=${MESSENGER_TRANSPORT_FAILURE}
+      - MICROSOFT_URL=${MICROSOFT_URL}
+      - JWT_MEMORY_KEY=${JWT_MEMORY_KEY}
+      - JWT_PHRASE_KEY=${JWT_PHRASE_KEY}
+      - JWT_TIMEOUT=${JWT_TIMEOUT}
+      - APP_TEST_PHONE=${APP_TEST_PHONE}
+      - APP_MAILER_FROM=${APP_MAILER_FROM}
+    volumes:
+      - ./:/var/www
+  nginx:
+    build:
+      context: ./docker/nginx
+    volumes:
+      - ./:/var/www
+      - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./docker/nginx/sites/:/etc/nginx/sites-available
+      - ./docker/nginx/conf.d/:/etc/nginx/conf.d
+      - ./docker/logs:/var/log
+    depends_on:
+      - php-fpm
+    ports:
+      - 16880:80
+      - 16843:443

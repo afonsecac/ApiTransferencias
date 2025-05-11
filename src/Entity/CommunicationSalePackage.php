@@ -99,7 +99,7 @@ class CommunicationSalePackage extends CommunicationSaleInfo
             'example' => 1,
         ],
     )]
-    #[Assert\Choice(choices: ['1', '9'])]
+    #[Assert\Choice(choices: [1, 9])]
     private ?int $identificationType = null;
 
     public function getIdentificationNumber(): ?string
