@@ -10,6 +10,7 @@ use App\Entity\BalanceOperation;
 use App\Entity\Client;
 use App\Entity\CommunicationSaleRecharge;
 use App\Entity\EmailNotification;
+use App\Entity\Environment;
 use App\Entity\ReportMarked;
 use App\Entity\User;
 use App\Enums\BalanceOperationEnum;
@@ -28,6 +29,7 @@ use Symfony\Component\Mailer\MailerInterface;
 use Symfony\Component\Messenger\MessageBusInterface;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 use Symfony\Component\Serializer\SerializerInterface;
+use Symfony\Contracts\HttpClient\HttpClientInterface;
 
 class BalanceService extends CommonService
 {
@@ -41,7 +43,8 @@ class BalanceService extends CommonService
         EnvironmentRepository $environmentRepository,
         SysConfigRepository $sysConfigRepo,
         SerializerInterface $serializer,
-        private readonly MessageBusInterface $messageBus
+        private readonly MessageBusInterface $messageBus,
+        private readonly HttpClientInterface $httpClient,
     ) {
         parent::__construct(
             $em,
@@ -145,6 +148,49 @@ class BalanceService extends CommonService
         }
 
         return $balances;
+    }
+
+    /**
+     * @param string $env
+     * @return array
+     * @throws \Symfony\Contracts\HttpClient\Exception\ClientExceptionInterface
+     * @throws \Symfony\Contracts\HttpClient\Exception\DecodingExceptionInterface
+     * @throws \Symfony\Contracts\HttpClient\Exception\RedirectionExceptionInterface
+     * @throws \Symfony\Contracts\HttpClient\Exception\ServerExceptionInterface
+     * @throws \Symfony\Contracts\HttpClient\Exception\TransportExceptionInterface
+     */
+    public function getBalancePlatform(string $env): array
+    {
+        $user = $this->security->getUser();
+        if (!$user instanceof User) {
+            return [];
+        }
+        if (!$this->security->isGranted('ROLE_ADMIN')) {
+            throw new AccessDeniedException();
+        }
+        $environment = $this->em->getRepository(Environment::class)->findOneBy([
+            'type' => $env,
+            'scope' => 'ET',
+            'isActive' => true,
+        ]);
+        if (is_null($environment)) {
+            return [];
+        }
+        $balanceResponse = $this->httpClient->request(
+            'POST',
+            $environment->getBasePath().'/information/balance',
+            [
+                'headers' => [
+                    'Content-Type' => 'application/json',
+                    'Accept' => 'application/json',
+                ],
+                'body' => $this->serializer->serialize([
+                    'environment' => $environment->getType(),
+                ], 'json', []),
+            ]
+        );
+
+        return $balanceResponse->toArray();
     }
 
     /**

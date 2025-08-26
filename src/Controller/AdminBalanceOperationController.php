@@ -41,6 +41,26 @@ class AdminBalanceOperationController extends AbstractController
         return $this->json($response);
     }
 
+
+    /**
+     * @throws \Symfony\Contracts\HttpClient\Exception\TransportExceptionInterface
+     * @throws \Symfony\Contracts\HttpClient\Exception\ServerExceptionInterface
+     * @throws \Symfony\Contracts\HttpClient\Exception\RedirectionExceptionInterface
+     * @throws \Symfony\Contracts\HttpClient\Exception\DecodingExceptionInterface
+     * @throws \Symfony\Contracts\HttpClient\Exception\ClientExceptionInterface
+     */
+    #[Route(
+        "/platform-balance/{environment}",
+        name: 'admin_balance_operation_platform_balance',
+        methods: ['GET']
+    )]
+    public function getPlatformBalance(
+        string $environment
+    ): JsonResponse
+    {
+        return $this->json($this->balanceService->getBalancePlatform($environment));
+    }
+
     /**
      * @throws \App\Exception\MyCurrentException
      */
@@ -74,7 +94,7 @@ class AdminBalanceOperationController extends AbstractController
                 [
                     'groups' => [
                         'balance:reading',
-                    ]
+                    ],
                 ]
             )
         );
