@@ -799,11 +799,19 @@ class CommunicationSaleService extends CommonService
             $statusResponse = strtoupper($responseInfo->status);
             $result = (object)$responseInfo->result;
             $fullResponse = (object) $responseInfo->fullResponse;
+            $isTrue = false;
+            if (!is_null($fullResponse)) {
+                $fullResponseObj = (object) $fullResponse->SaleRecharge;
+                if (!is_null($fullResponseObj)) {
+                    $isTrue = $statusResponse === "COMPLETED" && $fullResponseObj->RechargeStateCode === "OK";
+                }
+            }
             $sale->setTransactionStatus($response);
-            $isTrue = isset($fullResponse->SaleRecharge) && $statusResponse === "COMPLETED" && $fullResponse->SaleRecharge->RechargeStateCode === "OK";
             if ($isTrue || (property_exists($responseInfo, 'orderId') && isset($responseInfo->orderId))) {
-                $orderId = $responseInfo->orderId;
-                $sale->setTransactionOrder($orderId);
+                if (property_exists($responseInfo, 'orderId') && isset($responseInfo->orderId)) {
+                    $orderId = $responseInfo->orderId;
+                    $sale->setTransactionOrder($orderId);
+                }
                 if ($sale instanceof CommunicationSaleRecharge) {
                     $sale->setState(CommunicationStateEnum::COMPLETED);
                     $sale->setStateProcess(CommunicationStateEnum::COMPLETED->value);
