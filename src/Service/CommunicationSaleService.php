@@ -763,6 +763,7 @@ class CommunicationSaleService extends CommonService
      */
     public function checkStatusOrder(int $saleId, bool $isProcess = null): void
     {
+        sleep(2);
         $sale = $this->em->getRepository(CommunicationSaleInfo::class)->find($saleId);
         if (is_null($sale) ||
             $sale->getState() !== CommunicationStateEnum::PENDING ||
