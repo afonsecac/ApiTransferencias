@@ -781,19 +781,19 @@ class CommunicationSaleService extends CommonService
             'transactionId' => $sale->getTransactionId(),
         ];
 
-        $rechargeResponse = $this->httpClient->request(
-            'POST',
-            $url,
-            [
-                'headers' => [
-                    'Content-Type' => 'application/json',
-                    'Accept' => 'application/json',
-                ],
-                'body' => $this->serializer->serialize($body, 'json'),
-            ]
-        );
-
         try {
+            $rechargeResponse = $this->httpClient->request(
+                'POST',
+                $url,
+                [
+                    'headers' => [
+                        'Content-Type' => 'application/json',
+                        'Accept' => 'application/json',
+                    ],
+                    'body' => $this->serializer->serialize($body, 'json'),
+                ]
+            );
+
             $response = $rechargeResponse->toArray();
             $responseInfo = (object)$response;
             $result = (object)$responseInfo->result;
