@@ -798,7 +798,7 @@ class CommunicationSaleService extends CommonService
             $responseInfo = (object)$response;
             $result = (object)$responseInfo->result;
             $sale->setTransactionStatus($response);
-            $isTrue = isset($responseInfo->transactionStatus->SaleRecharge) && $responseInfo->transactionStatus->status === 'Completed' && $responseInfo->transactionStatus->SaleRecharge->RechargeStateCode === "OK";
+            $isTrue = isset($responseInfo->SaleRecharge) && $responseInfo->status === 'Completed' && $responseInfo->SaleRecharge->RechargeStateCode === "OK";
             if ($isTrue || (property_exists($responseInfo, 'orderId') && isset($responseInfo->orderId))) {
                 $orderId = $responseInfo->orderId;
                 $sale->setTransactionOrder($orderId);
