@@ -13,7 +13,7 @@ final class RequestInfo implements IInput
     /**
      * @param string $type
      * @param string|null $clientTxId
-     * @param string|null $internalTxId
+     * @param int|null $internalTxId
      */
     public function __construct(string $type, ?string $clientTxId, ?int $internalTxId)
     {
