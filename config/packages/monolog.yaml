@@ -88,7 +88,7 @@ when@prod:
                 handler: symfony_mailer
             symfony_mailer:
                 type: symfony_mailer
-                from_email: 'support@sendmundo.com'
+                from_email: '%env(APP_MAILER_FROM)%'
                 to_email: ['alexander.afonsecac@gmail.com', 'aportela7@gmail.com']
                 subject: 'An Error Occurred in Api Clients! - ENV %kernel.environment%'
                 level: error
@@ -96,7 +96,7 @@ when@prod:
                 content_type: text/html
             symfony_mailer_critical:
                 type: symfony_mailer
-                from_email: 'support@sendmundo.com'
+                from_email: '%env(APP_MAILER_FROM)%'
                 to_email: [ 'alexander.afonsecac@gmail.com', 'aportela7@gmail.com' ]
                 subject: 'An Critical Error Occurred in Api Clients! - ENV %kernel.environment%'
                 level: critical
