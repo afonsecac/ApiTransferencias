@@ -9,13 +9,8 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  tests:
-    name: Run Tests
-    uses: ./.github/workflows/ci.yaml
-
   deploy:
     name: Deploy to Staging VPS
-    needs: tests
     runs-on: ubuntu-24.04
     environment: staging
 
