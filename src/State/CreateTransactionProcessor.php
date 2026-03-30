@@ -38,7 +38,9 @@ use Symfony\Contracts\HttpClient\HttpClientInterface;
 
 class CreateTransactionProcessor implements ProcessorInterface
 {
+    private const MAX_AUTH_RETRIES = 1;
     private Serializer $serializer;
+    private int $authRetryCount = 0;
 
     public function __construct(
         private readonly AuthService $authService,
@@ -75,7 +77,7 @@ class CreateTransactionProcessor implements ProcessorInterface
         ], [
             'createdAt' => 'DESC',
         ]);
-        if (is_null($accessTokens) || count($accessTokens) === 0) {
+        if (count($accessTokens) === 0) {
             $token = $this->authService->start();
             $accessToken = $this->authRepository->findOneBy([
                 'tokenAuth' => $token,
@@ -87,7 +89,7 @@ class CreateTransactionProcessor implements ProcessorInterface
         try {
             if ($user instanceof Account) {
                 $url = $accessToken->getPermission()?->getEnvironment()?->getBasePath()."/api/Transactions";
-                $tokenIn = 'Bearer '.$accessToken->getTokenAuth();
+                $tokenIn = $accessToken->getBearerToken();
                 $balance = $this->balanceRepository->getBalanceOutput($user->getId());
                 if ($data instanceof Transfer && $data->getTransactionType() !== '5') {
                     $calcObject = new Calculator();
@@ -109,8 +111,8 @@ class CreateTransactionProcessor implements ProcessorInterface
                             'amount' => $data->getAmountDeposit(),
                             'transactionType' => (int)$data->getTransactionType(),
                             'reason' => $data->getReasonNote(),
-                            'senderId' => $sender?->getRebusSenderId(),
-                            'beneficiaryId' => $beneficiary?->getRebusId(),
+                            'senderId' => $sender->getRebusSenderId(),
+                            'beneficiaryId' => $beneficiary->getRebusId(),
                             'tenantProcessorId' => (int)$this->configRepository->findOneBy([
                                 'propertyName' => 'rebuspay.tenant.account.'.strtolower(
                                         $user->getEnvironmentName()
@@ -162,19 +164,19 @@ class CreateTransactionProcessor implements ProcessorInterface
                     $data->setSenderName(
                         sprintf(
                             "%s%s %s",
-                            $sender?->getFirstName(),
-                            is_null($sender?->getMiddleName()) ? "" : " ".$sender?->getMiddleName(),
-                            $sender?->getLastName()
+                            $sender->getFirstName(),
+                            is_null($sender->getMiddleName()) ? "" : " ".$sender->getMiddleName(),
+                            $sender->getLastName()
                         )
                     );
                     $data->setBeneficiaryName(
                         sprintf(
                             "%s%s %s",
-                            $beneficiary?->getBeneficiary()?->getFirstName(),
+                            $beneficiary->getBeneficiary()?->getFirstName(),
                             is_null(
-                                $beneficiary?->getBeneficiary()?->getMiddleName()
-                            ) ? "" : " ".$beneficiary?->getBeneficiary()?->getMiddleName(),
-                            $beneficiary?->getBeneficiary()?->getLastName()
+                                $beneficiary->getBeneficiary()?->getMiddleName()
+                            ) ? "" : " ".$beneficiary->getBeneficiary()->getMiddleName(),
+                            $beneficiary->getBeneficiary()?->getLastName()
                         )
                     );
                 }
@@ -201,13 +203,13 @@ class CreateTransactionProcessor implements ProcessorInterface
                 $this->em->flush();
             }
         } catch (RedirectionExceptionInterface|ServerExceptionInterface|TransportExceptionInterface|ClientExceptionInterface $ex) {
-            if ($ex->getCode() === 401) {
+            if ($ex->getCode() === 401 && $this->authRetryCount < self::MAX_AUTH_RETRIES) {
+                $this->authRetryCount++;
                 $accessToken->setClosedAt(new \DateTimeImmutable('now'));
                 $this->em->flush();
-
-
                 return $this->process($data, $operation, $uriVariables, $context);
             }
+            $this->authRetryCount = 0;
             throw $ex;
         }
 

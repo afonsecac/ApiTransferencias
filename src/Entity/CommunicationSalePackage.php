@@ -22,7 +22,7 @@ class CommunicationSalePackage extends CommunicationSaleInfo
         description: 'Document identification of the client',
         required: true
     )]
-    #[Groups(['comSales:read', 'comSales:create'])]
+    #[Groups(['comSales:read', 'comSales:create', 'sale:list', 'sale:detail'])]
     private ?string $identificationNumber = null;
 
     #[ORM\Column(length: 255, nullable: true)]
@@ -33,12 +33,12 @@ class CommunicationSalePackage extends CommunicationSaleInfo
         types: 'https://scheme.org/Name'
     )]
     #[Assert\Length(min: 3)]
-    #[Groups(['comSales:read', 'comSales:create'])]
+    #[Groups(['comSales:read', 'comSales:create', 'sale:list', 'sale:detail'])]
     private ?string $name = null;
 
     #[ORM\ManyToOne]
     #[ORM\JoinColumn(nullable: true)]
-    #[Groups(['comSales:read'])]
+    #[Groups(['comSales:read', 'sale:detail'])]
     private ?CommunicationOffice $commercialOffice = null;
 
     #[ApiProperty(

@@ -1,0 +1,52 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker-packages
+  namespace: api-transferencias
+  labels:
+    app: api-transferencias
+    component: worker-packages
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: api-transferencias
+      component: worker-packages
+  template:
+    metadata:
+      labels:
+        app: api-transferencias
+        component: worker-packages
+    spec:
+      containers:
+        - name: worker
+          image: api-transferencias:latest
+          command:
+            - php
+            - bin/console
+            - messenger:consume
+            - async_send_sale_package
+            - --time-limit=3600
+            - --memory-limit=256M
+            - -vv
+          envFrom:
+            - configMapRef:
+                name: api-transferencias-config
+            - secretRef:
+                name: api-transferencias-secret
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - ps aux | grep -v grep | grep messenger:consume
+            periodSeconds: 30
+            failureThreshold: 3
+      restartPolicy: Always

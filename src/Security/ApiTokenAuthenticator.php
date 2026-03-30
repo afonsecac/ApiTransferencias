@@ -68,10 +68,18 @@ class ApiTokenAuthenticator extends AbstractAuthenticator
         }
         $referer = $request->headers->get("Referer");
         $host = $request->headers->get("host");
-        $isWebPage = !is_null($referer) && strpos($host, $referer) >= 0;
+        $isWebPage = !is_null($referer) && !is_null($host) && str_contains($referer, $host);
 
-        $isLocal = str_contains($ips, "127.0.0.1") || str_contains($ips, "::1");
-        $isRemote = !is_null($ips) && !empty($ips) && !empty($permission->getOrigin()) && (strpos($ips, $permission->getOrigin()) >= 0 || strpos( "*", $permission->getOrigin()) >= 0);
+        $isLocal = !empty($ips) && (str_contains($ips, "127.0.0.1") || str_contains($ips, "::1"));
+        $origin = $permission->getOrigin();
+        $isWildcard = $origin === '*';
+        $isOriginMatch = false;
+        if (!$isWildcard && !empty($ips) && !empty($origin)) {
+            $allowedIps = array_map('trim', explode(',', $origin));
+            $clientIps = array_map('trim', explode(',', $ips));
+            $isOriginMatch = count(array_intersect($clientIps, $allowedIps)) > 0;
+        }
+        $isRemote = $isWildcard || $isOriginMatch;
         if (!$isLocal && !$isRemote && !$isWebPage) {
             $this->logger->debug('The logger in reques URL {url} info Local: {isLocal}, IsRemote: {isRemote}, IPs: {ips}, IsWebPage: {isWebPage}', [
                 'isLocal' => $isLocal,

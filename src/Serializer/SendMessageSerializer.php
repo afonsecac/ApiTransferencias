@@ -5,12 +5,12 @@ namespace App\Serializer;
 use App\Message\SaleRechargeMessage;
 use Symfony\Component\Messenger\Envelope;
 use Symfony\Component\Messenger\Transport\Serialization\SerializerInterface;
-use Symfony\Component\Serializer\SerializerInterface as SymfonySerializerInterface;
+use Symfony\Component\Serializer\Normalizer\NormalizerInterface;
 
 class SendMessageSerializer implements SerializerInterface
 {
     public function __construct(
-        private readonly SymfonySerializerInterface $serializer
+        private readonly NormalizerInterface $serializer
     ) {}
 
     /**
@@ -18,7 +18,7 @@ class SendMessageSerializer implements SerializerInterface
      */
     public function decode(array $encodedEnvelope): Envelope
     {
-        // TODO: Implement decode() method.
+        throw new \LogicException('The decode() method is not implemented.');
     }
 
     /**

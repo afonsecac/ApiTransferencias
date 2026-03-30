@@ -110,7 +110,7 @@ class CommunicationInfoService extends CommonService
         $url = $tenant->getEnvironment()?->getBasePath().'/information/status';
 
         $body = [
-            'environment' => $tenant?->getEnvironment()?->getType(),
+            'environment' => $tenant->getEnvironment()?->getType(),
             'transactionId' => $operationSale->getTransactionId(),
         ];
 

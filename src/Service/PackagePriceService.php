@@ -19,9 +19,13 @@ class PackagePriceService extends CommonService
      */
     public function getUnusedPrices(int $productId, int $clientId = null): array
     {
-        $ids = $this->em->getRepository(CommunicationPricePackage::class)->getIdsWithPrices($productId, $clientId);
+        /** @var \App\Repository\CommunicationPricePackageRepository $pricePackageRepo */
+        $pricePackageRepo = $this->em->getRepository(CommunicationPricePackage::class);
+        $ids = $pricePackageRepo->getIdsWithPrices($productId, $clientId);
 
-        return $this->em->getRepository(CommunicationPrice::class)->getPricesNoUsed($ids);
+        /** @var \App\Repository\CommunicationPriceRepository $priceRepo */
+        $priceRepo = $this->em->getRepository(CommunicationPrice::class);
+        return $priceRepo->getPricesNoUsed($ids);
     }
 
     /**

@@ -26,7 +26,8 @@ class BalanceProvider implements ProviderInterface
         $user = $this->security->getUser();
         if (!($operation instanceof CollectionOperationInterface) && $user instanceof Account) {
             $amount = $this->operationRepository->getBalanceOutput($user->getId());
-            return new AccountBalanceDto( 'USD', $amount);
+            $currency = $user->getContractCurrency() ?? 'USD';
+            return new AccountBalanceDto($currency, $amount);
         }
         return new AccountBalanceDto('USD', 0);
     }

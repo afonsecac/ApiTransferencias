@@ -1,0 +1,114 @@
+# ===========================================
+# VPS PRODUCCION - Overrides sobre base
+# Uso: docker compose -f docker-compose.vps.yaml -f docker-compose.vps.prod.yaml up -d
+# ===========================================
+
+x-worker-base: &worker-base
+  build:
+    context: .
+    dockerfile: docker/php-fpm/Dockerfile
+    target: app
+  environment: &prod-worker-env
+    APP_ENV: ${APP_ENV}
+    APP_DEBUG: ${APP_DEBUG}
+    APP_SECRET: ${APP_SECRET}
+    DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@database:5432/${POSTGRES_DB}?serverVersion=15&charset=utf8
+    MAILER_DSN: ${MAILER_DSN}
+    MESSENGER_TRANSPORT_DSN: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672/%2f/
+    MESSENGER_TRANSPORT_VHOST: ${MESSENGER_TRANSPORT_VHOST}
+    MESSENGER_TRANSPORT_FAILURE: ${MESSENGER_TRANSPORT_FAILURE:-doctrine://default?queue_name=failed}
+    MICROSOFT_URL: ${MICROSOFT_URL}
+    JWT_MEMORY_KEY: ${JWT_MEMORY_KEY}
+    JWT_PHRASE_KEY: ${JWT_PHRASE_KEY}
+    JWT_TIMEOUT: ${JWT_TIMEOUT:-30}
+    APP_TEST_PHONE: ${APP_TEST_PHONE}
+    APP_MAILER_FROM: ${APP_MAILER_FROM}
+  depends_on:
+    database:
+      condition: service_healthy
+    rabbitmq:
+      condition: service_healthy
+  restart: always
+  networks:
+    - app
+
+services:
+  php-fpm:
+    build:
+      target: app
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+        reservations:
+          cpus: "0.25"
+          memory: 256M
+
+  nginx:
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 128M
+        reservations:
+          cpus: "0.1"
+          memory: 64M
+
+  # ============================================
+  # WORKERS SEPARADOS - Uno por cola para produccion
+  # ============================================
+  worker-notifications:
+    <<: *worker-base
+    command: >
+      php bin/console messenger:consume async_notifications_high
+      --time-limit=3600 --memory-limit=128M -vv
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 128M
+
+  worker-clients:
+    <<: *worker-base
+    command: >
+      php bin/console messenger:consume async_clients_high
+      --time-limit=3600 --memory-limit=256M -vv
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+
+  worker-packages:
+    <<: *worker-base
+    command: >
+      php bin/console messenger:consume async_send_sale_package
+      --time-limit=3600 --memory-limit=256M -vv
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+
+  worker-check-status:
+    <<: *worker-base
+    command: >
+      php bin/console messenger:consume async_check_status
+      --time-limit=3600 --memory-limit=256M -vv
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+
+  worker-balance:
+    <<: *worker-base
+    command: >
+      php bin/console messenger:consume async_send_notification
+      --time-limit=3600 --memory-limit=128M -vv
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 128M

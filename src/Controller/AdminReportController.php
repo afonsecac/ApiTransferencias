@@ -7,14 +7,14 @@ use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpKernel\Attribute\MapQueryParameter;
 use Symfony\Component\Routing\Attribute\Route;
-use Symfony\Component\Serializer\SerializerInterface;
+use Symfony\Component\Serializer\Normalizer\NormalizerInterface;
 
 #[Route('/admin/report')]
 class AdminReportController extends AbstractController
 {
     public function __construct(
         private readonly ReportService $reportService,
-        private readonly SerializerInterface $serializer
+        private readonly NormalizerInterface $serializer
     ) {
 
     }

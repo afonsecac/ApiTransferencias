@@ -36,7 +36,7 @@ class TransferProvider implements ProviderInterface
             $transfer = $this->itemProvider->provide($operation, $uriVariables, $context);
             if ($transfer instanceof Transfer) {
                 $stateId = $transfer->getStatusId();
-                if ($stateId !== RebusStatusEnum::Completed && $stateId !== RebusStatusEnum::Rejected) {
+                if ($stateId !== RebusStatusEnum::Completed->value && $stateId !== RebusStatusEnum::Rejected->value) {
                     return $this->service->getTransferData($transfer, $user);
                 }
                 return $transfer;

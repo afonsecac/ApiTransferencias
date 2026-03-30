@@ -30,7 +30,7 @@ class AccountRepository extends ServiceEntityRepository
         return $this->createQueryBuilder('a')
             ->leftJoin('a.client', 'c')
             ->leftJoin('a.environment', 'e')
-            ->where('c.isActive = :isActive AND c.isActive = :isActive')
+            ->where('c.isActive = :isActive AND a.isActive = :isActive')
             ->andWhere('c.isActiveAt <= :currentDate')
             ->andWhere('c.removeAt IS NULL')
             ->andWhere('a.isActiveAt <= :currentDate')
@@ -58,28 +58,4 @@ class AccountRepository extends ServiceEntityRepository
             ->orderBy('c.companyName')
             ->getQuery()->execute();
     }
-//    /**
-//     * @return Account[] Returns an array of Account objects
-//     */
-//    public function findByExampleField($value): array
-//    {
-//        return $this->createQueryBuilder('p')
-//            ->andWhere('p.exampleField = :val')
-//            ->setParameter('val', $value)
-//            ->orderBy('p.id', 'ASC')
-//            ->setMaxResults(10)
-//            ->getQuery()
-//            ->getResult()
-//        ;
-//    }
-
-//    public function findOneBySomeField($value): ?Account
-//    {
-//        return $this->createQueryBuilder('p')
-//            ->andWhere('p.exampleField = :val')
-//            ->setParameter('val', $value)
-//            ->getQuery()
-//            ->getOneOrNullResult()
-//        ;
-//    }
 }

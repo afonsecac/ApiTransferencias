@@ -41,7 +41,7 @@ class CommunicationSaleRecharge extends CommunicationSaleInfo
     )]
     #[Assert\NotBlank]
     #[Assert\Length(min: 8, max: 10)]
-    #[Groups(['comSales:read', 'comSales:create'])]
+    #[Groups(['comSales:read', 'comSales:create', 'sale:list', 'sale:detail'])]
     private string $phoneNumber;
 
 

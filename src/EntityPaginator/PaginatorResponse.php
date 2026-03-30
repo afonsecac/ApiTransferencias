@@ -43,7 +43,7 @@ class PaginatorResponse implements IPaginationResponse
 
     public function getTotalPages(): int
     {
-        return ceil($this->total / $this->limit);
+        return (int) ceil($this->total / $this->limit);
     }
 
     public function getResults(): array

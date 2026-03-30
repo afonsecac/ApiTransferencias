@@ -35,7 +35,9 @@ class CreateOperationProcessor implements ProcessorInterface
             $balance->setOperationType('CREDIT');
 
             $this->em->persist($balance);
-            $lastNotification = $this->em->getRepository(EmailNotification::class)->getLastNotification($user->getId());
+            /** @var \App\Repository\EmailNotificationRepository $emailNotifRepo */
+            $emailNotifRepo = $this->em->getRepository(EmailNotification::class);
+            $lastNotification = $emailNotifRepo->getLastNotification($user->getId());
             if (!is_null($lastNotification)) {
                 $lastNotification->setBalanceIn($balance);
                 $lastNotification->setClosedAt(new \DateTimeImmutable('now'));

@@ -15,31 +15,31 @@ class NavigationItem
     #[ORM\Id]
     #[ORM\GeneratedValue]
     #[ORM\Column]
-    #[Groups('navigation')]
+    #[Groups(['navigation', 'navItem:read'])]
     private ?int $id = null;
 
     #[ORM\Column(length: 255)]
-    #[Groups('navigation')]
+    #[Groups(['navigation', 'navItem:read'])]
     private ?string $title = null;
 
     #[ORM\Column(length: 255, nullable: true)]
-    #[Groups('navigation')]
+    #[Groups(['navigation', 'navItem:read'])]
     private ?string $subtitle = null;
 
     #[ORM\Column(length: 20, nullable: true)]
-    #[Groups('navigation')]
+    #[Groups(['navigation', 'navItem:read'])]
     private ?NavigationTypeEnum $type = null;
 
     #[ORM\Column(length: 80, nullable: true)]
-    #[Groups('navigation')]
+    #[Groups(['navigation', 'navItem:read'])]
     private ?string $icon = null;
 
     #[ORM\Column(length: 255, nullable: true)]
-    #[Groups('navigation')]
+    #[Groups(['navigation', 'navItem:read'])]
     private ?string $link = null;
 
     #[ORM\Column(nullable: true)]
-    #[Groups('navigation')]
+    #[Groups(['navigation', 'navItem:read'])]
     private ?array $badge = null;
 
     #[ORM\ManyToOne(targetEntity: self::class, inversedBy: 'children')]
@@ -53,6 +53,7 @@ class NavigationItem
     private Collection $children;
 
     #[ORM\Column(name: 'is_active', type: 'boolean')]
+    #[Groups(['navItem:read'])]
     private ?bool $active = null;
 
     #[ORM\Column]
@@ -62,10 +63,11 @@ class NavigationItem
     private ?\DateTimeImmutable $updatedAt = null;
 
     #[ORM\Column(nullable: true)]
-    #[Groups('navigation')]
+    #[Groups(['navigation', 'navItem:read'])]
     private ?array $data = null;
 
     #[ORM\Column(length: 5, nullable: true)]
+    #[Groups(['navItem:read'])]
     private ?string $orderValue = null;
 
     #[ORM\Column(length: 255, nullable: true)]

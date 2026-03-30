@@ -77,28 +77,4 @@ class CommunicationClientPackageRepository extends ServiceEntityRepository
         return $dql->orderBy('c.companyName')->addOrderBy('p.amount')->getQuery()->getResult();
     }
 
-//    /**
-//     * @return CommunicationClientPackage[] Returns an array of CommunicationClientPackage objects
-//     */
-//    public function findByExampleField($value): array
-//    {
-//        return $this->createQueryBuilder('c')
-//            ->andWhere('c.exampleField = :val')
-//            ->setParameter('val', $value)
-//            ->orderBy('c.id', 'ASC')
-//            ->setMaxResults(10)
-//            ->getQuery()
-//            ->getResult()
-//        ;
-//    }
-
-//    public function findOneBySomeField($value): ?CommunicationClientPackage
-//    {
-//        return $this->createQueryBuilder('c')
-//            ->andWhere('c.exampleField = :val')
-//            ->setParameter('val', $value)
-//            ->getQuery()
-//            ->getOneOrNullResult()
-//        ;
-//    }
 }

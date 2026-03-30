@@ -28,7 +28,9 @@ class ReportService extends CommonService
             $accountId = $user->getCompany()?->getId();
         }
 
-        return $this->em->getRepository(ReportMarked::class)->list($accountId, $page, $limit);
+        /** @var \App\Repository\ReportMarkedRepository $repo */
+        $repo = $this->em->getRepository(ReportMarked::class);
+        return $repo->list($accountId, $page, $limit);
     }
 
     public function getReport(int $id): ReportMarked

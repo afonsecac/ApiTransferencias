@@ -56,7 +56,7 @@ class CreateSenderProcessor implements ProcessorInterface
         ], [
             'createdAt' => 'DESC',
         ]);
-        if (is_null($accessTokens) || count($accessTokens) === 0) {
+        if (count($accessTokens) === 0) {
             $token = $this->authService->start();
             $accessToken = $this->authRepository->findOneBy([
                 'tokenAuth' => $token,
@@ -69,7 +69,7 @@ class CreateSenderProcessor implements ProcessorInterface
             $data->setTenant($accessToken->getPermission());
             $this->em->persist($data);
             $url = $accessToken->getPermission()?->getEnvironment()?->getBasePath()."/api/Senders";
-            $tokenIn = 'Bearer '.$accessToken->getTokenAuth();
+            $tokenIn = $accessToken->getBearerToken();
             $response = $this->httpClient->request(
                 'POST',
                 $url,

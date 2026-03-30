@@ -6,7 +6,6 @@ use ApiPlatform\Metadata\Operation;
 use ApiPlatform\State\ProviderInterface;
 use App\Entity\Account;
 use App\Entity\CommunicationPromotions;
-use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\SecurityBundle\Security;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
 
@@ -16,8 +15,6 @@ class CommunicationPromotionProvider implements ProviderInterface
     public function __construct(
         #[Autowire(service: 'api_platform.doctrine.orm.state.collection_provider')]
         private readonly ProviderInterface $itemProvider,
-        #[Autowire(service: 'doctrine.orm.entity_manager')]
-        private readonly EntityManagerInterface $em,
         private readonly Security $security
     ) {
     }
@@ -25,12 +22,17 @@ class CommunicationPromotionProvider implements ProviderInterface
     public function provide(Operation $operation, array $uriVariables = [], array $context = []): object|array|null
     {
         $promotions = $this->itemProvider->provide($operation, $uriVariables, $context);
+        if ($promotions === null) {
+            return $promotions;
+        }
+        if (!$promotions instanceof \Countable || !$promotions instanceof \IteratorAggregate) {
+            return $promotions;
+        }
         if ($promotions->count() > 0) {
             $tenant = $this->security->getUser();
             if ($tenant instanceof Account) {
-                $countPromotion = $promotions->count();
-                for ($i = 0; $i < $countPromotion; $i++) {
-                    $promotion = $promotions->getIterator()->offsetGet($i);
+                $items = iterator_to_array($promotions->getIterator());
+                foreach ($items as $promotion) {
                     if ($promotion instanceof CommunicationPromotions) {
                         $products = $promotion->getProducts()->filter(
                             function (\App\Entity\CommunicationClientPackage $clientPackage) {
@@ -41,7 +43,6 @@ class CommunicationPromotionProvider implements ProviderInterface
                             }
                         );
                         $promotion->setProductsTemp($products);
-                        $promotions->getIterator()->offsetSet($i, $promotion);
                     }
                 }
             }

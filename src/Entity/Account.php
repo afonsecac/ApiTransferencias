@@ -2,7 +2,6 @@
 
 namespace App\Entity;
 
-use AllowDynamicProperties;
 use App\Repository\AccountRepository;
 use DateTimeImmutable;
 use Doctrine\ORM\Mapping as ORM;
@@ -13,7 +12,7 @@ use Symfony\Component\Serializer\Attribute\Groups;
 use Symfony\Component\Serializer\Attribute\MaxDepth;
 use Symfony\Component\Uid\Uuid;
 
-#[AllowDynamicProperties] #[ORM\Entity(repositoryClass: AccountRepository::class)]
+#[ORM\Entity(repositoryClass: AccountRepository::class)]
 #[ORM\HasLifecycleCallbacks]
 #[ORM\UniqueConstraint(
     name: "unique_environment_by_client", fields: ["environment", "client"]
@@ -258,7 +257,6 @@ class Account implements UserInterface
     #[ORM\PrePersist]
     public function setCreated(): void
     {
-        $this->uuid = Uuid::v4();
         $this->accessToken = Uuid::v7();
         $this->createdAt = new DateTimeImmutable('now');
     }
