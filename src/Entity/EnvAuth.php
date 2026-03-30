@@ -39,6 +39,11 @@ class EnvAuth
         return $this->tokenAuth;
     }
 
+    public function getBearerToken(): string
+    {
+        return 'Bearer ' . $this->tokenAuth;
+    }
+
     public function setTokenAuth(string $tokenAuth): static
     {
         $this->tokenAuth = $tokenAuth;

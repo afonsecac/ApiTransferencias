@@ -38,12 +38,20 @@ class CommunicationSaleProvider implements ProviderInterface
         $communicationSale = $this->itemProvider->provide($operation, $uriVariables, $context);
 
         if ($communicationSale instanceof CommunicationSaleInfo && $communicationSale->getState() === CommunicationStateEnum::PENDING) {
-            $currentDate = new \DateTimeImmutable('now');
-            $updatedAt = $communicationSale->getUpdatedAt();
-            if ($updatedAt !== null) {
-                $updatedAtDiff = $currentDate->diff($updatedAt);
-                if ($updatedAtDiff->i >= 15) {
-                    $communicationSale = $this->saleService->checkSaleInfo($communicationSale->getId());
+            // Solo hacer check si la transacción ya fue enviada a ETECSA
+            $stateProcess = $communicationSale->getStateProcess();
+            $wasSent = $stateProcess !== null
+                && $stateProcess !== CommunicationStateEnum::CREATED->value
+                && $stateProcess !== 'SENDING';
+
+            if ($wasSent) {
+                $currentDate = new \DateTimeImmutable('now');
+                $updatedAt = $communicationSale->getUpdatedAt();
+                if ($updatedAt !== null) {
+                    $updatedAtDiff = $currentDate->diff($updatedAt);
+                    if ($updatedAtDiff->i >= 15) {
+                        $communicationSale = $this->saleService->checkSaleInfo($communicationSale->getId());
+                    }
                 }
             }
         }

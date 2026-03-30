@@ -5,6 +5,7 @@ namespace App\Entity;
 use App\Repository\CommunicationProductRepository;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
+use Symfony\Component\Serializer\Attribute\Groups;
 
 #[ORM\Entity(repositoryClass: CommunicationProductRepository::class)]
 class CommunicationProduct
@@ -12,27 +13,35 @@ class CommunicationProduct
     #[ORM\Id]
     #[ORM\GeneratedValue]
     #[ORM\Column]
+    #[Groups(['product:read'])]
     private ?int $id = null;
 
     #[ORM\Column]
+    #[Groups(['product:read'])]
     private ?int $packageId = null;
 
     #[ORM\Column(length: 255)]
+    #[Groups(['product:read'])]
     private ?string $packageType = null;
 
     #[ORM\Column]
+    #[Groups(['product:read'])]
     private ?float $price = null;
 
     #[ORM\Column]
+    #[Groups(['product:read'])]
     private ?bool $enabled = null;
 
     #[ORM\Column(type: Types::DATETIMETZ_IMMUTABLE)]
+    #[Groups(['product:read'])]
     private ?\DateTimeImmutable $initialDate = null;
 
     #[ORM\Column(type: Types::DATETIMETZ_IMMUTABLE, nullable: true)]
+    #[Groups(['product:read'])]
     private ?\DateTimeImmutable $endDateAt = null;
 
     #[ORM\Column(length: 255, nullable: true)]
+    #[Groups(['product:read'])]
     private ?string $productType = null;
 
     #[ORM\Column]
@@ -40,9 +49,11 @@ class CommunicationProduct
 
     #[ORM\ManyToOne]
     #[ORM\JoinColumn(nullable: false)]
+    #[Groups(['product:read'])]
     private ?Environment $environment = null;
 
     #[ORM\Column(length: 255, nullable: true)]
+    #[Groups(['product:read'])]
     private ?string $description = null;
 
     public function __construct()

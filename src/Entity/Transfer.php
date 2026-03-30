@@ -18,6 +18,8 @@ use Symfony\Component\Serializer\Annotation\Groups;
 use Symfony\Component\Validator\Constraints as Assert;
 
 #[ORM\Entity(repositoryClass: TransferRepository::class)]
+#[ORM\Index(columns: ['rebus_pay_id'], name: 'idx_transfer_rebus_pay_id')]
+#[ORM\Index(columns: ['status_id'], name: 'idx_transfer_status_id')]
 #[ORM\HasLifecycleCallbacks]
 #[ApiResource(
     operations: [

@@ -58,7 +58,7 @@ class TakeProductService extends CommonService
     public function takeProduct(string $env): array
     {
         try {
-            $environments = $this->environment->findBy([
+            $environments = $this->environmentRepository->findBy([
                 'scope' => 'ET',
                 'isActive' => true,
                 'type' => $env
@@ -83,14 +83,17 @@ class TakeProductService extends CommonService
 
                 $products = (object)$response->toArray();
                 $currentDate = new \DateTimeImmutable();
+                $existingProducts = $this->em->getRepository(CommunicationProduct::class)->findBy([
+                    'environment' => $item,
+                ]);
+                $existingByPackageId = [];
+                foreach ($existingProducts as $ep) {
+                    $existingByPackageId[$ep->getPackageId()] = true;
+                }
                 foreach ($products as $productItem) {
                     $currentProduct = (object)$productItem;
                     $endDate = !is_null($currentProduct->FinalDate) ? new \DateTimeImmutable($currentProduct->FinalDate) : null;
-                    $findProduct = $this->em->getRepository(CommunicationProduct::class)->findBy([
-                        'environment' => $item,
-                        'packageId' => $currentProduct->Id,
-                    ]);
-                    if ((is_null($endDate) || $currentDate <= $endDate) && $currentProduct->Enabled && count($findProduct) === 0) {
+                    if ((is_null($endDate) || $currentDate <= $endDate) && $currentProduct->Enabled && !isset($existingByPackageId[$currentProduct->Id])) {
                         $product = new CommunicationProduct();
                         $product->setPackageType($currentProduct->PackageType);
                         $product->setEnvironment($item);
@@ -138,7 +141,7 @@ class TakeProductService extends CommonService
      */
     public function takeOtherData(): void
     {
-        $environments = $this->environment->findBy([
+        $environments = $this->environmentRepository->findBy([
             'scope' => 'ET',
             'isActive' => true,
         ]);
@@ -251,7 +254,7 @@ class TakeProductService extends CommonService
      */
     public function configurePackages(int $productId = 100, string $env = 'TEST'): void
     {
-        $environments = $this->environment->findBy([
+        $environments = $this->environmentRepository->findBy([
             'scope' => 'ET',
             'type' => $env,
             'isActive' => true,

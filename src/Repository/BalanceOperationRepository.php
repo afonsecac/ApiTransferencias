@@ -37,7 +37,7 @@ class BalanceOperationRepository extends ServiceEntityRepository
             ->andWhere('b.state = :completed')
             ->setParameter('accountId', $accountId)
             ->setParameter('report', true)
-            ->setParameter('completed', 'COMPLETED')
+            ->setParameter('completed', BalanceStateEnum::COMPLETED->value)
             ->getQuery()->getSingleScalarResult();
     }
 
@@ -56,7 +56,7 @@ class BalanceOperationRepository extends ServiceEntityRepository
             ->setParameters(
                 new ArrayCollection([
                     new Parameter('report', false),
-                    new Parameter('completed', 'COMPLETED'),
+                    new Parameter('completed', BalanceStateEnum::COMPLETED->value),
                     new Parameter('accountId', $accountId),
                 ])
             )
@@ -71,7 +71,7 @@ class BalanceOperationRepository extends ServiceEntityRepository
             ->where('b.markAsReported = :report')
             ->andWhere('b.state = :completed')
             ->setParameter('report', true)
-            ->setParameter('completed', 'COMPLETED');
+            ->setParameter('completed', BalanceStateEnum::COMPLETED->value);
         if ($userId) {
             $query->andWhere('t.id = :userId')
                 ->setParameter('userId', $userId);
@@ -121,7 +121,7 @@ class BalanceOperationRepository extends ServiceEntityRepository
                 ->select('SUM(b.totalAmount) as total')
                 ->where('b.state = :completed')
                 ->andWhere('a.id = :tenantId')
-                ->setParameter('completed', 'COMPLETED')
+                ->setParameter('completed', BalanceStateEnum::COMPLETED->value)
                 ->setParameter('tenantId', $userId);
 
 
@@ -208,7 +208,7 @@ class BalanceOperationRepository extends ServiceEntityRepository
             ->andWhere('b.state = :completed')
             ->andWhere('t.id = :tenantId')
             ->setParameter('transferId', $transferId)
-            ->setParameter('completed', 'COMPLETED')
+            ->setParameter('completed', BalanceStateEnum::COMPLETED->value)
             ->setParameter('tenantId', $userId)
             ->setMaxResults(1)
             ->getQuery()->getOneOrNullResult();
@@ -304,28 +304,4 @@ class BalanceOperationRepository extends ServiceEntityRepository
         return new PaginationResult($total, $page, $limit, $paginator->getQuery()->getResult());
     }
 
-//    /**
-//     * @return BalanceOperation[] Returns an array of BalanceOperation objects
-//     */
-//    public function findByExampleField($value): array
-//    {
-//        return $this->createQueryBuilder('b')
-//            ->andWhere('b.exampleField = :val')
-//            ->setParameter('val', $value)
-//            ->orderBy('b.id', 'ASC')
-//            ->setMaxResults(10)
-//            ->getQuery()
-//            ->getResult()
-//        ;
-//    }
-
-//    public function findOneBySomeField($value): ?BalanceOperation
-//    {
-//        return $this->createQueryBuilder('b')
-//            ->andWhere('b.exampleField = :val')
-//            ->setParameter('val', $value)
-//            ->getQuery()
-//            ->getOneOrNullResult()
-//        ;
-//    }
 }

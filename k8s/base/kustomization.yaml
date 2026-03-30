@@ -1,0 +1,21 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: api-transferencias
+
+commonLabels:
+  app: api-transferencias
+
+resources:
+  - namespace.yaml
+  - configmap.yaml
+  - secret.yaml
+  - api/deployment.yaml
+  - api/service.yaml
+  - api/hpa.yaml
+  - ingress.yaml
+  - workers/deployment-notifications.yaml
+  - workers/deployment-clients.yaml
+  - workers/deployment-packages.yaml
+  - workers/deployment-check-status.yaml
+  - workers/deployment-balance.yaml

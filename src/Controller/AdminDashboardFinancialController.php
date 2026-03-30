@@ -14,7 +14,7 @@ use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpKernel\Attribute\MapQueryParameter;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Http\Attribute\IsGranted;
-use Symfony\Component\Serializer\SerializerInterface;
+use Symfony\Component\Serializer\Normalizer\NormalizerInterface;
 
 #[Route("/admin/dashboard/financial")]
 #[IsGranted("ROLE_SYSTEM_SHOW")]
@@ -22,7 +22,7 @@ class AdminDashboardFinancialController extends AbstractController
 {
     public function __construct(
         private readonly BalanceService $balanceService,
-        private readonly SerializerInterface $serializer
+        private readonly NormalizerInterface $serializer
     ) {
 
     }

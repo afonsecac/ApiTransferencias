@@ -15,12 +15,14 @@ class ClientService extends CommonService
     public function getAllClients(array $params): PaginatorResponse
     {
         $orderBy = [];
-        if (isset($params['orderBy']) && !is_null($params['orderBy'])) {
+        if (isset($params['orderBy'])) {
             $orderBy = [
                 'orderBy' => $params['orderBy'],
                 'direction' => $params['direction']
             ];
         }
-        return $this->em->getRepository(Client::class)->getAllClients($params, $orderBy);
+        /** @var \App\Repository\ClientRepository $clientRepo */
+        $clientRepo = $this->em->getRepository(Client::class);
+        return $clientRepo->getAllClients($params, $orderBy);
     }
 }

@@ -508,7 +508,7 @@ class CommunicationClientPackage
         return $this;
     }
 
-    public function getPromotionItems(): ArrayCollection
+    public function getPromotionItems(): Collection
     {
 
         return $this->promotionItems->filter(function (CommunicationPromotions $promotion) {

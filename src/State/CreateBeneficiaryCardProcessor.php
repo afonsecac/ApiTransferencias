@@ -26,8 +26,9 @@ use Symfony\Contracts\HttpClient\HttpClientInterface;
 
 final class CreateBeneficiaryCardProcessor implements ProcessorInterface
 {
-
+    private const MAX_AUTH_RETRIES = 1;
     private Serializer $serializer;
+    private int $authRetryCount = 0;
     public function __construct(
         private readonly Security $security,
         private readonly EntityManagerInterface $em,
@@ -63,7 +64,7 @@ final class CreateBeneficiaryCardProcessor implements ProcessorInterface
             ], [
                 'createdAt' => 'DESC',
             ]);
-            if (is_null($accessTokens) || count($accessTokens) === 0) {
+            if (count($accessTokens) === 0) {
                 $token = $this->authService->start();
                 $accessToken = $this->authRepository->findOneBy([
                     'tokenAuth' => $token,
@@ -75,7 +76,7 @@ final class CreateBeneficiaryCardProcessor implements ProcessorInterface
 
             if (!is_null($accessToken)) {
                 $url = $accessToken->getPermission()?->getEnvironment()?->getBasePath()."/api/BeneficiaryRemittances";
-                $tokenIn = 'Bearer '.$accessToken->getTokenAuth();
+                $tokenIn = $accessToken->getBearerToken();
                 $beneficiaryInfo = $this->serializer->serialize(
                     [
                         'email' => $data->getBeneficiary()?->getEmail(),
@@ -84,13 +85,13 @@ final class CreateBeneficiaryCardProcessor implements ProcessorInterface
                         'displayName' => sprintf(
                             "%s%s %s",
                             $data->getBeneficiary()?->getFirstName(),
-                            is_null($data->getBeneficiary()?->getMiddleName()) ? "" : " ".$data->getBeneficiary()?->getMiddleName(),
+                            is_null($data->getBeneficiary()->getMiddleName()) ? "" : " ".$data->getBeneficiary()?->getMiddleName(),
                             $data->getBeneficiary()?->getLastName()
                         ),
                         'firstName' => sprintf(
                             "%s%s",
                             $data->getBeneficiary()?->getFirstName(),
-                            is_null($data->getBeneficiary()?->getMiddleName()) ? "" : " ".$data->getBeneficiary()?->getMiddleName()
+                            is_null($data->getBeneficiary()->getMiddleName()) ? "" : " ".$data->getBeneficiary()?->getMiddleName()
                         ),
                         'dob' => $data->getBeneficiary()?->getDateOfBirth()?->format('Y-m-d'),
                         'lastName' => $data->getBeneficiary()?->getLastName(),
@@ -128,13 +129,13 @@ final class CreateBeneficiaryCardProcessor implements ProcessorInterface
                     $this->em->persist($data);
                     $this->em->flush();
                 } catch (RedirectionExceptionInterface|ServerExceptionInterface|TransportExceptionInterface|ClientExceptionInterface $ex) {
-                    if ($ex->getCode() === 401) {
+                    if ($ex->getCode() === 401 && $this->authRetryCount < self::MAX_AUTH_RETRIES) {
+                        $this->authRetryCount++;
                         $accessToken->setClosedAt(new \DateTimeImmutable('now'));
                         $this->em->flush();
-
-
                         return $this->process($data, $operation, $uriVariables, $context);
                     }
+                    $this->authRetryCount = 0;
                     throw $ex;
                 }
             }

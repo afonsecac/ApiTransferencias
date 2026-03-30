@@ -21,11 +21,11 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface, IInput
     #[ORM\Id]
     #[ORM\GeneratedValue]
     #[ORM\Column]
-    #[Groups(['profile'])]
+    #[Groups(['profile', 'permission:read'])]
     private ?int $id = null;
 
     #[ORM\Column(length: 180, unique: true)]
-    #[Groups(['profile'])]
+    #[Groups(['profile', 'permission:read'])]
     private ?string $email = null;
 
     #[ORM\Column]

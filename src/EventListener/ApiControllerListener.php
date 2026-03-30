@@ -34,8 +34,17 @@ class ApiControllerListener
         }
 
         if ($request->getMethod() !== Request::METHOD_GET) {
-            $params = $this->serializer->decode($request->getContent(), 'json');
-            $paramsIn = is_array($params) ? $params : $request->request->all();
+            $content = $request->getContent();
+            if (!empty($content)) {
+                try {
+                    $params = $this->serializer->decode($content, 'json');
+                    $paramsIn = is_array($params) ? $params : $request->request->all();
+                } catch (\Exception) {
+                    $paramsIn = $request->request->all();
+                }
+            } else {
+                $paramsIn = $request->request->all();
+            }
             $paramsIn['lang'] = $language;
             $request->request->replace($paramsIn);
         }

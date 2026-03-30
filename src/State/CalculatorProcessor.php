@@ -26,7 +26,9 @@ use Symfony\Contracts\HttpClient\HttpClientInterface;
 
 class CalculatorProcessor implements ProcessorInterface
 {
+    private const MAX_AUTH_RETRIES = 1;
     private Serializer $serializer;
+    private int $authRetryCount = 0;
 
     public function __construct(
         private readonly AuthService $authService,
@@ -58,7 +60,7 @@ class CalculatorProcessor implements ProcessorInterface
         ], [
             'createdAt' => 'DESC',
         ]);
-        if (is_null($accessTokens) || count($accessTokens) === 0) {
+        if (count($accessTokens) === 0) {
             $token = $this->authService->start();
             $accessToken = $this->authRepository->findOneBy([
                 'tokenAuth' => $token,
@@ -70,7 +72,7 @@ class CalculatorProcessor implements ProcessorInterface
         try {
             if ($user instanceof Account) {
                 $url = $accessToken->getPermission()?->getEnvironment()?->getBasePath()."/api/Transactions/calculator";
-                $tokenIn = 'Bearer '.$accessToken->getTokenAuth();
+                $tokenIn = $accessToken->getBearerToken();
                 if ($data instanceof Calculator) {
                     $response = $this->httpClient->request(
                         'POST',
@@ -107,13 +109,13 @@ class CalculatorProcessor implements ProcessorInterface
                 }
             }
         } catch (RedirectionExceptionInterface|ServerExceptionInterface|TransportExceptionInterface|ClientExceptionInterface $ex) {
-            if ($ex->getCode() === 401) {
+            if ($ex->getCode() === 401 && $this->authRetryCount < self::MAX_AUTH_RETRIES) {
+                $this->authRetryCount++;
                 $accessToken->setClosedAt(new \DateTimeImmutable('now'));
                 $this->em->flush();
-
-
                 return $this->process($data, $operation, $uriVariables, $context);
             }
+            $this->authRetryCount = 0;
             throw $ex;
         }
 

@@ -4,19 +4,24 @@ namespace App\Entity;
 
 use App\Repository\UserPermissionRepository;
 use Doctrine\ORM\Mapping as ORM;
+use Symfony\Component\Serializer\Attribute\Groups;
 
 #[ORM\Entity(repositoryClass: UserPermissionRepository::class)]
+#[ORM\HasLifecycleCallbacks]
 class UserPermission
 {
     #[ORM\Id]
     #[ORM\GeneratedValue]
     #[ORM\Column]
+    #[Groups(['permission:read'])]
     private ?int $id = null;
 
     #[ORM\ManyToOne]
+    #[Groups(['permission:read'])]
     private ?Client $client = null;
 
     #[ORM\ManyToOne]
+    #[Groups(['permission:read'])]
     private ?User $userInfo = null;
 
     #[ORM\Column]
@@ -26,9 +31,11 @@ class UserPermission
     private ?\DateTimeImmutable $updatedAt = null;
 
     #[ORM\Column]
+    #[Groups(['permission:read'])]
     private ?bool $isActive = null;
 
     #[ORM\Column(length: 50)]
+    #[Groups(['permission:read'])]
     private ?string $minRoleRequired = null;
 
     #[ORM\ManyToOne(inversedBy: 'userPermissions')]
@@ -122,5 +129,19 @@ class UserPermission
         $this->item = $item;
 
         return $this;
+    }
+
+    #[ORM\PrePersist]
+    public function setCreatedAtNow(): void
+    {
+        $this->createdAt = new \DateTimeImmutable('now');
+        $this->updatedAt = new \DateTimeImmutable('now');
+    }
+
+    #[ORM\PreUpdate]
+    #[ORM\PreFlush]
+    public function setUpdatedAtNow(): void
+    {
+        $this->updatedAt = new \DateTimeImmutable('now');
     }
 }

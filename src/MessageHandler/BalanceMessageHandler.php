@@ -41,11 +41,11 @@ class BalanceMessageHandler
         try {
             $account = $this->em->getRepository(Account::class)->find($message->getAccountId());
             if (!is_null($account) && $account->getClient()?->getCompanyEmail()) {
-                $contractWith = $account->getClient()?->getContractWith() ?? 'comremit';
+                $contractWith = $account->getClient()->getContractWith() ?? 'comremit';
                 $emailContact = $contractWith === 'comremit' ? 'administrador@comremit.com' : 'support@sendmundo.com';
                 $this->logger->info("The send notification to low balance");
                 $mail = (new TemplatedEmail())->from(new Address($this->parameterBag->get('app.email.from'), 'Support Account'))
-                    ->to(new Address($account->getClient()?->getCompanyEmail(), $account->getClient()?->getCompanyName()))
+                    ->to(new Address($account->getClient()->getCompanyEmail(), $account->getClient()->getCompanyName()))
                     ->cc(new Address('alexander.afonsecac@gmail.com', 'A. Fonseca'))
                     ->addCc(new Address('aportela7@gmail.com', 'A. Portela'))
                     ->subject('[' . $message->getMessageType() . '] Account balance information')
@@ -54,7 +54,7 @@ class BalanceMessageHandler
                     ->context([
                         'balance' => $message->getCurrentBalance(),
                         'currency' => $message->getCurrency(),
-                        'name' => $account->getClient()?->getCompanyName(),
+                        'name' => $account->getClient()->getCompanyName(),
                         'status_es' => $message->getMessageType() === 'CRITICAL' ? 'CRITICO' : 'DE RIESGO',
                         'status_en' => $message->getMessageType(),
                         'mail' => $emailContact,

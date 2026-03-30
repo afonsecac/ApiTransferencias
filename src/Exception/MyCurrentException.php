@@ -13,7 +13,7 @@ class MyCurrentException extends \Exception
      */
     public function __construct(string $codeWork, string $message, int $code = null)
     {
-        parent::__construct($message);
+        parent::__construct($message, $code ?? 0);
         $this->codeWork = $codeWork;
     }
 

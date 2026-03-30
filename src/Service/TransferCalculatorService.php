@@ -28,6 +28,9 @@ use Symfony\Contracts\HttpClient\HttpClientInterface;
 
 class TransferCalculatorService extends CommonService
 {
+    private const MAX_AUTH_RETRIES = 1;
+    private int $authRetryCount = 0;
+
     public function __construct(
         EntityManagerInterface               $em,
         Security                             $security,
@@ -62,7 +65,7 @@ class TransferCalculatorService extends CommonService
         ], [
             'createdAt' => 'DESC',
         ]);
-        if (is_null($accessTokens) || count($accessTokens) === 0) {
+        if (count($accessTokens) === 0) {
             $token = $this->authService->start();
             $accessToken = $this->authRepository->findOneBy([
                 'tokenAuth' => $token,
@@ -74,7 +77,7 @@ class TransferCalculatorService extends CommonService
         try {
             if ($user instanceof Account) {
                 $url = $accessToken->getPermission()?->getEnvironment()?->getBasePath() . "/api/Transactions/calculator";
-                $tokenIn = 'Bearer ' . $accessToken->getTokenAuth();
+                $tokenIn = $accessToken->getBearerToken();
                 $response = $this->httpClient->request(
                     'POST',
                     $url,
@@ -109,13 +112,13 @@ class TransferCalculatorService extends CommonService
                 $data->setReceiveAmount($info->receiveAmount);
             }
         } catch (RedirectionExceptionInterface|ServerExceptionInterface|TransportExceptionInterface|ClientExceptionInterface $ex) {
-            if ($ex->getCode() === 401) {
+            if ($ex->getCode() === 401 && $this->authRetryCount < self::MAX_AUTH_RETRIES) {
+                $this->authRetryCount++;
                 $accessToken->setClosedAt(new \DateTimeImmutable('now'));
                 $this->em->flush();
-
-
                 return $this->calculator($data);
             }
+            $this->authRetryCount = 0;
             throw $ex;
         }
 
@@ -137,7 +140,7 @@ class TransferCalculatorService extends CommonService
         ], [
             'createdAt' => 'DESC',
         ]);
-        if (is_null($accessTokens) || count($accessTokens) === 0) {
+        if (count($accessTokens) === 0) {
             $token = $this->authService->start();
             $accessToken = $this->authRepository->findOneBy([
                 'tokenAuth' => $token,
@@ -148,7 +151,7 @@ class TransferCalculatorService extends CommonService
         }
         try {
             $url = $accessToken->getPermission()?->getEnvironment()?->getBasePath() . "/api/Transactions/" . $transfer->getRebusPayId();
-            $tokenIn = 'Bearer ' . $accessToken->getTokenAuth();
+            $tokenIn = $accessToken->getBearerToken();
             $response = $this->httpClient->request(
                 'GET',
                 $url,
@@ -171,7 +174,9 @@ class TransferCalculatorService extends CommonService
             $statusName = RebusUtil::getRebusStatusName($enumItem);
             $transfer->setStatusName($statusName);
             if (!is_null($enumItem) && $enumItem === RebusStatusEnum::Rejected) {
-                $balanceInfo = $this->em->getRepository(BalanceOperation::class)->getBalanceByTransferId($transfer->getId(), $user->getId());
+                /** @var \App\Repository\BalanceOperationRepository $repo */
+                $repo = $this->em->getRepository(BalanceOperation::class);
+                $balanceInfo = $repo->getBalanceByTransferId($transfer->getId(), $user->getId());
                 if (!is_null($balanceInfo)) {
                     $balanceInfo->setState(BalanceStateEnum::REVERSED->value);
                 }
@@ -181,12 +186,13 @@ class TransferCalculatorService extends CommonService
 
             return $transfer;
         } catch (RedirectionExceptionInterface|ServerExceptionInterface|TransportExceptionInterface|ClientExceptionInterface $ex) {
-            if ($ex->getCode() === 401) {
+            if ($ex->getCode() === 401 && $this->authRetryCount < self::MAX_AUTH_RETRIES) {
+                $this->authRetryCount++;
                 $accessToken->setClosedAt(new \DateTimeImmutable('now'));
                 $this->em->flush();
-
                 return $this->getTransferData($transfer, $user);
             }
+            $this->authRetryCount = 0;
             throw $ex;
         }
     }

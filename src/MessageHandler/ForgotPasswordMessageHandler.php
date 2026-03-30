@@ -29,7 +29,7 @@ class ForgotPasswordMessageHandler
         $senderName = $contractWith === 'comremit' ? 'No Reply (Comremit Solutions SL)' : 'No Reply - (SendMundo SL)';
         $mailer = (new TemplatedEmail())
             ->from(new Address($this->parameterBag->get('app.email.from'), $senderName))
-            ->to(new Address($message->getEmail(), $message->getName()))
+            ->to(new Address($message->getEmail(), $message->getName() ?? ''))
             ->priority(Email::PRIORITY_HIGH)
             ->subject('Reset password / Cambio de contraseña')
             ->htmlTemplate('emails/password/forgot-password.'.$contractWith.'.html.twig')

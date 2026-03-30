@@ -10,7 +10,7 @@ use Doctrine\ORM\EntityManagerInterface;
 use Psr\Log\LoggerInterface;
 use Symfony\Bundle\SecurityBundle\Security;
 use Symfony\Component\DependencyInjection\ParameterBag\ParameterBagInterface;
-use Symfony\Component\Finder\Exception\AccessDeniedException;
+use Symfony\Component\Security\Core\Exception\AccessDeniedException;
 use Symfony\Component\Mailer\MailerInterface;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 use Symfony\Component\Security\Core\Role\RoleHierarchyInterface;
@@ -49,7 +49,9 @@ class NavigationService extends CommonService
      */
     public function getNavigationItems(): array
     {
-        return $this->em->getRepository(NavigationItem::class)->getNavigationItems();
+        /** @var \App\Repository\NavigationItemRepository $navRepo */
+        $navRepo = $this->em->getRepository(NavigationItem::class);
+        return $navRepo->getNavigationItems();
     }
 
     public function getNavigationForUsers(): array
@@ -66,11 +68,23 @@ class NavigationService extends CommonService
             $userId = null;
         }
 
+        /** @var \App\Repository\NavigationItemRepository $repository */
+        $repository = $this->em->getRepository(NavigationItem::class);
+        $allowedIds = $repository->getAllowedItemIds($userRoles, $companyId, $userId);
+        $items = $repository->getNavigationByUserAndClient($userRoles, $companyId, $userId);
 
-        return $this->em->getRepository(NavigationItem::class)->getNavigationByUserAndClient(
-            $userRoles,
-            $companyId,
-            $userId
-        );
+        // Filtrar children que no están en los IDs permitidos
+        foreach ($items as $item) {
+            foreach ($item->getChildren() as $child) {
+                if (!in_array($child->getId(), $allowedIds, true)) {
+                    $item->removeChild($child);
+                }
+            }
+        }
+
+        // Remover padres que quedaron sin hijos (excepto items tipo basic/collapsable sin hijos por diseño)
+        return array_values(array_filter($items, function (NavigationItem $item) {
+            return $item->getChildren()->count() > 0 || $item->getLink() !== null;
+        }));
     }
 }

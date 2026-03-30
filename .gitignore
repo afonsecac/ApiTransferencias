@@ -22,9 +22,14 @@ composer.lock
 *.sublime-workspace
 ###< symfony/framework-bundle ###
 !/composer.lock
-docker-compose.yaml
 
 ###> symfony/phpunit-bridge ###
 .phpunit.result.cache
 /phpunit.xml
 ###< symfony/phpunit-bridge ###
+
+###> vps deployment ###
+.env.vps
+/backups/
+/files/
+###< vps deployment ###

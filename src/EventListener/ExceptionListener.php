@@ -57,7 +57,7 @@ class ExceptionListener
                 'error' => [
                     'message' => $exception->getMessage()
                 ]
-            ], $exception->getCode() ?? Response::HTTP_UNAUTHORIZED);
+            ], $exception->getCode());
         } elseif ($exception instanceof HttpExceptionInterface || $exception instanceof \ApiPlatform\Metadata\Exception\HttpExceptionInterface) {
             $response->setStatusCode($exception->getStatusCode());
             $response->headers->replace($exception->getHeaders());
