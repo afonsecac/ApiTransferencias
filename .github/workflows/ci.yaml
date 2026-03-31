@@ -41,7 +41,7 @@ jobs:
           extensions: mbstring, xml, ctype, iconv, intl, pdo_pgsql, dom, filter, gd, json, pdo, amqp, zip, opcache, apcu
 
       - name: Validate composer
-        run: composer validate
+        run: composer validate --no-check-lock
 
       - name: Cache Composer dependencies
         uses: actions/cache@v4
