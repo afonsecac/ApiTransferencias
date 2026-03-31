@@ -33,7 +33,8 @@ services:
 
   nginx:
     build:
-      context: ./docker/nginx
+      context: .
+      dockerfile: docker/nginx/Dockerfile
     volumes:
       - ./public:/var/www/public:ro
     ports:
