@@ -5,7 +5,7 @@ WORKDIR /var/www
 
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
-RUN apk add --no-cache icu-dev postgresql-dev rabbitmq-c-dev libzip-dev $PHPIZE_DEPS \
+RUN apk add --no-cache icu-dev postgresql-dev rabbitmq-c-dev libzip-dev linux-headers $PHPIZE_DEPS \
     && docker-php-ext-install pdo_pgsql intl opcache zip sockets \
     && pecl install amqp apcu && docker-php-ext-enable amqp apcu \
     && apk del $PHPIZE_DEPS
