@@ -43,6 +43,7 @@ CMD ["php-fpm"]
 # Stage 3: Production (code baked in)
 FROM php-base AS app
 
+COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 COPY --from=composer-deps /app/vendor ./vendor
 COPY . .
 
