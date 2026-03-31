@@ -1,4 +1,6 @@
 {
+    "name": "comremit/api-transferencias",
+    "description": "API de transferencias y comunicaciones - Comremit/SendMundo",
     "type": "project",
     "license": "proprietary",
     "minimum-stability": "stable",

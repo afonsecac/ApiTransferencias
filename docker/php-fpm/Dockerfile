@@ -5,7 +5,7 @@ WORKDIR /app
 
 COPY composer.json composer.lock ./
 
-RUN composer install --no-dev --no-scripts --no-autoloader --prefer-dist --no-progress
+RUN composer install --no-dev --no-scripts --no-autoloader --prefer-dist --no-progress --ignore-platform-reqs
 
 # Stage 2: PHP base (used for development)
 FROM php:8.2-fpm-alpine AS php-base
