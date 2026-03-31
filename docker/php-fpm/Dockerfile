@@ -5,10 +5,10 @@ WORKDIR /app
 
 COPY composer.json composer.lock ./
 
-RUN composer install --no-dev --no-scripts --no-autoloader --prefer-dist --no-progress --ignore-platform-reqs
+RUN composer install --no-scripts --no-autoloader --prefer-dist --no-progress --ignore-platform-reqs
 
 # Stage 2: PHP base (used for development)
-FROM php:8.2-fpm-alpine AS php-base
+FROM php:8.4-fpm-alpine AS php-base
 
 RUN apk add --no-cache \
     icu-dev \
@@ -66,7 +66,7 @@ RUN printf '%s\n' \
        'APP_MAILER_FROM=noreply@localhost' \
        > .env
 
-RUN composer dump-autoload --optimize --classmap-authoritative \
+RUN composer dump-autoload --optimize \
     && php bin/console cache:warmup --env=prod \
     && chown -R www-data:www-data var/
 
