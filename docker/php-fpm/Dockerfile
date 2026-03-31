@@ -47,25 +47,27 @@ COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 COPY --from=composer-deps /app/vendor ./vendor
 COPY . .
 
-RUN composer dump-autoload --optimize --classmap-authoritative \
-    && printf '%s\n' \
+# Create .env stub (Symfony Dotenv requires this file to exist;
+# real values are injected at runtime via docker-compose environment)
+RUN printf '%s\n' \
        'APP_ENV=prod' \
-       'APP_SECRET=build-placeholder' \
-       'DATABASE_URL="postgresql://dummy:dummy@localhost:5432/dummy?serverVersion=15"' \
+       'APP_SECRET=change-me' \
+       'DATABASE_URL="postgresql://localhost:5432/app?serverVersion=15"' \
        'CORS_ALLOW_ORIGIN="^https?://localhost$"' \
        'MESSENGER_TRANSPORT_DSN=doctrine://default' \
        'MESSENGER_TRANSPORT_VHOST=/' \
        'MESSENGER_TRANSPORT_FAILURE=doctrine://default?queue_name=failed' \
        'MAILER_DSN=null://null' \
        'MICROSOFT_URL=https://localhost' \
-       'JWT_MEMORY_KEY=build-placeholder' \
-       'JWT_PHRASE_KEY=build-placeholder' \
+       'JWT_MEMORY_KEY=change-me' \
+       'JWT_PHRASE_KEY=change-me' \
        'JWT_TIMEOUT=30' \
        'APP_TEST_PHONE=0000000000' \
-       'APP_MAILER_FROM=build@build.com' \
-       > .env \
+       'APP_MAILER_FROM=noreply@localhost' \
+       > .env
+
+RUN composer dump-autoload --optimize --classmap-authoritative \
     && php bin/console cache:warmup --env=prod \
-    && rm .env \
     && chown -R www-data:www-data var/
 
 USER www-data
