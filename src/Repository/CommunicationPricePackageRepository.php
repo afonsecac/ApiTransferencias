@@ -28,7 +28,7 @@ class CommunicationPricePackageRepository extends ServiceEntityRepository
      * @param int|null $clientId
      * @return array
      */
-    public function getIdsWithPrices(int $productId, int $clientId = null): array
+    public function getIdsWithPrices(int $productId, ?int $clientId = null): array
     {
         $currentDate = new \DateTimeImmutable();
         $dql = $this->createQueryBuilder('p')
@@ -59,7 +59,7 @@ class CommunicationPricePackageRepository extends ServiceEntityRepository
             ->getQuery()->getScalarResult();
     }
 
-    public function getPricesByEnvironment(string $env = 'TEST', int $tenantId = null): array
+    public function getPricesByEnvironment(string $env = 'TEST', ?int $tenantId = null): array
     {
         $currentDate = new \DateTimeImmutable();
         $dql = $this->createQueryBuilder('pp')

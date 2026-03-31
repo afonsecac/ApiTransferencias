@@ -809,7 +809,7 @@ class CommunicationSaleService extends CommonService
      * @throws \Symfony\Contracts\HttpClient\Exception\ServerExceptionInterface
      * @throws \Symfony\Contracts\HttpClient\Exception\TransportExceptionInterface
      */
-    public function checkStatusOrder(int $saleId, bool $isProcess = null): void
+    public function checkStatusOrder(int $saleId, ?bool $isProcess = null): void
     {
         sleep(2);
         $sale = $this->em->getRepository(CommunicationSaleInfo::class)->find($saleId);

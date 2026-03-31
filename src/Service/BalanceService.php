@@ -206,7 +206,7 @@ class BalanceService extends CommonService
      * @param int|null $companyId
      * @return BalanceOperation[]
      */
-    public function recentTransactions(int $limit = 5, int $companyId = null): array
+    public function recentTransactions(int $limit = 5, ?int $companyId = null): array
     {
         $user = $this->security->getUser();
         if (!$user instanceof User) {

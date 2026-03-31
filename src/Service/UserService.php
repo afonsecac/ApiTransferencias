@@ -132,7 +132,7 @@ class UserService extends CommonService
         return $sessionRepo->getActiveUserSession($userId);
     }
 
-    public function parserJwt(DefaultValidator $validator = null): Parser
+    public function parserJwt(?DefaultValidator $validator = null): Parser
     {
         return new Parser($this->createSignature(), $validator);
     }
