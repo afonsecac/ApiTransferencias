@@ -52,7 +52,7 @@ jobs:
 
             echo "=== Health check ==="
             sleep 5
-            curl -sf http://localhost/health/ready || echo "WARNING: Health check failed"
+            curl -sf http://localhost/health/ready || exit 1
 
             echo "=== Deploy complete ==="
 
