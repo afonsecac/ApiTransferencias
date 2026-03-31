@@ -50,7 +50,7 @@ class CommunicationClientPackageRepository extends ServiceEntityRepository
      * @param int|null $tenant
      * @return CommunicationClientPackage[]
      */
-    public function getAllPackages(string $env = 'TEST', int $tenant = null): array
+    public function getAllPackages(string $env = 'TEST', ?int $tenant = null): array
     {
         $currentDate = new \DateTimeImmutable('now');
         $dql = $this->createQueryBuilder('p')

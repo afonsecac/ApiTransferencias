@@ -64,7 +64,7 @@ class BalanceOperationRepository extends ServiceEntityRepository
             ->getQuery()->execute();
     }
 
-    public function getLastMarkedAsReported(int $userId = null): ?BalanceOperation
+    public function getLastMarkedAsReported(?int $userId = null): ?BalanceOperation
     {
         $query = $this->createQueryBuilder('b')
             ->leftJoin('b.tenant', 't')
@@ -140,7 +140,7 @@ class BalanceOperationRepository extends ServiceEntityRepository
      * @param int|null $clientId
      * @return \App\Entity\BalanceOperation|null
      */
-    public function getLastDateBalance(int $clientId = null): ?BalanceOperation
+    public function getLastDateBalance(?int $clientId = null): ?BalanceOperation
     {
         $dql = $this->createQueryBuilder('bo')
             ->leftJoin('bo.tenant', 't')
@@ -167,7 +167,7 @@ class BalanceOperationRepository extends ServiceEntityRepository
      * @param int|null $clientId
      * @return array
      */
-    public function getBalancesInEnvironments(int $clientId = null): array
+    public function getBalancesInEnvironments(?int $clientId = null): array
     {
         $dql = $this->createQueryBuilder('bo')
             ->leftJoin('bo.tenant', 't')
@@ -219,7 +219,7 @@ class BalanceOperationRepository extends ServiceEntityRepository
      * @param int|null $companyId
      * @return BalanceOperation[]
      */
-    public function getRecentTransactions(int $limit = 5, int $companyId = null): array
+    public function getRecentTransactions(int $limit = 5, ?int $companyId = null): array
     {
         $dql = $this->createQueryBuilder('b')
             ->leftJoin('b.tenant', 't')

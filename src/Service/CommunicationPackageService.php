@@ -14,7 +14,7 @@ class CommunicationPackageService extends CommonService
      * @param int|null $tenant
      * @return CommunicationClientPackage[]
      */
-    public function all(int $productId, int $tenant = null): array
+    public function all(int $productId, ?int $tenant = null): array
     {
         $product = $this->em->getRepository(CommunicationProduct::class)->find($productId);
         /** @var \App\Repository\CommunicationClientPackageRepository $clientPackageRepo */

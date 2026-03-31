@@ -40,7 +40,7 @@ class UserRepository extends ServiceEntityRepository implements PasswordUpgrader
         $this->getEntityManager()->flush();
     }
 
-    public function searchAllUsersInCompany(int $companyId = null, bool $isActive = null, int $page = 0, int $limit = 20): PaginatorResponse
+    public function searchAllUsersInCompany(?int $companyId = null, ?bool $isActive = null, int $page = 0, int $limit = 20): PaginatorResponse
     {
         $dql = $this->createQueryBuilder('u')
             ->leftJoin('u.company', 'c');

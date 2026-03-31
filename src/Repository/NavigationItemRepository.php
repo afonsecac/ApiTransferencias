@@ -42,7 +42,7 @@ class NavigationItemRepository extends ServiceEntityRepository
      * - Client: el permiso está asignado al client del usuario
      * - Usuario: el permiso está asignado directamente al usuario
      */
-    public function getNavigationByUserAndClient(array $roles, int $clientId = null, int $userId = null): array
+    public function getNavigationByUserAndClient(array $roles, ?int $clientId = null, ?int $userId = null): array
     {
         $allowedIds = $this->getAllowedItemIds($roles, $clientId, $userId);
 
@@ -71,7 +71,7 @@ class NavigationItemRepository extends ServiceEntityRepository
     /**
      * Devuelve los IDs de parent y child a los que el usuario tiene acceso.
      */
-    public function accessIds(array $roles, int $clientId = null, int $userId = null): array
+    public function accessIds(array $roles, ?int $clientId = null, ?int $userId = null): array
     {
         $allowedIds = $this->getAllowedItemIds($roles, $clientId, $userId);
 

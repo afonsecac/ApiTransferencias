@@ -16,7 +16,7 @@ class CommunicationProductService extends CommonService
      * @param string|null $query
      * @return \App\Util\IPaginationResponse
      */
-    public function getProducts(int $page = 0, int $limit = 10, string $env = 'TEST', string $query = null): IPaginationResponse
+    public function getProducts(int $page = 0, int $limit = 10, string $env = 'TEST', ?string $query = null): IPaginationResponse
     {
         /** @var \App\Repository\CommunicationProductRepository $productRepo */
         $productRepo = $this->em->getRepository(CommunicationProduct::class);

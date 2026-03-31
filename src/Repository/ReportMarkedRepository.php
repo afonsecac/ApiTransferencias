@@ -24,7 +24,7 @@ class ReportMarkedRepository extends ServiceEntityRepository
      * @param int $page
      * @return \App\DTO\PaginationResult
      */
-    public function list(int $accountId = null, int $limit = 10, int $page = 0): PaginationResult
+    public function list(?int $accountId = null, int $limit = 10, int $page = 0): PaginationResult
     {
         $dql = $this->createQueryBuilder('r');
         if (!is_null($accountId)) {
