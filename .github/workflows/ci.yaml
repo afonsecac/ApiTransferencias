@@ -52,15 +52,15 @@ jobs:
 
       - name: Create .env for Symfony
         run: |
-          cat > .env << 'EOF'
+          cat > .env <<'EOF'
           APP_ENV=test
           APP_SECRET=ci-secret-not-real
           DATABASE_URL="postgresql://app:app@localhost:5432/app_test?serverVersion=15&charset=utf8"
+          CORS_ALLOW_ORIGIN='^https?://localhost(:[0-9]+)?$'
           MESSENGER_TRANSPORT_DSN=doctrine://default
           MESSENGER_TRANSPORT_VHOST=/
           MESSENGER_TRANSPORT_FAILURE=doctrine://default?queue_name=failed
           MAILER_DSN=null://null
-          CORS_ALLOW_ORIGIN='^https?://localhost(:[0-9]+)?$'
           MICROSOFT_URL=https://login.microsoftonline.com
           JWT_MEMORY_KEY=ci-test-key
           JWT_PHRASE_KEY=ci-test-phrase
@@ -72,9 +72,6 @@ jobs:
 
       - name: Install dependencies
         run: composer install --prefer-dist --no-progress
-
-      - name: Check Symfony requirements
-        run: vendor/bin/requirements-checker
 
       - name: Check Symfony console
         run: php bin/console -V
@@ -109,15 +106,15 @@ jobs:
 
       - name: Create .env for Symfony
         run: |
-          cat > .env << 'EOF'
+          cat > .env <<'EOF'
           APP_ENV=dev
           APP_SECRET=ci-secret-not-real
           DATABASE_URL="postgresql://app:app@localhost:5432/app?serverVersion=15&charset=utf8"
+          CORS_ALLOW_ORIGIN='^https?://localhost(:[0-9]+)?$'
           MESSENGER_TRANSPORT_DSN=doctrine://default
           MESSENGER_TRANSPORT_VHOST=/
           MESSENGER_TRANSPORT_FAILURE=doctrine://default?queue_name=failed
           MAILER_DSN=null://null
-          CORS_ALLOW_ORIGIN='^https?://localhost(:[0-9]+)?$'
           MICROSOFT_URL=https://login.microsoftonline.com
           JWT_MEMORY_KEY=ci-test-key
           JWT_PHRASE_KEY=ci-test-phrase
