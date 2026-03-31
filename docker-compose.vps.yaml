@@ -74,7 +74,8 @@ services:
 
   nginx:
     build:
-      context: ./docker/nginx
+      context: .
+      dockerfile: docker/nginx/Dockerfile
     labels:
       - traefik.enable=true
       - traefik.http.routers.api.rule=Host(`${DOMAIN}`)
