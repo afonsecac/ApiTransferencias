@@ -8,6 +8,9 @@ concurrency:
   group: deploy-prod
   cancel-in-progress: false
 
+permissions:
+  statuses: write
+
 jobs:
   deploy:
     name: Deploy to Production VPS
