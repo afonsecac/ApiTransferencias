@@ -47,24 +47,25 @@ COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 COPY --from=composer-deps /app/vendor ./vendor
 COPY . .
 
-# Build-time env vars (overridden at runtime by .env.vps / docker-compose env)
-ENV APP_ENV=prod \
-    APP_SECRET=build-placeholder \
-    DATABASE_URL="postgresql://dummy:dummy@localhost:5432/dummy?serverVersion=15" \
-    CORS_ALLOW_ORIGIN="^https?://localhost$" \
-    MESSENGER_TRANSPORT_DSN=doctrine://default \
-    MESSENGER_TRANSPORT_VHOST=/ \
-    MESSENGER_TRANSPORT_FAILURE=doctrine://default?queue_name=failed \
-    MAILER_DSN=null://null \
-    MICROSOFT_URL=https://localhost \
-    JWT_MEMORY_KEY=build-placeholder \
-    JWT_PHRASE_KEY=build-placeholder \
-    JWT_TIMEOUT=30 \
-    APP_TEST_PHONE=0000000000 \
-    APP_MAILER_FROM=build@build.com
-
 RUN composer dump-autoload --optimize --classmap-authoritative \
+    && printf '%s\n' \
+       'APP_ENV=prod' \
+       'APP_SECRET=build-placeholder' \
+       'DATABASE_URL="postgresql://dummy:dummy@localhost:5432/dummy?serverVersion=15"' \
+       'CORS_ALLOW_ORIGIN="^https?://localhost$"' \
+       'MESSENGER_TRANSPORT_DSN=doctrine://default' \
+       'MESSENGER_TRANSPORT_VHOST=/' \
+       'MESSENGER_TRANSPORT_FAILURE=doctrine://default?queue_name=failed' \
+       'MAILER_DSN=null://null' \
+       'MICROSOFT_URL=https://localhost' \
+       'JWT_MEMORY_KEY=build-placeholder' \
+       'JWT_PHRASE_KEY=build-placeholder' \
+       'JWT_TIMEOUT=30' \
+       'APP_TEST_PHONE=0000000000' \
+       'APP_MAILER_FROM=build@build.com' \
+       > .env \
     && php bin/console cache:warmup --env=prod \
+    && rm .env \
     && chown -R www-data:www-data var/
 
 USER www-data
