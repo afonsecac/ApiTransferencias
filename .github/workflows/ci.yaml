@@ -77,7 +77,7 @@ jobs:
         run: vendor/bin/requirements-checker
 
       - name: Check Symfony console
-        run: bin/console -V
+        run: php bin/console -V
         env:
           APP_ENV: test
 
