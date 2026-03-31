@@ -233,7 +233,7 @@ class BalanceService extends CommonService
      */
     public function getBalanceOperations(
         array $filters = [],
-        string $orderBy = null,
+        ?string $orderBy = null,
         int $page = 0,
         int $limit = 10
     ): PaginationResult {

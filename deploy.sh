@@ -141,6 +141,14 @@ setup() {
     log "Limpiando cache..."
     $COMPOSE_CMD exec php-fpm php bin/console cache:clear
 
+    log "Verificando health check..."
+    sleep 5
+    if $COMPOSE_CMD exec -T php-fpm php bin/console debug:router | grep -q health_live; then
+        log "Rutas health registradas correctamente"
+    else
+        warn "Las rutas de health check no se encontraron"
+    fi
+
     local DOMAIN_VAL
     DOMAIN_VAL=$(get_env_val "DOMAIN")
 

@@ -2,5 +2,10 @@ controllers:
     resource:
         path: ../src/Controller/
         namespace: App\Controller
+        exclude: ../src/Controller/HealthCheckController.php
     type: attribute
     prefix: /dashboard/api
+
+health:
+    resource: ../src/Controller/HealthCheckController.php
+    type: attribute

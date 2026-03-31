@@ -246,7 +246,7 @@ class BalanceOperationRepository extends ServiceEntityRepository
         string $orderBy = 'createdAt DESC',
         int $page = 0,
         int $limit = 10,
-        int $companyId = null
+        ?int $companyId = null
     ): PaginationResult {
         $dql = $this->createQueryBuilder('b')
             ->leftJoin('b.tenant', 't')
