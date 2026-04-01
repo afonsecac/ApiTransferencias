@@ -122,7 +122,7 @@ setup() {
     git pull origin "$GIT_BRANCH"
 
     log "Construyendo imagenes (esto puede tardar ~5 min)..."
-    $COMPOSE_CMD build --no-cache
+    $COMPOSE_CMD build
 
     log "Levantando servicios..."
     $COMPOSE_CMD up -d
@@ -187,7 +187,7 @@ deploy() {
     git pull origin "$GIT_BRANCH"
 
     log "Construyendo imagenes..."
-    $COMPOSE_CMD build --no-cache
+    $COMPOSE_CMD build
 
     if [[ "$ENV" == "prod" ]]; then
         log "Creando backup automatico antes del despliegue..."
@@ -218,7 +218,7 @@ deploy_with_migrate() {
     git pull origin "$GIT_BRANCH"
 
     log "Construyendo imagenes..."
-    $COMPOSE_CMD build --no-cache
+    $COMPOSE_CMD build
 
     if [[ "$ENV" == "prod" ]]; then
         log "Creando backup automatico antes de las migraciones..."

@@ -34,9 +34,9 @@ jobs:
             git checkout develop
             git pull origin develop
 
-            echo "=== Building images (no cache) ==="
+            echo "=== Building images ==="
             docker compose -f docker-compose.vps.yaml -f docker-compose.vps.staging.yaml \
-              --env-file .env.vps build --no-cache
+              --env-file .env.vps build
 
             echo "=== Deploying ==="
             docker compose -f docker-compose.vps.yaml -f docker-compose.vps.staging.yaml \

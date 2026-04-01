@@ -58,7 +58,7 @@ jobs:
 
             echo "=== Deploying ==="
             docker compose -f docker-compose.vps.yaml -f docker-compose.vps.prod.yaml \
-              --env-file .env.vps up -d --remove-orphans
+              --env-file .env.vps up -d --remove-orphans --force-recreate
 
             echo "=== Clearing cache ==="
             docker compose -f docker-compose.vps.yaml -f docker-compose.vps.prod.yaml \
