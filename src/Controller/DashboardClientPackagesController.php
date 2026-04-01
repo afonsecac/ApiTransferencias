@@ -151,7 +151,7 @@ class DashboardClientPackagesController extends AbstractController
         return $this->json($this->serializePricePackage($pp), Response::HTTP_CREATED);
     }
 
-    #[Route('/client/prices/{id}', name: 'dashboard_client_prices_update', methods: ['PUT'], requirements: ['id' => '\d+'])]
+    #[Route('/client/prices/{id}', name: 'dashboard_client_prices_update', methods: ['PATCH'], requirements: ['id' => '\d+'])]
     public function updatePrice(int $id, Request $request): JsonResponse
     {
         $pp = $this->em->getRepository(CommunicationPricePackage::class)->find($id);
@@ -159,7 +159,7 @@ class DashboardClientPackagesController extends AbstractController
             return $this->json(['error' => ['message' => 'Price package not found']], Response::HTTP_NOT_FOUND);
         }
 
-        $data = $request->request->all();
+        $data = $request->toArray();
         if (isset($data['price'])) $pp->setPrice((float) $data['price']);
         if (isset($data['priceCurrency'])) $pp->setPriceCurrency($data['priceCurrency']);
         if (isset($data['amount'])) $pp->setAmount((float) $data['amount']);
@@ -249,7 +249,7 @@ class DashboardClientPackagesController extends AbstractController
         return $this->json($this->serializeClientPackageDetail($cp));
     }
 
-    #[Route('/client/packages/{id}', name: 'dashboard_client_packages_update', methods: ['PUT'], requirements: ['id' => '\d+'])]
+    #[Route('/client/packages/{id}', name: 'dashboard_client_packages_update', methods: ['PATCH'], requirements: ['id' => '\d+'])]
     public function updatePackage(int $id, Request $request): JsonResponse
     {
         $cp = $this->em->getRepository(CommunicationClientPackage::class)->find($id);
@@ -257,7 +257,7 @@ class DashboardClientPackagesController extends AbstractController
             return $this->json(['error' => ['message' => 'Package not found']], Response::HTTP_NOT_FOUND);
         }
 
-        $data = $request->request->all();
+        $data = $request->toArray();
         if (isset($data['name'])) $cp->setName(mb_substr($data['name'], 0, 255));
         if (isset($data['description'])) $cp->setDescription(mb_substr($data['description'], 0, 255));
         if (isset($data['amount'])) $cp->setAmount((float) $data['amount']);
