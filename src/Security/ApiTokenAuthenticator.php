@@ -4,6 +4,7 @@ namespace App\Security;
 
 use ApiPlatform\Symfony\Security\Exception\AccessDeniedException;
 use App\Repository\AccountRepository;
+use App\Service\IpMatcherService;
 use Monolog\Attribute\WithMonologChannel;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -22,14 +23,17 @@ class ApiTokenAuthenticator extends AbstractAuthenticator
 {
     private AccountRepository $permission;
     private LoggerInterface $logger;
+    private IpMatcherService $ipMatcherService;
 
     public function __construct(
         LoggerInterface $logger,
-        AccountRepository $permissionRepo
+        AccountRepository $permissionRepo,
+        IpMatcherService $ipMatcherService,
     )
     {
         $this->permission = $permissionRepo;
         $this->logger = $logger;
+        $this->ipMatcherService = $ipMatcherService;
     }
 
     /**
@@ -75,9 +79,7 @@ class ApiTokenAuthenticator extends AbstractAuthenticator
         $isWildcard = $origin === '*';
         $isOriginMatch = false;
         if (!$isWildcard && !empty($ips) && !empty($origin)) {
-            $allowedIps = array_map('trim', explode(',', $origin));
-            $clientIps = array_map('trim', explode(',', $ips));
-            $isOriginMatch = count(array_intersect($clientIps, $allowedIps)) > 0;
+            $isOriginMatch = $this->ipMatcherService->isIpAllowed($ips, $origin);
         }
         $isRemote = $isWildcard || $isOriginMatch;
         if (!$isLocal && !$isRemote && !$isWebPage) {
