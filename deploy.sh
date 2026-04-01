@@ -187,7 +187,7 @@ deploy() {
     git pull origin "$GIT_BRANCH"
 
     log "Construyendo imagenes..."
-    $COMPOSE_CMD build
+    $COMPOSE_CMD build --no-cache
 
     if [[ "$ENV" == "prod" ]]; then
         log "Creando backup automatico antes del despliegue..."
@@ -195,7 +195,7 @@ deploy() {
     fi
 
     log "Desplegando..."
-    $COMPOSE_CMD up -d --remove-orphans
+    $COMPOSE_CMD up -d --remove-orphans --force-recreate
 
     log "Limpiando cache de Symfony..."
     $COMPOSE_CMD exec php-fpm php bin/console cache:clear
@@ -218,7 +218,7 @@ deploy_with_migrate() {
     git pull origin "$GIT_BRANCH"
 
     log "Construyendo imagenes..."
-    $COMPOSE_CMD build
+    $COMPOSE_CMD build --no-cache
 
     if [[ "$ENV" == "prod" ]]; then
         log "Creando backup automatico antes de las migraciones..."
@@ -237,7 +237,7 @@ deploy_with_migrate() {
     $COMPOSE_CMD run --rm php-fpm php bin/console doctrine:migrations:migrate --no-interaction
 
     log "Desplegando aplicacion..."
-    $COMPOSE_CMD up -d --remove-orphans
+    $COMPOSE_CMD up -d --remove-orphans --force-recreate
 
     log "Limpiando cache..."
     $COMPOSE_CMD exec php-fpm php bin/console cache:clear

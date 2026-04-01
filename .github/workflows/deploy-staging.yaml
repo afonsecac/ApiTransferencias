@@ -34,13 +34,13 @@ jobs:
             git checkout develop
             git pull origin develop
 
-            echo "=== Building images ==="
+            echo "=== Building images (no cache) ==="
             docker compose -f docker-compose.vps.yaml -f docker-compose.vps.staging.yaml \
-              --env-file .env.vps build
+              --env-file .env.vps build --no-cache
 
             echo "=== Deploying ==="
             docker compose -f docker-compose.vps.yaml -f docker-compose.vps.staging.yaml \
-              --env-file .env.vps up -d --remove-orphans
+              --env-file .env.vps up -d --remove-orphans --force-recreate
 
             echo "=== Running migrations ==="
             docker compose -f docker-compose.vps.yaml -f docker-compose.vps.staging.yaml \
