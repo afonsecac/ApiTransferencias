@@ -75,9 +75,15 @@ class NavigationItemRepository extends ServiceEntityRepository
     {
         $allowedIds = $this->getAllowedItemIds($roles, $clientId, $userId);
 
+        $items = $this->findBy(['id' => $allowedIds]);
+        $itemMap = [];
+        foreach ($items as $item) {
+            $itemMap[$item->getId()] = $item;
+        }
+
         $result = [];
         foreach ($allowedIds as $id) {
-            $item = $this->find($id);
+            $item = $itemMap[$id] ?? null;
             if ($item === null) {
                 continue;
             }
@@ -137,11 +143,12 @@ class NavigationItemRepository extends ServiceEntityRepository
 
         // Para cada hijo permitido, incluir también su padre
         // Para cada padre permitido, no incluir hijos automáticamente
-        $allIds = [];
-        foreach ($allowedItemIds as $itemId) {
-            $allIds[] = (int) $itemId;
-            $item = $this->find($itemId);
-            if ($item !== null && $item->getParent() !== null) {
+        $intIds = array_map('intval', $allowedItemIds);
+        $items = $this->findBy(['id' => $intIds]);
+
+        $allIds = $intIds;
+        foreach ($items as $item) {
+            if ($item->getParent() !== null) {
                 $allIds[] = $item->getParent()->getId();
             }
         }

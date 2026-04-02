@@ -222,10 +222,15 @@ class UserService extends CommonService
      */
     public function createToken(User $user, ?UserSession $userSession): string
     {
+        $payloadUser = $this->createPayloadUser($user);
+        return $this->createTokenFromPayload($user, $payloadUser);
+    }
+
+    public function createTokenFromPayload(User $user, array $payloadUser): string
+    {
         $generator = $this->generatorJwt();
         $timeToExpire = $this->parameters->get('app.jwt.expired');
         $currentTime = new \DateTimeImmutable('now');
-        $payloadUser = $this->createPayloadUser($user);
         $payload = $this->serializer->serialize($payloadUser, 'json', [
             'groups' => ['profile'],
         ]);

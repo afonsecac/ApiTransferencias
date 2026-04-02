@@ -57,8 +57,8 @@ class ApiLoginController extends AbstractController
         }
 
         $user->setCurrentIp($clientIp);
-        $accessToken = $this->userService->createToken($user, null);
         $currentUser = $this->userService->createPayloadUser($user);
+        $accessToken = $this->userService->createTokenFromPayload($user, $currentUser);
 
         // Crear refresh token y cookie
         $refreshToken = $this->refreshTokenService->createForUser($user, $clientIp);
@@ -102,8 +102,8 @@ class ApiLoginController extends AbstractController
 
         $user = $newRefreshToken->getUser();
         $user->setCurrentIp($clientIp);
-        $accessToken = $this->userService->createToken($user, null);
         $currentUser = $this->userService->createPayloadUser($user);
+        $accessToken = $this->userService->createTokenFromPayload($user, $currentUser);
 
         $response = $this->json([
             'token' => $accessToken,
