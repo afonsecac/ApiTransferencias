@@ -13,6 +13,7 @@ x-worker-base: &worker-base
     APP_DEBUG: ${APP_DEBUG}
     APP_SECRET: ${APP_SECRET}
     CORS_ALLOW_ORIGIN: ${CORS_ALLOW_ORIGIN}
+    CORS_DASHBOARD_ORIGIN: ${CORS_DASHBOARD_ORIGIN}
     DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@database:5432/${POSTGRES_DB}?serverVersion=15&charset=utf8
     MAILER_DSN: ${MAILER_DSN}
     MESSENGER_TRANSPORT_DSN: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672/%2f/
@@ -47,6 +48,8 @@ services:
           memory: 256M
 
   nginx:
+    labels:
+      - traefik.http.routers.api.rule=Host(`${DOMAIN}`) || Host(`${DOMAIN_ALIAS}`)
     deploy:
       resources:
         limits:

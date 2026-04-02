@@ -57,6 +57,7 @@ jobs:
           APP_SECRET=ci-secret-not-real
           DATABASE_URL="postgresql://app:app@localhost:5432/app_test?serverVersion=15&charset=utf8"
           CORS_ALLOW_ORIGIN='^https?://localhost(:[0-9]+)?$'
+          CORS_DASHBOARD_ORIGIN='^https?://localhost(:[0-9]+)?$'
           MESSENGER_TRANSPORT_DSN=doctrine://default
           MESSENGER_TRANSPORT_VHOST=/
           MESSENGER_TRANSPORT_FAILURE=doctrine://default?queue_name=failed
@@ -111,6 +112,7 @@ jobs:
           APP_SECRET=ci-secret-not-real
           DATABASE_URL="postgresql://app:app@localhost:5432/app?serverVersion=15&charset=utf8"
           CORS_ALLOW_ORIGIN='^https?://localhost(:[0-9]+)?$'
+          CORS_DASHBOARD_ORIGIN='^https?://localhost(:[0-9]+)?$'
           MESSENGER_TRANSPORT_DSN=doctrine://default
           MESSENGER_TRANSPORT_VHOST=/
           MESSENGER_TRANSPORT_FAILURE=doctrine://default?queue_name=failed

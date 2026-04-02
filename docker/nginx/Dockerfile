@@ -30,6 +30,7 @@ RUN printf '%s\n' \
        'APP_TEST_PHONE=0000000000' \
        'APP_MAILER_FROM=noreply@localhost' \
        'CORS_ALLOW_ORIGIN="^https?://localhost$"' \
+       'CORS_DASHBOARD_ORIGIN="^https?://localhost$"' \
        > .env \
     && composer dump-autoload --optimize \
     && php bin/console assets:install public --env=prod
