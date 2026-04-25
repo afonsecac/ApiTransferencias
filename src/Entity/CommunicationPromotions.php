@@ -17,6 +17,7 @@ use Symfony\Component\Serializer\Attribute\Groups;
 use Symfony\Component\Validator\Constraints as Assert;
 
 #[ORM\Entity(repositoryClass: CommunicationPromotionsRepository::class)]
+#[ORM\Index(columns: ['priority'], name: 'idx_com_promotion_priority')]
 #[ApiResource(
     uriTemplate: '/communication/promotions',
     operations: [
@@ -32,6 +33,7 @@ use Symfony\Component\Validator\Constraints as Assert;
 )]
 #[ApiFilter(OrderFilter::class, properties: [
     'id',
+    'priority',
 ], arguments: ['orderParameterName' => 'orderBy'])]
 #[Orm\HasLifecycleCallbacks]
 class CommunicationPromotions
@@ -95,6 +97,11 @@ class CommunicationPromotions
     #[Groups(['comProm:read', 'comPackage:read', 'promotion:detail'])]
     #[ApiProperty]
     private ?string $knowMore = null;
+
+    #[ORM\Column(length: 3, options: ['default' => '999'])]
+    #[Groups(['comProm:read', 'comProm:create', 'comProm:update', 'comPackage:read', 'promotion:list', 'promotion:detail'])]
+    #[ApiProperty]
+    private string $priority = '999';
 
     #[ORM\ManyToOne]
     #[ORM\JoinColumn(nullable: true)]
@@ -329,6 +336,18 @@ class CommunicationPromotions
     public function removePackage(CommunicationPricePackage $package): static
     {
         $this->packages->removeElement($package);
+
+        return $this;
+    }
+
+    public function getPriority(): string
+    {
+        return $this->priority;
+    }
+
+    public function setPriority(string $priority): static
+    {
+        $this->priority = $priority;
 
         return $this;
     }
