@@ -2,45 +2,36 @@
 
 namespace App\Security;
 
-use ApiPlatform\Symfony\Security\Exception\AccessDeniedException;
 use App\Entity\User;
-use App\Service\UserService;
-use Symfony\Component\Config\Definition\Exception\ForbiddenOverwriteException;
+use Symfony\Component\Security\Core\Exception\AccountExpiredException;
+use Symfony\Component\Security\Core\Exception\CustomUserMessageAccountStatusException;
+use Symfony\Component\Security\Core\Exception\DisabledException;
 use Symfony\Component\Security\Core\User\UserCheckerInterface;
 use Symfony\Component\Security\Core\User\UserInterface;
 
 class DashboardUserChecker implements UserCheckerInterface
 {
-    public function __construct(private readonly UserService $userService)
-    {
-
-    }
-
-    /**
-     * @inheritDoc
-     */
     public function checkPreAuth(UserInterface $user): void
     {
-        // TODO: Implement checkPreAuth() method.
         if (!$user instanceof User) {
-            throw new AccessDeniedException("You are not authorized to access this resource");
+            return;
         }
         if (!$user->isActive()) {
-            throw new AccessDeniedException("Your account is not active");
+            throw new DisabledException('Your account is not active.');
         }
         if (!$user->isCheckValidation()) {
-            throw new ForbiddenOverwriteException("Your account is not valid");
+            throw new CustomUserMessageAccountStatusException('Your account is pending validation.');
         }
     }
 
-    /**
-     * @inheritDoc
-     */
     public function checkPostAuth(UserInterface $user): void
     {
+        if (!$user instanceof User) {
+            return;
+        }
         $currentDate = new \DateTimeImmutable('now');
-        if (!$user instanceof User || ($user->getRemovedAt() !== null && $user->getRemovedAt() <= $currentDate)) {
-            throw new AccessDeniedException("You are not allowed to access this resource");
+        if ($user->getRemovedAt() !== null && $user->getRemovedAt() <= $currentDate) {
+            throw new AccountExpiredException('Your account has been removed.');
         }
     }
 }

@@ -1,192 +1,143 @@
-<html lang="es">
-<head>
-    <meta charset="UTF-8"/>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-    <style>
-        body {
-            font-size: 16px;
-            font-weight: bold;
-            font-family: Arial, Helvetica, sans-serif;
-        }
+{% extends 'emails/_base.html.twig' %}
 
-        .content {
-            display: block;
-            align-items: center;
-            align-content: center;
-            width: 100%;
-            min-width: 400px;
-            color: rgb(175, 1, 1);
-        }
+{% block title %}Balance Alert{% endblock %}
 
-        .content-img {
-            display: block;
-            margin-left: auto;
-            margin-right: auto;
-        }
+{% block logo %}
+    <img src="https://www.comremit.com/img/comremit.png" alt="Comremit"
+         width="200" style="display: block; margin: 0 auto; max-width: 200px; height: auto; border: 0;"/>
+{% endblock %}
 
-        .content-img img {
-            display: block;
-            margin-left: auto;
-            margin-right: auto;
-        }
+{% block accent_color %}rgb(175, 1, 1){% endblock %}
+{% block footer_bg_color %}rgb(175, 1, 1){% endblock %}
 
-        .content h3 {
-            font-size: 24px;
-            min-width: 400px;
-            text-align: center;
-            align-items: center;
-            align-self: center;
-        }
+{% block content %}
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+        <!-- Title ES -->
+        <tr>
+            <td align="center" style="font-size: 22px; font-weight: bold; color: rgb(175, 1, 1); padding-bottom: 5px; font-family: Arial, Helvetica, sans-serif;">
+                &iexcl;SALDO EN ESTADO {{ status_es }}!
+            </td>
+        </tr>
+        <!-- Title EN -->
+        <tr>
+            <td align="center" style="font-size: 16px; font-weight: bold; color: #888888; padding-bottom: 25px; font-family: Arial, Helvetica, sans-serif;">
+                {{ status_en }} STATE BALANCE!
+            </td>
+        </tr>
+        <!-- Body ES -->
+        <tr>
+            <td style="font-size: 14px; color: #333333; line-height: 22px; padding-bottom: 8px; font-family: Arial, Helvetica, sans-serif;">
+                Estimado cliente {{ name }}, el motivo de este correo electr&oacute;nico es para ponerlo al tanto del estado de su saldo en nuestra plataforma. Sugerimos realizar un dep&oacute;sito para que sus operaciones no se vean afectadas.
+            </td>
+        </tr>
+        <!-- Body EN -->
+        <tr>
+            <td style="font-size: 14px; color: #888888; line-height: 22px; padding-bottom: 20px; font-family: Arial, Helvetica, sans-serif;">
+                Dear customer {{ name }}, the purpose of this email is to inform you about the status of your balance on our platform. We suggest making a deposit so that your operations are not affected.
+            </td>
+        </tr>
+        <!-- Platform ES -->
+        <tr>
+            <td style="font-size: 14px; color: #333333; line-height: 22px; padding-bottom: 8px; font-family: Arial, Helvetica, sans-serif;">
+                La plataforma que se ver&aacute; afectada para realizar las operaciones ser&aacute; la de {{ platform }}.
+            </td>
+        </tr>
+        <!-- Platform EN -->
+        <tr>
+            <td style="font-size: 14px; color: #888888; line-height: 22px; padding-bottom: 25px; font-family: Arial, Helvetica, sans-serif;">
+                The platform that will be affected to carry out the operations will be {{ platform }}.
+            </td>
+        </tr>
+        <!-- Data Table -->
+        <tr>
+            <td align="center" style="padding-bottom: 25px;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width: 420px; margin: 0 auto; border: 1px solid #dddddd; border-collapse: collapse;">
+                    <!-- Row: Balance -->
+                    <tr>
+                        <td style="background-color: #f8f8f8; padding: 12px 15px; font-size: 13px; font-weight: bold; color: rgb(175, 1, 1); border-bottom: 1px solid #dddddd; width: 50%; font-family: Arial, Helvetica, sans-serif;">
+                            Saldo Actual / Current Amount
+                        </td>
+                        <td style="background-color: #f8f8f8; padding: 12px 15px; font-size: 14px; color: #333333; border-bottom: 1px solid #dddddd; font-family: Arial, Helvetica, sans-serif;">
+                            {{ balance | round(2, 'floor') }}
+                        </td>
+                    </tr>
+                    <!-- Row: Currency -->
+                    <tr>
+                        <td style="padding: 12px 15px; font-size: 13px; font-weight: bold; color: rgb(175, 1, 1); border-bottom: 1px solid #dddddd; font-family: Arial, Helvetica, sans-serif;">
+                            Moneda / Currency
+                        </td>
+                        <td style="padding: 12px 15px; font-size: 14px; color: #333333; border-bottom: 1px solid #dddddd; font-family: Arial, Helvetica, sans-serif;">
+                            {{ currency }}
+                        </td>
+                    </tr>
+                    <!-- Row: Date -->
+                    <tr>
+                        <td style="background-color: #f8f8f8; padding: 12px 15px; font-size: 13px; font-weight: bold; color: rgb(175, 1, 1); font-family: Arial, Helvetica, sans-serif;">
+                            Fecha / Date
+                        </td>
+                        <td style="background-color: #f8f8f8; padding: 12px 15px; font-size: 14px; color: #333333; font-family: Arial, Helvetica, sans-serif;">
+                            {{ 'now' | date('d/m/Y') }}
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+        <!-- Divider -->
+        <tr>
+            <td style="padding-bottom: 20px;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                    <tr>
+                        <td style="border-top: 1px solid #dddddd; font-size: 1px; line-height: 1px;">&nbsp;</td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+        <!-- Thank you -->
+        <tr>
+            <td align="center" style="font-size: 14px; font-weight: bold; color: #333333; padding-bottom: 10px; font-family: Arial, Helvetica, sans-serif;">
+                &iexcl;Muchas gracias por elegirnos!
+            </td>
+        </tr>
+        <!-- Contact label -->
+        <tr>
+            <td align="center" style="font-size: 13px; color: #666666; padding-bottom: 5px; font-family: Arial, Helvetica, sans-serif;">
+                Cont&aacute;ctenos a / Contact us at
+            </td>
+        </tr>
+        <!-- Contact email -->
+        <tr>
+            <td align="center" style="padding-bottom: 5px;">
+                <a href="mailto:{{ mail }}" style="color: rgb(175, 1, 1); font-size: 14px; font-weight: bold; text-decoration: underline; font-family: Arial, Helvetica, sans-serif;">
+                    {{ mail }}
+                </a>
+            </td>
+        </tr>
+    </table>
+{% endblock %}
 
-        .content p {
-            text-align: center;
-            font-size: 14px;
-            font-weight: bold;
-            font-family: Arial, Helvetica, sans-serif;
-        }
-
-        .content a {
-            text-align: center;
-            margin: auto;
-            display: block;
-        }
-
-        .inline {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            max-width: 400px;
-            margin-left: auto;
-            margin-right: auto;
-        }
-
-        .inline div {
-            min-width: 150px;
-            min-height: 50px;
-            display: inline;
-            vertical-align: middle;
-        }
-
-        .inline .left {
-            text-align: right;
-        }
-
-        .inline .right {
-            text-align: left;
-            padding-left: 10px;
-        }
-
-        .line {
-            display: block;
-            width: 90%;
-            margin: 0 auto;
-            border: 1px solid gray;
-        }
-
-        .footerContent {
-            width: 100%;
-            display: block;
-            align-items: center;
-            justify-content: center;
-            margin-top: 50px;
-            padding-top: 20px;
-            padding-bottom: 20px;
-            gap: 10px;
-            background: rgb(175, 1, 1);
-        }
-
-        .footerContent p {
-            display: block;
-            font-size: 14px;
-            width: 100%;
-            align-items: center;
-            gap: 16px;
-            color: white;
-        }
-
-        .footerContent p a {
-            text-decoration: none;
-        }
-    </style>
-</head>
-<body>
-<div class="content">
-    <div class="content">
-        <div class="content-img">
-            <img src="https://www.comremit.com/img/comremit.png" alt="Comremit" style="margin: auto"/>
-        </div>
-    </div>
-    <div class="content">
-        <p>
-        <h3>¡SALDO EN ESTADO {{ status_es }}!</h3>
-        </p>
-        <p>
-        <h3>{{ status_en }} STATE BALANCE!</h3>
-        </p>
-    </div>
-    <br>
-    <div class="content">
-        <p>
-            Estimado cliente {{ name }}, el motivo de este correo electrónico es para ponerlo al tanto del estado de su
-            saldo en nuestra plataforma. Sugerimos realizar un depósito para que sus operaciones no se vean afectadas.
-            <br/>
-            Dear customer {{ name }}, the purpose of this email is to inform you about the status of your
-            balance on our platform. We suggest making a deposit so that your operations are not affected.
-        </p>
-    </div>
-    <br>
-    <div class="content">
-        <p>
-            La plataforma que se verá afectada para realizar las operaciones será la de {{ platform }}.
-            <br/>
-            The platform that will be affected to carry out the operations will be {{ platform }}.
-        </p>
-    </div>
-    <div class="content">
-        <div class="inline">
-            <div class="left">
-                Saldo Actual / Current Amount
-            </div>
-            <div class="right">
-                {{ balance | round(2, 'floor') }}
-            </div>
-        </div>
-        <div class="inline">
-            <div class="left">
-                Moneda / Currency
-            </div>
-            <div class="right">
-                {{ currency }}
-            </div>
-        </div>
-        <div class="inline">
-            <div class="left">
-                Fecha / Date
-            </div>
-            <div class="right">
-                {{ 'now' | date('d/m/Y') }}
-            </div>
-        </div>
-    </div>
-    <div class="line"></div>
-    <div class="content">
-        <p>¡Muchas gracias por elegirnos!</p>
-        <br>
-        <p>Contáctenos a</p>
-        <br>
-        <a href="mailto:{{ mail }}">{{ mail }}</a>
-    </div>
-    <div class="content footerContent">
-        <p>Comremit Solutions SL</p>
-        <p>
-            Pasaje del Carme, 24, Sant Cugat del Vallés, 08173. Barcelona, España
-        </p>
-        <p>CIF: B10583565</p>
-        <p>
-            <a href="https://dashboard.comremit.com">
-                dashboard.comremit.com
-            </a>
-        </p>
-    </div>
-</div>
-</body>
-</html>
+{% block footer %}
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+        <tr>
+            <td align="center" style="color: #ffffff; font-size: 14px; font-weight: bold; padding-bottom: 8px; font-family: Arial, Helvetica, sans-serif;">
+                Comremit Solutions SL
+            </td>
+        </tr>
+        <tr>
+            <td align="center" style="color: rgba(255,255,255,0.85); font-size: 12px; line-height: 18px; padding-bottom: 5px; font-family: Arial, Helvetica, sans-serif;">
+                Pasaje del Carme, 24, Sant Cugat del Vall&eacute;s, 08173. Barcelona, Espa&ntilde;a
+            </td>
+        </tr>
+        <tr>
+            <td align="center" style="color: rgba(255,255,255,0.85); font-size: 12px; padding-bottom: 8px; font-family: Arial, Helvetica, sans-serif;">
+                CIF: B10583565
+            </td>
+        </tr>
+        <tr>
+            <td align="center">
+                <a href="https://dashboard.comremit.com" style="color: #ffffff; font-size: 12px; text-decoration: underline; font-family: Arial, Helvetica, sans-serif;">
+                    dashboard.comremit.com
+                </a>
+            </td>
+        </tr>
+    </table>
+{% endblock %}

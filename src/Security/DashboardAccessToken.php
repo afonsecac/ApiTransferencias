@@ -18,38 +18,29 @@ class DashboardAccessToken extends AbstractAuthenticator
 {
     public function __construct(
         private readonly UserService $userService,
-    )
-    {
-
+    ) {
     }
+
     public function supports(Request $request): ?bool
     {
         return $request->headers->has('Authorization');
     }
 
-    /**
-     * @throws \MiladRahimi\Jwt\Exceptions\InvalidTokenException
-     * @throws \MiladRahimi\Jwt\Exceptions\SigningException
-     * @throws \MiladRahimi\Jwt\Exceptions\ValidationException
-     * @throws \MiladRahimi\Jwt\Exceptions\InvalidSignatureException
-     * @throws \MiladRahimi\Jwt\Exceptions\JsonDecodingException
-     * @throws \DateMalformedStringException
-     */
     public function authenticate(Request $request): Passport
     {
         $headerToken = $request->headers->get('Authorization');
-        if (!$headerToken) {
-            throw new CustomUserMessageAuthenticationException('Missing authorization header.');
+        if (!$headerToken || !str_starts_with($headerToken, 'Bearer ')) {
+            throw new CustomUserMessageAuthenticationException('Missing or invalid authorization header.');
         }
+
         $token = substr($headerToken, 7);
-        if (!$token) {
-            throw new CustomUserMessageAuthenticationException('User don\'t have authorization.');
+        if (empty($token)) {
+            throw new CustomUserMessageAuthenticationException('Empty authorization token.');
         }
 
         $user = $this->userService->parser($token);
 
         return new SelfValidatingPassport(new UserBadge($user->getUserIdentifier()));
-
     }
 
     public function onAuthenticationSuccess(Request $request, TokenInterface $token, string $firewallName): ?Response
@@ -59,15 +50,10 @@ class DashboardAccessToken extends AbstractAuthenticator
 
     public function onAuthenticationFailure(Request $request, AuthenticationException $exception): ?Response
     {
-        $data = [
-            // you may want to customize or obfuscate the message first
-            'message' => strtr($exception->getMessageKey(), $exception->getMessageData()),
-
-            // or to translate this message
-            // $this->translator->trans($exception->getMessageKey(), $exception->getMessageData())
-        ];
-
-        return new JsonResponse($data, Response::HTTP_UNAUTHORIZED);
+        return new JsonResponse([
+            'error' => [
+                'message' => strtr($exception->getMessageKey(), $exception->getMessageData()),
+            ],
+        ], Response::HTTP_UNAUTHORIZED);
     }
-
 }

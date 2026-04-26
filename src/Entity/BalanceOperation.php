@@ -21,6 +21,10 @@ use Symfony\Component\Serializer\Attribute\Groups;
 use Symfony\Component\Validator\Constraints as Assert;
 
 #[ORM\Entity(repositoryClass: BalanceOperationRepository::class)]
+#[ORM\Index(columns: ['state'], name: 'idx_balance_op_state')]
+#[ORM\Index(columns: ['operation_type'], name: 'idx_balance_op_type')]
+#[ORM\Index(columns: ['transfer_id'], name: 'idx_balance_op_transfer_id')]
+#[ORM\Index(columns: ['state', 'mark_as_reported'], name: 'idx_balance_op_state_reported')]
 #[ApiResource(
     uriTemplate: '/balance',
     operations: [

@@ -17,6 +17,7 @@ use Symfony\Component\Serializer\Attribute\Groups;
 use Symfony\Component\Validator\Constraints as Assert;
 
 #[ORM\Entity(repositoryClass: CommunicationPromotionsRepository::class)]
+#[ORM\Index(columns: ['priority'], name: 'idx_com_promotion_priority')]
 #[ApiResource(
     uriTemplate: '/communication/promotions',
     operations: [
@@ -32,6 +33,7 @@ use Symfony\Component\Validator\Constraints as Assert;
 )]
 #[ApiFilter(OrderFilter::class, properties: [
     'id',
+    'priority',
 ], arguments: ['orderParameterName' => 'orderBy'])]
 #[Orm\HasLifecycleCallbacks]
 class CommunicationPromotions
@@ -39,30 +41,32 @@ class CommunicationPromotions
     #[ORM\Id]
     #[ORM\GeneratedValue]
     #[ORM\Column]
-    #[Groups(['comProm:read', 'comPackage:read'])]
+    #[Groups(['comProm:read', 'comPackage:read', 'promotion:list', 'promotion:detail'])]
     #[ApiProperty(identifier: true)]
     private ?int $id = null;
 
     #[ORM\Column(length: 255)]
-    #[Groups(['comProm:read', 'comPackage:read'])]
+    #[Groups(['comProm:read', 'comPackage:read', 'promotion:list', 'promotion:detail'])]
     #[ApiProperty()]
     private ?string $name = null;
 
     #[ORM\Column(length: 255)]
-    #[Groups(['comProm:read', 'comPackage:read'])]
+    #[Groups(['comProm:read', 'comPackage:read', 'promotion:list', 'promotion:detail'])]
     #[ApiProperty]
     private ?string $description = null;
 
     #[ORM\Column(type: Types::TEXT, nullable: true)]
-    #[Groups(['comProm:read', 'comPackage:read'])]
+    #[Groups(['comProm:read', 'comPackage:read', 'promotion:detail'])]
     #[ApiProperty]
     private ?string $infoDescription = null;
 
     #[ORM\Column]
+    #[Groups(['promotion:detail'])]
     #[ApiProperty]
     private array $terms = [];
 
     #[ORM\Column]
+    #[Groups(['promotion:list', 'promotion:detail'])]
     private ?\DateTimeImmutable $createdAt = null;
 
     #[ORM\Column]
@@ -71,13 +75,13 @@ class CommunicationPromotions
     #[ORM\Column(type: Types::DATETIMETZ_IMMUTABLE)]
     #[Assert\NotNull]
     #[ApiProperty(types: 'https://scheme.org/DateTime')]
-    #[Groups(['comProm:read', 'comPackage:read'])]
+    #[Groups(['comProm:read', 'comPackage:read', 'promotion:list', 'promotion:detail'])]
     private ?\DateTimeImmutable $startAt = null;
 
     #[ORM\Column(type: Types::DATETIMETZ_IMMUTABLE)]
     #[Assert\NotNull]
     #[ApiProperty(types: 'https://scheme.org/DateTime')]
-    #[Groups(['comProm:read', 'comPackage:read'])]
+    #[Groups(['comProm:read', 'comPackage:read', 'promotion:list', 'promotion:detail'])]
     private ?\DateTimeImmutable $endAt = null;
 
     #[ORM\ManyToOne]
@@ -85,20 +89,27 @@ class CommunicationPromotions
     private ?CommunicationProduct $product = null;
 
     #[ORM\ManyToMany(targetEntity: CommunicationClientPackage::class, inversedBy: 'promotionItems')]
-    #[Groups(['comProm:read'])]
+    #[Groups(['comProm:read', 'promotion:detail'])]
     #[ApiProperty]
     private Collection $products;
 
     #[ORM\Column(length: 500, nullable: true)]
-    #[Groups(['comProm:read', 'comPackage:read'])]
+    #[Groups(['comProm:read', 'comPackage:read', 'promotion:detail'])]
     #[ApiProperty]
     private ?string $knowMore = null;
 
+    #[ORM\Column(length: 3, options: ['default' => '999'])]
+    #[Groups(['comProm:read', 'comProm:create', 'comProm:update', 'comPackage:read', 'promotion:list', 'promotion:detail'])]
+    #[ApiProperty]
+    private string $priority = '999';
+
     #[ORM\ManyToOne]
     #[ORM\JoinColumn(nullable: true)]
+    #[Groups(['promotion:list', 'promotion:detail'])]
     private ?Environment $environment = null;
 
     #[ORM\Column(nullable: true)]
+    #[Groups(['promotion:detail'])]
     private ?array $validityInfo = [];
 
     /**
@@ -216,20 +227,6 @@ class CommunicationPromotions
 
     public function getProduct(): ?CommunicationProduct
     {
-
-        $products = $this->product;
-        $productOuts = [];
-        foreach ($products as $key => $product) {
-            $tenant = $this->security?->getUser();
-            if (!is_null(
-                    $tenant
-                ) && $tenant instanceof Account && $product instanceof CommunicationClientPackage && (is_null(
-                        $product->getTenant()
-                    ) || $product->getTenant()?->getId() === $tenant->getId())) {
-                $productOuts[] = $product;
-            }
-        }
-
         return $this->product;
     }
 
@@ -339,6 +336,18 @@ class CommunicationPromotions
     public function removePackage(CommunicationPricePackage $package): static
     {
         $this->packages->removeElement($package);
+
+        return $this;
+    }
+
+    public function getPriority(): string
+    {
+        return $this->priority;
+    }
+
+    public function setPriority(string $priority): static
+    {
+        $this->priority = $priority;
 
         return $this;
     }

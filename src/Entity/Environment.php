@@ -26,11 +26,11 @@ class Environment
     #[ORM\Id]
     #[ORM\GeneratedValue]
     #[ORM\Column]
-    #[Groups(['balance:reading', 'profile', 'accounts:read'])]
+    #[Groups(['balance:reading', 'profile', 'accounts:read', 'promotion:list', 'promotion:detail', 'product:read', 'env:list'])]
     private ?int $id = null;
 
     #[ORM\Column(length: 10)]
-    #[Groups(['balance:reading', 'profile', 'accounts:read'])]
+    #[Groups(['balance:reading', 'profile', 'accounts:read', 'promotion:list', 'promotion:detail', 'product:read', 'env:list'])]
     private ?string $type = null;
 
     #[ORM\Column(length: 255)]
@@ -43,6 +43,7 @@ class Environment
     private ?string $tenantId = null;
 
     #[ORM\Column(length: 255)]
+    #[Groups(['env:list'])]
     private ?string $providerName = null;
 
     #[ORM\Column(length: 255)]

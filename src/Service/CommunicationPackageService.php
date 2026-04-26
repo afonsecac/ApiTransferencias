@@ -14,10 +14,12 @@ class CommunicationPackageService extends CommonService
      * @param int|null $tenant
      * @return CommunicationClientPackage[]
      */
-    public function all(int $productId, int $tenant = null): array
+    public function all(int $productId, ?int $tenant = null): array
     {
         $product = $this->em->getRepository(CommunicationProduct::class)->find($productId);
-        $productList = $this->em->getRepository(CommunicationClientPackage::class)->getAllPackages($product?->getEnvironment()?->getType(), $tenant);
+        /** @var \App\Repository\CommunicationClientPackageRepository $clientPackageRepo */
+        $clientPackageRepo = $this->em->getRepository(CommunicationClientPackage::class);
+        $productList = $clientPackageRepo->getAllPackages($product?->getEnvironment()?->getType(), $tenant);
         if (count($productList) === 0) {
             $productList = $this->em->getRepository(CommunicationPricePackage::class)->findBy([], [
                 'amount' => 'ASC'

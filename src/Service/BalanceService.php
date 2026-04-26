@@ -8,7 +8,9 @@ use App\DTO\PaginationResult;
 use App\Entity\Account;
 use App\Entity\BalanceOperation;
 use App\Entity\Client;
+use App\Entity\CommunicationSaleInfo;
 use App\Entity\CommunicationSaleRecharge;
+use App\Enums\CommunicationStateEnum;
 use App\Entity\EmailNotification;
 use App\Entity\Environment;
 use App\Entity\ReportMarked;
@@ -24,7 +26,7 @@ use Doctrine\ORM\EntityNotFoundException;
 use Psr\Log\LoggerInterface;
 use Symfony\Bundle\SecurityBundle\Security;
 use Symfony\Component\DependencyInjection\ParameterBag\ParameterBagInterface;
-use Symfony\Component\Finder\Exception\AccessDeniedException;
+use Symfony\Component\Security\Core\Exception\AccessDeniedException;
 use Symfony\Component\Mailer\MailerInterface;
 use Symfony\Component\Messenger\MessageBusInterface;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
@@ -66,7 +68,9 @@ class BalanceService extends CommonService
      */
     public function balance(int $userId): AccountBalanceDto
     {
-        $balance = $this->em->getRepository(BalanceOperation::class)->getBalanceOutput($userId);
+        /** @var \App\Repository\BalanceOperationRepository $balanceRepo */
+        $balanceRepo = $this->em->getRepository(BalanceOperation::class);
+        $balance = $balanceRepo->getBalanceOutput($userId);
         $account = $this->em->getRepository(Account::class)->find($userId);
         if (!is_null($account)) {
             $criticalBalance = $account->getCriticalBalance() ?? $account->getClient()?->getCriticalBalance();
@@ -81,7 +85,9 @@ class BalanceService extends CommonService
                     'propertyName' => 'client.min.balance.operation',
                 ])?->getPropertyValue();
             }
-            $lastNotification = $this->em->getRepository(EmailNotification::class)->getLastNotification($userId);
+            /** @var \App\Repository\EmailNotificationRepository $emailNotifRepo */
+            $emailNotifRepo = $this->em->getRepository(EmailNotification::class);
+            $lastNotification = $emailNotifRepo->getLastNotification($userId);
             if (is_null($lastNotification)) {
                 $lastNotification = new EmailNotification();
                 $lastNotification->setActive(true);
@@ -89,7 +95,7 @@ class BalanceService extends CommonService
                 $this->em->persist($lastNotification);
             }
             if ($balance <= $criticalBalance) {
-                $tryCritical = $lastNotification?->getCriticalTry() ?? 0;
+                $tryCritical = $lastNotification->getCriticalTry() ?? 0;
                 $lastNotification->setCriticalTry($tryCritical + 1);
                 $this->messageBus->dispatch(
                     new BalanceMessage(
@@ -100,7 +106,7 @@ class BalanceService extends CommonService
                     )
                 );
             } elseif ($balance <= $minBalance) {
-                if (is_null($lastNotification) || is_null($lastNotification->getMinInfo())) {
+                if (is_null($lastNotification->getMinInfo())) {
                     $this->messageBus->dispatch(
                         new BalanceMessage(
                             'RISK',
@@ -135,13 +141,15 @@ class BalanceService extends CommonService
             throw new AccessDeniedException();
         }
 
-        $balancesAvailabilities = $this->em->getRepository(BalanceOperation::class)->getBalancesInEnvironments(
+        /** @var \App\Repository\BalanceOperationRepository $balanceRepo */
+        $balanceRepo = $this->em->getRepository(BalanceOperation::class);
+        $balancesAvailabilities = $balanceRepo->getBalancesInEnvironments(
             $clientId
         );
         $balances = [];
         foreach ($balancesAvailabilities as $balanceItem) {
             $balanceItem['currentBalance'] = round($balanceItem['currentBalance'], 2);
-            $lastPaid = $this->em->getRepository(BalanceOperation::class)->getLastDateBalance($balanceItem['id']);
+            $lastPaid = $balanceRepo->getLastDateBalance($balanceItem['id']);
             $balanceItem['lastPaid'] = $lastPaid?->getCreatedAt();
             $balanceItem['lastPaidIsAdvance'] = $lastPaid?->isPreviousAmount();
             $balances[] = $balanceItem;
@@ -198,7 +206,7 @@ class BalanceService extends CommonService
      * @param int|null $companyId
      * @return BalanceOperation[]
      */
-    public function recentTransactions(int $limit = 5, int $companyId = null): array
+    public function recentTransactions(int $limit = 5, ?int $companyId = null): array
     {
         $user = $this->security->getUser();
         if (!$user instanceof User) {
@@ -211,7 +219,9 @@ class BalanceService extends CommonService
             throw new AccessDeniedException();
         }
 
-        return $this->em->getRepository(BalanceOperation::class)->getRecentTransactions($limit, $companyId);
+        /** @var \App\Repository\BalanceOperationRepository $balanceRepo */
+        $balanceRepo = $this->em->getRepository(BalanceOperation::class);
+        return $balanceRepo->getRecentTransactions($limit, $companyId);
     }
 
     /**
@@ -223,7 +233,7 @@ class BalanceService extends CommonService
      */
     public function getBalanceOperations(
         array $filters = [],
-        string $orderBy = null,
+        ?string $orderBy = null,
         int $page = 0,
         int $limit = 10
     ): PaginationResult {
@@ -231,9 +241,11 @@ class BalanceService extends CommonService
         if (!$user instanceof User) {
             throw new AccessDeniedException();
         }
-        $companyId = $user?->getCompany()?->getId();
+        $companyId = $user->getCompany()?->getId();
 
-        return $this->em->getRepository(BalanceOperation::class)->getAllBalance(
+        /** @var \App\Repository\BalanceOperationRepository $balanceRepo */
+        $balanceRepo = $this->em->getRepository(BalanceOperation::class);
+        return $balanceRepo->getAllBalance(
             $filters,
             $orderBy,
             $page,
@@ -242,8 +254,17 @@ class BalanceService extends CommonService
         );
     }
 
-    public function createSaleBalance(Account $tenant, CommunicationSaleRecharge $sale)
+    public function createSaleBalance(Account $tenant, CommunicationSaleInfo $sale): void
     {
+        // Verificar que no exista ya un balance para esta venta
+        $existing = $this->em->getRepository(BalanceOperation::class)->findOneBy([
+            'communicationSale' => $sale,
+        ]);
+        if ($existing !== null) {
+            $this->logger->info("Balance already exists for sale {$sale->getId()}, skipping.");
+            return;
+        }
+
         $balance = new BalanceOperation();
         $balance->setTenant($tenant);
         $balance->setAmount($sale->getTotalPrice());
@@ -256,6 +277,45 @@ class BalanceService extends CommonService
         $balance->setCommunicationSale($sale);
 
         $this->em->persist($balance);
+    }
+
+    /**
+     * Reconcilia ventas completadas que no tienen balance asociado.
+     * Retorna la cantidad de balances creados.
+     */
+    public function reconcileMissingBalances(): int
+    {
+        $salesWithoutBalance = $this->em->createQueryBuilder()
+            ->select('s')
+            ->from(CommunicationSaleInfo::class, 's')
+            ->leftJoin(BalanceOperation::class, 'b', 'WITH', 'b.communicationSale = s')
+            ->where('s.state = :completed')
+            ->andWhere('b.id IS NULL')
+            ->setParameter('completed', CommunicationStateEnum::COMPLETED->value)
+            ->getQuery()
+            ->getResult();
+
+        $count = 0;
+        foreach ($salesWithoutBalance as $sale) {
+            $tenant = $sale->getTenant();
+            if ($tenant === null) {
+                $this->logger->error("Reconcile: sale {$sale->getId()} has no tenant, skipping.");
+                continue;
+            }
+            try {
+                $this->createSaleBalance($tenant, $sale);
+                $count++;
+                $this->logger->info("Reconcile: created balance for sale {$sale->getId()}");
+            } catch (\Exception $e) {
+                $this->logger->error("Reconcile: failed for sale {$sale->getId()}: " . $e->getMessage());
+            }
+        }
+
+        if ($count > 0) {
+            $this->em->flush();
+        }
+
+        return $count;
     }
 
     /**
@@ -278,7 +338,7 @@ class BalanceService extends CommonService
             if ($account->getEnvironment()?->getId() !== $balanceInDto->getEnvironmentId()) {
                 throw new MyCurrentException('BAL002', 'The account doesn\'t exist in the environment');
             }
-            if ($this->security->isGranted('ROLE_SYSTEM_EDITOR') && !$this->security->isGranted('ROLE_ADMIN')) {
+            if (!$this->security->isGranted('ROLE_ADMIN')) {
                 $currentUser = $this->security->getUser();
                 if (!$currentUser instanceof User || $account->getClient()?->getId() !== $currentUser->getCompany(
                     )?->getId()) {
@@ -346,7 +406,7 @@ class BalanceService extends CommonService
             $balance->setTotalCurrency($balanceInDto->getCurrencyApproved());
             if (!is_null($balance->getTenant())) {
                 $account = $balance->getTenant();
-                $this->closeNotification($account?->getId(), $balance);
+                $this->closeNotification($account->getId(), $balance);
             }
             $this->em->flush();
         }
@@ -357,7 +417,9 @@ class BalanceService extends CommonService
     public function closeNotification(int $accountId, BalanceOperation $balance): void
     {
         $account = $this->em->getRepository(Account::class)->find($accountId);
-        $lastNotification = $this->em->getRepository(EmailNotification::class)->getLastNotification($accountId);
+        /** @var \App\Repository\EmailNotificationRepository $emailNotifRepo */
+        $emailNotifRepo = $this->em->getRepository(EmailNotification::class);
+        $lastNotification = $emailNotifRepo->getLastNotification($accountId);
         if (!is_null($lastNotification)) {
             $lastNotification->setBalanceIn($balance);
             $lastNotification->setActive(false);
@@ -397,8 +459,10 @@ class BalanceService extends CommonService
         if (!$isMyAccount && !$this->security->isGranted('ROLE_ADMIN')) {
             throw new AccessDeniedException();
         }
-        $lastMarked = $this->em->getRepository(BalanceOperation::class)->getLastMarkedAsReported($accountId);
-        $previousAmount = $this->em->getRepository(BalanceOperation::class)->getPreviousAmount($accountId);
+        /** @var \App\Repository\BalanceOperationRepository $balanceRepo */
+        $balanceRepo = $this->em->getRepository(BalanceOperation::class);
+        $lastMarked = $balanceRepo->getLastMarkedAsReported($accountId);
+        $previousAmount = $balanceRepo->getPreviousAmount($accountId);
         $arrayToExcelExport = [];
         $opItems = [];
         if (!is_null($lastMarked)) {
@@ -415,12 +479,12 @@ class BalanceService extends CommonService
                 'package' => '',
             ];
         }
-        $operations = $this->em->getRepository(BalanceOperation::class)->filterNoMarkedTransactions($accountId);
+        $operations = $balanceRepo->filterNoMarkedTransactions($accountId);
         $currentTime = new \DateTimeImmutable('now');
         $lastId = null;
         foreach ($operations as $key => $operation) {
-            $operation?->setMarkAsReported(true);
-            $operation?->setReportedDateAt($currentTime);
+            $operation->setMarkAsReported(true);
+            $operation->setReportedDateAt($currentTime);
             $phone = '';
             if ($operation->getOperationType(
                 ) === BalanceOperationEnum::DEBIT->value && $operation->getCommunicationSale()) {
@@ -430,20 +494,20 @@ class BalanceService extends CommonService
                 $phone = $comSaleRecharge?->getPhoneNumber();
             }
             $opItems[] = [
-                'id' => $operation?->getId(),
-                'amount' => round($operation?->getTotalAmount(), 2),
-                'currency' => $operation?->getTotalCurrency(),
-                'operation_type' => $operation?->getOperationType(),
-                'date' => $operation?->getCreatedAt()?->format('c'),
+                'id' => $operation->getId(),
+                'amount' => round($operation->getTotalAmount(), 2),
+                'currency' => $operation->getTotalCurrency(),
+                'operation_type' => $operation->getOperationType(),
+                'date' => $operation->getCreatedAt()?->format('c'),
                 'phone' => $phone,
-                'system_reference' => $operation?->getCommunicationSale()?->getId(),
-                'client_reference' => $operation?->getCommunicationSale()?->getClientTransactionId(),
-                'legacy_reference' => $operation?->getCommunicationSale()?->getTransactionId(),
-                'package' => $operation?->getCommunicationSale()?->getPackage()?->getName(),
+                'system_reference' => $operation->getCommunicationSale()?->getId(),
+                'client_reference' => $operation->getCommunicationSale()?->getClientTransactionId(),
+                'legacy_reference' => $operation->getCommunicationSale()?->getTransactionId(),
+                'package' => $operation->getCommunicationSale()?->getPackage()?->getName(),
             ];
             $operation->setMarkAsReported(true);
             $operation->setReportedDateAt($currentTime);
-            $lastId = $operation?->getId();
+            $lastId = $operation->getId();
         }
         $arrayToExcelExport = array_merge($arrayToExcelExport, $opItems);
         $name = 'Report_'.$currentTime->format('c').'_'.$account?->getEnvironment()?->getType();

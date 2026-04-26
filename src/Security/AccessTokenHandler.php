@@ -10,6 +10,6 @@ class AccessTokenHandler implements AccessTokenHandlerInterface
 {
     public function getUserBadgeFrom(#[\SensitiveParameter] string $accessToken): UserBadge
     {
-        // TODO: Implement getUserBadgeFrom() method.
+        throw new AuthenticationException('Access token authentication not implemented.');
     }
 }

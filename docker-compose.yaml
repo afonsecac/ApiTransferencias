@@ -1,35 +1,142 @@
 services:
   php-fpm:
     build:
-      context: ./docker/php-fpm
-    environment:
-      - APP_ENV=${APP_ENV}
-      - APP_SECRET=${APP_SECRET}
-      - DATABASE_URL=${DATABASE_URL}
-      - CORS_ALLOW_ORIGIN=${CORS_ALLOW_ORIGIN}
-      - MAILER_DSN=${MAILER_DSN}
-      - MESSENGER_TRANSPORT_DSN=${MESSENGER_TRANSPORT_DSN}
-      - MESSENGER_TRANSPORT_VHOST=${MESSENGER_TRANSPORT_VHOST}
-      - MESSENGER_TRANSPORT_FAILURE=${MESSENGER_TRANSPORT_FAILURE}
-      - MICROSOFT_URL=${MICROSOFT_URL}
-      - JWT_MEMORY_KEY=${JWT_MEMORY_KEY}
-      - JWT_PHRASE_KEY=${JWT_PHRASE_KEY}
-      - JWT_TIMEOUT=${JWT_TIMEOUT}
-      - APP_TEST_PHONE=${APP_TEST_PHONE}
-      - APP_MAILER_FROM=${APP_MAILER_FROM}
+      context: .
+      dockerfile: docker/php-fpm/Dockerfile
+      target: php-base
     volumes:
       - ./:/var/www
+      - ./docker/php-fpm/php-dev.ini:/usr/local/etc/php/conf.d/zz-dev.ini:ro
+    environment:
+      - APP_ENV=${APP_ENV:-dev}
+      - APP_DEBUG=${APP_DEBUG:-1}
+      - APP_SECRET=${APP_SECRET}
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-app}:${POSTGRES_PASSWORD:-app}@database:5432/${POSTGRES_DB:-app}?serverVersion=15&charset=utf8
+      - CORS_ALLOW_ORIGIN=${CORS_ALLOW_ORIGIN:-'^https?://(localhost|127\.0\.0\.1)(:[0-9]+)?$$'}
+      - CORS_DASHBOARD_ORIGIN=${CORS_DASHBOARD_ORIGIN:-'^https?://(localhost|127\.0\.0\.1)(:[0-9]+)?$$'}
+      - MAILER_DSN=smtp://mailcatcher:1025
+      - MESSENGER_TRANSPORT_DSN=amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672/%2f/
+      - MESSENGER_TRANSPORT_VHOST=${MESSENGER_TRANSPORT_VHOST:-client-vh1}
+      - MESSENGER_TRANSPORT_FAILURE=${MESSENGER_TRANSPORT_FAILURE:-doctrine://default?queue_name=failed}
+      - MICROSOFT_URL=${MICROSOFT_URL:-https://login.microsoftonline.com}
+      - JWT_MEMORY_KEY=${JWT_MEMORY_KEY:-dev_key}
+      - JWT_PHRASE_KEY=${JWT_PHRASE_KEY:-dev_key}
+      - JWT_TIMEOUT=${JWT_TIMEOUT:-30}
+      - APP_TEST_PHONE=${APP_TEST_PHONE:-0000000000}
+      - APP_MAILER_FROM=${APP_MAILER_FROM:-soporte@comremit.com}
+    depends_on:
+      database:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - app
+
   nginx:
     build:
-      context: ./docker/nginx
+      context: .
+      dockerfile: docker/nginx/Dockerfile
     volumes:
-      - ./:/var/www
-      - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf
-      - ./docker/nginx/sites/:/etc/nginx/sites-available
-      - ./docker/nginx/conf.d/:/etc/nginx/conf.d
-      - ./docker/logs:/var/log
+      - ./public:/var/www/public:ro
+    ports:
+      - "16880:80"
     depends_on:
       - php-fpm
+    networks:
+      - app
+
+  database:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-app}
+      POSTGRES_USER: ${POSTGRES_USER:-app}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-app}
+    volumes:
+      - database_data:/var/lib/postgresql/data
     ports:
-      - 16880:80
-      - 16843:443
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-app}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - app
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-guest}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-guest}
+      RABBITMQ_DEFAULT_VHOST: ${MESSENGER_TRANSPORT_VHOST:-client-vh1}
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD-SHELL", "rabbitmq-diagnostics -q ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - app
+
+  mailcatcher:
+    image: schickling/mailcatcher
+    ports:
+      - "1080:1080"
+      - "1026:1026"
+    networks:
+      - app
+
+  worker:
+    build:
+      context: .
+      dockerfile: docker/php-fpm/Dockerfile
+      target: php-base
+    volumes:
+      - ./:/var/www
+    command: >
+      php bin/console messenger:consume
+      async_notifications_high
+      async_clients_high
+      async_send_sale_package
+      async_check_status
+      async_send_notification
+      --time-limit=3600
+      --memory-limit=256M
+      -vv
+    environment:
+      - APP_ENV=${APP_ENV:-dev}
+      - APP_DEBUG=${APP_DEBUG:-1}
+      - APP_SECRET=${APP_SECRET}
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-app}:${POSTGRES_PASSWORD:-app}@database:5432/${POSTGRES_DB:-app}?serverVersion=15&charset=utf8
+      - CORS_ALLOW_ORIGIN=${CORS_ALLOW_ORIGIN:-'^https?://(localhost|127\.0\.0\.1)(:[0-9]+)?$$'}
+      - CORS_DASHBOARD_ORIGIN=${CORS_DASHBOARD_ORIGIN:-'^https?://(localhost|127\.0\.0\.1)(:[0-9]+)?$$'}
+      - MAILER_DSN=smtp://mailcatcher:1025
+      - MESSENGER_TRANSPORT_DSN=amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672/%2f/
+      - MESSENGER_TRANSPORT_VHOST=${MESSENGER_TRANSPORT_VHOST:-client-vh1}
+      - MESSENGER_TRANSPORT_FAILURE=${MESSENGER_TRANSPORT_FAILURE:-doctrine://default?queue_name=failed}
+      - MICROSOFT_URL=${MICROSOFT_URL:-https://login.microsoftonline.com}
+      - JWT_MEMORY_KEY=${JWT_MEMORY_KEY:-dev_key}
+      - JWT_PHRASE_KEY=${JWT_PHRASE_KEY:-dev_key}
+      - JWT_TIMEOUT=${JWT_TIMEOUT:-30}
+      - APP_TEST_PHONE=${APP_TEST_PHONE:-0000000000}
+      - APP_MAILER_FROM=${APP_MAILER_FROM:-soporte@comremit.com}
+    depends_on:
+      database:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - app
+
+volumes:
+  database_data:
+  rabbitmq_data:
+
+networks:
+  app:
+    driver: bridge

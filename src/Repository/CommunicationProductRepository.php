@@ -38,7 +38,7 @@ class CommunicationProductRepository extends ServiceEntityRepository
         int $page = 0,
         int $limit = 10,
         string $env = 'TEST',
-        string $query = null
+        ?string $query = null
     ): IPaginationResponse {
         $currentDate = new \DateTimeImmutable();
         $dql = $this->createQueryBuilder('p')

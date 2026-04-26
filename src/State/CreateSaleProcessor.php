@@ -66,7 +66,9 @@ class CreateSaleProcessor implements ProcessorInterface
             if (is_null($package)) {
                 throw new MyCurrentException('COM003','The package don\'t exist');
             }
-            $balance = $this->em->getRepository(BalanceOperation::class)->getBalanceOutput($user->getId());
+            /** @var \App\Repository\BalanceOperationRepository $balanceRepo */
+            $balanceRepo = $this->em->getRepository(BalanceOperation::class);
+            $balance = $balanceRepo->getBalanceOutput($user->getId());
             if ($balance < $package->getAmount()) {
                 throw new MyCurrentException('COM001','Insufficient balance' );
             }
@@ -80,7 +82,7 @@ class CreateSaleProcessor implements ProcessorInterface
             $nationality = $this->em->getRepository(CommunicationNationality::class)->find($data->client->nationality);
 
             try {
-                $url = $user?->getEnvironment()?->getBasePath().'/sale/package';
+                $url = $user->getEnvironment()?->getBasePath().'/sale/package';
                 $body  = $this->serializer->serialize(
                     [
                         'client' => [
@@ -98,12 +100,12 @@ class CreateSaleProcessor implements ProcessorInterface
                             'packageType' => $package?->getComPackageType()
                         ],
                         'transactionId' => (new \DateTime('now'))->format('ymd').'02'.str_pad(
-                                $sale->getSequenceInfo(),
+                                (string) $sale->getSequenceInfo(),
                                 5,
                                 '0',
                                 STR_PAD_LEFT
                             ),
-                        'environment' => $user?->getEnvironment()?->getType()
+                        'environment' => $user->getEnvironment()?->getType()
                     ], 'json', []
                 );
                 $response = $this->httpClient->request(

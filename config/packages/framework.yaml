@@ -1,9 +1,26 @@
 # see https://symfony.com/doc/current/reference/configuration/framework.html
 framework:
     secret: '%env(APP_SECRET)%'
-    #csrf_protection: true
     http_method_override: false
     handle_all_throwables: true
+
+    rate_limiter:
+        dashboard_login:
+            policy: 'sliding_window'
+            limit: 5
+            interval: '1 minute'
+        dashboard_login_ip:
+            policy: 'sliding_window'
+            limit: 20
+            interval: '5 minutes'
+        forgot_password:
+            policy: 'fixed_window'
+            limit: 3
+            interval: '15 minutes'
+        reset_password:
+            policy: 'fixed_window'
+            limit: 5
+            interval: '15 minutes'
 #    serializer:
 #        enable_annotations: true
 

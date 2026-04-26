@@ -1,0 +1,97 @@
+# ===========================================
+# VPS STAGING - Overrides sobre base
+# Uso: docker compose -f docker-compose.vps.yaml -f docker-compose.vps.staging.yaml up -d
+# ===========================================
+
+services:
+  php-fpm:
+    build:
+      target: app
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+        reservations:
+          cpus: "0.1"
+          memory: 128M
+
+  nginx:
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 64M
+
+  database:
+    ports:
+      - "5432:5432"
+
+  rabbitmq:
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+
+  # ============================================
+  # MAILCATCHER - Captura emails en staging
+  # ============================================
+  mailcatcher:
+    image: schickling/mailcatcher
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.mail.rule=Host(`mail.${DOMAIN}`)
+      - traefik.http.routers.mail.entrypoints=websecure
+      - traefik.http.routers.mail.tls.certresolver=letsencrypt
+      - traefik.http.services.mail.loadbalancer.server.port=1080
+    restart: always
+    networks:
+      - app
+
+  # ============================================
+  # WORKER UNICO - Consume todas las colas en staging
+  # ============================================
+  worker:
+    build:
+      context: .
+      dockerfile: docker/php-fpm/Dockerfile
+      target: app
+    command: >
+      php bin/console messenger:consume
+      async_notifications_high
+      async_clients_high
+      async_send_sale_package
+      async_check_status
+      async_send_notification
+      --time-limit=3600
+      --memory-limit=256M
+      -vv
+    environment: &staging-worker-env
+      APP_ENV: ${APP_ENV}
+      APP_DEBUG: ${APP_DEBUG}
+      APP_SECRET: ${APP_SECRET}
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@database:5432/${POSTGRES_DB}?serverVersion=15&charset=utf8
+      CORS_ALLOW_ORIGIN: ${CORS_ALLOW_ORIGIN}
+      CORS_DASHBOARD_ORIGIN: ${CORS_DASHBOARD_ORIGIN}
+      MAILER_DSN: ${MAILER_DSN}
+      MESSENGER_TRANSPORT_DSN: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672/%2f/
+      MESSENGER_TRANSPORT_VHOST: ${MESSENGER_TRANSPORT_VHOST}
+      MESSENGER_TRANSPORT_FAILURE: ${MESSENGER_TRANSPORT_FAILURE:-doctrine://default?queue_name=failed}
+      MICROSOFT_URL: ${MICROSOFT_URL}
+      JWT_MEMORY_KEY: ${JWT_MEMORY_KEY}
+      JWT_PHRASE_KEY: ${JWT_PHRASE_KEY}
+      JWT_TIMEOUT: ${JWT_TIMEOUT:-30}
+      APP_TEST_PHONE: ${APP_TEST_PHONE}
+      APP_MAILER_FROM: ${APP_MAILER_FROM}
+    depends_on:
+      database:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+    networks:
+      - app

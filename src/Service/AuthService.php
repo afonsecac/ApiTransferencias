@@ -5,7 +5,6 @@ namespace App\Service;
 use App\Entity\Account;
 use App\Entity\EnvAuth;
 use App\Entity\User;
-use App\Entity\UserSession;
 use App\Repository\EnvironmentRepository;
 use App\Repository\SysConfigRepository;
 use Doctrine\ORM\EntityManagerInterface;
@@ -69,14 +68,14 @@ final class AuthService extends CommonService
     public function start(): string
     {
         $envAuth = new EnvAuth();
-        $url = "";
 
         $permission = $this->security->getUser();
-        if ($permission instanceof Account) {
-            $url = $this->parameters->get('app.microsoft.url')."/";
-
-            $url .= $permission->getEnvironment()?->getTenantId()."/oauth2/v2.0/token";
+        if (!$permission instanceof Account) {
+            throw new \RuntimeException('User must be an Account to start auth.');
         }
+
+        $url = $this->parameters->get('app.microsoft.url')."/";
+        $url .= $permission->getEnvironment()?->getTenantId()."/oauth2/v2.0/token";
 
         $tokenInfoResponse = $this->httpClient->request(
             'POST',
@@ -106,7 +105,7 @@ final class AuthService extends CommonService
         return $token;
     }
 
-    public function getActiveSession(User $user): UserSession|null
+    public function getActiveSession(User $user): null
     {
         return null;
     }

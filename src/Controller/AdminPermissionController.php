@@ -6,14 +6,14 @@ use App\Service\UserService;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\Routing\Attribute\Route;
-use Symfony\Component\Serializer\SerializerInterface;
+use Symfony\Component\Serializer\Normalizer\NormalizerInterface;
 
 #[Route('/admin/permission')]
 class AdminPermissionController extends AbstractController
 {
     public function __construct(
         private readonly UserService $userService,
-        private readonly SerializerInterface $serializer
+        private readonly NormalizerInterface $serializer
     ) {
 
     }

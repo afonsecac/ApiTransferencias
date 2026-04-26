@@ -10,14 +10,14 @@ use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Attribute\MapQueryParameter;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Serializer\Normalizer\AbstractObjectNormalizer;
-use Symfony\Component\Serializer\SerializerInterface;
+use Symfony\Component\Serializer\Normalizer\NormalizerInterface;
 
 #[Route('/admin/balance-operation')]
 class AdminBalanceOperationController extends AbstractController
 {
     public function __construct(
         private readonly BalanceService $balanceService,
-        private readonly SerializerInterface $serializer
+        private readonly NormalizerInterface $serializer
     ) {
 
     }

@@ -27,6 +27,7 @@ class TakeProductCommand extends Command
     protected function configure(): void
     {
         $this->addOption('dry-execute-take-product', null, InputOption::VALUE_NONE, 'Execute Take Product');
+        $this->addOption('env-type', null, InputOption::VALUE_REQUIRED, 'Environment type (e.g. TEST, PROD)', 'PROD');
     }
 
 
@@ -36,8 +37,10 @@ class TakeProductCommand extends Command
 
         try {
 
-            $io->note('Execute take product');
-            $this->productService->takeProduct();
+            /** @var string $env */
+            $env = $input->getOption('env-type');
+            $io->note('Execute take product for environment: ' . $env);
+            $this->productService->takeProduct($env);
 
             $io->success('Completed take product');
 

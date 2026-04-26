@@ -23,20 +23,21 @@ class CommunicationSaleHistory
 
     #[ORM\Column(length: 20)]
     #[ApiProperty]
-    #[Groups(['comSales:read'])]
+    #[Groups(['comSales:read', 'sale:detail'])]
     private ?CommunicationStateEnum $state = null;
 
     #[ORM\Column]
     #[ApiProperty]
-    #[Groups(['comSales:read'])]
+    #[Groups(['comSales:read', 'sale:detail'])]
     private array $info = [];
 
     #[ORM\Column]
+    #[Groups(['sale:detail'])]
     private ?\DateTimeImmutable $createdAt = null;
 
     #[ORM\Column(type: Types::DATETIMETZ_IMMUTABLE)]
     #[ApiProperty]
-    #[Groups(['comSales:read'])]
+    #[Groups(['comSales:read', 'sale:detail'])]
     private ?\DateTimeImmutable $updatedAt = null;
 
     public function __construct()

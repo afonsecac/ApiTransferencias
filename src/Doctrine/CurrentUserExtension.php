@@ -31,7 +31,7 @@ final class CurrentUserExtension implements QueryCollectionExtensionInterface, Q
         QueryBuilder $queryBuilder,
         QueryNameGeneratorInterface $queryNameGenerator,
         string $resourceClass,
-        Operation $operation = null,
+        ?Operation $operation = null,
         array $context = []
     ): void {
         $this->addWhere($queryBuilder, $resourceClass, $queryNameGenerator);
@@ -42,7 +42,7 @@ final class CurrentUserExtension implements QueryCollectionExtensionInterface, Q
         QueryNameGeneratorInterface $queryNameGenerator,
         string $resourceClass,
         array $identifiers,
-        Operation $operation = null,
+        ?Operation $operation = null,
         array $context = []
     ): void {
         $this->addWhere($queryBuilder, $resourceClass, $queryNameGenerator);
@@ -51,7 +51,7 @@ final class CurrentUserExtension implements QueryCollectionExtensionInterface, Q
     public function addWhere(
         QueryBuilder $queryBuilder,
         string $resourceClass,
-        QueryNameGeneratorInterface $queryNameGenerator = null
+        ?QueryNameGeneratorInterface $queryNameGenerator = null
     ): void {
         if ($this->security->isGranted('ROLE_SUPER_ADMIN')) {
             return;

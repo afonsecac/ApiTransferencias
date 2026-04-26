@@ -1,0 +1,149 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [develop, main]
+
+jobs:
+  tests:
+    name: Tests (PHP ${{ matrix.php-versions }})
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: true
+      matrix:
+        php-versions: ['8.4']
+
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_DB: app_test
+          POSTGRES_USER: app
+          POSTGRES_PASSWORD: app
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U app"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php-versions }}
+          coverage: none
+          tools: composer:v2
+          extensions: mbstring, xml, ctype, iconv, intl, pdo_pgsql, dom, filter, gd, json, pdo, amqp, zip, opcache, apcu
+
+      - name: Validate composer
+        run: composer validate --no-check-lock
+
+      - name: Cache Composer dependencies
+        uses: actions/cache@v4
+        with:
+          path: vendor
+          key: ${{ runner.os }}-composer-${{ hashFiles('**/composer.lock') }}
+          restore-keys: ${{ runner.os }}-composer-
+
+      - name: Create .env for Symfony
+        run: |
+          cat > .env <<'EOF'
+          APP_ENV=test
+          APP_SECRET=ci-secret-not-real
+          DATABASE_URL="postgresql://app:app@localhost:5432/app_test?serverVersion=15&charset=utf8"
+          CORS_ALLOW_ORIGIN='^https?://localhost(:[0-9]+)?$'
+          CORS_DASHBOARD_ORIGIN='^https?://localhost(:[0-9]+)?$'
+          MESSENGER_TRANSPORT_DSN=doctrine://default
+          MESSENGER_TRANSPORT_VHOST=/
+          MESSENGER_TRANSPORT_FAILURE=doctrine://default?queue_name=failed
+          MAILER_DSN=null://null
+          MICROSOFT_URL=https://login.microsoftonline.com
+          JWT_MEMORY_KEY=ci-test-key
+          JWT_PHRASE_KEY=ci-test-phrase
+          JWT_TIMEOUT=30
+          APP_TEST_PHONE=0000000000
+          APP_MAILER_FROM=test@test.com
+          EOF
+          sed -i 's/^          //' .env
+
+      - name: Install dependencies
+        run: composer install --prefer-dist --no-progress
+
+      - name: Check Symfony console
+        run: php bin/console -V
+        env:
+          APP_ENV: test
+
+      - name: Run tests
+        run: php vendor/bin/simple-phpunit
+        env:
+          APP_ENV: test
+          DATABASE_URL: postgresql://app:app@localhost:5432/app_test?serverVersion=15&charset=utf8
+
+  static-analysis:
+    name: PHPStan
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: mbstring, xml, ctype, iconv, intl, pdo_pgsql, amqp, zip, opcache, apcu
+
+      - name: Cache Composer dependencies
+        uses: actions/cache@v4
+        with:
+          path: vendor
+          key: ${{ runner.os }}-composer-${{ hashFiles('**/composer.lock') }}
+          restore-keys: ${{ runner.os }}-composer-
+
+      - name: Create .env for Symfony
+        run: |
+          cat > .env <<'EOF'
+          APP_ENV=dev
+          APP_SECRET=ci-secret-not-real
+          DATABASE_URL="postgresql://app:app@localhost:5432/app?serverVersion=15&charset=utf8"
+          CORS_ALLOW_ORIGIN='^https?://localhost(:[0-9]+)?$'
+          CORS_DASHBOARD_ORIGIN='^https?://localhost(:[0-9]+)?$'
+          MESSENGER_TRANSPORT_DSN=doctrine://default
+          MESSENGER_TRANSPORT_VHOST=/
+          MESSENGER_TRANSPORT_FAILURE=doctrine://default?queue_name=failed
+          MAILER_DSN=null://null
+          MICROSOFT_URL=https://login.microsoftonline.com
+          JWT_MEMORY_KEY=ci-test-key
+          JWT_PHRASE_KEY=ci-test-phrase
+          JWT_TIMEOUT=30
+          APP_TEST_PHONE=0000000000
+          APP_MAILER_FROM=test@test.com
+          EOF
+          sed -i 's/^          //' .env
+
+      - name: Install dependencies
+        run: composer install --prefer-dist --no-progress
+
+      - name: Warmup cache for PHPStan
+        run: php bin/console cache:clear --env=dev
+
+      - name: Run PHPStan
+        run: vendor/bin/phpstan analyse --no-progress
+
+  lint:
+    name: Code Style
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: PHP-CS-Fixer
+        uses: docker://oskarstark/php-cs-fixer-ga
+        with:
+          args: --config=.php_cs.dist --diff --dry-run
+        continue-on-error: true

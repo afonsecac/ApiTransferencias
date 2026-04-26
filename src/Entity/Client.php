@@ -23,11 +23,11 @@ class Client
     #[ORM\Id]
     #[ORM\GeneratedValue]
     #[ORM\Column]
-    #[Groups(['balance:reading', 'profile', 'accounts:read', 'reports:list', 'report:read'])]
+    #[Groups(['balance:reading', 'profile', 'accounts:read', 'reports:list', 'report:read', 'client:list', 'permission:read'])]
     private ?int $id = null;
 
     #[ORM\Column(length: 255)]
-    #[Groups(['balance:reading', 'profile', 'accounts:read', 'reports:list', 'report:read'])]
+    #[Groups(['balance:reading', 'profile', 'accounts:read', 'reports:list', 'report:read', 'client:list', 'permission:read'])]
     private ?string $companyName = null;
 
     #[ORM\Column(type: Types::TEXT, nullable: true)]
@@ -35,7 +35,7 @@ class Client
     private ?string $companyAddress = null;
 
     #[ORM\Column(length: 3)]
-    #[Groups(['balance:reading', 'profile', 'accounts:read'])]
+    #[Groups(['balance:reading', 'profile', 'accounts:read', 'client:list'])]
     private ?string $companyCountry = null;
 
     #[ORM\Column(length: 12, nullable: true)]
@@ -63,7 +63,7 @@ class Client
     private ?DateTimeImmutable $removeAt = null;
 
     #[ORM\Column(nullable: true)]
-    #[Groups(['balance:reading', 'profile', 'accounts:read', 'reports:list', 'report:read'])]
+    #[Groups(['balance:reading', 'profile', 'accounts:read', 'reports:list', 'report:read', 'client:list'])]
     private ?bool $isActive = null;
 
     #[ORM\Column(nullable: true)]
@@ -75,7 +75,7 @@ class Client
     private ?float $discountOfClient = null;
 
     #[ORM\Column(length: 255)]
-    #[Groups(['balance:reading', 'profile', 'accounts:read'])]
+    #[Groups(['balance:reading', 'profile', 'accounts:read', 'client:list'])]
     private ?string $companyIdentification = null;
 
     #[ORM\Column(length: 255)]

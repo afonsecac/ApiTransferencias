@@ -3,6 +3,7 @@
 namespace App\Repository;
 
 use App\Entity\NavigationItem;
+use App\Entity\UserPermission;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
 
@@ -24,100 +25,134 @@ class NavigationItemRepository extends ServiceEntityRepository
         return $this->createQueryBuilder('ni')
             ->select('ni')
             ->leftJoin('ni.children', 'c')
-//            ->addSelect('c')
-            ->where('ni.parent IS NULL AND c.parent IS NOT NULL')
+            ->where('ni.parent IS NULL')
             ->andWhere('ni.active = :is_active')
             ->setParameter('is_active', true)
             ->orderBy('ni.orderValue', 'ASC')
             ->addOrderBy('ni.title', 'ASC')
             ->getQuery()
             ->getResult();
-
     }
 
-    public function getNavigationByUserAndClient(array $roles, int $clientId = null, int $userId = null): array
+    /**
+     * Devuelve los items de navegación filtrados por permisos del usuario.
+     *
+     * Un item es visible si el usuario tiene acceso por:
+     * - Rol: su minRoleRequired está en los roles del usuario
+     * - Client: el permiso está asignado al client del usuario
+     * - Usuario: el permiso está asignado directamente al usuario
+     */
+    public function getNavigationByUserAndClient(array $roles, ?int $clientId = null, ?int $userId = null): array
     {
-        $dql = $this->createQueryBuilder('ni')
+        $allowedIds = $this->getAllowedItemIds($roles, $clientId, $userId);
+
+        if (empty($allowedIds)) {
+            return [];
+        }
+
+        return $this->createQueryBuilder('ni')
             ->select('ni')
             ->leftJoin('ni.children', 'c')
-            ->leftJoin('ni.userPermissions', 'up')
-            ->where('ni.parent IS NULL AND c.parent IS NOT NULL')
+            ->addSelect('c')
+            ->where('ni.parent IS NULL')
             ->andWhere('ni.active = :is_active')
-            ->andWhere('up.isActive = :is_active')
-            ->setParameter('is_active', true);
-
-        return $this->extracted($clientId, $dql, $userId, $roles)->orderBy('ni.orderValue', 'ASC')
+            ->andWhere('ni.id IN (:allowedIds)')
+            ->andWhere('c.active = :is_active OR c.id IS NULL')
+            ->setParameter('is_active', true)
+            ->setParameter('allowedIds', $allowedIds)
+            ->orderBy('ni.orderValue', 'ASC')
             ->addOrderBy('c.orderValue', 'ASC')
             ->addOrderBy('ni.title', 'ASC')
             ->addOrderBy('c.title', 'ASC')
-            ->getQuery()->getResult();
+            ->getQuery()
+            ->getResult();
     }
 
     /**
-     * @param array $roles
-     * @param int|null $clientId
-     * @param int|null $userId
-     * @return array
+     * Devuelve los IDs de parent y child a los que el usuario tiene acceso.
      */
-    public function accessIds(array $roles, int $clientId = null, int $userId = null): array
+    public function accessIds(array $roles, ?int $clientId = null, ?int $userId = null): array
     {
-        $dql = $this->createQueryBuilder('ni')
-            ->select('ni.id as parentId, c.id as childId')
-            ->leftJoin('ni.children', 'c')
-            ->leftJoin('ni.userPermissions', 'up')
-            ->where('ni.parent IS NULL AND c.parent IS NOT NULL')
-            ->andWhere('ni.active = :is_active')
-            ->andWhere('up.isActive = :is_active')
+        $allowedIds = $this->getAllowedItemIds($roles, $clientId, $userId);
+
+        $items = $this->findBy(['id' => $allowedIds]);
+        $itemMap = [];
+        foreach ($items as $item) {
+            $itemMap[$item->getId()] = $item;
+        }
+
+        $result = [];
+        foreach ($allowedIds as $id) {
+            $item = $itemMap[$id] ?? null;
+            if ($item === null) {
+                continue;
+            }
+            $parent = $item->getParent();
+            if ($parent !== null) {
+                $result[] = ['parentId' => $parent->getId(), 'childId' => $id];
+            } else {
+                $result[] = ['parentId' => $id, 'childId' => $id];
+            }
+        }
+
+        return $result;
+    }
+
+    /**
+     * Obtiene todos los IDs de NavigationItem a los que el usuario tiene acceso,
+     * verificando permisos tanto en padres como en hijos.
+     *
+     * @return int[]
+     */
+    public function getAllowedItemIds(array $roles, ?int $clientId, ?int $userId): array
+    {
+        $qb = $this->getEntityManager()->createQueryBuilder()
+            ->select('IDENTITY(up.item) as itemId')
+            ->from(UserPermission::class, 'up')
+            ->where('up.isActive = :is_active')
             ->setParameter('is_active', true);
 
-        return $this->extracted($clientId, $dql, $userId, $roles)->getQuery()->getScalarResult();
-    }
+        $conditions = [];
 
-    //    /**
-    //     * @return NavigationItem[] Returns an array of NavigationItem objects
-    //     */
-    //    public function findByExampleField($value): array
-    //    {
-    //        return $this->createQueryBuilder('n')
-    //            ->andWhere('n.exampleField = :val')
-    //            ->setParameter('val', $value)
-    //            ->orderBy('n.id', 'ASC')
-    //            ->setMaxResults(10)
-    //            ->getQuery()
-    //            ->getResult()
-    //        ;
-    //    }
+        // Condición por rol: el minRoleRequired debe estar en los roles del usuario
+        if (!empty($roles)) {
+            $conditions[] = 'up.minRoleRequired IN (:roles)';
+            $qb->setParameter('roles', $roles);
+        }
 
-    //    public function findOneBySomeField($value): ?NavigationItem
-    //    {
-    //        return $this->createQueryBuilder('n')
-    //            ->andWhere('n.exampleField = :val')
-    //            ->setParameter('val', $value)
-    //            ->getQuery()
-    //            ->getOneOrNullResult()
-    //        ;
-    //    }
-    /**
-     * @param int|null $clientId
-     * @param \Doctrine\ORM\QueryBuilder $dql
-     * @param int|null $userId
-     * @param array $roles
-     * @return mixed
-     */
-    public function extracted(?int $clientId, \Doctrine\ORM\QueryBuilder $dql, ?int $userId, array $roles): mixed
-    {
-        if (!is_null($clientId)) {
-            $dql->leftJoin('up.client', 'cl')
-                ->andWhere('cl.id = :clientId OR up.minRoleRequired IN (:roles)')
-                ->setParameter('clientId', $clientId);
+        // Condición por client
+        if ($clientId !== null) {
+            $conditions[] = 'up.client = :clientId';
+            $qb->setParameter('clientId', $clientId);
         }
-        if (!is_null($userId)) {
-            $dql->leftJoin('up.userInfo', 'u')
-                ->andWhere('u.id = :userId OR up.minRoleRequired IN (:roles)')
-                ->setParameter('userId', $userId);
-        } else {
-            $dql->andWhere('up.minRoleRequired IN (:roles)');
+
+        // Condición por usuario específico
+        if ($userId !== null) {
+            $conditions[] = 'up.userInfo = :userId';
+            $qb->setParameter('userId', $userId);
         }
-        return $dql->setParameter('roles', $roles);
+
+        if (empty($conditions)) {
+            return [];
+        }
+
+        $qb->andWhere(implode(' OR ', $conditions));
+
+        $rows = $qb->getQuery()->getScalarResult();
+        $allowedItemIds = array_unique(array_column($rows, 'itemId'));
+
+        // Para cada hijo permitido, incluir también su padre
+        // Para cada padre permitido, no incluir hijos automáticamente
+        $intIds = array_map('intval', $allowedItemIds);
+        $items = $this->findBy(['id' => $intIds]);
+
+        $allIds = $intIds;
+        foreach ($items as $item) {
+            if ($item->getParent() !== null) {
+                $allIds[] = $item->getParent()->getId();
+            }
+        }
+
+        return array_unique($allIds);
     }
 }

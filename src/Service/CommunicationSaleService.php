@@ -104,7 +104,6 @@ class CommunicationSaleService extends CommonService
      * @param \App\Repository\SysConfigRepository $sysConfigRepo
      * @param \Symfony\Component\Serializer\SerializerInterface $serializer
      * @param \Symfony\Contracts\HttpClient\HttpClientInterface $httpClient
-     * @param \App\Repository\BalanceOperationRepository $balanceRepository
      * @param \App\Service\ConfigureSequenceService $configureSequence
      * @param \Symfony\Component\Messenger\MessageBusInterface $messageBus
      * @param \App\Service\HistoricalSaleService $historicalSaleService
@@ -151,7 +150,9 @@ class CommunicationSaleService extends CommonService
         if (!$user instanceof Account) {
             throw new AccessDeniedException();
         }
-        $package = $this->em->getRepository(CommunicationClientPackage::class)->getPackageById(
+        /** @var \App\Repository\CommunicationClientPackageRepository $clientPackageRepo */
+        $clientPackageRepo = $this->em->getRepository(CommunicationClientPackage::class);
+        $package = $clientPackageRepo->getPackageById(
             $reserveDto->getPackageId(),
             $user
         );
@@ -162,7 +163,9 @@ class CommunicationSaleService extends CommonService
         if ($balance->amount < $package->getAmount()) {
             throw new MyCurrentException('COM001', 'Insufficient balance');
         }
-        $promotion = $this->em->getRepository(CommunicationPromotions::class)->getFuturePromotionById(
+        /** @var \App\Repository\CommunicationPromotionsRepository $promotionRepo */
+        $promotionRepo = $this->em->getRepository(CommunicationPromotions::class);
+        $promotion = $promotionRepo->getFuturePromotionById(
             $reserveDto->getPromotionId(),
             $reserveDto->getPackageId()
         );
@@ -174,6 +177,7 @@ class CommunicationSaleService extends CommonService
         $recharge = new CommunicationSaleRecharge();
         $recharge->setTenant($user);
         $recharge->setState(CommunicationStateEnum::RESERVED);
+        $recharge->setStateProcess(CommunicationStateEnum::CREATED->value);
         $recharge->setPromotionId($reserveDto->getPromotionId());
         $recharge->setPackageId($reserveDto->getPackageId());
         $recharge->setPhoneNumber($reserveDto->getPhoneNumber());
@@ -182,7 +186,7 @@ class CommunicationSaleService extends CommonService
         $recharge->setPromotion($promotion);
         $lastSequence = $this->configureSequence->getLastSequence(CommunicationSaleRecharge::class);
         $transactionId = (new \DateTime('now'))->format('ymd').'01'.str_pad(
-                $lastSequence,
+                (string) $lastSequence,
                 5,
                 '0',
                 STR_PAD_LEFT
@@ -198,8 +202,11 @@ class CommunicationSaleService extends CommonService
             $this->em->persist($comHistoric);
             $this->em->flush();
         } catch (\Exception $e) {
-            if (strpos($e->getMessage(), "unique_identification_client") >= 0) {
+            if (str_contains($e->getMessage(), "unique_identification_client")) {
                 throw new MyCurrentException('COM005', 'Duplicate transaction by customer');
+            }
+            if (str_contains($e->getMessage(), "unique_transaction_id")) {
+                throw new MyCurrentException('COM005', 'Duplicate transaction');
             }
             throw $e;
         }
@@ -219,7 +226,9 @@ class CommunicationSaleService extends CommonService
         if (!$user instanceof Account) {
             throw new AccessDeniedException();
         }
-        $package = $this->em->getRepository(CommunicationClientPackage::class)->getPackageById(
+        /** @var \App\Repository\CommunicationClientPackageRepository $clientPackageRepo */
+        $clientPackageRepo = $this->em->getRepository(CommunicationClientPackage::class);
+        $package = $clientPackageRepo->getPackageById(
             $recharge->getPackageId(),
             $user
         );
@@ -233,7 +242,7 @@ class CommunicationSaleService extends CommonService
 
         $lastSequence = $this->configureSequence->getLastSequence(CommunicationSaleRecharge::class);
         $transactionId = (new \DateTime('now'))->format('ymd').'01'.str_pad(
-                $lastSequence,
+                (string) $lastSequence,
                 5,
                 '0',
                 STR_PAD_LEFT
@@ -245,6 +254,7 @@ class CommunicationSaleService extends CommonService
         $recharge->setCurrency($package->getCurrency());
         $recharge->getCalculatePrice();
         $recharge->setState(CommunicationStateEnum::PENDING);
+        $recharge->setStateProcess(CommunicationStateEnum::CREATED->value);
 
         try {
             $this->em->persist($recharge);
@@ -272,6 +282,8 @@ class CommunicationSaleService extends CommonService
                     mb_convert_encoding(self::ETECSA_INFO_ERROR['103'], 'ISO-8859-1', 'UTF-8')
                 );
             }
+            $this->logger->error("Recharge persist failed: " . $ex->getMessage());
+            throw $ex;
         }
 
         return $recharge;
@@ -289,14 +301,12 @@ class CommunicationSaleService extends CommonService
         $this->em->flush();
         $this->messageBus->dispatch(
             new SaleRechargeMessage(
-                $saleId,
-                $recharge
+                $saleId
             )
         );
     }
 
     /**
-     * @param \App\Entity\CommunicationSaleRecharge $recharge
      * @param int $saleId
      * @return void
      * @throws \App\Exception\MyCurrentException
@@ -312,7 +322,12 @@ class CommunicationSaleService extends CommonService
         if (is_null($saleRecharge)) {
             return;
         }
-        if ($saleRecharge instanceof CommunicationSaleRecharge) {
+        {
+            // No procesar ventas reservadas — deben ser activadas por app:activate-reserved-sales
+            if ($saleRecharge->getState() === CommunicationStateEnum::RESERVED) {
+                $this->logger->info("Skipping recharge {$saleId}: still RESERVED, waiting for promotion to start.");
+                return;
+            }
             $user = $saleRecharge->getTenant();
             if (!$user instanceof Account) {
                 $saleRecharge->setState(CommunicationStateEnum::PENDING);
@@ -326,12 +341,21 @@ class CommunicationSaleService extends CommonService
 
                 return;
             }
+            // Solo procesar si stateProcess es CREATED (no enviada aún)
+            // Si ya está en PENDING o COMPLETED, la recarga ya fue enviada a ETECSA
             if ($saleRecharge->getStateProcess() !== CommunicationStateEnum::CREATED->value) {
+                $this->logger->info("Skipping recharge {$saleId}: already processed (stateProcess={$saleRecharge->getStateProcess()})");
                 return;
             }
+
+            // Lock optimista: marcar como PENDING antes de enviar para evitar reenvíos
+            $saleRecharge->setStateProcess('SENDING');
+            $this->em->flush();
             try {
                 $balance = $this->balanceService->balance($user->getId());
-                $package = $this->em->getRepository(CommunicationClientPackage::class)->getPackageById(
+                /** @var \App\Repository\CommunicationClientPackageRepository $clientPackageRepo */
+                $clientPackageRepo = $this->em->getRepository(CommunicationClientPackage::class);
+                $package = $clientPackageRepo->getPackageById(
                     $saleRecharge->getPackageId(),
                     $user
                 );
@@ -366,10 +390,12 @@ class CommunicationSaleService extends CommonService
 
                     return;
                 }
-                $urlRecharge = $environment?->getBasePath().'/sale/recharge';
+                $urlRecharge = $environment->getBasePath().'/sale/recharge';
                 $productCode = $package?->getPriceClientPackage()?->getProduct()?->getPackageId();
                 if (!is_null($saleRecharge->getPromotionId())) {
-                    $promotion = $this->em->getRepository(CommunicationPromotions::class)->getActivePromotionById(
+                    /** @var \App\Repository\CommunicationPromotionsRepository $promotionRepo */
+                    $promotionRepo = $this->em->getRepository(CommunicationPromotions::class);
+                    $promotion = $promotionRepo->getActivePromotionById(
                         $saleRecharge->getPromotionId()
                     );
                     if (!is_null($promotion)) {
@@ -378,7 +404,7 @@ class CommunicationSaleService extends CommonService
                     $saleRecharge->setPromotionId($saleRecharge->getPromotionId());
                     $saleRecharge->setPromotion($promotion);
                 } elseif ($package?->getPromotionItems()->count() === 1) {
-                    $promotion = $package?->getPromotionItems()->first();
+                    $promotion = $package->getPromotionItems()->first();
                     $saleRecharge->setPromotionId($promotion->getId());
                     $saleRecharge->setPromotion($promotion);
                     $productCode = $promotion?->getProduct()?->getPackageId();
@@ -389,7 +415,7 @@ class CommunicationSaleService extends CommonService
                 $phoneLength = strlen($saleRecharge->getPhoneNumber());
                 $checkPhone = substr($saleRecharge->getPhoneNumber(), $phoneLength - 2, $phoneLength);
                 $phoneNumber = $saleRecharge->getPhoneNumber();
-                if ($environment?->getType() === 'TEST') {
+                if ($environment->getType() === 'TEST') {
                     $phoneNumber = $checkPhone === "60" ? $this->parameters->get(
                         'app.phoneNumber'
                     ) : $saleRecharge->getPhoneNumber();
@@ -401,7 +427,7 @@ class CommunicationSaleService extends CommonService
                     'productCode' => $productCode,
                     'productPrice' => round($destination->amount, 2),
                     'transactionId' => $saleRecharge->getTransactionId(),
-                    'environment' => $environment?->getType(),
+                    'environment' => $environment->getType(),
                 ];
 
                 $rechargeResponse = $this->httpClient->request(
@@ -454,10 +480,15 @@ class CommunicationSaleService extends CommonService
                     $saleRecharge->setTransactionStatus($comInfo);
                 }
                 $this->em->flush();
-                $this->messageBus->dispatch(new CheckSaleMessage($saleId));
+                // Solo despachar check si la venta sigue pendiente (no si fue rechazada)
+                if ($saleRecharge->getState() === CommunicationStateEnum::PENDING) {
+                    $this->messageBus->dispatch(new CheckSaleMessage($saleId));
+                }
             } catch (ClientExceptionInterface|TimeoutException $exc) {
+                // Timeout/error de cliente: la petición pudo haber llegado a ETECSA.
+                // NO resetear stateProcess a CREATED para evitar reenvío.
                 $saleRecharge->setState(CommunicationStateEnum::PENDING);
-                $saleRecharge->setStateProcess(CommunicationStateEnum::CREATED->value);
+                $saleRecharge->setStateProcess(CommunicationStateEnum::PENDING->value);
                 $comInfo = [
                     'error' => [
                         'message' => sprintf(
@@ -478,8 +509,10 @@ class CommunicationSaleService extends CommonService
                 );
                 $saleRecharge->setTransactionStatus($comInfo);
             } catch (RedirectionExceptionInterface|ServerExceptionInterface|TransportExceptionInterface $exc) {
+                // Error de red/servidor: la petición pudo haber llegado a ETECSA.
+                // NO resetear stateProcess a CREATED para evitar reenvío.
                 $saleRecharge->setState(CommunicationStateEnum::PENDING);
-                $saleRecharge->setStateProcess(CommunicationStateEnum::CREATED->value);
+                $saleRecharge->setStateProcess(CommunicationStateEnum::PENDING->value);
                 $comInfo = [
                     'error' => [
                         'message' => sprintf(
@@ -498,7 +531,7 @@ class CommunicationSaleService extends CommonService
                 $saleRecharge->setTransactionStatus($comInfo);
             } catch (\Exception $ex) {
                 $saleRecharge->setState(CommunicationStateEnum::PENDING);
-                $saleRecharge->setStateProcess(CommunicationStateEnum::CREATED->value);
+                $saleRecharge->setStateProcess(CommunicationStateEnum::PENDING->value);
                 $comInfo = [
                     'error' => [
                         'message' => sprintf(
@@ -515,7 +548,7 @@ class CommunicationSaleService extends CommonService
                     CommunicationStateEnum::PENDING
                 );
                 if ($ex instanceof Exception\UniqueConstraintViolationException) {
-                    if (strpos($ex->getPrevious()?->getMessage(), "unique_identification_client") >= 0) {
+                    if (strpos($ex->getPrevious()?->getMessage() ?? '', "unique_identification_client") !== false) {
                         $comInfo = [
                             'error' => [
                                 'code' => 'COM005',
@@ -537,8 +570,6 @@ class CommunicationSaleService extends CommonService
             }
 
             $this->em->flush();
-        } else {
-            throw new MyCurrentException(151, 'The sale information no longer exists.');
         }
     }
 
@@ -553,19 +584,21 @@ class CommunicationSaleService extends CommonService
             throw new AccessDeniedException();
         }
         $balance = $this->balanceService->balance($user->getId());
-        $package = $this->em->getRepository(CommunicationClientPackage::class)->getPackageById(
+        /** @var \App\Repository\CommunicationClientPackageRepository $clientPackageRepo */
+        $clientPackageRepo = $this->em->getRepository(CommunicationClientPackage::class);
+        $package = $clientPackageRepo->getPackageById(
             $sale->getPackageId(),
             $user
         );
         if (is_null($package)) {
             throw new MyCurrentException('COM003', 'The package don\'t exist');
         }
-        if ($balance->amount < $package?->getPriceClientPackage()?->getAmount()) {
+        if ($balance->amount < $package->getPriceClientPackage()?->getAmount()) {
             throw new MyCurrentException('COM001', 'Insufficient balance');
         }
         $lastSequence = $this->configureSequence->getLastSequence(CommunicationSalePackage::class);
         $transactionId = (new \DateTime('now'))->format('ymd').'02'.str_pad(
-                $lastSequence,
+                (string) $lastSequence,
                 5,
                 '0',
                 STR_PAD_LEFT
@@ -573,10 +606,11 @@ class CommunicationSaleService extends CommonService
         $sale->setTransactionId($transactionId);
         $sale->setPackage($package);
         $sale->setTenant($user);
-        $sale->setAmount($package?->getPriceClientPackage()?->getAmount());
-        $sale->setCurrency($package?->getPriceClientPackage()?->getCurrency());
+        $sale->setAmount($package->getPriceClientPackage()?->getAmount());
+        $sale->setCurrency($package->getPriceClientPackage()?->getCurrency());
         $sale->getCalculatePrice();
         $sale->setState(CommunicationStateEnum::PENDING);
+        $sale->setStateProcess(CommunicationStateEnum::CREATED->value);
 
         $commercialOffice = $this->em->getRepository(CommunicationOffice::class)->findOneBy([
             'id' => $sale->commercialOfficeId,
@@ -596,7 +630,6 @@ class CommunicationSaleService extends CommonService
         $sale->setNationality($nationality);
 
         try {
-            $this->em->persist($sale);
             $this->em->persist($sale);
             $comHistoric = new CommunicationSaleHistory();
             $comHistoric->setState(CommunicationStateEnum::PENDING);
@@ -634,43 +667,56 @@ class CommunicationSaleService extends CommonService
         if (is_null($sale) || $sale->getState() !== CommunicationStateEnum::PENDING) {
             return;
         }
+        // Evitar reenvío: solo procesar si no fue enviada aún
+        if ($sale->getStateProcess() !== null && $sale->getStateProcess() !== CommunicationStateEnum::CREATED->value) {
+            $this->logger->info("Skipping sale {$saleId}: already processed (stateProcess={$sale->getStateProcess()})");
+            return;
+        }
+        // Lock: marcar como enviándose
+        $sale->setStateProcess('SENDING');
+        $this->em->flush();
+
         $transactionId = $sale->getTransactionId();
         try {
-            $user = $sale?->getTenant();
+            $user = $sale->getTenant();
             if (!$user instanceof Account) {
+                $this->failSale($sale, 'Unexpected user');
                 return;
             }
-            $commercialOffice = $sale?->getCommercialOffice();
+            $commercialOffice = $sale->getCommercialOffice();
             if (is_null($commercialOffice)) {
+                $this->failSale($sale, 'Missing commercial office');
                 return;
             }
-            $nationality = $sale?->getNationality();
+            $nationality = $sale->getNationality();
             if (is_null($nationality)) {
+                $this->failSale($sale, 'Missing nationality');
                 return;
             }
-            $package = $sale?->getPackage();
+            $package = $sale->getPackage();
             if (!$package instanceof CommunicationClientPackage) {
+                $this->failSale($sale, 'Missing package');
                 return;
             }
             $urlSale = $user->getEnvironment()?->getBasePath().'/sale/package';
 
             $body = [
                 'client' => [
-                    'id' => $sale?->getIdentificationNumber(),
-                    'name' => $sale?->getName(),
+                    'id' => $sale->getIdentificationNumber(),
+                    'name' => $sale->getName(),
                     'identificationType' => $sale->getIdentificationType() ?? 1,
-                    'arrivalDate' => $sale?->getArrivalAt() ? $sale->getArrivalAt()?->format('Y-m-d') : null,
+                    'arrivalDate' => $sale->getArrivalAt() ? $sale->getArrivalAt()->format('Y-m-d') : null,
                     'isAirport' => $commercialOffice->isIsAirport(),
-                    'commercialOfficeId' => $commercialOffice?->getComId(),
-                    'provinceId' => $commercialOffice?->getProvince()?->getComId(),
-                    'nationality' => $nationality?->getComId(),
+                    'commercialOfficeId' => $commercialOffice->getComId(),
+                    'provinceId' => $commercialOffice->getProvince()?->getComId(),
+                    'nationality' => $nationality->getComId(),
                 ],
                 'packageInfo' => [
-                    'id' => $package?->getPriceClientPackage()?->getProduct()?->getPackageId(),
-                    'packageType' => $package?->getPriceClientPackage()?->getProduct()?->getPackageType(),
+                    'id' => $package->getPriceClientPackage()?->getProduct()?->getPackageId(),
+                    'packageType' => $package->getPriceClientPackage()?->getProduct()?->getPackageType(),
                 ],
                 'transactionId' => $transactionId,
-                'environment' => $user?->getEnvironment()?->getType(),
+                'environment' => $user->getEnvironment()?->getType(),
             ];
 
             $saleResponse = $this->httpClient->request(
@@ -697,23 +743,25 @@ class CommunicationSaleService extends CommonService
                 $sale->setState(CommunicationStateEnum::FAILED);
             }
             $sale->setTransactionStatus($saleInfo);
+            $sale->setStateProcess(CommunicationStateEnum::PENDING->value);
             $this->em->flush();
             $this->messageBus->dispatch(new CheckSaleMessage($sale->getId()));
         } catch (\Exception $exc) {
-
+            $sale->setStateProcess(CommunicationStateEnum::PENDING->value);
+            $this->em->flush();
+            $this->logger->error("Sale {$saleId} execution error: " . $exc->getMessage());
         }
     }
 
-    /**
-     * @param int $saleId
-     * @return \App\Entity\CommunicationSaleInfo|null
-     * @throws \Symfony\Contracts\HttpClient\Exception\ClientExceptionInterface
-     * @throws \Symfony\Contracts\HttpClient\Exception\DecodingExceptionInterface
-     * @throws \Symfony\Contracts\HttpClient\Exception\RedirectionExceptionInterface
-     * @throws \Symfony\Contracts\HttpClient\Exception\ServerExceptionInterface
-     * @throws \Symfony\Contracts\HttpClient\Exception\TransportExceptionInterface
-     * @throws \Symfony\Component\Messenger\Exception\ExceptionInterface
-     */
+    private function failSale(CommunicationSaleInfo $sale, string $reason): void
+    {
+        $sale->setState(CommunicationStateEnum::FAILED);
+        $sale->setStateProcess(CommunicationStateEnum::FAILED->value);
+        $sale->setTransactionStatus(['result' => ['message' => $reason]]);
+        $this->em->flush();
+        $this->logger->error("Sale {$sale->getId()} failed: {$reason}");
+    }
+
     public function checkSaleInfo(int $saleId): CommunicationSaleInfo|null
     {
         $user = $this->security->getUser();
@@ -761,13 +809,20 @@ class CommunicationSaleService extends CommonService
      * @throws \Symfony\Contracts\HttpClient\Exception\ServerExceptionInterface
      * @throws \Symfony\Contracts\HttpClient\Exception\TransportExceptionInterface
      */
-    public function checkStatusOrder(int $saleId, bool $isProcess = null): void
+    public function checkStatusOrder(int $saleId, ?bool $isProcess = null): void
     {
         sleep(2);
         $sale = $this->em->getRepository(CommunicationSaleInfo::class)->find($saleId);
-        if (is_null($sale) ||
-            $sale->getState() !== CommunicationStateEnum::PENDING ||
-            $sale->getStateProcess() === CommunicationStateEnum::CREATED->value) {
+        if (is_null($sale) || $sale->getState() !== CommunicationStateEnum::PENDING) {
+            return;
+        }
+        // No hacer check si la transacción aún no fue enviada a ETECSA
+        $stateProcess = $sale->getStateProcess();
+        if ($stateProcess === null
+            || $stateProcess === CommunicationStateEnum::CREATED->value
+            || $stateProcess === 'SENDING'
+        ) {
+            $this->logger->info("Check skipped for sale {$saleId}: not yet sent to provider (stateProcess={$stateProcess})");
             return;
         }
         $tenant = $sale->getTenant();
@@ -777,10 +832,11 @@ class CommunicationSaleService extends CommonService
         $url = $tenant->getEnvironment()?->getBasePath().'/sale/sale-info';
 
         $body = [
-            'environment' => $tenant?->getEnvironment()?->getType(),
+            'environment' => $tenant->getEnvironment()?->getType(),
             'transactionId' => $sale->getTransactionId(),
         ];
 
+        $rechargeResponse = null;
         try {
             $rechargeResponse = $this->httpClient->request(
                 'POST',
@@ -797,17 +853,22 @@ class CommunicationSaleService extends CommonService
             $response = $rechargeResponse->toArray();
             $responseInfo = (object)$response;
             $statusResponse = strtoupper($responseInfo->status);
-            $result = (object)$responseInfo->result;
-            $fullResponse = (object) $responseInfo->fullResponse;
+            $result = isset($responseInfo->result) ? (object)$responseInfo->result : null;
+            $fullResponse = isset($responseInfo->fullResponse) ? (object) $responseInfo->fullResponse : null;
             $isTrue = false;
-            if (!is_null($fullResponse)) {
-                $fullResponseObj = (object) $fullResponse->SaleRecharge;
-                if (!is_null($fullResponseObj)) {
+            if ($fullResponse !== null) {
+                $fullResponseObj = isset($fullResponse->SaleRecharge) ? (object) $fullResponse->SaleRecharge : null;
+                if ($fullResponseObj !== null) {
                     $isTrue = $statusResponse === "COMPLETED" && $fullResponseObj->RechargeStateCode === "OK";
                 }
             }
             $sale->setTransactionStatus($response);
             if ($isTrue || (property_exists($responseInfo, 'orderId') && isset($responseInfo->orderId))) {
+                // Evitar procesar si ya fue completada (check concurrente)
+                $this->em->refresh($sale);
+                if ($sale->getState() === CommunicationStateEnum::COMPLETED) {
+                    return;
+                }
                 if (property_exists($responseInfo, 'orderId') && isset($responseInfo->orderId)) {
                     $orderId = $responseInfo->orderId;
                     $sale->setTransactionOrder($orderId);
@@ -822,7 +883,11 @@ class CommunicationSaleService extends CommonService
                     return;
                 }
 
-                $this->balanceService->createSaleBalance($tenant, $sale);
+                try {
+                    $this->balanceService->createSaleBalance($tenant, $sale);
+                } catch (\Exception $balanceEx) {
+                    $this->logger->critical("BALANCE FAILED for sale {$sale->getId()}: " . $balanceEx->getMessage());
+                }
                 $this->historicalSaleService->createHistoricalCommunication(
                     $sale->getId(),
                     CommunicationStateEnum::COMPLETED,
@@ -879,9 +944,9 @@ class CommunicationSaleService extends CommonService
             }
             $this->em->flush();
         } catch (\Exception $e) {
-            $infoResponse = $this->serializer->decode($rechargeResponse->getContent(false), 'json');
+            $infoResponse = $rechargeResponse !== null ? json_decode($rechargeResponse->getContent(false), true) : [];
             $message = $e->getMessage();
-            $this->logger->error($rechargeResponse->getContent(false), $infoResponse);
+            $this->logger->error($rechargeResponse !== null ? $rechargeResponse->getContent(false) : $message, is_array($infoResponse) ? $infoResponse : []);
             if ($e instanceof ClientException && $e->getCode() === 404 && $isProcess) {
                 // TO-DO: Recheck info to process
                 // $this->tryAgainWithTransaction($saleId);
@@ -939,7 +1004,9 @@ class CommunicationSaleService extends CommonService
      */
     public function unprocessed(): void
     {
-        $sales = $this->em->getRepository(CommunicationSaleInfo::class)->getLastPending();
+        /** @var \App\Repository\CommunicationSaleInfoRepository $saleInfoRepo */
+        $saleInfoRepo = $this->em->getRepository(CommunicationSaleInfo::class);
+        $sales = $saleInfoRepo->getLastPending();
         foreach ($sales as $sale) {
             $this->checkStatusOrder($sale->getId(), true);
         }

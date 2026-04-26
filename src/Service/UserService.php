@@ -7,6 +7,7 @@ use App\DTO\ForgotPassword;
 use App\DTO\ResetPassword;
 use App\Entity\Account;
 use App\Entity\Client;
+use App\EntityPaginator\PaginatorResponse;
 use App\Entity\Environment;
 use App\Entity\NavigationItem;
 use App\Entity\User;
@@ -39,8 +40,8 @@ use Symfony\Component\Serializer\SerializerInterface;
 
 class UserService extends CommonService
 {
-    static string $ISS_VALUE = 'https://api-tx.sendmundo.com';
-    static string $AUD_VALUE = 'https://dashboard.sendmundo.com';
+    private string $issValue;
+    private string $audValue;
 
     public function __construct(
         EntityManagerInterface $em,
@@ -66,6 +67,8 @@ class UserService extends CommonService
             $sysConfigRepo,
             $serializer
         );
+        $this->issValue = $parameters->get('app.jwt.issuer');
+        $this->audValue = $parameters->get('app.jwt.audience');
     }
 
     public function findByEmail(string $email): ?User
@@ -124,10 +127,12 @@ class UserService extends CommonService
 
     public function getActiveSession(int $userId): ?UserSession
     {
-        return $this->em->getRepository(UserSession::class)->getActiveUserSession($userId);
+        /** @var \App\Repository\UserSessionRepository $sessionRepo */
+        $sessionRepo = $this->em->getRepository(UserSession::class);
+        return $sessionRepo->getActiveUserSession($userId);
     }
 
-    public function parserJwt(DefaultValidator $validator = null): Parser
+    public function parserJwt(?DefaultValidator $validator = null): Parser
     {
         return new Parser($this->createSignature(), $validator);
     }
@@ -136,6 +141,7 @@ class UserService extends CommonService
     {
         $roles = $user->getRoles();
         $userRoles = [];
+        $accessIds = [];
         try {
             $userRoles = $this->roleHierarchy->getReachableRoleNames($roles);
             $clientId = $user->getCompany()?->getId();
@@ -144,8 +150,9 @@ class UserService extends CommonService
                 $clientId = null;
                 $userId = null;
             }
-            $allIds = $this->em->getRepository(NavigationItem::class)->accessIds($userRoles, $clientId, $userId);
-            $accessIds = [];
+            /** @var \App\Repository\NavigationItemRepository $navRepo */
+            $navRepo = $this->em->getRepository(NavigationItem::class);
+            $allIds = $navRepo->accessIds($userRoles, $clientId, $userId);
             foreach ($allIds as $itemIds) {
                 if (!in_array($itemIds['parentId'], $accessIds, true)) {
                     $accessIds[] = $itemIds['parentId'];
@@ -215,10 +222,15 @@ class UserService extends CommonService
      */
     public function createToken(User $user, ?UserSession $userSession): string
     {
+        $payloadUser = $this->createPayloadUser($user);
+        return $this->createTokenFromPayload($user, $payloadUser);
+    }
+
+    public function createTokenFromPayload(User $user, array $payloadUser): string
+    {
         $generator = $this->generatorJwt();
         $timeToExpire = $this->parameters->get('app.jwt.expired');
         $currentTime = new \DateTimeImmutable('now');
-        $payloadUser = $this->createPayloadUser($user);
         $payload = $this->serializer->serialize($payloadUser, 'json', [
             'groups' => ['profile'],
         ]);
@@ -229,8 +241,8 @@ class UserService extends CommonService
             'sub' => $user->getId(),
             'exp' => (new \DateTimeImmutable('now'))->modify('+'.$timeToExpire.' minutes')->getTimestamp(),
             'nbf' => $currentTime->getTimestamp(),
-            'iss' => self::$ISS_VALUE,
-            'aud' => self::$AUD_VALUE,
+            'iss' => $this->issValue,
+            'aud' => $this->audValue,
         ]);
     }
 
@@ -243,26 +255,26 @@ class UserService extends CommonService
      */
     public function forgotPassword(ForgotPassword $forgotPassword): array
     {
+        // Siempre devolver la misma respuesta para evitar enumeración de emails
+        $successResponse = ['send' => true];
+
         $user = $this->em->getRepository(User::class)->findOneBy([
             'email' => $forgotPassword->getEmail(),
             'isActive' => true,
         ]);
         if (is_null($user)) {
-            return [
-                'send' => false,
-                'error' => [
-                    'message' => 'User not found',
-                ],
-                'status' => Response::HTTP_NOT_FOUND,
-            ];
+            $this->logger->info('Forgot password attempt for non-existent email: ' . $forgotPassword->getEmail());
+            return $successResponse;
         }
 
-        $userCode = $this->em->getRepository(UserCode::class)->getLastCodeByEmail($forgotPassword->getEmail());
+        /** @var \App\Repository\UserCodeRepository $userCodeRepo */
+        $userCodeRepo = $this->em->getRepository(UserCode::class);
+        $userCode = $userCodeRepo->getLastCodeByEmail($forgotPassword->getEmail());
         if (is_null($userCode)) {
             $userCode = new UserCode();
             $userCode->setCode(DashboardUtil::generateUniqueCode());
             $userCode->setUserInfo($user);
-            $userCode->setInvalidAt((new \DateTimeImmutable('now'))->modify('+1 day'));
+            $userCode->setInvalidAt((new \DateTimeImmutable('now'))->modify('+1 hour'));
             $this->em->persist($userCode);
             $this->em->flush();
         }
@@ -276,14 +288,12 @@ class UserService extends CommonService
             )
         );
 
-        return [
-            'send' => true,
-        ];
+        return $successResponse;
     }
 
     /**
      * @param \App\DTO\ResetPassword $resetPassword
-     * @return array|true[]
+     * @return array<string, mixed>
      */
     public function resetPassword(ResetPassword $resetPassword): array
     {
@@ -296,7 +306,9 @@ class UserService extends CommonService
                 'status' => Response::HTTP_BAD_REQUEST,
             ];
         }
-        $userCode = $this->em->getRepository(UserCode::class)->getByCodeAndEmailNotUsed(
+        /** @var \App\Repository\UserCodeRepository $userCodeRepo */
+        $userCodeRepo = $this->em->getRepository(UserCode::class);
+        $userCode = $userCodeRepo->getByCodeAndEmailNotUsed(
             $resetPassword->getCode(),
             $resetPassword->getEmail()
         );
@@ -352,17 +364,15 @@ class UserService extends CommonService
             $validator->addRequiredRule('exp', new NewerThan($currentTime->getTimestamp()));
             $validator->addRequiredRule('nbf', new OlderThanOrSame($currentTime->getTimestamp()));
             $validator->addRequiredRule('iat', new OlderThanOrSame($currentTime->getTimestamp()));
-            $validator->addRequiredRule('iss', new IdenticalTo(self::$ISS_VALUE));
-            $validator->addRequiredRule('aud', new IdenticalTo(self::$AUD_VALUE));
+            $validator->addRequiredRule('iss', new IdenticalTo($this->issValue));
+            $validator->addRequiredRule('aud', new IdenticalTo($this->audValue));
             $parser = $this->parserJwt($validator);
             $objectParser = (object)$parser->parse($token);
             if (property_exists($objectParser, 'jti') && !is_null($objectParser->jti)) {
                 $sessionId = $objectParser->jti;
-                if (!is_null($sessionId)) {
-                    $session = $this->em->getRepository(UserSession::class)->find($sessionId);
-                    if (!is_null($session)) {
-                        $this->updateActiveSession($session);
-                    }
+                $session = $this->em->getRepository(UserSession::class)->find($sessionId);
+                if (!is_null($session)) {
+                    $this->updateActiveSession($session);
                 }
             }
 
@@ -370,8 +380,8 @@ class UserService extends CommonService
         } catch (\Exception $e) {
             $tokenSplit = explode('.', $token);
             $dataCode = base64_decode($tokenSplit[1]);
-            $objectDecode = $this->serializer->decode($dataCode, 'json');
-            if (is_object($objectDecode) && property_exists($objectDecode, 'jti') && is_numeric($objectDecode['jti'])) {
+            $objectDecode = json_decode($dataCode, true);
+            if (is_array($objectDecode) && array_key_exists('jti', $objectDecode) && is_numeric($objectDecode['jti'])) {
                 $session = $this->em->getRepository(UserSession::class)->find($objectDecode['jti']);
                 if (!is_null($session)) {
                     $this->closeAllSessions([$session]);
@@ -390,7 +400,9 @@ class UserService extends CommonService
     public function closeAllOpenSessions(): void
     {
         $timeToExpire = $this->parameters->get('app.jwt.expired');
-        $sessions = $this->em->getRepository(UserSession::class)->sessionUnclosed((int)$timeToExpire);
+        /** @var \App\Repository\UserSessionRepository $sessionRepo */
+        $sessionRepo = $this->em->getRepository(UserSession::class);
+        $sessions = $sessionRepo->sessionUnclosed((int)$timeToExpire);
         $this->closeAllSessions($sessions);
     }
 
@@ -399,7 +411,9 @@ class UserService extends CommonService
         if (!$this->security->isGranted('ROLE_SYSTEM_ADMIN')) {
             throw new AccessDeniedException();
         }
-        $sessions = $this->em->getRepository(UserSession::class)->sessionUnclosedByUser($userId);
+        /** @var \App\Repository\UserSessionRepository $sessionRepo */
+        $sessionRepo = $this->em->getRepository(UserSession::class);
+        $sessions = $sessionRepo->sessionUnclosedByUser($userId);
         $this->closeAllSessions($sessions);
 
         return count($sessions);
@@ -407,7 +421,9 @@ class UserService extends CommonService
 
     public function closeMySession(int $userId): bool
     {
-        $sessions = $this->em->getRepository(UserSession::class)->sessionUnclosedByUser($userId);
+        /** @var \App\Repository\UserSessionRepository $sessionRepo */
+        $sessionRepo = $this->em->getRepository(UserSession::class);
+        $sessions = $sessionRepo->sessionUnclosedByUser($userId);
         $this->closeAllSessions($sessions);
 
         return count($sessions) !== 0;
@@ -427,7 +443,7 @@ class UserService extends CommonService
         }
     }
 
-    public function allUsers(int $page = 0, int $limit = 20, array $filters = [], array $orders = []): array
+    public function allUsers(int $page = 0, int $limit = 20, array $filters = [], array $orders = []): PaginatorResponse
     {
         $user = $this->security->getUser();
         if (!$user instanceof User) {
@@ -436,7 +452,9 @@ class UserService extends CommonService
         $companyId = $user->getCompany()?->getId();
         $active = !is_null($companyId) ? true : null;
 
-        return $this->em->getRepository(User::class)->searchAllUsersInCompany($companyId, $active, $page, $limit);
+        /** @var \App\Repository\UserRepository $userRepo */
+        $userRepo = $this->em->getRepository(User::class);
+        return $userRepo->searchAllUsersInCompany($companyId, $active, $page, $limit);
     }
 
     public function getPermissionUsed(): AccountPermission
@@ -451,7 +469,9 @@ class UserService extends CommonService
             ], [
                 'companyName' => 'ASC',
             ]);
-            $accounts = $this->em->getRepository(Account::class)->getAccounts();
+            /** @var \App\Repository\AccountRepository $accountRepo */
+            $accountRepo = $this->em->getRepository(Account::class);
+            $accounts = $accountRepo->getAccounts();
             $environments = $this->em->getRepository(Environment::class)->findBy([], [
                 'opType' => 'ASC',
                 'providerName' => 'ASC',
@@ -486,5 +506,7 @@ class UserService extends CommonService
 
             return new AccountPermission($accounts, $environments, [$client], $preferEnvironment, $preferAccount);
         }
+
+        throw new AccessDeniedException('Insufficient permissions to access account information.');
     }
 }

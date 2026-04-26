@@ -82,20 +82,20 @@ class CreateRechargeProcessor implements ProcessorInterface
                 $data->setRate(($package->getComPrice() / $package->getAmount()));
                 $data->setTenant($user);
                 try {
-                    $urlRecharge = $user?->getEnvironment()?->getBasePath().'/sale/recharge';
-                    $urlStatus = $user?->getEnvironment()?->getBasePath().'/sale/sale-info';
+                    $urlRecharge = $user->getEnvironment()?->getBasePath().'/sale/recharge';
+                    $urlStatus = $user->getEnvironment()?->getBasePath().'/sale/sale-info';
                     $transactionId = (new \DateTime('now'))->format('ymd').'01'.str_pad(
-                            $data->getSequence(),
+                            (string) $data->getSequence(),
                             5,
                             '0',
                             STR_PAD_LEFT
                         );
                     $body = [
                         'phoneNumber' => $data->getPhoneNumber(),
-                        'productCode' => $package?->getComId(),
-                        'productPrice' => round($data?->getPrice(), 2),
+                        'productCode' => $package->getComId(),
+                        'productPrice' => round($data->getPrice(), 2),
                         'transactionId' => $transactionId,
-                        'environment' => $user?->getEnvironment()?->getType(),
+                        'environment' => $user->getEnvironment()?->getType(),
                     ];
                     $response = $this->httpClient->request(
                         'POST',
@@ -121,7 +121,7 @@ class CreateRechargeProcessor implements ProcessorInterface
                     $bodyCheck = [
                         'orderId' => $orderId,
                         'transactionId' => $transactionId,
-                        'environment' => $user?->getEnvironment()?->getType(),
+                        'environment' => $user->getEnvironment()?->getType(),
                     ];
 
                     $responseStatus = $this->httpClient->request(
