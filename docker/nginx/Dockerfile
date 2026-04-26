@@ -18,7 +18,7 @@ COPY . .
 RUN printf '%s\n' \
        'APP_ENV=prod' \
        'APP_SECRET=build' \
-       'DATABASE_URL="postgresql://localhost:5432/app?serverVersion=15"' \
+       'DATABASE_URL="postgresql://localhost:5432/app?serverVersion=18"' \
        'MESSENGER_TRANSPORT_DSN=doctrine://default' \
        'MESSENGER_TRANSPORT_VHOST=/' \
        'MESSENGER_TRANSPORT_FAILURE=doctrine://default?queue_name=failed' \

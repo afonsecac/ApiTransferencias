@@ -52,7 +52,7 @@ COPY . .
 RUN printf '%s\n' \
        'APP_ENV=prod' \
        'APP_SECRET=change-me' \
-       'DATABASE_URL="postgresql://localhost:5432/app?serverVersion=15"' \
+       'DATABASE_URL="postgresql://localhost:5432/app?serverVersion=18"' \
        'CORS_ALLOW_ORIGIN="^https?://localhost$"' \
        'MESSENGER_TRANSPORT_DSN=doctrine://default' \
        'MESSENGER_TRANSPORT_VHOST=/' \

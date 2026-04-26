@@ -29,6 +29,18 @@ jobs:
           script: |
             cd ${{ secrets.STAGING_APP_PATH || '/opt/api-transferencias' }}
 
+            echo "=== Creating pre-deploy backup ==="
+            TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+            mkdir -p backups/staging
+            docker compose -f docker-compose.vps.yaml -f docker-compose.vps.staging.yaml \
+              --env-file .env.vps exec -T database \
+              pg_dump -U $(grep ^POSTGRES_USER .env.vps | cut -d= -f2) \
+              $(grep ^POSTGRES_DB .env.vps | cut -d= -f2) \
+              | gzip > "backups/staging/db_${TIMESTAMP}.sql.gz"
+            echo "Backup: backups/staging/db_${TIMESTAMP}.sql.gz"
+            # Retain last 7 backups
+            ls -t backups/staging/db_*.sql.gz 2>/dev/null | tail -n +8 | xargs -r rm
+
             echo "=== Pulling latest changes ==="
             git fetch origin develop
             git checkout develop
