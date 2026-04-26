@@ -93,6 +93,46 @@ check_env() {
   Luego edita los valores:
     nano .env.vps"
     fi
+    check_env_quoting
+}
+
+# Variables que legítimamente llevan comillas en su valor (p. ej. regex de CORS,
+# hash de Traefik). El resto de las variables no deben tener comillas literales
+# porque docker compose las pasa byte-a-byte al runtime, rompiendo credenciales.
+QUOTED_VARS_OK='^(CORS_ALLOW_ORIGIN|CORS_DASHBOARD_ORIGIN|TRAEFIK_DASHBOARD_AUTH)='
+
+check_env_quoting() {
+    local issues=0
+    local line key val lineno=0
+
+    while IFS= read -r line || [ -n "$line" ]; do
+        lineno=$((lineno + 1))
+        [[ -z "${line// /}" ]] && continue
+        [[ "$line" =~ ^[[:space:]]*# ]] && continue
+        [[ "$line" =~ ^[A-Za-z_][A-Za-z0-9_]*= ]] || continue
+        [[ "$line" =~ $QUOTED_VARS_OK ]] && continue
+
+        key="${line%%=*}"
+        val="${line#*=}"
+
+        if [[ "$val" =~ ^\'.*\'$ ]] || [[ "$val" =~ ^\".*\"$ ]]; then
+            warn "[$ENV_FILE:$lineno] $key tiene comillas envolventes literales — docker compose las pasara tal cual al runtime"
+            issues=$((issues + 1))
+            continue
+        fi
+        if [[ "$val" == *\'* ]] || [[ "$val" == *\"* ]]; then
+            warn "[$ENV_FILE:$lineno] $key contiene comillas embebidas — credenciales como MAILER_DSN se romperian en el runtime"
+            issues=$((issues + 1))
+        fi
+    done < "$ENV_FILE"
+
+    if [ "$issues" -gt 0 ]; then
+        error "Detectados $issues problema(s) de quoting en $ENV_FILE.
+  docker compose pasa los valores sin procesar al runtime, las comillas llegan
+  literales y rompen credenciales (MAILER_DSN, DATABASE_URL, etc.).
+  Corrige el archivo: elimina comillas y usa %40 en lugar de @ en usernames de URL.
+  Si una variable legítimamente necesita comillas, añádela a QUOTED_VARS_OK en deploy.sh."
+    fi
 }
 
 check_docker() {
