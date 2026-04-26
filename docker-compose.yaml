@@ -11,7 +11,7 @@ services:
       - APP_ENV=${APP_ENV:-dev}
       - APP_DEBUG=${APP_DEBUG:-1}
       - APP_SECRET=${APP_SECRET}
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-app}:${POSTGRES_PASSWORD:-app}@database:5432/${POSTGRES_DB:-app}?serverVersion=15&charset=utf8
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-app}:${POSTGRES_PASSWORD:-app}@database:5432/${POSTGRES_DB:-app}?serverVersion=18&charset=utf8
       - CORS_ALLOW_ORIGIN=${CORS_ALLOW_ORIGIN:-'^https?://(localhost|127\.0\.0\.1)(:[0-9]+)?$$'}
       - CORS_DASHBOARD_ORIGIN=${CORS_DASHBOARD_ORIGIN:-'^https?://(localhost|127\.0\.0\.1)(:[0-9]+)?$$'}
       - MAILER_DSN=smtp://mailcatcher:1025
@@ -46,13 +46,13 @@ services:
       - app
 
   database:
-    image: postgres:15-alpine
+    image: postgres:18-alpine
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-app}
       POSTGRES_USER: ${POSTGRES_USER:-app}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-app}
     volumes:
-      - database_data:/var/lib/postgresql/data
+      - database_data:/var/lib/postgresql
     ports:
       - "5432:5432"
     healthcheck:
@@ -111,7 +111,7 @@ services:
       - APP_ENV=${APP_ENV:-dev}
       - APP_DEBUG=${APP_DEBUG:-1}
       - APP_SECRET=${APP_SECRET}
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-app}:${POSTGRES_PASSWORD:-app}@database:5432/${POSTGRES_DB:-app}?serverVersion=15&charset=utf8
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-app}:${POSTGRES_PASSWORD:-app}@database:5432/${POSTGRES_DB:-app}?serverVersion=18&charset=utf8
       - CORS_ALLOW_ORIGIN=${CORS_ALLOW_ORIGIN:-'^https?://(localhost|127\.0\.0\.1)(:[0-9]+)?$$'}
       - CORS_DASHBOARD_ORIGIN=${CORS_DASHBOARD_ORIGIN:-'^https?://(localhost|127\.0\.0\.1)(:[0-9]+)?$$'}
       - MAILER_DSN=smtp://mailcatcher:1025
