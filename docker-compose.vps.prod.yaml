@@ -49,7 +49,7 @@ services:
 
   nginx:
     labels:
-      - traefik.http.routers.api.rule=Host(`${DOMAIN}`) || Host(`${DOMAIN_ALIAS}`)
+      - traefik.http.routers.api.rule=Host(`${DOMAIN}`)
     deploy:
       resources:
         limits:
