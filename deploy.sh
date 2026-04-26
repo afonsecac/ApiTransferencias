@@ -39,7 +39,7 @@ if [[ "$ENV" != "staging" && "$ENV" != "prod" ]]; then
     echo ""
     echo "Entornos:"
     echo "  staging   VPS de staging (branch: develop)"
-    echo "  prod      VPS de produccion (branch: main)"
+    echo "  prod      VPS de produccion (branch: master)"
     echo ""
     echo "Acciones:"
     echo "  (sin args)     Despliegue estandar (git pull + build + up)"
@@ -70,7 +70,7 @@ fi
 if [[ "$ENV" == "staging" ]]; then
     GIT_BRANCH="develop"
 else
-    GIT_BRANCH="main"
+    GIT_BRANCH="master"
 fi
 
 COMPOSE_BASE="docker-compose.vps.yaml"

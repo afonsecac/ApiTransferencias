@@ -15,7 +15,7 @@ jobs:
 
     services:
       postgres:
-        image: postgres:15-alpine
+        image: postgres:18-alpine
         env:
           POSTGRES_DB: app_test
           POSTGRES_USER: app
@@ -55,7 +55,7 @@ jobs:
           cat > .env <<'EOF'
           APP_ENV=test
           APP_SECRET=ci-secret-not-real
-          DATABASE_URL="postgresql://app:app@localhost:5432/app_test?serverVersion=15&charset=utf8"
+          DATABASE_URL="postgresql://app:app@localhost:5432/app_test?serverVersion=18&charset=utf8"
           CORS_ALLOW_ORIGIN='^https?://localhost(:[0-9]+)?$'
           CORS_DASHBOARD_ORIGIN='^https?://localhost(:[0-9]+)?$'
           MESSENGER_TRANSPORT_DSN=doctrine://default
@@ -83,7 +83,7 @@ jobs:
         run: php vendor/bin/simple-phpunit
         env:
           APP_ENV: test
-          DATABASE_URL: postgresql://app:app@localhost:5432/app_test?serverVersion=15&charset=utf8
+          DATABASE_URL: postgresql://app:app@localhost:5432/app_test?serverVersion=18&charset=utf8
 
   static-analysis:
     name: PHPStan
@@ -110,7 +110,7 @@ jobs:
           cat > .env <<'EOF'
           APP_ENV=dev
           APP_SECRET=ci-secret-not-real
-          DATABASE_URL="postgresql://app:app@localhost:5432/app?serverVersion=15&charset=utf8"
+          DATABASE_URL="postgresql://app:app@localhost:5432/app?serverVersion=18&charset=utf8"
           CORS_ALLOW_ORIGIN='^https?://localhost(:[0-9]+)?$'
           CORS_DASHBOARD_ORIGIN='^https?://localhost(:[0-9]+)?$'
           MESSENGER_TRANSPORT_DSN=doctrine://default
