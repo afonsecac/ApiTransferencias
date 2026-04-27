@@ -51,8 +51,7 @@ jobs:
 
             echo "=== Running migrations ==="
             docker compose -f docker-compose.vps.yaml -f docker-compose.vps.prod.yaml \
-              --env-file .env.vps up -d database rabbitmq
-            sleep 10
+              --env-file .env.vps up -d --wait database rabbitmq
             docker compose -f docker-compose.vps.yaml -f docker-compose.vps.prod.yaml \
               --env-file .env.vps run --rm -T php-fpm php bin/console doctrine:migrations:migrate --no-interaction --allow-no-migration
 
