@@ -26,8 +26,8 @@ jobs:
           key: ${{ secrets.PROD_SSH_KEY }}
           port: ${{ secrets.PROD_SSH_PORT || 22 }}
           command_timeout: 15m
-          script_stop: true
           script: |
+            set -e
             cd ${{ secrets.PROD_APP_PATH || '/opt/api-transferencias' }}
 
             echo "=== Creating pre-deploy backup ==="

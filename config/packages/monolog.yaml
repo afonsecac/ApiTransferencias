@@ -77,15 +77,16 @@ when@prod:
                 path: php://stderr
             grouped:
                 type: group
-                members: [ streamed, deduplicated, symfony_mailer_critical ]
+                members: [ streamed, deduplicated_http, symfony_mailer_critical ]
             streamed:
                 type: stream
                 path: '%kernel.logs_dir%/debug.%kernel.environment%.log'
                 level: debug
                 max_files: 10
-            deduplicated:
+            deduplicated_http:
                 type: deduplication
                 handler: symfony_mailer
+                channels: ["!console"]
             symfony_mailer:
                 type: symfony_mailer
                 from_email: '%env(APP_MAILER_FROM)%'
@@ -94,6 +95,7 @@ when@prod:
                 level: error
                 formatter: monolog.formatter.html
                 content_type: text/html
+                channels: ["!console"]
             symfony_mailer_critical:
                 type: symfony_mailer
                 from_email: '%env(APP_MAILER_FROM)%'
@@ -102,3 +104,4 @@ when@prod:
                 level: critical
                 formatter: monolog.formatter.html
                 content_type: text/html
+                channels: ["!console"]
