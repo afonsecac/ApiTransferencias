@@ -25,8 +25,8 @@ jobs:
           username: ${{ secrets.STAGING_USER }}
           key: ${{ secrets.STAGING_SSH_KEY }}
           port: ${{ secrets.STAGING_SSH_PORT || 22 }}
-          script_stop: true
           script: |
+            set -e
             cd ${{ secrets.STAGING_APP_PATH || '/opt/api-transferencias' }}
 
             echo "=== Creating pre-deploy backup ==="
