@@ -21,7 +21,7 @@ class CommunicationPricePackage
     private ?CommunicationProduct $product = null;
 
     #[ORM\ManyToOne]
-    #[ORM\JoinColumn(nullable: false)]
+    #[ORM\JoinColumn(nullable: true)]
     private ?CommunicationPrice $priceUsed = null;
 
     #[ORM\Column]
