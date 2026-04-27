@@ -95,3 +95,7 @@ services:
           memory: 256M
     networks:
       - app
+
+volumes:
+  database_data:
+    name: api-transferencias_database_data
