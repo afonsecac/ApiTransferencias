@@ -86,6 +86,26 @@ class DashboardClientPackagesController extends AbstractController
         ]);
     }
 
+    #[Route('/client/prices/catalogue', name: 'dashboard_client_prices_catalogue', methods: ['GET'])]
+    public function listCommunicationPrices(): JsonResponse
+    {
+        $prices = $this->em->getRepository(CommunicationPrice::class)
+            ->createQueryBuilder('cp')
+            ->where('cp.isActive = :active')
+            ->setParameter('active', true)
+            ->orderBy('cp.startPrice', 'ASC')
+            ->getQuery()->getResult();
+
+        return $this->json(array_map(fn($p) => [
+            'id' => $p->getId(),
+            'startPrice' => $p->getStartPrice(),
+            'endPrice' => $p->getEndPrice(),
+            'currencyPrice' => $p->getCurrencyPrice(),
+            'amount' => $p->getAmount(),
+            'currency' => $p->getCurrency(),
+        ], $prices));
+    }
+
     #[Route('/client/prices/{id}', name: 'dashboard_client_prices_show', methods: ['GET'], requirements: ['id' => '\d+'])]
     public function showPrice(int $id): JsonResponse
     {
