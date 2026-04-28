@@ -11,6 +11,7 @@ use ApiPlatform\Metadata\Patch;
 use ApiPlatform\Metadata\Post;
 use App\Repository\BeneficiaryRepository;
 use App\State\CreateBeneficiaryProcessor;
+use App\State\SoftDeleteBeneficiaryProcessor;
 use DateTimeImmutable;
 use DateTimeInterface;
 use Doctrine\Common\Collections\ArrayCollection;
@@ -30,7 +31,7 @@ use Symfony\Component\Validator\Constraints as Assert;
             processor: CreateBeneficiaryProcessor::class
         ),
         new Patch(),
-        new Delete()
+        new Delete(processor: SoftDeleteBeneficiaryProcessor::class)
     ],
     normalizationContext: ['groups' => ['beneficiary:read']],
     denormalizationContext: ['groups' => ['beneficiary:write']],

@@ -8,6 +8,7 @@ use ApiPlatform\Doctrine\Orm\Util\QueryNameGeneratorInterface;
 use ApiPlatform\Metadata\Operation;
 use App\Entity\Account;
 use App\Entity\BankCard;
+use App\Entity\Beneficiary;
 use App\Entity\City;
 use App\Entity\CommunicationClientPackage;
 use App\Entity\CommunicationNationality;
@@ -89,6 +90,11 @@ final class CurrentUserExtension implements QueryCollectionExtensionInterface, Q
             } elseif (BankCard::class === $resourceClass) {
                 $queryBuilder->innerJoin(sprintf('%s.beneficiary', $rootAlias), 'b')
                     ->andWhere('b.tenant = :current_user')
+                    ->andWhere(sprintf('%s.removedAt IS NULL', $rootAlias))
+                    ->setParameter('current_user', $user->getId());
+            } elseif (Beneficiary::class === $resourceClass) {
+                $queryBuilder->andWhere(sprintf('%s.tenant = :current_user', $rootAlias))
+                    ->andWhere(sprintf('%s.removeAt IS NULL', $rootAlias))
                     ->setParameter('current_user', $user->getId());
             } else {
                 $queryBuilder->andWhere(sprintf('%s.tenant = :current_user', $rootAlias))
