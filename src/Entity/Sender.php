@@ -38,7 +38,7 @@ use Symfony\Component\Validator\Constraints as Assert;
     normalizationContext: ['groups' => ['sender:read']],
     denormalizationContext: ['groups' => ['sender:create']],
     security: "is_granted('ROLE_REM_API_USER')",
-    paginationMaxItemsPerPage: 20,
+    paginationMaximumItemsPerPage: 20,
 )]
 #[ApiFilter(SearchFilter::class, properties: [
     'identification' => 'exact',
