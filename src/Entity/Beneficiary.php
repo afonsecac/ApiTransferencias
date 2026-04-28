@@ -39,6 +39,7 @@ use Symfony\Component\Validator\Constraints as Assert;
     normalizationContext: ['groups' => ['beneficiary:read']],
     denormalizationContext: ['groups' => ['beneficiary:create']],
     security: "is_granted('ROLE_REM_API_USER')",
+    paginationMaxItemsPerPage: 20,
 )]
 #[ORM\UniqueConstraint(
     name: "unique_beneficiary_by_environment",

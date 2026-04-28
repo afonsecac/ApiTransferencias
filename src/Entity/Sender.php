@@ -2,7 +2,6 @@
 
 namespace App\Entity;
 
-use ApiPlatform\Doctrine\Orm\Filter\DateFilter;
 use ApiPlatform\Doctrine\Orm\Filter\OrderFilter;
 use ApiPlatform\Doctrine\Orm\Filter\SearchFilter;
 use ApiPlatform\Metadata\ApiFilter;
@@ -39,8 +38,8 @@ use Symfony\Component\Validator\Constraints as Assert;
     normalizationContext: ['groups' => ['sender:read']],
     denormalizationContext: ['groups' => ['sender:create']],
     security: "is_granted('ROLE_REM_API_USER')",
+    paginationMaxItemsPerPage: 20,
 )]
-#[ApiFilter(DateFilter::class, properties: ['dateOfBirth'])]
 #[ApiFilter(SearchFilter::class, properties: [
     'identification' => 'exact',
     'firstName' => 'partial',
@@ -49,8 +48,6 @@ use Symfony\Component\Validator\Constraints as Assert;
 #[ApiFilter(OrderFilter::class, properties: [
     'firstName' => 'ASC',
     'lastName' => 'ASC',
-    'identification' => 'ASC',
-    'dateOfBirth' => 'DESC',
 ])]
 #[ORM\UniqueConstraint(
     name: "unique_identification_sender",

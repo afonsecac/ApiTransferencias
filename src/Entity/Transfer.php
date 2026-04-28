@@ -38,6 +38,7 @@ use Symfony\Component\Validator\Constraints as Assert;
     normalizationContext: ['groups' => ['tx:read']],
     denormalizationContext: ['groups' => ['tx:write']],
     security: "is_granted('ROLE_REM_API_USER')",
+    paginationMaxItemsPerPage: 30,
 )]
 class Transfer
 {
