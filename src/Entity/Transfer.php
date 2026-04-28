@@ -100,6 +100,7 @@ class Transfer
     #[Groups(['tx:read', 'balance:reading'])]
     private ?float $rateToChange = null;
 
+    #[ORM\Column(length: 1, nullable: true)]
     #[Groups(['tx:read', 'tx:write', 'balance:reading'])]
     #[ApiProperty(
         openapiContext: [
