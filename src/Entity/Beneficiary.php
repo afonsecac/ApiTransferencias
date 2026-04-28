@@ -41,10 +41,6 @@ use Symfony\Component\Validator\Constraints as Assert;
     security: "is_granted('ROLE_REM_API_USER')",
     paginationMaximumItemsPerPage: 20,
 )]
-#[ORM\UniqueConstraint(
-    name: "unique_beneficiary_by_environment",
-    fields: ["identificationNumber", "environment"]
-)]
 class Beneficiary
 {
     #[ORM\Id]

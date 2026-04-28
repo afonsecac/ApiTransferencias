@@ -49,14 +49,6 @@ use Symfony\Component\Validator\Constraints as Assert;
     'firstName' => 'ASC',
     'lastName' => 'ASC',
 ])]
-#[ORM\UniqueConstraint(
-    name: "unique_identification_sender",
-    fields: ["identificationType", "identification"]
-)]
-#[ORM\UniqueConstraint(
-    name: "unique__rebus_identification_sender",
-    fields: ["rebusSenderId", "identification"]
-)]
 #[ORM\Index(
     fields: ["identification"],
     name: "index_identification_sender"

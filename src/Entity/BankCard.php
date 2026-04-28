@@ -29,11 +29,13 @@ use Symfony\Component\Validator\Constraints as Assert;
         ),
         new Post(
             uriTemplate: '/bankCards',
+            denormalizationContext: ['groups' => ['bankCard:create']],
             processor: CreateBeneficiaryCardProcessor::class
         ),
         new Patch(
             uriTemplate: '/bankCards/{id}',
-            uriVariables: 'id'
+            uriVariables: 'id',
+            denormalizationContext: ['groups' => ['bankCard:update']],
         ),
         new Delete(
             uriTemplate: '/bankCards/{id}',
@@ -42,7 +44,7 @@ use Symfony\Component\Validator\Constraints as Assert;
         ),
     ],
     normalizationContext: ['groups' => ['bankCard:read']],
-    denormalizationContext: ['groups' => ['bankCard:write']],
+    denormalizationContext: ['groups' => ['bankCard:create']],
     security: "is_granted('ROLE_REM_API_USER')",
 )]
 #[ORM\UniqueConstraint(
@@ -78,13 +80,13 @@ class BankCard
 
     #[ORM\Column(length: 20)]
     #[ApiProperty(readable: false, example: "92049598xxxxxxxx", types: ['https://schema.org/identifier'])]
-    #[Groups(['bankCard:write'])]
+    #[Groups(['bankCard:create'])]
     #[Assert\Length(exactly: 16)]
     #[Assert\NotBlank]
     private ?string $cardNumber = null;
 
     #[ORM\Column]
-    #[Groups(['bankCard:read', 'bankCard:write'])]
+    #[Groups(['bankCard:read', 'bankCard:create'])]
     #[ApiProperty(description: "Beneficiary information")]
     #[Assert\NotNull]
     #[Assert\Positive]
