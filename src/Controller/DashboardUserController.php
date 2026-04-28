@@ -2,8 +2,13 @@
 
 namespace App\Controller;
 
+use App\DTO\Out\DeletedOutDto;
+use App\DTO\Out\PaginatedListOutDto;
+use App\DTO\Out\ToggleOutDto;
+use App\DTO\Out\UserOutDto;
 use App\Entity\Client;
 use App\Entity\User;
+use App\OpenApi\Attribute\DashboardEndpoint;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -44,6 +49,7 @@ class DashboardUserController extends AbstractController
     }
 
     #[Route('', name: 'dashboard_users_list', methods: ['GET'])]
+    #[DashboardEndpoint(summary: 'Listar usuarios', tag: 'Users', responseDto: PaginatedListOutDto::class, itemDto: UserOutDto::class)]
     public function list(Request $request): JsonResponse
     {
         $currentUser = $this->getAuthUser();
@@ -80,6 +86,7 @@ class DashboardUserController extends AbstractController
     }
 
     #[Route('/{id}', name: 'dashboard_users_show', methods: ['GET'], requirements: ['id' => '\d+'])]
+    #[DashboardEndpoint(summary: 'Obtener usuario', tag: 'Users', responseDto: UserOutDto::class)]
     public function show(int $id): JsonResponse
     {
         $currentUser = $this->getAuthUser();
@@ -101,6 +108,7 @@ class DashboardUserController extends AbstractController
     }
 
     #[Route('', name: 'dashboard_users_create', methods: ['POST'])]
+    #[DashboardEndpoint(summary: 'Crear usuario', tag: 'Users', responseDto: UserOutDto::class, responseStatusCode: 201)]
     public function create(Request $request): JsonResponse
     {
         $currentUser = $this->getAuthUser();
@@ -170,6 +178,7 @@ class DashboardUserController extends AbstractController
     }
 
     #[Route('/{id}', name: 'dashboard_users_update', methods: ['PUT'], requirements: ['id' => '\d+'])]
+    #[DashboardEndpoint(summary: 'Actualizar usuario', tag: 'Users', responseDto: UserOutDto::class)]
     public function update(int $id, Request $request): JsonResponse
     {
         $currentUser = $this->getAuthUser();
@@ -247,6 +256,7 @@ class DashboardUserController extends AbstractController
     }
 
     #[Route('/{id}/toggle', name: 'dashboard_users_toggle', methods: ['PATCH'], requirements: ['id' => '\d+'])]
+    #[DashboardEndpoint(summary: 'Activar/desactivar usuario', tag: 'Users', responseDto: ToggleOutDto::class)]
     public function toggle(int $id): JsonResponse
     {
         $currentUser = $this->getAuthUser();
@@ -284,6 +294,7 @@ class DashboardUserController extends AbstractController
     }
 
     #[Route('/{id}', name: 'dashboard_users_delete', methods: ['DELETE'], requirements: ['id' => '\d+'])]
+    #[DashboardEndpoint(summary: 'Eliminar usuario', tag: 'Users', responseDto: DeletedOutDto::class)]
     public function delete(int $id): JsonResponse
     {
         $currentUser = $this->getAuthUser();

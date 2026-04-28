@@ -2,7 +2,10 @@
 
 namespace App\Controller;
 
+use App\DTO\Out\ProfileUpdateOutDto;
+use App\DTO\Out\UserOutDto;
 use App\Entity\User;
+use App\OpenApi\Attribute\DashboardEndpoint;
 use App\Service\UserService;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -17,20 +20,15 @@ class AdminProfileController extends AbstractController
     ) {
     }
 
-    /**
-     * @return \Symfony\Component\HttpFoundation\JsonResponse
-     */
     #[Route('', name: 'admin_profile', methods: ['GET'])]
+    #[DashboardEndpoint(summary: 'Obtener perfil', tag: 'Admin Profile', responseDto: UserOutDto::class)]
     public function __invoke(): JsonResponse
     {
         return $this->json($this->getUser());
     }
 
-    /**
-     * @throws \MiladRahimi\Jwt\Exceptions\SigningException
-     * @throws \MiladRahimi\Jwt\Exceptions\JsonEncodingException
-     */
     #[Route('', name: 'admin_profile_update', methods: ['PUT', 'PATCH'])]
+    #[DashboardEndpoint(summary: 'Actualizar perfil', tag: 'Admin Profile', responseDto: ProfileUpdateOutDto::class)]
     public function update(User $user): JsonResponse
     {
         $currentUser = $this->userService->update($user);

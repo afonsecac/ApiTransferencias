@@ -2,6 +2,7 @@
 
 namespace App\Controller;
 
+use App\OpenApi\Attribute\DashboardEndpoint;
 use App\Service\ReportService;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -20,6 +21,7 @@ class AdminReportController extends AbstractController
     }
 
     #[Route(name: 'admin_report', methods: ['GET'])]
+    #[DashboardEndpoint(summary: 'Listar reportes', tag: 'Admin Reports', responseIsArray: true)]
     public function __invoke(
         #[MapQueryParameter] int $page = 0,
         #[MapQueryParameter] int $limit = 40,
@@ -38,6 +40,7 @@ class AdminReportController extends AbstractController
     }
 
     #[Route('/{id}', name: 'admin_report_get', requirements: ['id' => '\d+'], methods: ['GET'])]
+    #[DashboardEndpoint(summary: 'Obtener reporte', tag: 'Admin Reports')]
     public function getReport(int $id): JsonResponse
     {
         return $this->json(

@@ -2,6 +2,9 @@
 
 namespace App\Controller;
 
+use App\DTO\Out\CompanyRefOutDto;
+use App\DTO\Out\PaginatedListOutDto;
+use App\OpenApi\Attribute\DashboardEndpoint;
 use App\Service\ClientService;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -17,6 +20,7 @@ class AdminClientController extends AbstractController
     }
 
     #[Route('/all', name: 'admin_client_all', methods: ['GET'])]
+    #[DashboardEndpoint(summary: 'Listar todos los clientes', tag: 'Admin Clients', responseDto: PaginatedListOutDto::class, itemDto: CompanyRefOutDto::class)]
     public function index(
         #[MapQueryParameter] int    $page = 0,
         #[MapQueryParameter] int    $limit = 10,

@@ -7,16 +7,13 @@ use ApiPlatform\OpenApi\OpenApi;
 
 class OpenApiFactory implements OpenApiFactoryInterface
 {
+    public function __construct(
+        private readonly OpenApiFactoryInterface $decorated,
+        private readonly DashboardOpenApiBuilder $builder,
+    ) {}
 
-    private OpenApiFactoryInterface $decorated;
-
-    public function __construct(OpenApiFactoryInterface $decorated)
-    {
-        $this->decorated = $decorated;
-    }
     public function __invoke(array $context = []): OpenApi
     {
-        return $this->decorated->__invoke($context);
+        return $this->builder->build($this->decorated->__invoke($context));
     }
-
 }

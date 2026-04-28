@@ -3,6 +3,10 @@
 namespace App\Controller;
 
 use App\DTO\BalanceInDto;
+use App\DTO\Out\BalanceOperationOutDto;
+use App\DTO\Out\ExportResultOutDto;
+use App\DTO\Out\PaginatedTotalOutDto;
+use App\OpenApi\Attribute\DashboardEndpoint;
 use App\Service\BalanceService;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -23,6 +27,7 @@ class AdminBalanceOperationController extends AbstractController
     }
 
     #[Route(name: 'admin_balance_operation', methods: ['GET'])]
+    #[DashboardEndpoint(summary: 'Listar operaciones de balance', tag: 'Balance Operations', responseDto: PaginatedTotalOutDto::class, itemDto: BalanceOperationOutDto::class)]
     public function __invoke(
         #[MapQueryParameter] int $page = 0,
         #[MapQueryParameter] int $limit = 10,
@@ -54,6 +59,7 @@ class AdminBalanceOperationController extends AbstractController
         name: 'admin_balance_operation_platform_balance',
         methods: ['GET']
     )]
+    #[DashboardEndpoint(summary: 'Balance de plataforma por entorno', tag: 'Balance Operations')]
     public function getPlatformBalance(
         string $environment
     ): JsonResponse
@@ -65,6 +71,7 @@ class AdminBalanceOperationController extends AbstractController
      * @throws \App\Exception\MyCurrentException
      */
     #[Route("/{id}", name: 'admin_balance_operation_update', methods: ['PUT', 'PATCH'])]
+    #[DashboardEndpoint(summary: 'Actualizar operación de balance', tag: 'Balance Operations', requestDto: BalanceInDto::class, responseDto: BalanceOperationOutDto::class)]
     public function update(int $id, BalanceInDto $balance): JsonResponse
     {
         return $this->json(
@@ -84,6 +91,7 @@ class AdminBalanceOperationController extends AbstractController
      * @throws \App\Exception\MyCurrentException
      */
     #[Route(name: 'admin_balance_operation_create', methods: ['POST'])]
+    #[DashboardEndpoint(summary: 'Crear operación de balance', tag: 'Balance Operations', requestDto: BalanceInDto::class, responseDto: BalanceOperationOutDto::class, responseStatusCode: 201)]
     public function createBalance(BalanceInDto $balance): JsonResponse
     {
         $newBalance = $this->balanceService->create($balance);
@@ -101,6 +109,7 @@ class AdminBalanceOperationController extends AbstractController
     }
 
     #[Route("/export", name: 'admin_balance_operation_export', methods: ['GET'])]
+    #[DashboardEndpoint(summary: 'Exportar operaciones de balance', tag: 'Balance Operations', responseDto: ExportResultOutDto::class)]
     public function exportBalance(
         #[MapQueryParameter] int $accountId
     ) {

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Controller;
 
 use App\DTO\RequestInfo;
+use App\OpenApi\Attribute\DashboardEndpoint;
 use App\Service\CommunicationInfoService;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -19,13 +20,8 @@ class AdminInformationController extends AbstractController
     {
     }
 
-    /**
-     * @throws \Symfony\Contracts\HttpClient\Exception\TransportExceptionInterface
-     * @throws \Symfony\Contracts\HttpClient\Exception\ServerExceptionInterface
-     * @throws \Symfony\Contracts\HttpClient\Exception\RedirectionExceptionInterface
-     * @throws \Symfony\Contracts\HttpClient\Exception\ClientExceptionInterface
-     */
     #[Route('/information', name: 'admin_information', methods: ['POST'])]
+    #[DashboardEndpoint(summary: 'Consultar información de venta al proveedor', tag: 'Admin Information', requestDto: RequestInfo::class)]
     public function index(RequestInfo $requestInfo): JsonResponse
     {
         return $this->json(

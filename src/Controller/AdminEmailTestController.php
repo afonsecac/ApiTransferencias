@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Controller;
 
+use App\DTO\Out\SuccessOutDto;
+use App\OpenApi\Attribute\DashboardEndpoint;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\DependencyInjection\ParameterBag\ParameterBagInterface;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -21,10 +23,8 @@ class AdminEmailTestController extends AbstractController
 
     }
 
-    /**
-     * @throws \Symfony\Component\Mailer\Exception\TransportExceptionInterface
-     */
     #[Route('/test')]
+    #[DashboardEndpoint(summary: 'Enviar email de prueba', tag: 'Admin Email', responseDto: SuccessOutDto::class)]
     public function index(): JsonResponse
     {
         $mail = (new Email())

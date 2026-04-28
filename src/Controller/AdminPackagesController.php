@@ -2,6 +2,8 @@
 
 namespace App\Controller;
 
+use App\DTO\Out\InsertResultOutDto;
+use App\OpenApi\Attribute\DashboardEndpoint;
 use App\Service\CommunicationPackageService;
 use App\Service\TakeProductService;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -20,6 +22,7 @@ class AdminPackagesController extends AbstractController
 
     }
     #[Route('/all', name: 'admin_packages_all', methods: ['GET'])]
+    #[DashboardEndpoint(summary: 'Listar todos los paquetes', tag: 'Admin Packages', responseIsArray: true)]
     public function index(Request $request): JsonResponse
     {
         $productId = $request->query->getInt('productId');
@@ -32,14 +35,8 @@ class AdminPackagesController extends AbstractController
         );
     }
 
-    /**
-     * @throws \Symfony\Contracts\HttpClient\Exception\TransportExceptionInterface
-     * @throws \Symfony\Contracts\HttpClient\Exception\ServerExceptionInterface
-     * @throws \Symfony\Contracts\HttpClient\Exception\RedirectionExceptionInterface
-     * @throws \Symfony\Contracts\HttpClient\Exception\DecodingExceptionInterface
-     * @throws \Symfony\Contracts\HttpClient\Exception\ClientExceptionInterface
-     */
     #[Route('/take', name: 'admin_packages_take_products', methods: ['GET'])]
+    #[DashboardEndpoint(summary: 'Importar productos del proveedor', tag: 'Admin Packages', responseDto: InsertResultOutDto::class)]
     public function takeProducts(Request $request): JsonResponse
     {
         $env = $request->query->get('env', 'TEST');
