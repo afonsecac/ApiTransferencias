@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace App\Controller;
 
+use App\DTO\Out\PaginatedListOutDto;
+use App\DTO\Out\SuccessOutDto;
+use App\OpenApi\Attribute\DashboardEndpoint;
 use App\Service\CommunicationProductService;
 use App\Service\ProductBenefitService;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -29,6 +32,7 @@ class AdminProductsController extends AbstractController
     }
 
     #[Route('', name: 'admin_products', methods: ['GET'])]
+    #[DashboardEndpoint(summary: 'Listar productos', tag: 'Admin Products', responseDto: PaginatedListOutDto::class)]
     public function products(Request $request): JsonResponse
     {
         $page = $request->query->getInt('page', 0);
@@ -41,10 +45,8 @@ class AdminProductsController extends AbstractController
         );
     }
 
-    /**
-     * @throws \App\Exception\MyCurrentException
-     */
     #[Route('/import', name: 'import_product_benefits', methods: ['POST'])]
+    #[DashboardEndpoint(summary: 'Importar beneficios de productos', tag: 'Admin Products', responseDto: SuccessOutDto::class)]
     public function index(): JsonResponse
     {
         return $this->json([

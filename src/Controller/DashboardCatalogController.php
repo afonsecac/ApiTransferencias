@@ -2,11 +2,15 @@
 
 namespace App\Controller;
 
+use App\DTO\Out\PaginatedListOutDto;
+use App\DTO\Out\SyncProductsOutDto;
+use App\DTO\Out\ToggleOutDto;
 use App\Entity\Account;
 use App\Entity\Client;
 use App\Entity\CommunicationProduct;
 use App\Entity\Environment;
 use App\Entity\User;
+use App\OpenApi\Attribute\DashboardEndpoint;
 use App\Service\TakeProductService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -28,6 +32,7 @@ class DashboardCatalogController extends AbstractController
     }
 
     #[Route('/environments', name: 'dashboard_environments_list', methods: ['GET'])]
+    #[DashboardEndpoint(summary: 'Listar entornos', tag: 'Catalog')]
     public function environments(): JsonResponse
     {
         $environments = $this->em->getRepository(Environment::class)->findBy(
@@ -43,6 +48,7 @@ class DashboardCatalogController extends AbstractController
     }
 
     #[Route('/clients', name: 'dashboard_clients_list', methods: ['GET'])]
+    #[DashboardEndpoint(summary: 'Listar clientes', tag: 'Catalog')]
     public function clients(Request $request): JsonResponse
     {
         $envType = $request->query->get('type');
@@ -90,7 +96,8 @@ class DashboardCatalogController extends AbstractController
     ];
 
     #[Route('/products', name: 'dashboard_products_list', methods: ['GET'])]
-    #[IsGranted('ROLE_ADMIN')]
+    #[DashboardEndpoint(summary: 'Listar productos', tag: 'Catalog', responseDto: PaginatedListOutDto::class)]
+#[IsGranted('ROLE_ADMIN')]
     public function products(Request $request): JsonResponse
     {
         $page = max(0, (int) $request->query->get('page', 0));
@@ -141,7 +148,8 @@ class DashboardCatalogController extends AbstractController
     }
 
     #[Route('/products/{id}', name: 'dashboard_products_update', methods: ['PUT'])]
-    #[IsGranted('ROLE_ADMIN')]
+    #[DashboardEndpoint(summary: 'Actualizar producto', tag: 'Catalog')]
+#[IsGranted('ROLE_ADMIN')]
     public function updateProduct(int $id, Request $request): JsonResponse
     {
         $product = $this->em->getRepository(CommunicationProduct::class)->find($id);
@@ -180,7 +188,8 @@ class DashboardCatalogController extends AbstractController
     }
 
     #[Route('/products/{id}/toggle', name: 'dashboard_products_toggle', methods: ['PATCH'])]
-    #[IsGranted('ROLE_ADMIN')]
+    #[DashboardEndpoint(summary: 'Activar/desactivar producto', tag: 'Catalog', responseDto: ToggleOutDto::class)]
+#[IsGranted('ROLE_ADMIN')]
     public function toggleProduct(int $id): JsonResponse
     {
         $product = $this->em->getRepository(CommunicationProduct::class)->find($id);
@@ -198,7 +207,8 @@ class DashboardCatalogController extends AbstractController
     }
 
     #[Route('/products/sync', name: 'dashboard_products_sync', methods: ['POST'])]
-    #[IsGranted('ROLE_ADMIN')]
+    #[DashboardEndpoint(summary: 'Sincronizar productos con proveedor', tag: 'Catalog', responseDto: SyncProductsOutDto::class)]
+#[IsGranted('ROLE_ADMIN')]
     public function syncProducts(Request $request): JsonResponse
     {
         $envType = $request->request->get('environmentType');

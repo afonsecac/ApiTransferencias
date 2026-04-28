@@ -2,6 +2,7 @@
 
 namespace App\Controller;
 
+use App\OpenApi\Attribute\DashboardEndpoint;
 use App\Service\UserService;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -19,6 +20,7 @@ class AdminPermissionController extends AbstractController
     }
 
     #[Route(name: 'admin_permission_index', methods: ['GET'])]
+    #[DashboardEndpoint(summary: 'Obtener permisos de cuenta', tag: 'Admin Permissions', responseIsArray: true)]
     public function __invoke(): JsonResponse
     {
         return $this->json(

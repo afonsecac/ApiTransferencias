@@ -7,6 +7,7 @@ namespace App\Controller;
 use ApiPlatform\Symfony\Security\Exception\AccessDeniedException;
 use App\DTO\BudgetInfoDto;
 use App\Entity\User;
+use App\OpenApi\Attribute\DashboardEndpoint;
 use App\Service\BalanceService;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -28,6 +29,7 @@ class AdminDashboardFinancialController extends AbstractController
     }
 
     #[Route("", name: "admin_dashboard_financial", methods: ["GET"])]
+    #[DashboardEndpoint(summary: 'Dashboard financiero', tag: 'Admin Dashboard')]
     public function index(Request $request): JsonResponse
     {
         $clientId = $request->query->getInt('clientId');

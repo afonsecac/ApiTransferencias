@@ -2,7 +2,12 @@
 
 namespace App\Controller;
 
+use App\DTO\Out\CommunicationPriceOutDto;
+use App\DTO\Out\DeletedOutDto;
+use App\DTO\Out\PaginatedListOutDto;
+use App\DTO\Out\ToggleOutDto;
 use App\Entity\CommunicationPrice;
+use App\OpenApi\Attribute\DashboardEndpoint;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -28,6 +33,7 @@ class DashboardCommunicationPriceController extends AbstractController
     }
 
     #[Route('/client/communication-prices', name: 'dashboard_communication_prices_list', methods: ['GET'])]
+    #[DashboardEndpoint(summary: 'Listar communication prices', tag: 'Communication Prices', responseDto: PaginatedListOutDto::class, itemDto: CommunicationPriceOutDto::class)]
     public function list(Request $request): JsonResponse
     {
         $page  = max(0, (int) $request->query->get('page', 0));
@@ -73,6 +79,7 @@ class DashboardCommunicationPriceController extends AbstractController
     }
 
     #[Route('/client/communication-prices/{id}', name: 'dashboard_communication_prices_show', methods: ['GET'], requirements: ['id' => '\d+'])]
+    #[DashboardEndpoint(summary: 'Obtener communication price', tag: 'Communication Prices', responseDto: CommunicationPriceOutDto::class)]
     public function show(int $id): JsonResponse
     {
         $cp = $this->em->getRepository(CommunicationPrice::class)->find($id);
@@ -83,6 +90,7 @@ class DashboardCommunicationPriceController extends AbstractController
     }
 
     #[Route('/client/communication-prices', name: 'dashboard_communication_prices_create', methods: ['POST'])]
+    #[DashboardEndpoint(summary: 'Crear communication price', tag: 'Communication Prices', responseDto: CommunicationPriceOutDto::class, responseStatusCode: 201)]
     public function create(Request $request): JsonResponse
     {
         $data   = $request->toArray();
@@ -112,6 +120,7 @@ class DashboardCommunicationPriceController extends AbstractController
     }
 
     #[Route('/client/communication-prices/{id}', name: 'dashboard_communication_prices_update', methods: ['PATCH'], requirements: ['id' => '\d+'])]
+    #[DashboardEndpoint(summary: 'Actualizar communication price', tag: 'Communication Prices', responseDto: CommunicationPriceOutDto::class)]
     public function update(int $id, Request $request): JsonResponse
     {
         $cp = $this->em->getRepository(CommunicationPrice::class)->find($id);
@@ -136,6 +145,7 @@ class DashboardCommunicationPriceController extends AbstractController
     }
 
     #[Route('/client/communication-prices/{id}/toggle', name: 'dashboard_communication_prices_toggle', methods: ['PATCH'], requirements: ['id' => '\d+'])]
+    #[DashboardEndpoint(summary: 'Activar/desactivar communication price', tag: 'Communication Prices', responseDto: ToggleOutDto::class)]
     public function toggle(int $id): JsonResponse
     {
         $cp = $this->em->getRepository(CommunicationPrice::class)->find($id);
@@ -148,6 +158,7 @@ class DashboardCommunicationPriceController extends AbstractController
     }
 
     #[Route('/client/communication-prices/{id}', name: 'dashboard_communication_prices_delete', methods: ['DELETE'], requirements: ['id' => '\d+'])]
+    #[DashboardEndpoint(summary: 'Eliminar communication price', tag: 'Communication Prices', responseDto: DeletedOutDto::class)]
     public function delete(int $id): JsonResponse
     {
         $cp = $this->em->getRepository(CommunicationPrice::class)->find($id);

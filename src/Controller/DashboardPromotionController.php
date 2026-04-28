@@ -2,10 +2,13 @@
 
 namespace App\Controller;
 
+use App\DTO\Out\DeletedOutDto;
+use App\DTO\Out\PaginatedListOutDto;
 use App\DTO\UpsertPromotionDto;
 use App\Entity\CommunicationProduct;
 use App\Entity\CommunicationPromotions;
 use App\Entity\Environment;
+use App\OpenApi\Attribute\DashboardEndpoint;
 use App\Repository\CommunicationPromotionsRepository;
 use App\Service\CommunicationPromotionService;
 use Doctrine\ORM\EntityManagerInterface;
@@ -32,6 +35,7 @@ class DashboardPromotionController extends AbstractController
     }
 
     #[Route('', name: 'dashboard_promotions_list', methods: ['GET'])]
+    #[DashboardEndpoint(summary: 'Listar promociones', tag: 'Promotions', responseDto: PaginatedListOutDto::class)]
     public function list(Request $request): JsonResponse
     {
         $page = max(0, (int) $request->query->get('page', 0));
@@ -58,6 +62,7 @@ class DashboardPromotionController extends AbstractController
     }
 
     #[Route('/{id}', name: 'dashboard_promotions_show', methods: ['GET'])]
+    #[DashboardEndpoint(summary: 'Obtener detalle de promoción', tag: 'Promotions')]
     public function show(int $id): JsonResponse
     {
         $promotion = $this->repository->find($id);
@@ -70,6 +75,7 @@ class DashboardPromotionController extends AbstractController
 
     #[Route('', name: 'dashboard_promotions_create', methods: ['POST'])]
     #[IsGranted('ROLE_ADMIN')]
+    #[DashboardEndpoint(summary: 'Crear promoción', tag: 'Promotions', requestDto: UpsertPromotionDto::class, responseStatusCode: 201)]
     public function create(UpsertPromotionDto $dto): JsonResponse
     {
         $violations = $this->validator->validate($dto);
@@ -103,6 +109,7 @@ class DashboardPromotionController extends AbstractController
 
     #[Route('/{id}', name: 'dashboard_promotions_update', methods: ['PUT'])]
     #[IsGranted('ROLE_ADMIN')]
+    #[DashboardEndpoint(summary: 'Actualizar promoción', tag: 'Promotions', requestDto: UpsertPromotionDto::class)]
     public function update(int $id, UpsertPromotionDto $dto): JsonResponse
     {
         $promotion = $this->repository->find($id);
@@ -127,6 +134,7 @@ class DashboardPromotionController extends AbstractController
 
     #[Route('/{id}', name: 'dashboard_promotions_delete', methods: ['DELETE'])]
     #[IsGranted('ROLE_ADMIN')]
+    #[DashboardEndpoint(summary: 'Eliminar promoción', tag: 'Promotions', responseDto: DeletedOutDto::class)]
     public function delete(int $id): JsonResponse
     {
         $promotion = $this->repository->find($id);

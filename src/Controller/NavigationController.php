@@ -2,6 +2,7 @@
 
 namespace App\Controller;
 
+use App\OpenApi\Attribute\DashboardEndpoint;
 use App\Service\NavigationService;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -19,10 +20,8 @@ class NavigationController extends AbstractController
 
     }
 
-    /**
-     * @throws \JsonException
-     */
     #[Route(name: 'navigation', methods: ['GET'])]
+    #[DashboardEndpoint(summary: 'Obtener navegación del usuario', tag: 'Navigation')]
     public function navigation(): JsonResponse
     {
         $serializerArray = $this->serializer->normalize(

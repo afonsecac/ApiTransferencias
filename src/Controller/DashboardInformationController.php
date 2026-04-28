@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Controller;
 
+use App\OpenApi\Attribute\DashboardEndpoint;
 use App\Service\DashboardStatisticsService;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -32,6 +33,7 @@ class DashboardInformationController extends AbstractController
     }
 
     #[Route('/summary', name: 'dashboard_info_summary', methods: ['GET'])]
+    #[DashboardEndpoint(summary: 'Resumen de operaciones', tag: 'Information')]
     public function summary(Request $request): JsonResponse
     {
         return $this->json(
@@ -40,6 +42,7 @@ class DashboardInformationController extends AbstractController
     }
 
     #[Route('/operations-by-client', name: 'dashboard_info_ops_by_client', methods: ['GET'])]
+    #[DashboardEndpoint(summary: 'Operaciones agrupadas por cliente', tag: 'Information')]
     public function operationsByClient(Request $request): JsonResponse
     {
         return $this->json(
@@ -48,6 +51,7 @@ class DashboardInformationController extends AbstractController
     }
 
     #[Route('/operations-over-time', name: 'dashboard_info_ops_over_time', methods: ['GET'])]
+    #[DashboardEndpoint(summary: 'Operaciones a lo largo del tiempo', tag: 'Information')]
     public function operationsOverTime(Request $request): JsonResponse
     {
         $filters = $this->extractFilters($request);
@@ -58,6 +62,7 @@ class DashboardInformationController extends AbstractController
     }
 
     #[Route('/busiest-days', name: 'dashboard_info_busiest_days', methods: ['GET'])]
+    #[DashboardEndpoint(summary: 'Días con más actividad', tag: 'Information')]
     public function busiestDays(Request $request): JsonResponse
     {
         return $this->json(
@@ -66,6 +71,7 @@ class DashboardInformationController extends AbstractController
     }
 
     #[Route('/peak-hours', name: 'dashboard_info_peak_hours', methods: ['GET'])]
+    #[DashboardEndpoint(summary: 'Horas pico de operaciones', tag: 'Information')]
     public function peakHours(Request $request): JsonResponse
     {
         return $this->json(
@@ -74,6 +80,7 @@ class DashboardInformationController extends AbstractController
     }
 
     #[Route('/top-packages', name: 'dashboard_info_top_packages', methods: ['GET'])]
+    #[DashboardEndpoint(summary: 'Paquetes más vendidos', tag: 'Information')]
     public function topPackages(Request $request): JsonResponse
     {
         $limit = min(50, max(1, (int) $request->query->get('limit', 10)));

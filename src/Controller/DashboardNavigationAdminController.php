@@ -2,11 +2,14 @@
 
 namespace App\Controller;
 
+use App\DTO\Out\DeletedOutDto;
+use App\DTO\Out\ToggleNavItemOutDto;
 use App\Entity\Client;
 use App\Entity\NavigationItem;
 use App\Entity\User;
 use App\Entity\UserPermission;
 use App\Enums\NavigationTypeEnum;
+use App\OpenApi\Attribute\DashboardEndpoint;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -30,6 +33,7 @@ class DashboardNavigationAdminController extends AbstractController
     // ─── Navigation Items ───────────────────────────────────
 
     #[Route('/items', name: 'dashboard_nav_items_list', methods: ['GET'])]
+    #[DashboardEndpoint(summary: 'Listar items de navegación', tag: 'Navigation Admin')]
     public function listItems(): JsonResponse
     {
         $items = $this->em->getRepository(NavigationItem::class)->createQueryBuilder('ni')
@@ -45,6 +49,7 @@ class DashboardNavigationAdminController extends AbstractController
     }
 
     #[Route('/items/{id}', name: 'dashboard_nav_items_show', methods: ['GET'])]
+    #[DashboardEndpoint(summary: 'Obtener item de navegación', tag: 'Navigation Admin')]
     public function showItem(int $id): JsonResponse
     {
         $item = $this->em->getRepository(NavigationItem::class)->find($id);
@@ -63,6 +68,7 @@ class DashboardNavigationAdminController extends AbstractController
     }
 
     #[Route('/items', name: 'dashboard_nav_items_create', methods: ['POST'])]
+    #[DashboardEndpoint(summary: 'Crear item de navegación', tag: 'Navigation Admin', responseStatusCode: 201)]
     public function createItem(Request $request): JsonResponse
     {
         $data = $request->request->all();
@@ -104,6 +110,7 @@ class DashboardNavigationAdminController extends AbstractController
     }
 
     #[Route('/items/{id}', name: 'dashboard_nav_items_update', methods: ['PUT'])]
+    #[DashboardEndpoint(summary: 'Actualizar item de navegación', tag: 'Navigation Admin')]
     public function updateItem(int $id, Request $request): JsonResponse
     {
         $item = $this->em->getRepository(NavigationItem::class)->find($id);
@@ -121,6 +128,7 @@ class DashboardNavigationAdminController extends AbstractController
     }
 
     #[Route('/items/{id}', name: 'dashboard_nav_items_delete', methods: ['DELETE'])]
+    #[DashboardEndpoint(summary: 'Eliminar item de navegación', tag: 'Navigation Admin', responseDto: DeletedOutDto::class)]
     public function deleteItem(int $id): JsonResponse
     {
         $item = $this->em->getRepository(NavigationItem::class)->find($id);
@@ -147,6 +155,7 @@ class DashboardNavigationAdminController extends AbstractController
     }
 
     #[Route('/items/{id}/toggle', name: 'dashboard_nav_items_toggle', methods: ['PATCH'])]
+    #[DashboardEndpoint(summary: 'Activar/desactivar item de navegación', tag: 'Navigation Admin', responseDto: ToggleNavItemOutDto::class)]
     public function toggleItem(int $id): JsonResponse
     {
         $item = $this->em->getRepository(NavigationItem::class)->find($id);
@@ -164,6 +173,7 @@ class DashboardNavigationAdminController extends AbstractController
     // ─── Permissions ────────────────────────────────────────
 
     #[Route('/items/{itemId}/permissions', name: 'dashboard_nav_permissions_list', methods: ['GET'])]
+    #[DashboardEndpoint(summary: 'Listar permisos de item', tag: 'Navigation Admin')]
     public function listPermissions(int $itemId): JsonResponse
     {
         $item = $this->em->getRepository(NavigationItem::class)->find($itemId);
@@ -181,6 +191,7 @@ class DashboardNavigationAdminController extends AbstractController
     }
 
     #[Route('/items/{itemId}/permissions', name: 'dashboard_nav_permissions_create', methods: ['POST'])]
+    #[DashboardEndpoint(summary: 'Crear permiso de item', tag: 'Navigation Admin', responseStatusCode: 201)]
     public function createPermission(int $itemId, Request $request): JsonResponse
     {
         $item = $this->em->getRepository(NavigationItem::class)->find($itemId);
@@ -218,6 +229,7 @@ class DashboardNavigationAdminController extends AbstractController
     }
 
     #[Route('/permissions/{id}', name: 'dashboard_nav_permissions_update', methods: ['PUT'])]
+    #[DashboardEndpoint(summary: 'Actualizar permiso', tag: 'Navigation Admin')]
     public function updatePermission(int $id, Request $request): JsonResponse
     {
         $permission = $this->em->getRepository(UserPermission::class)->find($id);
@@ -254,6 +266,7 @@ class DashboardNavigationAdminController extends AbstractController
     }
 
     #[Route('/permissions/{id}', name: 'dashboard_nav_permissions_delete', methods: ['DELETE'])]
+    #[DashboardEndpoint(summary: 'Eliminar permiso', tag: 'Navigation Admin', responseDto: DeletedOutDto::class)]
     public function deletePermission(int $id): JsonResponse
     {
         $permission = $this->em->getRepository(UserPermission::class)->find($id);
