@@ -2,10 +2,16 @@
 
 namespace App\Controller;
 
+use App\DTO\Out\AccountSecOutDto;
+use App\DTO\Out\ClientSecOutDto;
+use App\DTO\Out\DeletedOutDto;
+use App\DTO\Out\RegenerateTokenOutDto;
+use App\DTO\Out\ToggleOutDto;
 use App\DTO\UpdateAccountSecurityDto;
 use App\Entity\Account;
 use App\Entity\Client;
 use App\Entity\User;
+use App\OpenApi\Attribute\DashboardEndpoint;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -31,6 +37,7 @@ class DashboardClientSecurityController extends AbstractController
      * ROLE_API_ADMIN: solo su cliente.
      */
     #[Route('', name: 'dashboard_client_sec_list', methods: ['GET'])]
+    #[DashboardEndpoint(summary: 'Listar clientes con cuentas', tag: 'Client Security', responseDto: ClientSecOutDto::class, responseIsArray: true)]
     public function list(): JsonResponse
     {
         $user = $this->getAuthUser();
@@ -57,6 +64,7 @@ class DashboardClientSecurityController extends AbstractController
      * Detalle de un cliente con sus cuentas.
      */
     #[Route('/{clientId}', name: 'dashboard_client_sec_show', methods: ['GET'], requirements: ['clientId' => '\d+'])]
+    #[DashboardEndpoint(summary: 'Obtener cliente con cuentas', tag: 'Client Security', responseDto: ClientSecOutDto::class)]
     public function show(int $clientId): JsonResponse
     {
         $client = $this->findClientWithAccess($clientId);
@@ -71,6 +79,7 @@ class DashboardClientSecurityController extends AbstractController
      * Actualizar datos de seguridad de una cuenta (origin IPs, active, balances).
      */
     #[Route('/{clientId}/accounts/{accountId}', name: 'dashboard_client_sec_update_account', methods: ['PUT'], requirements: ['clientId' => '\d+', 'accountId' => '\d+'])]
+    #[DashboardEndpoint(summary: 'Actualizar cuenta', tag: 'Client Security', requestDto: UpdateAccountSecurityDto::class, responseDto: AccountSecOutDto::class)]
     public function updateAccount(int $clientId, int $accountId, UpdateAccountSecurityDto $dto): JsonResponse
     {
         $violations = $this->validator->validate($dto);
@@ -123,6 +132,7 @@ class DashboardClientSecurityController extends AbstractController
      * Regenerar el access token de una cuenta.
      */
     #[Route('/{clientId}/accounts/{accountId}/regenerate-token', name: 'dashboard_client_sec_regen_token', methods: ['POST'], requirements: ['clientId' => '\d+', 'accountId' => '\d+'])]
+    #[DashboardEndpoint(summary: 'Regenerar token de acceso', tag: 'Client Security', responseDto: RegenerateTokenOutDto::class, responseStatusCode: 201)]
     public function regenerateToken(int $clientId, int $accountId): JsonResponse
     {
         $client = $this->findClientWithAccess($clientId);
@@ -149,7 +159,8 @@ class DashboardClientSecurityController extends AbstractController
      * Activar/desactivar una cuenta. Solo ROLE_ADMIN.
      */
     #[Route('/{clientId}/accounts/{accountId}/toggle', name: 'dashboard_client_sec_toggle', methods: ['PATCH'], requirements: ['clientId' => '\d+', 'accountId' => '\d+'])]
-    #[IsGranted('ROLE_ADMIN')]
+    #[DashboardEndpoint(summary: 'Activar/desactivar cuenta', tag: 'Client Security', responseDto: ToggleOutDto::class)]
+#[IsGranted('ROLE_ADMIN')]
     public function toggleAccount(int $clientId, int $accountId): JsonResponse
     {
         $client = $this->findClientWithAccess($clientId);

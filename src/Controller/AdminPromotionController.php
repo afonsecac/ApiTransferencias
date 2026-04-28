@@ -4,6 +4,7 @@ namespace App\Controller;
 
 use App\DTO\CreateAdminPromotionDto;
 use App\Exception\MyCurrentException;
+use App\OpenApi\Attribute\DashboardEndpoint;
 use App\Service\CommunicationPromotionService;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -21,6 +22,7 @@ class AdminPromotionController extends AbstractController
     }
 
     #[Route('/create', name: 'admin_promotion_index', methods: ['POST'])]
+    #[DashboardEndpoint(summary: 'Crear promoción (admin)', tag: 'Admin Promotions', requestDto: CreateAdminPromotionDto::class, responseStatusCode: 201)]
     public function index(CreateAdminPromotionDto $dto): JsonResponse
     {
         $violations = $this->validator->validate($dto);

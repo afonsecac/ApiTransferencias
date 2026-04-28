@@ -3,9 +3,16 @@
 namespace App\Controller;
 
 use App\DTO\CreateClientPackageDto;
+use App\DTO\Out\ClientPackageDetailOutDto;
+use App\DTO\Out\ClientPackageOutDto;
+use App\DTO\Out\DeletedOutDto;
+use App\DTO\Out\PaginatedListOutDto;
+use App\DTO\Out\PricePackageOutDto;
+use App\DTO\Out\ToggleOutDto;
 use App\Entity\Account;
 use App\Entity\CommunicationClientPackage;
 use App\Exception\MyCurrentException;
+use App\OpenApi\Attribute\DashboardEndpoint;
 use App\Service\CommunicationPackageService;
 use App\Entity\User;
 use App\Entity\CommunicationPrice;
@@ -55,6 +62,7 @@ class DashboardClientPackagesController extends AbstractController
     // ═══════════════════════════════════════════
 
     #[Route('/client/prices', name: 'dashboard_client_prices_list', methods: ['GET'])]
+    #[DashboardEndpoint(summary: 'Listar price packages', tag: 'Client Prices', responseDto: PaginatedListOutDto::class, itemDto: PricePackageOutDto::class)]
     public function listPrices(Request $request): JsonResponse
     {
         $page = max(0, (int) $request->query->get('page', 0));
@@ -93,6 +101,7 @@ class DashboardClientPackagesController extends AbstractController
     }
 
     #[Route('/client/prices/catalogue', name: 'dashboard_client_prices_catalogue', methods: ['GET'])]
+    #[DashboardEndpoint(summary: 'Catálogo de precios activos', tag: 'Client Prices')]
     public function listCommunicationPrices(): JsonResponse
     {
         $prices = $this->em->getRepository(CommunicationPrice::class)
@@ -113,6 +122,7 @@ class DashboardClientPackagesController extends AbstractController
     }
 
     #[Route('/client/prices/{id}', name: 'dashboard_client_prices_show', methods: ['GET'], requirements: ['id' => '\d+'])]
+    #[DashboardEndpoint(summary: 'Obtener price package', tag: 'Client Prices', responseDto: PricePackageOutDto::class)]
     public function showPrice(int $id): JsonResponse
     {
         $pp = $this->em->getRepository(CommunicationPricePackage::class)->find($id);
@@ -123,6 +133,7 @@ class DashboardClientPackagesController extends AbstractController
     }
 
     #[Route('/client/prices', name: 'dashboard_client_prices_create', methods: ['POST'])]
+    #[DashboardEndpoint(summary: 'Crear price package', tag: 'Client Prices', responseDto: PricePackageOutDto::class, responseStatusCode: 201)]
     public function createPrice(Request $request): JsonResponse
     {
         $data = $request->request->all();
@@ -178,6 +189,7 @@ class DashboardClientPackagesController extends AbstractController
     }
 
     #[Route('/client/prices/{id}', name: 'dashboard_client_prices_update', methods: ['PATCH'], requirements: ['id' => '\d+'])]
+    #[DashboardEndpoint(summary: 'Actualizar price package', tag: 'Client Prices', responseDto: PricePackageOutDto::class)]
     public function updatePrice(int $id, Request $request): JsonResponse
     {
         $pp = $this->em->getRepository(CommunicationPricePackage::class)->find($id);
@@ -201,6 +213,7 @@ class DashboardClientPackagesController extends AbstractController
     }
 
     #[Route('/client/prices/{id}/toggle', name: 'dashboard_client_prices_toggle', methods: ['PATCH'], requirements: ['id' => '\d+'])]
+    #[DashboardEndpoint(summary: 'Activar/desactivar price package', tag: 'Client Prices', responseDto: ToggleOutDto::class)]
     public function togglePrice(int $id): JsonResponse
     {
         $pp = $this->em->getRepository(CommunicationPricePackage::class)->find($id);
@@ -213,6 +226,7 @@ class DashboardClientPackagesController extends AbstractController
     }
 
     #[Route('/client/prices/{id}', name: 'dashboard_client_prices_delete', methods: ['DELETE'], requirements: ['id' => '\d+'])]
+    #[DashboardEndpoint(summary: 'Eliminar price package', tag: 'Client Prices', responseDto: DeletedOutDto::class)]
     public function deletePrice(int $id): JsonResponse
     {
         $pp = $this->em->getRepository(CommunicationPricePackage::class)->find($id);
@@ -229,6 +243,7 @@ class DashboardClientPackagesController extends AbstractController
     // ═══════════════════════════════════════════
 
     #[Route('/client/packages', name: 'dashboard_client_packages_create', methods: ['POST'])]
+    #[DashboardEndpoint(summary: 'Crear client package', tag: 'Client Packages', requestDto: CreateClientPackageDto::class, responseDto: ClientPackageDetailOutDto::class, responseStatusCode: 201)]
     public function createPackage(CreateClientPackageDto $dto): JsonResponse
     {
         $violations = $this->validator->validate($dto);
@@ -253,6 +268,7 @@ class DashboardClientPackagesController extends AbstractController
     }
 
     #[Route('/client/packages', name: 'dashboard_client_packages_list', methods: ['GET'])]
+    #[DashboardEndpoint(summary: 'Listar client packages', tag: 'Client Packages', responseDto: PaginatedListOutDto::class, itemDto: ClientPackageOutDto::class)]
     public function listPackages(Request $request): JsonResponse
     {
         $page = max(0, (int) $request->query->get('page', 0));
@@ -290,6 +306,7 @@ class DashboardClientPackagesController extends AbstractController
     }
 
     #[Route('/client/packages/{id}', name: 'dashboard_client_packages_show', methods: ['GET'], requirements: ['id' => '\d+'])]
+    #[DashboardEndpoint(summary: 'Obtener client package', tag: 'Client Packages', responseDto: ClientPackageDetailOutDto::class)]
     public function showPackage(int $id): JsonResponse
     {
         $cp = $this->em->getRepository(CommunicationClientPackage::class)->find($id);
@@ -300,6 +317,7 @@ class DashboardClientPackagesController extends AbstractController
     }
 
     #[Route('/client/packages/{id}', name: 'dashboard_client_packages_update', methods: ['PATCH'], requirements: ['id' => '\d+'])]
+    #[DashboardEndpoint(summary: 'Actualizar client package', tag: 'Client Packages', responseDto: ClientPackageDetailOutDto::class)]
     public function updatePackage(int $id, Request $request): JsonResponse
     {
         $cp = $this->em->getRepository(CommunicationClientPackage::class)->find($id);
@@ -326,6 +344,7 @@ class DashboardClientPackagesController extends AbstractController
     }
 
     #[Route('/client/packages/{id}', name: 'dashboard_client_packages_delete', methods: ['DELETE'], requirements: ['id' => '\d+'])]
+    #[DashboardEndpoint(summary: 'Eliminar client package', tag: 'Client Packages', responseDto: DeletedOutDto::class)]
     public function deletePackage(int $id): JsonResponse
     {
         $cp = $this->em->getRepository(CommunicationClientPackage::class)->find($id);

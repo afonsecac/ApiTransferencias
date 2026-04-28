@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace App\Controller;
 
+use App\DTO\Out\PaginatedListOutDto;
+use App\DTO\Out\UserOutDto;
+use App\OpenApi\Attribute\DashboardEndpoint;
 use App\Service\UserService;
 use App\Util\DashboardUtil;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -22,6 +25,7 @@ class AdminUserController extends AbstractController
     }
 
     #[Route('/all')]
+    #[DashboardEndpoint(summary: 'Listar todos los usuarios', tag: 'Admin Users', responseDto: PaginatedListOutDto::class, itemDto: UserOutDto::class)]
     public function index(Request $request): JsonResponse
     {
         $page = $request->query->getInt('page');

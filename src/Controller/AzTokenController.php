@@ -2,6 +2,7 @@
 
 namespace App\Controller;
 
+use App\OpenApi\Attribute\DashboardEndpoint;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -22,6 +23,7 @@ class AzTokenController extends AbstractController
 //    }
 
     #[Route('', name: 'app_az_token', methods: ['POST', 'GET'])]
+    #[DashboardEndpoint(summary: 'Token Azure (debug)', tag: 'AZ Token')]
     public function index(Request $request): JsonResponse
     {
         $params = $request->attributes->all();

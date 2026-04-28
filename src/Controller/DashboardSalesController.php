@@ -2,9 +2,15 @@
 
 namespace App\Controller;
 
+use App\DTO\Out\PaginatedListOutDto;
+use App\DTO\Out\SaleCheckStatusOutDto;
+use App\DTO\Out\SaleInfoDetailOutDto;
+use App\DTO\Out\SaleInfoListOutDto;
+use App\DTO\Out\SaleRetryOutDto;
 use App\Entity\CommunicationSaleInfo;
 use App\Enums\CommunicationStateEnum;
 use App\Message\CheckSaleMessage;
+use App\OpenApi\Attribute\DashboardEndpoint;
 use App\Service\CommunicationSaleService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -38,6 +44,7 @@ class DashboardSalesController extends AbstractController
     }
 
     #[Route('', name: 'dashboard_sales_list', methods: ['GET'])]
+    #[DashboardEndpoint(summary: 'Listar ventas', tag: 'Sales', responseDto: PaginatedListOutDto::class, itemDto: SaleInfoListOutDto::class)]
     public function list(Request $request): JsonResponse
     {
         $page = max(0, (int) $request->query->get('page', 0));
@@ -130,6 +137,7 @@ class DashboardSalesController extends AbstractController
     }
 
     #[Route('/{id}', name: 'dashboard_sales_detail', methods: ['GET'], requirements: ['id' => '\d+'])]
+    #[DashboardEndpoint(summary: 'Detalle de venta', tag: 'Sales', responseDto: SaleInfoDetailOutDto::class)]
     public function detail(int $id): JsonResponse
     {
         $sale = $this->em->getRepository(CommunicationSaleInfo::class)->find($id);
@@ -147,6 +155,7 @@ class DashboardSalesController extends AbstractController
     }
 
     #[Route('/{id}/check-status', name: 'dashboard_sales_check_status', methods: ['POST'], requirements: ['id' => '\d+'])]
+    #[DashboardEndpoint(summary: 'Verificar estado de venta', tag: 'Sales', responseDto: SaleCheckStatusOutDto::class)]
     public function checkStatus(int $id): JsonResponse
     {
         $sale = $this->em->getRepository(CommunicationSaleInfo::class)->find($id);
@@ -190,7 +199,8 @@ class DashboardSalesController extends AbstractController
     }
 
     #[Route('/{id}/retry', name: 'dashboard_sales_retry', methods: ['POST'], requirements: ['id' => '\d+'])]
-    #[IsGranted('ROLE_API_ADMIN')]
+    #[DashboardEndpoint(summary: 'Reintentar venta fallida', tag: 'Sales', responseDto: SaleRetryOutDto::class)]
+#[IsGranted('ROLE_API_ADMIN')]
     public function retry(int $id): JsonResponse
     {
         $sale = $this->em->getRepository(CommunicationSaleInfo::class)->find($id);

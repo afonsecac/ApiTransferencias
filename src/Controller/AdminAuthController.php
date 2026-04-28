@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace App\Controller;
 
+use App\DTO\Out\UserOutDto;
 use App\Entity\User;
+use App\OpenApi\Attribute\DashboardEndpoint;
 use App\Service\UserService;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -22,11 +24,9 @@ class AdminAuthController extends AbstractController
     {
     }
 
-    /**
-     * @return \Symfony\Component\HttpFoundation\JsonResponse
-     */
     #[Route('/profile')]
     #[IsGranted("ROLE_SYSTEM_USER")]
+    #[DashboardEndpoint(summary: 'Perfil del usuario autenticado', tag: 'Auth', responseDto: UserOutDto::class)]
     public function index(): JsonResponse
     {
         $user = $this->getUser();

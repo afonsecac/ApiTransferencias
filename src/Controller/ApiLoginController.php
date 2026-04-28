@@ -3,8 +3,11 @@
 namespace App\Controller;
 
 use App\DTO\ForgotPassword;
+use App\DTO\Out\AuthTokenOutDto;
+use App\DTO\Out\LogoutOutDto;
 use App\DTO\ResetPassword;
 use App\Entity\User;
+use App\OpenApi\Attribute\DashboardEndpoint;
 use App\Service\RefreshTokenService;
 use App\Service\UserService;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -30,6 +33,7 @@ class ApiLoginController extends AbstractController
     }
 
     #[Route('/login', name: 'app_dashboard_login', methods: ['POST'])]
+    #[DashboardEndpoint(summary: 'Login', tag: 'Auth', responseDto: AuthTokenOutDto::class)]
     public function index(#[CurrentUser] ?User $user, Request $request): JsonResponse
     {
         $clientIp = $request->getClientIp() ?? 'unknown';
@@ -77,6 +81,7 @@ class ApiLoginController extends AbstractController
     }
 
     #[Route('/refresh', name: 'app_dashboard_refresh', methods: ['POST'])]
+    #[DashboardEndpoint(summary: 'Refrescar token', tag: 'Auth', responseDto: AuthTokenOutDto::class)]
     public function refresh(Request $request): JsonResponse
     {
         $clientIp = $request->getClientIp() ?? 'unknown';
@@ -119,6 +124,7 @@ class ApiLoginController extends AbstractController
     }
 
     #[Route('/forgot-password', name: 'app_dashboard_reset', methods: ['POST'])]
+    #[DashboardEndpoint(summary: 'Solicitar recuperación de contraseña', tag: 'Auth', requestDto: ForgotPassword::class)]
     public function forgot(ForgotPassword $forgotPassword, Request $request): JsonResponse
     {
         $clientIp = $request->getClientIp() ?? 'unknown';
@@ -135,6 +141,7 @@ class ApiLoginController extends AbstractController
     }
 
     #[Route('/reset-password', name: 'app_dashboard_reset_password', methods: ['POST'])]
+    #[DashboardEndpoint(summary: 'Restablecer contraseña', tag: 'Auth', requestDto: ResetPassword::class)]
     public function reset(ResetPassword $resetPassword, Request $request): JsonResponse
     {
         $clientIp = $request->getClientIp() ?? 'unknown';
@@ -150,6 +157,7 @@ class ApiLoginController extends AbstractController
     }
 
     #[Route('/logout', name: 'app_dashboard_logout', methods: ['POST'])]
+    #[DashboardEndpoint(summary: 'Logout', tag: 'Auth', responseDto: LogoutOutDto::class)]
     public function logout(Request $request): JsonResponse
     {
         $user = $this->getUser();

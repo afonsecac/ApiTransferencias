@@ -2,6 +2,7 @@
 
 namespace App\DTO;
 
+use App\OpenApi\Attribute\OAProperty;
 use Symfony\Component\Validator\Constraints as Assert;
 
 class CreateClientPackageDto implements IInput
@@ -35,14 +36,70 @@ class CreateClientPackageDto implements IInput
     #[Assert\Length(max: 500)]
     protected ?string $knowMore;
 
+    #[OAProperty(schema: [
+        'type' => 'array',
+        'nullable' => true,
+        'items' => [
+            'type' => 'object',
+            'properties' => [
+                'type'                   => ['type' => 'string', 'enum' => ['CREDITS', 'TALKTIME', 'DATA', 'SMS']],
+                'unit'                   => ['type' => 'string', 'enum' => ['CUP', 'USD', 'UNITS', 'MINUTES', 'GB', 'ILIM']],
+                'unit_type'              => ['type' => 'string', 'enum' => ['CURRENCY', 'QUANTITY', 'DATA', 'TIME']],
+                'additional_information' => ['type' => 'string'],
+                'amount'                 => ['type' => 'object', 'properties' => [
+                    'base'                 => ['type' => 'integer'],
+                    'promotion_bonus'      => ['type' => 'integer'],
+                    'total_excluding_tax'  => ['type' => 'integer'],
+                    'total_including_tax'  => ['type' => 'integer'],
+                ]],
+                'schedule' => ['type' => 'object', 'nullable' => true, 'default' => null, 'properties' => [
+                    'start' => ['type' => 'string'],
+                    'end'   => ['type' => 'string', 'nullable' => true, 'default' => null],
+                ]],
+            ],
+        ],
+    ])]
     protected ?array $benefits;
 
+    #[OAProperty(schema: [
+        'type' => 'array',
+        'nullable' => true,
+        'items' => ['type' => 'string', 'enum' => ['AIRTIME', 'BUNDLE', 'DATA', 'SMS', 'INTERNET']],
+    ])]
     protected ?array $tags;
 
+    #[OAProperty(schema: [
+        'type' => 'object',
+        'nullable' => true,
+        'properties' => [
+            'name'       => ['type' => 'string', 'enum' => ['Mobile', 'uSIM', 'Devices']],
+            'subservice' => ['type' => 'object', 'properties' => [
+                'name' => ['type' => 'string', 'enum' => ['AIRTIME', 'BUNDLE', 'DATA', 'SMS', 'INTERNET', 'uSIM']],
+            ]],
+        ],
+    ])]
     protected ?array $service;
 
+    #[OAProperty(schema: [
+        'type' => 'object',
+        'nullable' => true,
+        'properties' => [
+            'amount'    => ['type' => 'number', 'format' => 'currency-number'],
+            'unit'      => ['type' => 'string', 'enum' => ['CUP', 'MLC', 'USD']],
+            'unit_type' => ['type' => 'string', 'enum' => ['CURRENCY']],
+        ],
+    ])]
     protected ?array $destination;
 
+    #[OAProperty(schema: [
+        'type' => 'object',
+        'nullable' => true,
+        'default' => null,
+        'properties' => [
+            'quantity' => ['type' => 'integer'],
+            'unit'     => ['type' => 'string', 'enum' => ['DAYS', 'MONTH', 'YEAR']],
+        ],
+    ])]
     protected ?array $validity;
 
     public function __construct(
