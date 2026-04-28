@@ -28,13 +28,16 @@ use Symfony\Component\Validator\Constraints as Assert;
         new Get(),
         new GetCollection(),
         new Post(
+            denormalizationContext: ['groups' => ['sender:create']],
             processor: CreateSenderProcessor::class
         ),
-        new Patch(),
+        new Patch(
+            denormalizationContext: ['groups' => ['sender:update']],
+        ),
         new Delete(processor: SoftDeleteSenderProcessor::class),
     ],
     normalizationContext: ['groups' => ['sender:read']],
-    denormalizationContext: ['groups' => ['sender:write']],
+    denormalizationContext: ['groups' => ['sender:create']],
     security: "is_granted('ROLE_REM_API_USER')",
 )]
 #[ApiFilter(DateFilter::class, properties: ['dateOfBirth'])]
@@ -76,13 +79,13 @@ class Sender
     #[Assert\NotBlank()]
     #[Assert\Length(min: 2, max: 60)]
     #[ApiProperty(description: "First name of sender", types: ['https://schema.org/name'])]
-    #[Groups(['sender:read', 'sender:write'])]
+    #[Groups(['sender:read', 'sender:create', 'sender:update'])]
     private ?string $firstName = null;
 
     #[ORM\Column(length: 60, nullable: true)]
     #[Assert\Length(min: 2, max: 60)]
     #[ApiProperty(description: "Middle name of sender", types: ['https://schema.org/name'])]
-    #[Groups(['sender:read', 'sender:write'])]
+    #[Groups(['sender:read', 'sender:create', 'sender:update'])]
     private ?string $middleName = null;
 
     #[ORM\Column(length: 120)]
@@ -90,32 +93,32 @@ class Sender
     #[Assert\NotBlank()]
     #[Assert\Length(min: 2, max: 120)]
     #[ApiProperty(description: "Last name of sender", types: ['https://schema.org/name'])]
-    #[Groups(['sender:read', 'sender:write'])]
+    #[Groups(['sender:read', 'sender:create', 'sender:update'])]
     private ?string $lastName = null;
 
     #[ORM\Column(length: 120)]
     #[Assert\Email()]
     #[Assert\NotBlank()]
     #[ApiProperty(description: "Email to send notifications", types: ['https://schema.org/email'])]
-    #[Groups(['sender:read', 'sender:write'])]
+    #[Groups(['sender:read', 'sender:create', 'sender:update'])]
     private ?string $email = null;
 
     #[ORM\Column(length: 20)]
     #[ApiProperty(description: "Phone number or cell number of sender", example: "+1 709 1515 1515")]
-    #[Groups(['sender:read', 'sender:write'])]
+    #[Groups(['sender:read', 'sender:create', 'sender:update'])]
     #[Assert\NotBlank()]
     #[Assert\Length(max: 20)]
     private ?string $phone = null;
 
     #[ORM\Column(type: Types::TEXT, nullable: true)]
-    #[Groups(['sender:read', 'sender:write'])]
+    #[Groups(['sender:read', 'sender:create', 'sender:update'])]
     #[Assert\NotBlank()]
     #[ApiProperty(description: "Address of sender")]
     private ?string $address = null;
 
     #[ORM\Column(length: 3)]
     #[Assert\Length(exactly: 3)]
-    #[Groups(['sender:read', 'sender:write'])]
+    #[Groups(['sender:read', 'sender:create', 'sender:update'])]
     #[ApiProperty(
         example: "USA"
     )]
@@ -133,7 +136,7 @@ class Sender
         ]
     )]
     #[Assert\NotBlank()]
-    #[Groups(['sender:read', 'sender:write'])]
+    #[Groups(['sender:read', 'sender:create'])]
     #[Assert\Choice(choices: ['P', 'NI', 'DL'])]
     private ?string $identificationType = null;
 
@@ -141,7 +144,7 @@ class Sender
     #[ApiProperty(readable: false, identifier: true, types: ["https://schema.org/identifier"])]
     #[Assert\NotBlank()]
     #[Assert\Length(max: 255)]
-    #[Groups(['sender:write'])]
+    #[Groups(['sender:create'])]
     private ?string $identification = null;
 
     #[ORM\Column(nullable: true)]
@@ -152,7 +155,7 @@ class Sender
     private ?Account $tenant = null;
 
     #[ORM\Column(type: Types::DATE_MUTABLE, nullable: true)]
-    #[Groups(['sender:read', 'sender:write'])]
+    #[Groups(['sender:read', 'sender:create', 'sender:update'])]
     #[ApiProperty(types: ["https://schema.org/Date"])]
     private ?DateTimeInterface $dateOfBirth = null;
 
