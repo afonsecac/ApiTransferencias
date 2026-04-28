@@ -15,6 +15,7 @@ use ApiPlatform\Metadata\Patch;
 use ApiPlatform\Metadata\Post;
 use App\Repository\SenderRepository;
 use App\State\CreateSenderProcessor;
+use App\State\SoftDeleteSenderProcessor;
 use DateTimeInterface;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
@@ -30,7 +31,7 @@ use Symfony\Component\Validator\Constraints as Assert;
             processor: CreateSenderProcessor::class
         ),
         new Patch(),
-        new Delete(),
+        new Delete(processor: SoftDeleteSenderProcessor::class),
     ],
     normalizationContext: ['groups' => ['sender:read']],
     denormalizationContext: ['groups' => ['sender:write']],
@@ -38,7 +39,7 @@ use Symfony\Component\Validator\Constraints as Assert;
 )]
 #[ApiFilter(DateFilter::class, properties: ['dateOfBirth'])]
 #[ApiFilter(SearchFilter::class, properties: [
-    'identification' => 'partial',
+    'identification' => 'exact',
     'firstName' => 'partial',
     'lastName' => 'partial',
 ])]
@@ -137,10 +138,10 @@ class Sender
     private ?string $identificationType = null;
 
     #[ORM\Column(length: 255)]
-    #[ApiProperty(identifier: true, types: ["https://schema.org/identifier"])]
+    #[ApiProperty(readable: false, identifier: true, types: ["https://schema.org/identifier"])]
     #[Assert\NotBlank()]
     #[Assert\Length(max: 255)]
-    #[Groups(['sender:read', 'sender:write'])]
+    #[Groups(['sender:write'])]
     private ?string $identification = null;
 
     #[ORM\Column(nullable: true)]
@@ -160,6 +161,9 @@ class Sender
 
     #[ORM\Column]
     private ?\DateTimeImmutable $updatedAt = null;
+
+    #[ORM\Column(nullable: true)]
+    private ?\DateTimeImmutable $removedAt = null;
 
     public function getId(): int
     {
@@ -330,6 +334,18 @@ class Sender
     public function setUpdatedAt(\DateTimeImmutable $updatedAt): static
     {
         $this->updatedAt = $updatedAt;
+
+        return $this;
+    }
+
+    public function getRemovedAt(): ?\DateTimeImmutable
+    {
+        return $this->removedAt;
+    }
+
+    public function setRemovedAt(?\DateTimeImmutable $removedAt): static
+    {
+        $this->removedAt = $removedAt;
 
         return $this;
     }

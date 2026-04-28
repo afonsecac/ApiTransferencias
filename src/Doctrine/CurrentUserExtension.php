@@ -10,6 +10,7 @@ use App\Entity\Account;
 use App\Entity\BankCard;
 use App\Entity\Beneficiary;
 use App\Entity\City;
+use App\Entity\Sender;
 use App\Entity\CommunicationClientPackage;
 use App\Entity\CommunicationNationality;
 use App\Entity\CommunicationOffice;
@@ -95,6 +96,10 @@ final class CurrentUserExtension implements QueryCollectionExtensionInterface, Q
             } elseif (Beneficiary::class === $resourceClass) {
                 $queryBuilder->andWhere(sprintf('%s.tenant = :current_user', $rootAlias))
                     ->andWhere(sprintf('%s.removeAt IS NULL', $rootAlias))
+                    ->setParameter('current_user', $user->getId());
+            } elseif (Sender::class === $resourceClass) {
+                $queryBuilder->andWhere(sprintf('%s.tenant = :current_user', $rootAlias))
+                    ->andWhere(sprintf('%s.removedAt IS NULL', $rootAlias))
                     ->setParameter('current_user', $user->getId());
             } else {
                 $queryBuilder->andWhere(sprintf('%s.tenant = :current_user', $rootAlias))

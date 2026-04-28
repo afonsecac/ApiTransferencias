@@ -37,7 +37,7 @@ class CommunicationSaleRecharge extends CommunicationSaleInfo
 	</tbody>
 </table><p>Any other number used that is not contemplated in this document will be shown as rejected.</p>',
         required: true,
-        default: '5350499847'
+        example: 'XXXXXXXXXX'
     )]
     #[Assert\NotBlank]
     #[Assert\Length(min: 8, max: 10)]

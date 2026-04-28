@@ -136,6 +136,7 @@ class Transfer
 
     #[ORM\Column(type: Types::TEXT, nullable: true)]
     #[Groups(['tx:read', 'tx:write', 'balance:reading'])]
+    #[Assert\Length(max: 1000)]
     private ?string $reasonNote = null;
 
     #[ORM\Column(nullable: true)]
