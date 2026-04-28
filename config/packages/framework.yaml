@@ -21,6 +21,14 @@ framework:
             policy: 'fixed_window'
             limit: 5
             interval: '15 minutes'
+        api_transfer:
+            policy: 'sliding_window'
+            limit: 10
+            interval: '1 minute'
+        api_recharge:
+            policy: 'sliding_window'
+            limit: 10
+            interval: '1 minute'
 #    serializer:
 #        enable_annotations: true
 

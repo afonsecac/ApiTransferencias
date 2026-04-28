@@ -56,6 +56,7 @@ use Symfony\Component\Validator\Constraints as Assert;
     normalizationContext: ['groups' => ['balance:read', 'balance:reading']],
     denormalizationContext: ['groups' => ['balance:update', 'balance:create']],
     security: "is_granted('ROLE_API_USER')",
+    paginationMaximumItemsPerPage: 30,
 )]
 #[ApiFilter(DateFilter::class, properties: ['createdAt'])]
 #[ApiFilter(OrderFilter::class, properties: [

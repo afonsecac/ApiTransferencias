@@ -29,6 +29,7 @@ RUN printf '%s\n' \
        'JWT_TIMEOUT=30' \
        'APP_TEST_PHONE=0000000000' \
        'APP_MAILER_FROM=noreply@localhost' \
+       'APP_ERROR_RECIPIENTS=noreply@localhost' \
        'CORS_ALLOW_ORIGIN="^https?://localhost$"' \
        'CORS_DASHBOARD_ORIGIN="^https?://localhost$"' \
        > .env \

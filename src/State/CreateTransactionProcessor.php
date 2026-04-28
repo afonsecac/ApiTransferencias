@@ -23,6 +23,8 @@ use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\NonUniqueResultException;
 use Symfony\Bundle\SecurityBundle\Security;
 use Symfony\Component\HttpFoundation\Exception\BadRequestException;
+use Symfony\Component\HttpKernel\Exception\TooManyRequestsHttpException;
+use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\Serializer\Encoder\JsonEncoder;
 use Symfony\Component\Serializer\Encoder\XmlEncoder;
 use Symfony\Component\Serializer\Normalizer\DateIntervalNormalizer;
@@ -53,6 +55,7 @@ class CreateTransactionProcessor implements ProcessorInterface
         private readonly SenderRepository $senderRepository,
         private readonly BalanceOperationRepository $balanceRepository,
         private readonly TransferCalculatorService $transferCalculatorService,
+        private readonly RateLimiterFactory $apiTransferLimiter,
     ) {
         $encoders = [new XmlEncoder(), new JsonEncoder()];
         $normalizer = [new DateTimeNormalizer(), new DateIntervalNormalizer(), new ObjectNormalizer()];
@@ -70,6 +73,14 @@ class CreateTransactionProcessor implements ProcessorInterface
     public function process(mixed $data, Operation $operation, array $uriVariables = [], array $context = [])
     {
         $user = $this->security->getUser();
+
+        if ($user instanceof Account) {
+            $limit = $this->apiTransferLimiter->create((string) $user->getId())->consume(1);
+            if (!$limit->isAccepted()) {
+                throw new TooManyRequestsHttpException($limit->getRetryAfter()->getTimestamp(), 'Too many transfer requests. Please wait before trying again.');
+            }
+        }
+
         $accessToken = null;
         $accessTokens = $this->authRepository->findBy([
             'closedAt' => null,

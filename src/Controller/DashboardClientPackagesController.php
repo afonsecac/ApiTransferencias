@@ -2,8 +2,11 @@
 
 namespace App\Controller;
 
+use App\DTO\CreateClientPackageDto;
 use App\Entity\Account;
 use App\Entity\CommunicationClientPackage;
+use App\Exception\MyCurrentException;
+use App\Service\CommunicationPackageService;
 use App\Entity\User;
 use App\Entity\CommunicationPrice;
 use App\Entity\CommunicationPricePackage;
@@ -18,6 +21,7 @@ use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Http\Attribute\IsGranted;
+use Symfony\Component\Validator\Validator\ValidatorInterface;
 
 #[IsGranted('ROLE_ADMIN')]
 class DashboardClientPackagesController extends AbstractController
@@ -41,6 +45,8 @@ class DashboardClientPackagesController extends AbstractController
     public function __construct(
         private readonly EntityManagerInterface $em,
         private readonly Security $security,
+        private readonly ValidatorInterface $validator,
+        private readonly CommunicationPackageService $packageService,
     ) {
     }
 
@@ -221,6 +227,30 @@ class DashboardClientPackagesController extends AbstractController
     // ═══════════════════════════════════════════
     //  CLIENT PACKAGES
     // ═══════════════════════════════════════════
+
+    #[Route('/client/packages', name: 'dashboard_client_packages_create', methods: ['POST'])]
+    public function createPackage(CreateClientPackageDto $dto): JsonResponse
+    {
+        $violations = $this->validator->validate($dto);
+        if (count($violations) > 0) {
+            $details = [];
+            foreach ($violations as $v) {
+                $details[] = $v->getPropertyPath() . ': ' . $v->getMessage();
+            }
+            return $this->json(
+                ['error' => ['message' => 'Validation failed', 'details' => $details]],
+                Response::HTTP_BAD_REQUEST
+            );
+        }
+
+        try {
+            $cp = $this->packageService->create($dto);
+        } catch (MyCurrentException $e) {
+            return $this->json(['error' => ['message' => $e->getMessage()]], $e->getCode());
+        }
+
+        return $this->json($this->serializeClientPackageDetail($cp), Response::HTTP_CREATED);
+    }
 
     #[Route('/client/packages', name: 'dashboard_client_packages_list', methods: ['GET'])]
     public function listPackages(Request $request): JsonResponse
