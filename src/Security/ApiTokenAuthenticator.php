@@ -2,7 +2,6 @@
 
 namespace App\Security;
 
-use ApiPlatform\Symfony\Security\Exception\AccessDeniedException;
 use App\Repository\AccountRepository;
 use App\Service\IpMatcherService;
 use Monolog\Attribute\WithMonologChannel;
@@ -93,7 +92,7 @@ class ApiTokenAuthenticator extends AbstractAuthenticator
                 'servers' => $request->server->all(),
                 'allIps' => $request->getClientIps()
             ]);
-            throw new AccessDeniedException();
+            throw new CustomUserMessageAuthenticationException('Access not allowed from this IP address');
         }
 
         return new SelfValidatingPassport(new UserBadge($permission->getUserIdentifier()));
