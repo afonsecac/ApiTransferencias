@@ -90,7 +90,7 @@ when@prod:
             symfony_mailer:
                 type: symfony_mailer
                 from_email: '%env(APP_MAILER_FROM)%'
-                to_email: '%env(json:APP_ERROR_RECIPIENTS)%'
+                to_email: '%env(APP_ERROR_RECIPIENTS)%'
                 subject: 'An Error Occurred in Api Clients! - ENV %kernel.environment%'
                 level: error
                 formatter: monolog.formatter.html
@@ -99,9 +99,21 @@ when@prod:
             symfony_mailer_critical:
                 type: symfony_mailer
                 from_email: '%env(APP_MAILER_FROM)%'
-                to_email: '%env(json:APP_ERROR_RECIPIENTS)%'
+                to_email: '%env(APP_ERROR_RECIPIENTS)%'
                 subject: 'An Critical Error Occurred in Api Clients! - ENV %kernel.environment%'
                 level: critical
                 formatter: monolog.formatter.html
                 content_type: text/html
                 channels: ["!console"]
+
+when@prod:
+    monolog:
+        handlers:
+            symfony_mailer:
+                to_email:
+                    - aportela7@gmail.com
+                    - alexander.afonsecac@gmail.com
+            symfony_mailer_critical:
+                to_email:
+                    - aportela7@gmail.com
+                    - alexander.afonsecac@gmail.com
