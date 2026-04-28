@@ -47,7 +47,7 @@ class CreateSaleInfoProcessor implements ProcessorInterface
         if ($user instanceof Account) {
             $limit = $this->apiRechargeLimiter->create((string) $user->getId())->consume(1);
             if (!$limit->isAccepted()) {
-                throw new TooManyRequestsHttpException($limit->getRetryAfter()?->getTimestamp(), 'Too many recharge requests. Please wait before trying again.');
+                throw new TooManyRequestsHttpException($limit->getRetryAfter()->getTimestamp(), 'Too many recharge requests. Please wait before trying again.');
             }
         }
 

@@ -59,7 +59,7 @@ class CommunicationPackageService extends CommonService
             $cp->setEnvironment($env);
         }
 
-        $dataInfo = $pricePackage->getDataInfo() ?? [];
+        $dataInfo = $pricePackage->getDataInfo();
         $cp->setName($dto->getName() ?? $pricePackage->getName() ?? '');
         $cp->setDescription($dto->getDescription() ?? $pricePackage->getDescription() ?? '');
         $cp->setAmount($dto->getAmount() ?? $pricePackage->getAmount());
