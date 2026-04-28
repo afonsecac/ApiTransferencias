@@ -77,7 +77,7 @@ class CreateTransactionProcessor implements ProcessorInterface
         if ($user instanceof Account) {
             $limit = $this->apiTransferLimiter->create((string) $user->getId())->consume(1);
             if (!$limit->isAccepted()) {
-                throw new TooManyRequestsHttpException($limit->getRetryAfter()?->getTimestamp(), 'Too many transfer requests. Please wait before trying again.');
+                throw new TooManyRequestsHttpException($limit->getRetryAfter()->getTimestamp(), 'Too many transfer requests. Please wait before trying again.');
             }
         }
 

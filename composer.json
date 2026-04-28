@@ -83,10 +83,15 @@
             "requirements-checker": "script"
         },
         "post-install-cmd": [
-            "@auto-scripts"
+            "@auto-scripts",
+            "@setup-hooks"
         ],
         "post-update-cmd": [
-            "@auto-scripts"
+            "@auto-scripts",
+            "@setup-hooks"
+        ],
+        "setup-hooks": [
+            "git config core.hooksPath .githooks"
         ],
         "test": [
             "php bin/phpunit"
