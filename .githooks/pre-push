@@ -1,0 +1,6 @@
+#!/bin/sh
+set -e
+
+echo "▶ PHPUnit tests..."
+php bin/phpunit --no-coverage
+echo "✔ Tests OK"
