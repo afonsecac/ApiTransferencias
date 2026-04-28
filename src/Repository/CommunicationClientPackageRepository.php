@@ -34,6 +34,7 @@ class CommunicationClientPackageRepository extends ServiceEntityRepository
 
         return $this->createQueryBuilder('p')
             ->leftJoin('p.tenant', 'a')
+            ->addSelect('a')
             ->where('p.id = :id')
             ->andWhere('a.id = :aId')
             ->andWhere('p.activeStartAt <= :currentDate AND p.activeEndAt > :currentDate')

@@ -11,6 +11,7 @@ use ApiPlatform\Metadata\Patch;
 use ApiPlatform\Metadata\Post;
 use App\Repository\BankCardRepository;
 use App\State\CreateBeneficiaryCardProcessor;
+use App\State\SoftDeleteBankCardProcessor;
 use DateTimeImmutable;
 use Doctrine\ORM\Mapping as ORM;
 use Symfony\Component\Serializer\Annotation\Groups;
@@ -28,19 +29,22 @@ use Symfony\Component\Validator\Constraints as Assert;
         ),
         new Post(
             uriTemplate: '/bankCards',
+            denormalizationContext: ['groups' => ['bankCard:create']],
             processor: CreateBeneficiaryCardProcessor::class
         ),
         new Patch(
             uriTemplate: '/bankCards/{id}',
-            uriVariables: 'id'
+            uriVariables: 'id',
+            denormalizationContext: ['groups' => ['bankCard:update']],
         ),
         new Delete(
             uriTemplate: '/bankCards/{id}',
-            uriVariables: 'id'
+            uriVariables: 'id',
+            processor: SoftDeleteBankCardProcessor::class
         ),
     ],
     normalizationContext: ['groups' => ['bankCard:read']],
-    denormalizationContext: ['groups' => ['bankCard:write']],
+    denormalizationContext: ['groups' => ['bankCard:create']],
     security: "is_granted('ROLE_REM_API_USER')",
 )]
 #[ORM\UniqueConstraint(
@@ -75,22 +79,25 @@ class BankCard
     private ?DateTimeImmutable $updatedAt = null;
 
     #[ORM\Column(length: 20)]
-    #[ApiProperty(example: "92049598xxxxxxxx", types: ['https://schema.org/identifier'])]
-    #[Groups(['bankCard:read', 'bankCard:write'])]
-//    #[Assert\CardScheme(
-//        schemes: [],
-//        message: "Beneficiary bank account"
-//    )]
+    #[ApiProperty(readable: false, example: "92049598xxxxxxxx", types: ['https://schema.org/identifier'])]
+    #[Groups(['bankCard:create'])]
     #[Assert\Length(exactly: 16)]
     #[Assert\NotBlank]
     private ?string $cardNumber = null;
 
     #[ORM\Column]
-    #[Groups(['bankCard:read', 'bankCard:write'])]
+    #[Groups(['bankCard:read', 'bankCard:create'])]
     #[ApiProperty(description: "Beneficiary information")]
     #[Assert\NotNull]
     #[Assert\Positive]
     private ?int $beneficiaryCardId = null;
+
+    #[ORM\Column(nullable: true)]
+    #[Groups(['bankCard:read'])]
+    private ?bool $isActive = null;
+
+    #[ORM\Column(nullable: true)]
+    private ?DateTimeImmutable $removedAt = null;
 
     public function getId(): ?int
     {
@@ -165,6 +172,30 @@ class BankCard
     public function setBeneficiaryCardId(int $beneficiaryCardId): static
     {
         $this->beneficiaryCardId = $beneficiaryCardId;
+
+        return $this;
+    }
+
+    public function isActive(): ?bool
+    {
+        return $this->isActive;
+    }
+
+    public function setIsActive(?bool $isActive): static
+    {
+        $this->isActive = $isActive;
+
+        return $this;
+    }
+
+    public function getRemovedAt(): ?DateTimeImmutable
+    {
+        return $this->removedAt;
+    }
+
+    public function setRemovedAt(?DateTimeImmutable $removedAt): static
+    {
+        $this->removedAt = $removedAt;
 
         return $this;
     }

@@ -16,12 +16,14 @@ use Doctrine\ORM\EntityRepository;
 use Doctrine\ORM\QueryBuilder;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
+use App\Service\CommunicationPackageService;
 use Symfony\Bundle\SecurityBundle\Security;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Serializer\SerializerInterface;
+use Symfony\Component\Validator\Validator\ValidatorInterface;
 
 /**
  * @covers \App\Controller\DashboardClientPackagesController
@@ -37,7 +39,12 @@ class DashboardClientPackagesControllerTest extends TestCase
         $this->em = $this->createMock(EntityManagerInterface::class);
         $this->security = $this->createMock(Security::class);
 
-        $this->controller = new DashboardClientPackagesController($this->em, $this->security);
+        $this->controller = new DashboardClientPackagesController(
+            $this->em,
+            $this->security,
+            $this->createMock(ValidatorInterface::class),
+            $this->createMock(CommunicationPackageService::class),
+        );
 
         $container = $this->createMock(ContainerInterface::class);
         $container->method('has')->willReturn(false);

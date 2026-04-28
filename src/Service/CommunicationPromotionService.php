@@ -2,6 +2,7 @@
 
 namespace App\Service;
 
+use App\DTO\CreateAdminPromotionDto;
 use App\Entity\Account;
 use App\Entity\CommunicationClientPackage;
 use App\Entity\CommunicationPrice;
@@ -9,6 +10,7 @@ use App\Entity\CommunicationPricePackage;
 use App\Entity\CommunicationProduct;
 use App\Entity\CommunicationPromotions;
 use App\Entity\Environment;
+use App\Exception\MyCurrentException;
 use Psr\Log\LoggerInterface;
 
 class CommunicationPromotionService extends CommonService
@@ -185,36 +187,39 @@ class CommunicationPromotionService extends CommonService
     }
 
     /**
-     * @deprecated Usar createPackagesForPromotion + el controller del dashboard
+     * @throws MyCurrentException
      */
-    public function onCreatedPromotion(array $inParams): CommunicationPromotions
+    public function createFromDto(CreateAdminPromotionDto $dto): CommunicationPromotions
     {
-        $params = (object)$inParams;
-        $promotion = new CommunicationPromotions();
-        $promotion->setName($params->name);
-        $productPromotion = $this->em->getRepository(CommunicationProduct::class)->find($params->productId);
-        if (!is_null($productPromotion)) {
-            $promotion->setProduct($productPromotion);
+        $product = $this->em->getRepository(CommunicationProduct::class)->find($dto->getProductId());
+        if ($product === null) {
+            throw new MyCurrentException('PRODUCT_NOT_FOUND', 'Product not found', 404);
         }
-        $promotion->setDescription($params->description);
-        $promotion->setInfoDescription($params->infoDescription);
-        $promotion->setKnowMore($params->knowMore);
-        $promotion->setTerms($params->terms);
-        $startDateAt = new \DateTimeImmutable($params->startAt);
-        $endDateAt = new \DateTimeImmutable($params->endAt);
-        $promotion->setStartAt($startDateAt);
-        $promotion->setEndAt($endDateAt);
-        $promotion->setValidityInfo($params->validity);
-        $promotion->setEnvironment($productPromotion->getEnvironment());
 
+        $promotion = new CommunicationPromotions();
+        $promotion->setName($dto->getName());
+        $promotion->setDescription($dto->getDescription());
+        $promotion->setProduct($product);
+        $promotion->setEnvironment($product->getEnvironment());
+        $promotion->setStartAt(new \DateTimeImmutable($dto->getStartAt()));
+        $promotion->setEndAt(new \DateTimeImmutable($dto->getEndAt()));
+        $promotion->setTerms($dto->getTerms() ?? []);
+        $promotion->setValidityInfo($dto->getValidity() ?? []);
 
-        foreach ($params->products as $key => $item) {
-            $productId = $item['productId'];
-            $product = $this->em->getRepository(CommunicationClientPackage::class)->find($productId);
-            if (!is_null($product)) {
-                $promotion->addProduct($product);
+        if ($dto->getInfoDescription() !== null) {
+            $promotion->setInfoDescription($dto->getInfoDescription());
+        }
+        if ($dto->getKnowMore() !== null) {
+            $promotion->setKnowMore($dto->getKnowMore());
+        }
+
+        foreach ($dto->getProducts() ?? [] as $item) {
+            $package = $this->em->getRepository(CommunicationClientPackage::class)->find($item['productId'] ?? 0);
+            if ($package !== null) {
+                $promotion->addProduct($package);
             }
         }
+
         $this->em->persist($promotion);
         $this->em->flush();
 

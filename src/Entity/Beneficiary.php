@@ -11,6 +11,7 @@ use ApiPlatform\Metadata\Patch;
 use ApiPlatform\Metadata\Post;
 use App\Repository\BeneficiaryRepository;
 use App\State\CreateBeneficiaryProcessor;
+use App\State\SoftDeleteBeneficiaryProcessor;
 use DateTimeImmutable;
 use DateTimeInterface;
 use Doctrine\Common\Collections\ArrayCollection;
@@ -27,18 +28,18 @@ use Symfony\Component\Validator\Constraints as Assert;
         new Get(),
         new GetCollection(),
         new Post(
+            denormalizationContext: ['groups' => ['beneficiary:create']],
             processor: CreateBeneficiaryProcessor::class
         ),
-        new Patch(),
-        new Delete()
+        new Patch(
+            denormalizationContext: ['groups' => ['beneficiary:update']],
+        ),
+        new Delete(processor: SoftDeleteBeneficiaryProcessor::class)
     ],
     normalizationContext: ['groups' => ['beneficiary:read']],
-    denormalizationContext: ['groups' => ['beneficiary:write']],
+    denormalizationContext: ['groups' => ['beneficiary:create']],
     security: "is_granted('ROLE_REM_API_USER')",
-)]
-#[ORM\UniqueConstraint(
-    name: "unique_beneficiary_by_environment",
-    fields: ["identificationNumber", "environment"]
+    paginationMaximumItemsPerPage: 20,
 )]
 class Beneficiary
 {
@@ -53,43 +54,43 @@ class Beneficiary
     #[ApiProperty(description: "First name of beneficiary", types: ['https://schema.org/name'])]
     #[Assert\NotBlank]
     #[Assert\Length(max: 60)]
-    #[Groups(['beneficiary:read', 'beneficiary:write'])]
+    #[Groups(['beneficiary:read', 'beneficiary:create', 'beneficiary:update'])]
     private ?string $firstName = null;
 
     #[ORM\Column(length: 60, nullable: true)]
     #[ApiProperty(description: "Middle name of beneficiary", types: ['https://schema.org/name'])]
     #[Assert\Length(max: 60)]
-    #[Groups(['beneficiary:read', 'beneficiary:write'])]
+    #[Groups(['beneficiary:read', 'beneficiary:create', 'beneficiary:update'])]
     private ?string $middleName = null;
 
     #[ORM\Column(length: 120)]
     #[ApiProperty(description: "Last name of beneficiary", types: ['https://schema.org/name'])]
     #[Assert\NotBlank]
     #[Assert\Length(max: 120)]
-    #[Groups(['beneficiary:read', 'beneficiary:write'])]
+    #[Groups(['beneficiary:read', 'beneficiary:create', 'beneficiary:update'])]
     private ?string $lastName = null;
 
     #[ORM\Column(length: 120, nullable: true)]
     #[Assert\Email]
     #[Assert\Length(max: 120)]
     #[ApiProperty(description: "Email of beneficiary", types: ['https://schema.org/email'])]
-    #[Groups(['beneficiary:read', 'beneficiary:write'])]
+    #[Groups(['beneficiary:read', 'beneficiary:create', 'beneficiary:update'])]
     private ?string $email = null;
 
     #[ORM\Column(length: 20, nullable: true)]
     #[Assert\Length(max: 20)]
     #[ApiProperty(description: "Phone number of beneficiary", example: "+53 5xxx xxxx")]
-    #[Groups(['beneficiary:read', 'beneficiary:write'])]
+    #[Groups(['beneficiary:read', 'beneficiary:create', 'beneficiary:update'])]
     private ?string $phone = null;
 
     #[ORM\Column(length: 20, nullable: true)]
     #[Assert\Length(max: 20)]
     #[ApiProperty(description: "Home phone number of beneficiary", example: "+53 7xxx xxxx")]
-    #[Groups(['beneficiary:read', 'beneficiary:write'])]
+    #[Groups(['beneficiary:read', 'beneficiary:create', 'beneficiary:update'])]
     private ?string $homePhone = null;
 
     #[ORM\Column(type: Types::DATE_MUTABLE)]
-    #[Groups(['beneficiary:read', 'beneficiary:write'])]
+    #[Groups(['beneficiary:read', 'beneficiary:create', 'beneficiary:update'])]
     #[ApiProperty(types: ["https://schema.org/Date"])]
     private ?DateTimeInterface $dateOfBirth = null;
 
@@ -103,7 +104,7 @@ class Beneficiary
             'example' => 'F',
         ]
     )]
-    #[Groups(['beneficiary:read', 'beneficiary:write'])]
+    #[Groups(['beneficiary:read', 'beneficiary:create', 'beneficiary:update'])]
     #[Assert\Choice(choices: ['M', 'F', 'O'])]
     private ?string $gender = null;
 
@@ -118,23 +119,23 @@ class Beneficiary
             'example' => 'F',
         ]
     )]
-    #[Groups(['beneficiary:read', 'beneficiary:write'])]
+    #[Groups(['beneficiary:read', 'beneficiary:create', 'beneficiary:update'])]
     #[Assert\Choice(choices: ['M', 'F'])]
     private ?string $genderAtBirth = null;
 
     #[ORM\Column(type: Types::TEXT)]
     #[ApiProperty(description: "Principal address of beneficiary")]
-    #[Groups(['beneficiary:read', 'beneficiary:write'])]
+    #[Groups(['beneficiary:read', 'beneficiary:create', 'beneficiary:update'])]
     #[Assert\NotBlank]
     private ?string $addressLine1 = null;
 
     #[ORM\Column(type: Types::TEXT, nullable: true)]
     #[ApiProperty(description: "Second address of beneficiary")]
-    #[Groups(['beneficiary:read', 'beneficiary:write'])]
+    #[Groups(['beneficiary:read', 'beneficiary:create', 'beneficiary:update'])]
     private ?string $addressLine2 = null;
 
     #[ORM\Column]
-    #[Groups(['beneficiary:read', 'beneficiary:write'])]
+    #[Groups(['beneficiary:read', 'beneficiary:create', 'beneficiary:update'])]
     #[ApiProperty(description: "Beneficiary city of residence, take from /api/cities")]
     #[Assert\Positive]
     #[Assert\NotNull]
@@ -146,14 +147,14 @@ class Beneficiary
 
     #[ORM\Column(length: 15)]
     #[ApiProperty(description: "Beneficiary zipCode", example: "10400")]
-    #[Groups(['beneficiary:read', 'beneficiary:write'])]
+    #[Groups(['beneficiary:read', 'beneficiary:create', 'beneficiary:update'])]
     #[Assert\NotBlank]
     #[Assert\Length(min: 4, max: 15)]
     private ?string $zipCode = null;
 
     #[ORM\Column(length: 30)]
-    #[ApiProperty(description: "Beneficiary national identification", example: "20010100001")]
-    #[Groups(['beneficiary:read', 'beneficiary:write'])]
+    #[ApiProperty(readable: false, description: "Beneficiary national identification")]
+    #[Groups(['beneficiary:create'])]
     #[Assert\NotBlank]
     #[Assert\Length(exactly: 11)]
     private ?string $identificationNumber = null;

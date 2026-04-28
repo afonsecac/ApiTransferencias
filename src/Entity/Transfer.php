@@ -28,16 +28,20 @@ use Symfony\Component\Validator\Constraints as Assert;
         ),
         new GetCollection(),
         new Post(
+            denormalizationContext: ['groups' => ['tx:create']],
             validationContext: [
                 'groups' => [Transfer::class, 'validationsTransactionType']
             ],
             processor: CreateTransactionProcessor::class
         ),
-        new Patch(),
+        new Patch(
+            denormalizationContext: ['groups' => ['tx:update']],
+        ),
     ],
     normalizationContext: ['groups' => ['tx:read']],
-    denormalizationContext: ['groups' => ['tx:write']],
+    denormalizationContext: ['groups' => ['tx:create']],
     security: "is_granted('ROLE_REM_API_USER')",
+    paginationMaximumItemsPerPage: 30,
 )]
 class Transfer
 {
@@ -49,7 +53,7 @@ class Transfer
     private ?int $id = null;
 
     #[ORM\Column]
-    #[Groups(['tx:read', 'tx:write', 'balance:reading'])]
+    #[Groups(['tx:read', 'tx:create', 'balance:reading'])]
     #[Assert\Positive]
     #[Assert\GreaterThan(value: 50)]
     #[Assert\LessThanOrEqual(value: 2000)]
@@ -57,7 +61,7 @@ class Transfer
     private ?float $amountDeposit = null;
 
     #[ORM\Column(length: 3)]
-    #[Groups(['tx:read', 'tx:write', 'balance:reading'])]
+    #[Groups(['tx:read', 'tx:create', 'balance:reading'])]
     #[ApiProperty(default: 'USD', types: ['https://schema.org/priceCurrency'])]
     #[Assert\Length(exactly: 3)]
     #[Assert\Currency]
@@ -99,7 +103,8 @@ class Transfer
     #[Groups(['tx:read', 'balance:reading'])]
     private ?float $rateToChange = null;
 
-    #[Groups(['tx:read', 'tx:write', 'balance:reading'])]
+    #[ORM\Column(length: 1, nullable: true)]
+    #[Groups(['tx:read', 'tx:create', 'balance:reading'])]
     #[ApiProperty(
         openapiContext: [
             'type' => 'string',
@@ -135,11 +140,12 @@ class Transfer
     private ?string $statusName = null;
 
     #[ORM\Column(type: Types::TEXT, nullable: true)]
-    #[Groups(['tx:read', 'tx:write', 'balance:reading'])]
+    #[Groups(['tx:read', 'tx:create', 'tx:update', 'balance:reading'])]
+    #[Assert\Length(max: 1000)]
     private ?string $reasonNote = null;
 
     #[ORM\Column(nullable: true)]
-    #[Groups(['tx:read', 'tx:write'])]
+    #[Groups(['tx:read', 'tx:create'])]
     #[Assert\NotNull(groups: ['debitTx'])]
     #[Assert\IsNull(groups: ['creditTx'])]
     private ?int $senderId = null;
@@ -150,7 +156,7 @@ class Transfer
     #[ORM\Column(nullable: true)]
     #[Assert\NotNull(groups: ['debitTx'])]
     #[Assert\IsNull(groups: ['creditTx'])]
-    #[Groups(['tx:read', 'tx:write'])]
+    #[Groups(['tx:read', 'tx:create'])]
     private ?int $beneficiaryId = null;
 
     #[ORM\ManyToOne]
