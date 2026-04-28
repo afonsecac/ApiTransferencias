@@ -2,6 +2,7 @@
 
 namespace App\Controller;
 
+use App\DTO\UpdateAccountSecurityDto;
 use App\Entity\Account;
 use App\Entity\Client;
 use App\Entity\User;
@@ -13,12 +14,14 @@ use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Http\Attribute\IsGranted;
 use Symfony\Component\Uid\Uuid;
+use Symfony\Component\Validator\Validator\ValidatorInterface;
 
 #[Route('/clients/sec')]
 class DashboardClientSecurityController extends AbstractController
 {
     public function __construct(
         private readonly EntityManagerInterface $em,
+        private readonly ValidatorInterface $validator,
     ) {
     }
 
@@ -68,8 +71,17 @@ class DashboardClientSecurityController extends AbstractController
      * Actualizar datos de seguridad de una cuenta (origin IPs, active, balances).
      */
     #[Route('/{clientId}/accounts/{accountId}', name: 'dashboard_client_sec_update_account', methods: ['PUT'], requirements: ['clientId' => '\d+', 'accountId' => '\d+'])]
-    public function updateAccount(int $clientId, int $accountId, Request $request): JsonResponse
+    public function updateAccount(int $clientId, int $accountId, UpdateAccountSecurityDto $dto): JsonResponse
     {
+        $violations = $this->validator->validate($dto);
+        if (count($violations) > 0) {
+            $details = [];
+            foreach ($violations as $v) {
+                $details[] = $v->getPropertyPath() . ': ' . $v->getMessage();
+            }
+            return $this->json(['error' => ['message' => 'Validation failed', 'details' => $details]], Response::HTTP_BAD_REQUEST);
+        }
+
         $client = $this->findClientWithAccess($clientId);
         if ($client instanceof JsonResponse) {
             return $client;
@@ -80,28 +92,25 @@ class DashboardClientSecurityController extends AbstractController
             return $this->json(['error' => ['message' => 'Account not found for this client']], Response::HTTP_NOT_FOUND);
         }
 
-        $data = $request->request->all();
-
-        if (isset($data['origin'])) {
-            $account->setOrigin($data['origin']);
+        if ($dto->getOrigin() !== null) {
+            $account->setOrigin($dto->getOrigin());
         }
-        if (isset($data['minBalance'])) {
-            $account->setMinBalance((float) $data['minBalance']);
+        if ($dto->getMinBalance() !== null) {
+            $account->setMinBalance($dto->getMinBalance());
         }
-        if (isset($data['criticalBalance'])) {
-            $account->setCriticalBalance((float) $data['criticalBalance']);
+        if ($dto->getCriticalBalance() !== null) {
+            $account->setCriticalBalance($dto->getCriticalBalance());
         }
-        // Solo ROLE_ADMIN puede modificar isActive, discount y commission
         if ($this->isGranted('ROLE_ADMIN')) {
-            if (isset($data['isActive'])) {
-                $account->setIsActive((bool) $data['isActive']);
+            if ($dto->getIsActive() !== null) {
+                $account->setIsActive($dto->getIsActive());
                 $account->setIsActiveAt(new \DateTimeImmutable('now'));
             }
-            if (isset($data['discount'])) {
-                $account->setDiscount((float) $data['discount']);
+            if ($dto->getDiscount() !== null) {
+                $account->setDiscount($dto->getDiscount());
             }
-            if (isset($data['commission'])) {
-                $account->setCommission((float) $data['commission']);
+            if ($dto->getCommission() !== null) {
+                $account->setCommission($dto->getCommission());
             }
         }
 

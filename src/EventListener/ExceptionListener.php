@@ -8,6 +8,7 @@ use MiladRahimi\Jwt\Exceptions\InvalidTokenException;
 use MiladRahimi\Jwt\Exceptions\JsonDecodingException;
 use MiladRahimi\Jwt\Exceptions\SigningException;
 use MiladRahimi\Jwt\Exceptions\ValidationException;
+use Psr\Log\LoggerInterface;
 use Symfony\Component\EventDispatcher\Attribute\AsEventListener;
 use Symfony\Component\Finder\Exception\AccessDeniedException;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -20,6 +21,8 @@ use Symfony\Component\Security\Core\Exception\InsufficientAuthenticationExceptio
 #[AsEventListener]
 class ExceptionListener
 {
+    public function __construct(private readonly LoggerInterface $logger) {}
+
     public function __invoke(ExceptionEvent $event): void
     {
         $exception = $event->getThrowable();
@@ -62,6 +65,7 @@ class ExceptionListener
             $response->setStatusCode($exception->getStatusCode());
             $response->headers->replace($exception->getHeaders());
         } else {
+            $this->logger->error($exception->getMessage(), ['exception' => $exception]);
             $response->setStatusCode(Response::HTTP_INTERNAL_SERVER_ERROR);
         }
 

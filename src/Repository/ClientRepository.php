@@ -18,6 +18,15 @@ use Doctrine\Persistence\ManagerRegistry;
  */
 class ClientRepository extends ServiceEntityRepository
 {
+    private const SORTABLE = [
+        'id'                      => 'c.id',
+        'companyName'             => 'c.companyName',
+        'companyEmail'            => 'c.companyEmail',
+        'companyCountry'          => 'c.companyCountry',
+        'companyIdentification'   => 'c.companyIdentification',
+        'discountOfClient'        => 'c.discountOfClient',
+    ];
+
     public function __construct(ManagerRegistry $registry)
     {
         parent::__construct($registry, Client::class);
@@ -35,13 +44,14 @@ class ClientRepository extends ServiceEntityRepository
         $firstResult = $limit * $page;
         $dql = $this->createQueryBuilder('c');
 
-
         $dql->setFirstResult($firstResult)
             ->setMaxResults($limit);
         if (count($orderBy) === 0) {
             $dql->orderBy('c.companyName', 'ASC');
         } else {
-            $dql->orderBy('c.'.$orderBy['orderBy'], strtoupper($orderBy['direction']));
+            $field     = self::SORTABLE[$orderBy['orderBy'] ?? ''] ?? 'c.companyName';
+            $direction = strtoupper($orderBy['direction'] ?? 'ASC') === 'DESC' ? 'DESC' : 'ASC';
+            $dql->orderBy($field, $direction);
         }
         $paginator = new Paginator($dql, fetchJoinCollection: false);
         $total = count($paginator);
