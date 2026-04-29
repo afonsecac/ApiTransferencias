@@ -420,7 +420,6 @@ class DashboardClientPackagesController extends AbstractController
 
     private function applyActivePackageFilter(QueryBuilder $qb, string $alias): void
     {
-        $qb->andWhere("{$alias}.activeStartAt <= :now")->setParameter('now', new \DateTimeImmutable());
         $qb->andWhere("({$alias}.activeEndAt IS NULL OR {$alias}.activeEndAt >= :nowEnd)")
             ->setParameter('nowEnd', new \DateTimeImmutable());
     }
