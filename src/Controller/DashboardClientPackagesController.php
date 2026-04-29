@@ -413,14 +413,12 @@ class DashboardClientPackagesController extends AbstractController
     private function applyActiveFilter(QueryBuilder $qb, string $alias): void
     {
         $qb->andWhere("{$alias}.isActive = :isActive")->setParameter('isActive', true);
-        $qb->andWhere("{$alias}.activeStartAt <= :now")->setParameter('now', new \DateTimeImmutable());
         $qb->andWhere("({$alias}.activeEndAt IS NULL OR {$alias}.activeEndAt >= :nowEnd)")
             ->setParameter('nowEnd', new \DateTimeImmutable());
     }
 
     private function applyActivePackageFilter(QueryBuilder $qb, string $alias): void
     {
-        $qb->andWhere("{$alias}.activeStartAt <= :now")->setParameter('now', new \DateTimeImmutable());
         $qb->andWhere("({$alias}.activeEndAt IS NULL OR {$alias}.activeEndAt >= :nowEnd)")
             ->setParameter('nowEnd', new \DateTimeImmutable());
     }
