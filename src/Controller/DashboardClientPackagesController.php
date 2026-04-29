@@ -3,22 +3,22 @@
 namespace App\Controller;
 
 use App\DTO\CreateClientPackageDto;
+use App\DTO\CreatePricePackageDto;
+use App\DTO\UpdateClientPackageDto;
+use App\DTO\UpdatePricePackageDto;
 use App\DTO\Out\ClientPackageDetailOutDto;
 use App\DTO\Out\ClientPackageOutDto;
 use App\DTO\Out\DeletedOutDto;
 use App\DTO\Out\PaginatedListOutDto;
 use App\DTO\Out\PricePackageOutDto;
 use App\DTO\Out\ToggleOutDto;
-use App\Entity\Account;
 use App\Entity\CommunicationClientPackage;
+use App\Entity\CommunicationPrice;
+use App\Entity\CommunicationPricePackage;
+use App\Entity\User;
 use App\Exception\MyCurrentException;
 use App\OpenApi\Attribute\DashboardEndpoint;
 use App\Service\CommunicationPackageService;
-use App\Entity\User;
-use App\Entity\CommunicationPrice;
-use App\Entity\CommunicationPricePackage;
-use App\Entity\CommunicationProduct;
-use App\Entity\Environment;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\QueryBuilder;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -133,86 +133,47 @@ class DashboardClientPackagesController extends AbstractController
     }
 
     #[Route('/client/prices', name: 'dashboard_client_prices_create', methods: ['POST'])]
-    #[DashboardEndpoint(summary: 'Crear price package', tag: 'Client Prices', responseDto: PricePackageOutDto::class, responseStatusCode: 201)]
-    public function createPrice(Request $request): JsonResponse
+    #[DashboardEndpoint(summary: 'Crear price package', tag: 'Client Prices', requestDto: CreatePricePackageDto::class, responseDto: PricePackageOutDto::class, responseStatusCode: 201)]
+    public function createPrice(CreatePricePackageDto $dto): JsonResponse
     {
-        $data = $request->request->all();
-        $errors = [];
-        if (empty($data['price'])) $errors[] = 'price is required';
-        if (empty($data['priceCurrency'])) $errors[] = 'priceCurrency is required';
-        if (empty($data['amount'])) $errors[] = 'amount is required';
-        if (empty($data['currency'])) $errors[] = 'currency is required';
-        if (empty($data['tenantId'])) $errors[] = 'tenantId is required';
-        if (empty($data['productId'])) $errors[] = 'productId is required';
-        if (!empty($errors)) {
-            return $this->json(['error' => ['message' => 'Validation failed', 'details' => $errors]], Response::HTTP_BAD_REQUEST);
+        $violations = $this->validator->validate($dto);
+        if (count($violations) > 0) {
+            $details = [];
+            foreach ($violations as $v) {
+                $details[] = $v->getPropertyPath() . ': ' . $v->getMessage();
+            }
+            return $this->json(['error' => ['message' => 'Validation failed', 'details' => $details]], Response::HTTP_BAD_REQUEST);
         }
 
-        $account = $this->em->getRepository(Account::class)->find($data['tenantId']);
-        $product = $this->em->getRepository(CommunicationProduct::class)->find($data['productId']);
-        if ($account === null || $product === null) {
-            return $this->json(['error' => ['message' => 'Account or product not found']], Response::HTTP_NOT_FOUND);
+        try {
+            $pp = $this->packageService->createPrice($dto);
+        } catch (MyCurrentException $e) {
+            return $this->json(['error' => ['message' => $e->getMessage()]], $e->getCode());
         }
-
-        if (empty($data['environmentId']) && !$account->isActive()) {
-            return $this->json(['error' => ['message' => 'Tenant is inactive']], Response::HTTP_UNPROCESSABLE_ENTITY);
-        }
-
-        $priceUsed = null;
-        if (!empty($data['priceUsedId'])) {
-            $priceUsed = $this->em->getRepository(CommunicationPrice::class)->find($data['priceUsedId']);
-        }
-
-        $pp = new CommunicationPricePackage();
-        $pp->setProduct($product);
-        $pp->setTenant($account);
-        $pp->setPrice((float) $data['price']);
-        $pp->setPriceCurrency($data['priceCurrency']);
-        $pp->setAmount((float) $data['amount']);
-        $pp->setCurrency($data['currency']);
-        $pp->setName(mb_substr($data['name'] ?? "Cubacel {$data['price']} {$data['priceCurrency']}", 0, 255));
-        $pp->setIsActive($data['isActive'] ?? true);
-        $pp->setActiveStartAt(new \DateTimeImmutable($data['activeStartAt'] ?? 'now'));
-        if (!empty($data['activeEndAt'])) {
-            $pp->setActiveEndAt(new \DateTimeImmutable($data['activeEndAt']));
-        }
-        if ($priceUsed !== null) {
-            $pp->setPriceUsed($priceUsed);
-        }
-        if (!empty($data['environmentId'])) {
-            $pp->setEnvironment($this->em->getRepository(Environment::class)->find($data['environmentId']));
-        }
-        if (!empty($data['description'])) {
-            $pp->setDescription(mb_substr($data['description'], 0, 255));
-        }
-
-        $this->em->persist($pp);
-        $this->em->flush();
 
         return $this->json($this->serializePricePackage($pp), Response::HTTP_CREATED);
     }
 
     #[Route('/client/prices/{id}', name: 'dashboard_client_prices_update', methods: ['PATCH'], requirements: ['id' => '\d+'])]
-    #[DashboardEndpoint(summary: 'Actualizar price package', tag: 'Client Prices', responseDto: PricePackageOutDto::class)]
-    public function updatePrice(int $id, Request $request): JsonResponse
+    #[DashboardEndpoint(summary: 'Actualizar price package', tag: 'Client Prices', requestDto: UpdatePricePackageDto::class, responseDto: PricePackageOutDto::class)]
+    public function updatePrice(int $id, UpdatePricePackageDto $dto): JsonResponse
     {
         $pp = $this->em->getRepository(CommunicationPricePackage::class)->find($id);
         if ($pp === null) {
             return $this->json(['error' => ['message' => 'Price package not found']], Response::HTTP_NOT_FOUND);
         }
 
-        $data = $request->toArray();
-        if (isset($data['price'])) $pp->setPrice((float) $data['price']);
-        if (isset($data['priceCurrency'])) $pp->setPriceCurrency($data['priceCurrency']);
-        if (isset($data['amount'])) $pp->setAmount((float) $data['amount']);
-        if (isset($data['currency'])) $pp->setCurrency($data['currency']);
-        if (isset($data['name'])) $pp->setName(mb_substr($data['name'], 0, 255));
-        if (isset($data['description'])) $pp->setDescription(mb_substr($data['description'], 0, 255));
-        if (isset($data['isActive'])) $pp->setIsActive((bool) $data['isActive']);
-        if (isset($data['activeStartAt'])) $pp->setActiveStartAt(new \DateTimeImmutable($data['activeStartAt']));
-        if (isset($data['activeEndAt'])) $pp->setActiveEndAt(new \DateTimeImmutable($data['activeEndAt']));
+        $violations = $this->validator->validate($dto);
+        if (count($violations) > 0) {
+            $details = [];
+            foreach ($violations as $v) {
+                $details[] = $v->getPropertyPath() . ': ' . $v->getMessage();
+            }
+            return $this->json(['error' => ['message' => 'Validation failed', 'details' => $details]], Response::HTTP_BAD_REQUEST);
+        }
 
-        $this->em->flush();
+        $pp = $this->packageService->updatePrice($pp, $dto);
+
         return $this->json($this->serializePricePackage($pp));
     }
 
@@ -224,8 +185,9 @@ class DashboardClientPackagesController extends AbstractController
         if ($pp === null) {
             return $this->json(['error' => ['message' => 'Price package not found']], Response::HTTP_NOT_FOUND);
         }
-        $pp->setIsActive(!$pp->isActive());
-        $this->em->flush();
+
+        $this->packageService->togglePrice($pp);
+
         return $this->json(['id' => $pp->getId(), 'isActive' => $pp->isActive()]);
     }
 
@@ -237,8 +199,9 @@ class DashboardClientPackagesController extends AbstractController
         if ($pp === null) {
             return $this->json(['error' => ['message' => 'Price package not found']], Response::HTTP_NOT_FOUND);
         }
-        $this->em->remove($pp);
-        $this->em->flush();
+
+        $this->packageService->deletePrice($pp);
+
         return $this->json(['deleted' => true]);
     }
 
@@ -321,29 +284,25 @@ class DashboardClientPackagesController extends AbstractController
     }
 
     #[Route('/client/packages/{id}', name: 'dashboard_client_packages_update', methods: ['PATCH'], requirements: ['id' => '\d+'])]
-    #[DashboardEndpoint(summary: 'Actualizar client package', tag: 'Client Packages', responseDto: ClientPackageDetailOutDto::class)]
-    public function updatePackage(int $id, Request $request): JsonResponse
+    #[DashboardEndpoint(summary: 'Actualizar client package', tag: 'Client Packages', requestDto: UpdateClientPackageDto::class, responseDto: ClientPackageDetailOutDto::class)]
+    public function updatePackage(int $id, UpdateClientPackageDto $dto): JsonResponse
     {
         $cp = $this->em->getRepository(CommunicationClientPackage::class)->find($id);
         if ($cp === null) {
             return $this->json(['error' => ['message' => 'Package not found']], Response::HTTP_NOT_FOUND);
         }
 
-        $data = $request->toArray();
-        if (isset($data['name'])) $cp->setName(mb_substr($data['name'], 0, 255));
-        if (isset($data['description'])) $cp->setDescription(mb_substr($data['description'], 0, 255));
-        if (isset($data['amount'])) $cp->setAmount((float) $data['amount']);
-        if (isset($data['currency'])) $cp->setCurrency($data['currency']);
-        if (isset($data['activeStartAt'])) $cp->setActiveStartAt(new \DateTimeImmutable($data['activeStartAt']));
-        if (isset($data['activeEndAt'])) $cp->setActiveEndAt(new \DateTimeImmutable($data['activeEndAt']));
-        if (isset($data['knowMore'])) $cp->setKnowMore(mb_substr($data['knowMore'], 0, 500));
-        if (isset($data['benefits'])) $cp->setBenefits($data['benefits']);
-        if (isset($data['tags'])) $cp->setTags($data['tags']);
-        if (isset($data['service'])) $cp->setService($data['service']);
-        if (isset($data['destination'])) $cp->setDestination($data['destination']);
-        if (isset($data['validity'])) $cp->setValidity($data['validity']);
+        $violations = $this->validator->validate($dto);
+        if (count($violations) > 0) {
+            $details = [];
+            foreach ($violations as $v) {
+                $details[] = $v->getPropertyPath() . ': ' . $v->getMessage();
+            }
+            return $this->json(['error' => ['message' => 'Validation failed', 'details' => $details]], Response::HTTP_BAD_REQUEST);
+        }
 
-        $this->em->flush();
+        $cp = $this->packageService->updateClientPackage($cp, $dto);
+
         return $this->json($this->serializeClientPackageDetail($cp));
     }
 
@@ -355,8 +314,9 @@ class DashboardClientPackagesController extends AbstractController
         if ($cp === null) {
             return $this->json(['error' => ['message' => 'Package not found']], Response::HTTP_NOT_FOUND);
         }
-        $this->em->remove($cp);
-        $this->em->flush();
+
+        $this->packageService->deleteClientPackage($cp);
+
         return $this->json(['deleted' => true]);
     }
 
