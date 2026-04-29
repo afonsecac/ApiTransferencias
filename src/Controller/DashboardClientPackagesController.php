@@ -154,6 +154,10 @@ class DashboardClientPackagesController extends AbstractController
             return $this->json(['error' => ['message' => 'Account or product not found']], Response::HTTP_NOT_FOUND);
         }
 
+        if (empty($data['environmentId']) && !$account->isActive()) {
+            return $this->json(['error' => ['message' => 'Tenant is inactive']], Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+
         $priceUsed = null;
         if (!empty($data['priceUsedId'])) {
             $priceUsed = $this->em->getRepository(CommunicationPrice::class)->find($data['priceUsedId']);
