@@ -242,12 +242,46 @@ class MiDto implements IInput
 
 ---
 
+### 10. Validación automática en `InputValueResolver`
+
+El `InputValueResolver` (`src/OpenApi/InputValueResolver.php`) valida automáticamente todos los DTOs `IInput` **antes** de que lleguen al controlador. No es necesario llamar a `$this->validator->validate($dto)` en ningún controlador.
+
+**Comportamiento:**
+- Body JSON inválido (malformado) → `MyCurrentException('INVALID_JSON_BODY', ..., 400)` → `{error: {message: "Invalid JSON body", code: "INVALID_JSON_BODY"}}`
+- Violaciones de `#[Assert\]` → `ValidationFailedException` → `{error: {message: "Validation failed", details: ["campo: mensaje", ...]}}`
+- DTO sin constraints → pasa directamente al controlador
+
+El `ExceptionListener` maneja `ValidationFailedException` nativo de Symfony. **Los controladores no deben importar ni inyectar `ValidatorInterface` para validar DTOs de entrada.**
+
+```php
+// ✅ Correcto — el resolver ya validó el DTO antes de llegar aquí
+public function create(CreateClientPackageDto $dto): JsonResponse
+{
+    try {
+        $result = $this->service->create($dto);
+    } catch (MyCurrentException $e) {
+        return $this->json(['error' => ['message' => $e->getMessage()]], $e->getCode());
+    }
+    return $this->json($result, Response::HTTP_CREATED);
+}
+
+// ❌ Incorrecto — duplica validación que ya hizo el resolver
+public function create(CreateClientPackageDto $dto): JsonResponse
+{
+    $violations = $this->validator->validate($dto); // no hacer esto
+    ...
+}
+```
+
+---
+
 ## Archivos de referencia
 
 | Propósito | Archivo |
 |---|---|
 | Interfaz marcadora de DTOs de entrada | `src/DTO/IInput.php` |
-| Resolver que hidrata DTOs desde el body | `src/OpenApi/InputValueResolver.php` |
+| Resolver que hidrata y valida DTOs desde el body | `src/OpenApi/InputValueResolver.php` |
+| Listener que convierte excepciones a JSON | `src/EventListener/ExceptionListener.php` |
 | Ejemplo de DTO de entrada completo | `src/DTO/BalanceInDto.php` |
 | Ejemplo de DTO con descriptores Assert | `src/DTO/CreateClientPackageDto.php` |
 | Excepción de dominio estándar | `src/Exception/MyCurrentException.php` |
