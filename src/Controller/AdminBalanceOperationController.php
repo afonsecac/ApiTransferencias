@@ -54,17 +54,13 @@ class AdminBalanceOperationController extends AbstractController
      * @throws \Symfony\Contracts\HttpClient\Exception\DecodingExceptionInterface
      * @throws \Symfony\Contracts\HttpClient\Exception\ClientExceptionInterface
      */
-    #[Route(
-        "/platform-balance/{environment}",
-        name: 'admin_balance_operation_platform_balance',
-        methods: ['GET']
-    )]
+    #[Route("/platform-balance", name: 'admin_balance_operation_platform_balance', methods: ['GET'])]
     #[DashboardEndpoint(summary: 'Balance de plataforma por entorno', tag: 'Balance Operations')]
     public function getPlatformBalance(
-        string $environment
+        #[MapQueryParameter] ?string $environmentType = null
     ): JsonResponse
     {
-        return $this->json($this->balanceService->getBalancePlatform($environment));
+        return $this->json($this->balanceService->getBalancePlatform($environmentType ?? ''));
     }
 
     /**

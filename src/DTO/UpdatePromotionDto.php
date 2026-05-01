@@ -25,7 +25,9 @@ class UpdatePromotionDto implements IInput
     #[Assert\Positive]
     protected ?int $productId;
 
-    protected ?array $environment;
+    protected ?int $environmentId;
+
+    protected ?string $priority;
 
     public function __construct(
         ?string $name = null,
@@ -37,7 +39,8 @@ class UpdatePromotionDto implements IInput
         ?string $startAt = null,
         ?string $endAt = null,
         ?int $productId = null,
-        ?array $environment = null,
+        ?int $environmentId = null,
+        ?string $priority = null,
     ) {
         $this->name = $name;
         $this->description = $description;
@@ -48,7 +51,8 @@ class UpdatePromotionDto implements IInput
         $this->startAt = $startAt;
         $this->endAt = $endAt;
         $this->productId = $productId;
-        $this->environment = $environment;
+        $this->environmentId = $environmentId;
+        $this->priority = $priority;
     }
 
     public function getName(): ?string { return $this->name; }
@@ -78,6 +82,9 @@ class UpdatePromotionDto implements IInput
     public function getProductId(): ?int { return $this->productId; }
     public function setProductId(?int $v): void { $this->productId = $v; }
 
-    public function getEnvironment(): ?array { return $this->environment; }
-    public function setEnvironment(?array $v): void { $this->environment = $v; }
+    public function getEnvironmentId(): ?int { return $this->environmentId; }
+    public function setEnvironmentId(?int $v): void { $this->environmentId = $v; }
+
+    public function getPriority(): ?string { return $this->priority; }
+    public function setPriority(?string $v): void { $this->priority = $v; }
 }

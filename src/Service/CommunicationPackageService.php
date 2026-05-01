@@ -51,6 +51,14 @@ class CommunicationPackageService extends CommonService
             throw new MyCurrentException('PRICE_PACKAGE_NOT_FOUND', 'Price package not found', 404);
         }
 
+        $existing = $this->em->getRepository(CommunicationClientPackage::class)->findOneBy([
+            'tenant' => $tenant,
+            'priceClientPackage' => $pricePackage,
+        ]);
+        if ($existing !== null) {
+            throw new MyCurrentException('DUPLICATE_CLIENT_PACKAGE', 'Client package already exists for this tenant and price package', 409);
+        }
+
         $cp = new CommunicationClientPackage();
         $cp->setTenant($tenant);
         $cp->setPriceClientPackage($pricePackage);
@@ -61,6 +69,8 @@ class CommunicationPackageService extends CommonService
                 throw new MyCurrentException('ENVIRONMENT_NOT_FOUND', 'Environment not found', 404);
             }
             $cp->setEnvironment($env);
+        } elseif ($pricePackage->getEnvironment() !== null) {
+            $cp->setEnvironment($pricePackage->getEnvironment());
         }
 
         $dataInfo = $pricePackage->getDataInfo();
@@ -227,6 +237,9 @@ class CommunicationPackageService extends CommonService
         }
         if ($dto->getValidity() !== null) {
             $cp->setValidity($dto->getValidity());
+        }
+        if ($cp->getEnvironment() === null && $cp->getPriceClientPackage()?->getEnvironment() !== null) {
+            $cp->setEnvironment($cp->getPriceClientPackage()->getEnvironment());
         }
 
         $this->em->flush();

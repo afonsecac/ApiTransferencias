@@ -27,8 +27,23 @@ final class InputValueResolver implements ValueResolverInterface
             return [];
         }
 
+        $body = json_decode($request->getContent() ?: '{}', true);
+        if (!is_array($body)) {
+            $body = [];
+        }
+
+        if ($request->headers->has('X-Environment-Id')) {
+            $body['environmentId'] = (int) $request->headers->get('X-Environment-Id');
+        }
+        if ($request->headers->has('X-Account-Id')) {
+            $body['accountId'] = (int) $request->headers->get('X-Account-Id');
+        }
+        if ($request->headers->has('X-Environment-Type')) {
+            $body['environmentType'] = $request->headers->get('X-Environment-Type');
+        }
+
         try {
-            $dto = $this->serializer->deserialize($request->getContent(), $argumentType, 'json', []);
+            $dto = $this->serializer->deserialize(json_encode($body), $argumentType, 'json', []);
         } catch (NotEncodableValueException) {
             throw new MyCurrentException('INVALID_JSON_BODY', 'Invalid JSON body', 400);
         }

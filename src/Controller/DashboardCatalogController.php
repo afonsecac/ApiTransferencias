@@ -55,7 +55,7 @@ class DashboardCatalogController extends AbstractController
     #[DashboardEndpoint(summary: 'Listar clientes', tag: 'Catalog')]
     public function clients(Request $request): JsonResponse
     {
-        $envType = $request->query->get('type');
+        $envType = $request->query->get('environmentType');
 
         $user = $this->getUser();
         if (!$user instanceof User) {
@@ -106,7 +106,7 @@ class DashboardCatalogController extends AbstractController
     {
         $page = max(0, (int) $request->query->get('page', 0));
         $limit = min(100, max(1, (int) $request->query->get('limit', 20)));
-        $envType = $request->query->get('type');
+        $envType = $request->query->get('environmentType');
         $search = $request->query->get('search');
         $orderBy = $request->query->get('orderBy', 'packageId DESC');
 
