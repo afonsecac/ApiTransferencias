@@ -93,6 +93,14 @@ class PackagePriceService extends CommonService
 
     public function createPackageClient(CommunicationPricePackage $pricePackage, Account $tenant): void
     {
+        $existing = $this->em->getRepository(CommunicationClientPackage::class)->findOneBy([
+            'tenant' => $tenant,
+            'priceClientPackage' => $pricePackage,
+        ]);
+        if ($existing !== null) {
+            return;
+        }
+
         $clientPackage = new CommunicationClientPackage();
         $clientPackage->setTenant($tenant);
         $clientPackage->setPriceClientPackage($pricePackage);
@@ -109,6 +117,9 @@ class PackagePriceService extends CommonService
         $clientPackage->setActiveStartAt($pricePackage->getActiveStartAt());
         $clientPackage->setActiveEndAt($pricePackage->getActiveEndAt());
         $clientPackage->setKnowMore($pricePackage->getKnowMore());
+        if ($pricePackage->getEnvironment() !== null) {
+            $clientPackage->setEnvironment($pricePackage->getEnvironment());
+        }
         $this->em->persist($clientPackage);
     }
 

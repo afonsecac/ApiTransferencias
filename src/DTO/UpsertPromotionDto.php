@@ -40,8 +40,8 @@ class UpsertPromotionDto implements IInput
     #[Assert\Positive]
     protected ?int $productId;
 
-    protected ?array  $environment;
-    protected ?array  $terms;
+    protected ?int   $environmentId;
+    protected ?array $terms;
     protected ?string $infoDescription;
     protected ?string $knowMore;
     protected ?array  $validityInfo;
@@ -57,7 +57,7 @@ class UpsertPromotionDto implements IInput
         ?float  $amountTo = null,
         ?float  $amountStep = null,
         ?int    $productId = null,
-        ?array  $environment = null,
+        ?int    $environmentId = null,
         ?array  $terms = null,
         ?string $infoDescription = null,
         ?string $knowMore = null,
@@ -73,7 +73,7 @@ class UpsertPromotionDto implements IInput
         $this->amountTo        = $amountTo;
         $this->amountStep      = $amountStep;
         $this->productId       = $productId;
-        $this->environment     = $environment;
+        $this->environmentId   = $environmentId;
         $this->terms           = $terms;
         $this->infoDescription = $infoDescription;
         $this->knowMore        = $knowMore;
@@ -108,8 +108,8 @@ class UpsertPromotionDto implements IInput
     public function getProductId(): ?int { return $this->productId; }
     public function setProductId(?int $v): void { $this->productId = $v; }
 
-    public function getEnvironment(): ?array { return $this->environment; }
-    public function setEnvironment(?array $v): void { $this->environment = $v; }
+    public function getEnvironmentId(): ?int { return $this->environmentId; }
+    public function setEnvironmentId(?int $v): void { $this->environmentId = $v; }
 
     public function getTerms(): ?array { return $this->terms; }
     public function setTerms(?array $v): void { $this->terms = $v; }

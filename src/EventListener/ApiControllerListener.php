@@ -33,21 +33,28 @@ class ApiControllerListener
             return;
         }
 
-        if ($request->getMethod() !== Request::METHOD_GET) {
-            $content = $request->getContent();
-            if (!empty($content)) {
-                try {
-                    $params = $this->serializer->decode($content, 'json');
-                    $paramsIn = is_array($params) ? $params : $request->request->all();
-                } catch (\Exception) {
-                    $paramsIn = $request->request->all();
-                }
-            } else {
+        if ($request->getMethod() === Request::METHOD_GET) {
+            if ($request->headers->has('X-Environment-Type')) {
+                $query = $request->query->all();
+                $query['environmentType'] ??= $request->headers->get('X-Environment-Type');
+                $request->query->replace($query);
+            }
+            return;
+        }
+
+        $content = $request->getContent();
+        if (!empty($content)) {
+            try {
+                $params = $this->serializer->decode($content, 'json');
+                $paramsIn = is_array($params) ? $params : $request->request->all();
+            } catch (\Exception) {
                 $paramsIn = $request->request->all();
             }
-            $paramsIn['lang'] = $language;
-            $request->request->replace($paramsIn);
+        } else {
+            $paramsIn = $request->request->all();
         }
+        $paramsIn['lang'] = $language;
+        $request->request->replace($paramsIn);
     }
 
 }

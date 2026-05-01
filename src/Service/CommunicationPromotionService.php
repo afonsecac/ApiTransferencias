@@ -120,6 +120,15 @@ class CommunicationPromotionService extends CommonService
         // 3. Por cada precio × cada account → crear PricePackage + ClientPackage
         foreach ($filteredPrices as $price) {
             foreach ($accounts as $account) {
+                $existingPP = $this->em->getRepository(CommunicationPricePackage::class)->findOneBy([
+                    'tenant' => $account,
+                    'priceUsed' => $price,
+                    'product' => $product,
+                ]);
+                if ($existingPP !== null) {
+                    continue;
+                }
+
                 // Crear CommunicationPricePackage
                 $pricePackage = new CommunicationPricePackage();
                 $pricePackage->setProduct($product);
@@ -173,6 +182,7 @@ class CommunicationPromotionService extends CommonService
                     'unit_type' => 'CURRENCY',
                 ]);
                 $clientPackage->setValidity($promotion->getValidityInfo());
+                $clientPackage->setEnvironment($environment);
                 $this->em->persist($clientPackage);
 
                 // Asociar el paquete a la promoción
@@ -225,15 +235,12 @@ class CommunicationPromotionService extends CommonService
             }
         }
 
-        $env = $dto->getEnvironment();
-        if ($env !== null) {
-            if (isset($env['id'])) {
-                $environment = $this->em->getRepository(Environment::class)->find($env['id']);
-                if ($environment === null) {
-                    throw new MyCurrentException('ENVIRONMENT_NOT_FOUND', 'Environment not found', 404);
-                }
-                $promotion->setEnvironment($environment);
+        if ($dto->getEnvironmentId() !== null) {
+            $environment = $this->em->getRepository(Environment::class)->find($dto->getEnvironmentId());
+            if ($environment === null) {
+                throw new MyCurrentException('ENVIRONMENT_NOT_FOUND', 'Environment not found', 404);
             }
+            $promotion->setEnvironment($environment);
         }
 
         if ($dto->getProductId() !== null) {
@@ -245,6 +252,10 @@ class CommunicationPromotionService extends CommonService
             if ($promotion->getEnvironment() === null) {
                 $promotion->setEnvironment($product->getEnvironment());
             }
+        }
+
+        if ($dto->getPriority() !== null) {
+            $promotion->setPriority($dto->getPriority());
         }
 
         $this->em->flush();

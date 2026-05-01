@@ -150,9 +150,8 @@ class DashboardPromotionController extends AbstractController
             $promotion->setValidityInfo($dto->getValidityInfo());
         }
 
-        $env = $dto->getEnvironment();
-        if (isset($env['id'])) {
-            $environment = $this->em->getRepository(Environment::class)->find($env['id']);
+        if ($dto->getEnvironmentId() !== null) {
+            $environment = $this->em->getRepository(Environment::class)->find($dto->getEnvironmentId());
             if ($environment !== null) {
                 $promotion->setEnvironment($environment);
             }

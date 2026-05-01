@@ -8,6 +8,7 @@ use App\DTO\Out\SaleInfoDetailOutDto;
 use App\DTO\Out\SaleInfoListOutDto;
 use App\DTO\Out\SaleRetryOutDto;
 use App\Entity\CommunicationSaleInfo;
+use App\Entity\User;
 use App\Enums\CommunicationStateEnum;
 use App\Message\CheckSaleMessage;
 use App\OpenApi\Attribute\DashboardEndpoint;
@@ -65,10 +66,15 @@ class DashboardSalesController extends AbstractController
             $qb->andWhere('s INSTANCE OF App\Entity\CommunicationSalePackage');
         }
 
-        // Filtro por client id
+        // Filtro por client id — admins pueden filtrar por cualquier cliente; el resto solo ve el suyo
         $clientId = $request->query->get('clientId');
-        if (!empty($clientId)) {
-            $qb->andWhere('c.id = :clientId')->setParameter('clientId', $clientId);
+        $user = $this->getUser();
+        if ($this->isGranted('ROLE_ADMIN')) {
+            if (!empty($clientId)) {
+                $qb->andWhere('c.id = :clientId')->setParameter('clientId', $clientId);
+            }
+        } elseif ($user instanceof User && $user->getCompany() !== null) {
+            $qb->andWhere('c.id = :clientId')->setParameter('clientId', $user->getCompany()->getId());
         }
 
         // Filtro por transaction id del sistema
@@ -143,6 +149,13 @@ class DashboardSalesController extends AbstractController
         $sale = $this->em->getRepository(CommunicationSaleInfo::class)->find($id);
         if ($sale === null) {
             return $this->json(['error' => ['message' => 'Sale not found']], Response::HTTP_NOT_FOUND);
+        }
+
+        $user = $this->getUser();
+        if (!$this->isGranted('ROLE_ADMIN') && $user instanceof User && $user->getCompany() !== null) {
+            if ($sale->getTenant()?->getClient()?->getId() !== $user->getCompany()->getId()) {
+                return $this->json(['error' => ['message' => 'Sale not found']], Response::HTTP_NOT_FOUND);
+            }
         }
 
         $data = $this->serializer->normalize($sale, 'json', [
