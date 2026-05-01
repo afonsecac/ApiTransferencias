@@ -2,12 +2,16 @@
 
 namespace App\Controller;
 
+use App\DTO\CreateCommunicationPriceDto;
+use App\DTO\UpdateCommunicationPriceDto;
 use App\DTO\Out\CommunicationPriceOutDto;
 use App\DTO\Out\DeletedOutDto;
 use App\DTO\Out\PaginatedListOutDto;
 use App\DTO\Out\ToggleOutDto;
 use App\Entity\CommunicationPrice;
+use App\Exception\MyCurrentException;
 use App\OpenApi\Attribute\DashboardEndpoint;
+use App\Service\CommunicationPriceService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -15,7 +19,6 @@ use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Http\Attribute\IsGranted;
-
 #[IsGranted('ROLE_ADMIN')]
 class DashboardCommunicationPriceController extends AbstractController
 {
@@ -29,6 +32,7 @@ class DashboardCommunicationPriceController extends AbstractController
 
     public function __construct(
         private readonly EntityManagerInterface $em,
+        private readonly CommunicationPriceService $priceService,
     ) {
     }
 
@@ -90,57 +94,29 @@ class DashboardCommunicationPriceController extends AbstractController
     }
 
     #[Route('/client/communication-prices', name: 'dashboard_communication_prices_create', methods: ['POST'])]
-    #[DashboardEndpoint(summary: 'Crear communication price', tag: 'Communication Prices', responseDto: CommunicationPriceOutDto::class, responseStatusCode: 201)]
-    public function create(Request $request): JsonResponse
+    #[DashboardEndpoint(summary: 'Crear communication price', tag: 'Communication Prices', requestDto: CreateCommunicationPriceDto::class, responseDto: CommunicationPriceOutDto::class, responseStatusCode: 201)]
+    public function create(CreateCommunicationPriceDto $dto): JsonResponse
     {
-        $data   = $request->toArray();
-        $errors = [];
-        if (!isset($data['startPrice'])) $errors[] = 'startPrice is required';
-        if (!isset($data['amount']))     $errors[] = 'amount is required';
-        if (!empty($errors)) {
-            return $this->json(['error' => ['message' => 'Validation failed', 'details' => $errors]], Response::HTTP_BAD_REQUEST);
+        try {
+            $cp = $this->priceService->create($dto);
+        } catch (MyCurrentException $e) {
+            return $this->json(['error' => ['message' => $e->getMessage()]], $e->getCode());
         }
-
-        $cp = new CommunicationPrice();
-        $cp->setStartPrice((float) $data['startPrice']);
-        $cp->setEndPrice(isset($data['endPrice']) ? (float) $data['endPrice'] : null);
-        $cp->setCurrencyPrice(strtoupper($data['currencyPrice'] ?? 'CUP'));
-        $cp->setAmount((float) $data['amount']);
-        $cp->setCurrency(strtoupper($data['currency'] ?? 'USD'));
-        $cp->setIsActive($data['isActive'] ?? true);
-        $cp->setValidStartAt(new \DateTimeImmutable($data['validStartAt'] ?? 'now'));
-        if (!empty($data['validEndAt'])) {
-            $cp->setValidEndAt(new \DateTimeImmutable($data['validEndAt']));
-        }
-
-        $this->em->persist($cp);
-        $this->em->flush();
 
         return $this->json($this->serialize($cp), Response::HTTP_CREATED);
     }
 
     #[Route('/client/communication-prices/{id}', name: 'dashboard_communication_prices_update', methods: ['PATCH'], requirements: ['id' => '\d+'])]
-    #[DashboardEndpoint(summary: 'Actualizar communication price', tag: 'Communication Prices', responseDto: CommunicationPriceOutDto::class)]
-    public function update(int $id, Request $request): JsonResponse
+    #[DashboardEndpoint(summary: 'Actualizar communication price', tag: 'Communication Prices', requestDto: UpdateCommunicationPriceDto::class, responseDto: CommunicationPriceOutDto::class)]
+    public function update(int $id, UpdateCommunicationPriceDto $dto): JsonResponse
     {
         $cp = $this->em->getRepository(CommunicationPrice::class)->find($id);
         if ($cp === null) {
             return $this->json(['error' => ['message' => 'Not found']], Response::HTTP_NOT_FOUND);
         }
 
-        $data = $request->toArray();
-        if (isset($data['startPrice']))   $cp->setStartPrice((float) $data['startPrice']);
-        if (array_key_exists('endPrice', $data)) $cp->setEndPrice($data['endPrice'] !== null ? (float) $data['endPrice'] : null);
-        if (isset($data['currencyPrice'])) $cp->setCurrencyPrice(strtoupper($data['currencyPrice']));
-        if (isset($data['amount']))        $cp->setAmount((float) $data['amount']);
-        if (isset($data['currency']))      $cp->setCurrency(strtoupper($data['currency']));
-        if (isset($data['isActive']))      $cp->setIsActive((bool) $data['isActive']);
-        if (isset($data['validStartAt']))  $cp->setValidStartAt(new \DateTimeImmutable($data['validStartAt']));
-        if (array_key_exists('validEndAt', $data)) {
-            $cp->setValidEndAt($data['validEndAt'] !== null ? new \DateTimeImmutable($data['validEndAt']) : null);
-        }
+        $cp = $this->priceService->update($cp, $dto);
 
-        $this->em->flush();
         return $this->json($this->serialize($cp));
     }
 
@@ -152,8 +128,9 @@ class DashboardCommunicationPriceController extends AbstractController
         if ($cp === null) {
             return $this->json(['error' => ['message' => 'Not found']], Response::HTTP_NOT_FOUND);
         }
-        $cp->setIsActive(!$cp->isActive());
-        $this->em->flush();
+
+        $this->priceService->toggle($cp);
+
         return $this->json(['id' => $cp->getId(), 'isActive' => $cp->isActive()]);
     }
 
@@ -165,8 +142,9 @@ class DashboardCommunicationPriceController extends AbstractController
         if ($cp === null) {
             return $this->json(['error' => ['message' => 'Not found']], Response::HTTP_NOT_FOUND);
         }
-        $this->em->remove($cp);
-        $this->em->flush();
+
+        $this->priceService->delete($cp);
+
         return $this->json(['deleted' => true]);
     }
 

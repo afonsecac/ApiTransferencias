@@ -17,6 +17,7 @@ use Symfony\Component\HttpKernel\Event\ExceptionEvent;
 use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 use Symfony\Component\Security\Core\Exception\InsufficientAuthenticationException;
+use Symfony\Component\Validator\Exception\ValidationFailedException;
 
 #[AsEventListener]
 class ExceptionListener
@@ -36,7 +37,16 @@ class ExceptionListener
                 'message' => $message
             ]
         ]);
-        if ($exception instanceof MyCurrentException) {
+        if ($exception instanceof ValidationFailedException) {
+            $details = [];
+            foreach ($exception->getViolations() as $v) {
+                $details[] = $v->getPropertyPath() . ': ' . $v->getMessage();
+            }
+            $response = new JsonResponse(
+                ['error' => ['message' => 'Validation failed', 'details' => $details]],
+                Response::HTTP_BAD_REQUEST,
+            );
+        } elseif ($exception instanceof MyCurrentException) {
             $response = new JsonResponse([
                 'error' => [
                     'message' => $exception->getMessage(),

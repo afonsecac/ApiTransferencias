@@ -3,6 +3,7 @@
 namespace App\Service;
 
 use App\DTO\CreateAdminPromotionDto;
+use App\DTO\UpdatePromotionDto;
 use App\Entity\Account;
 use App\Entity\CommunicationClientPackage;
 use App\Entity\CommunicationPrice;
@@ -184,6 +185,71 @@ class CommunicationPromotionService extends CommonService
         $this->em->flush();
 
         return $packagesCreated;
+    }
+
+    /**
+     * @throws MyCurrentException
+     */
+    public function update(CommunicationPromotions $promotion, UpdatePromotionDto $dto): CommunicationPromotions
+    {
+        if ($dto->getName() !== null) {
+            $promotion->setName($dto->getName());
+        }
+        if ($dto->getDescription() !== null) {
+            $promotion->setDescription($dto->getDescription());
+        }
+        if ($dto->getInfoDescription() !== null) {
+            $promotion->setInfoDescription($dto->getInfoDescription());
+        }
+        if ($dto->getKnowMore() !== null) {
+            $promotion->setKnowMore($dto->getKnowMore());
+        }
+        if ($dto->getTerms() !== null) {
+            $promotion->setTerms($dto->getTerms());
+        }
+        if ($dto->getValidityInfo() !== null) {
+            $promotion->setValidityInfo($dto->getValidityInfo());
+        }
+        if ($dto->getStartAt() !== null) {
+            try {
+                $promotion->setStartAt(new \DateTimeImmutable($dto->getStartAt()));
+            } catch (\Exception) {
+                throw new MyCurrentException('INVALID_DATE', 'Invalid date format for startAt', 400);
+            }
+        }
+        if ($dto->getEndAt() !== null) {
+            try {
+                $promotion->setEndAt(new \DateTimeImmutable($dto->getEndAt()));
+            } catch (\Exception) {
+                throw new MyCurrentException('INVALID_DATE', 'Invalid date format for endAt', 400);
+            }
+        }
+
+        $env = $dto->getEnvironment();
+        if ($env !== null) {
+            if (isset($env['id'])) {
+                $environment = $this->em->getRepository(Environment::class)->find($env['id']);
+                if ($environment === null) {
+                    throw new MyCurrentException('ENVIRONMENT_NOT_FOUND', 'Environment not found', 404);
+                }
+                $promotion->setEnvironment($environment);
+            }
+        }
+
+        if ($dto->getProductId() !== null) {
+            $product = $this->em->getRepository(CommunicationProduct::class)->find($dto->getProductId());
+            if ($product === null) {
+                throw new MyCurrentException('PRODUCT_NOT_FOUND', 'Product not found', 404);
+            }
+            $promotion->setProduct($product);
+            if ($promotion->getEnvironment() === null) {
+                $promotion->setEnvironment($product->getEnvironment());
+            }
+        }
+
+        $this->em->flush();
+
+        return $promotion;
     }
 
     /**

@@ -2,6 +2,8 @@
 
 namespace App\Controller;
 
+use App\DTO\SyncProductsDto;
+use App\DTO\UpdateProductDto;
 use App\DTO\Out\PaginatedListOutDto;
 use App\DTO\Out\SyncProductsOutDto;
 use App\DTO\Out\ToggleOutDto;
@@ -10,7 +12,9 @@ use App\Entity\Client;
 use App\Entity\CommunicationProduct;
 use App\Entity\Environment;
 use App\Entity\User;
+use App\Exception\MyCurrentException;
 use App\OpenApi\Attribute\DashboardEndpoint;
+use App\Service\CommunicationProductService;
 use App\Service\TakeProductService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -21,13 +25,13 @@ use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Http\Attribute\IsGranted;
 use Symfony\Component\Serializer\Normalizer\AbstractObjectNormalizer;
 use Symfony\Component\Serializer\Normalizer\NormalizerInterface;
-
 class DashboardCatalogController extends AbstractController
 {
     public function __construct(
         private readonly EntityManagerInterface $em,
         private readonly NormalizerInterface $serializer,
         private readonly TakeProductService $takeProductService,
+        private readonly CommunicationProductService $productService,
     ) {
     }
 
@@ -97,7 +101,7 @@ class DashboardCatalogController extends AbstractController
 
     #[Route('/products', name: 'dashboard_products_list', methods: ['GET'])]
     #[DashboardEndpoint(summary: 'Listar productos', tag: 'Catalog', responseDto: PaginatedListOutDto::class)]
-#[IsGranted('ROLE_ADMIN')]
+    #[IsGranted('ROLE_ADMIN')]
     public function products(Request $request): JsonResponse
     {
         $page = max(0, (int) $request->query->get('page', 0));
@@ -148,37 +152,20 @@ class DashboardCatalogController extends AbstractController
     }
 
     #[Route('/products/{id}', name: 'dashboard_products_update', methods: ['PUT'])]
-    #[DashboardEndpoint(summary: 'Actualizar producto', tag: 'Catalog')]
-#[IsGranted('ROLE_ADMIN')]
-    public function updateProduct(int $id, Request $request): JsonResponse
+    #[DashboardEndpoint(summary: 'Actualizar producto', tag: 'Catalog', requestDto: UpdateProductDto::class)]
+    #[IsGranted('ROLE_ADMIN')]
+    public function updateProduct(int $id, UpdateProductDto $dto): JsonResponse
     {
         $product = $this->em->getRepository(CommunicationProduct::class)->find($id);
         if ($product === null) {
             return $this->json(['error' => ['message' => 'Product not found']], Response::HTTP_NOT_FOUND);
         }
 
-        $data = $request->request->all();
-
-        if (isset($data['description'])) {
-            $product->setDescription(mb_substr($data['description'], 0, 255));
+        try {
+            $product = $this->productService->updateProduct($product, $dto);
+        } catch (MyCurrentException $e) {
+            return $this->json(['error' => ['message' => $e->getMessage()]], $e->getCode());
         }
-        if (isset($data['packageType'])) {
-            $product->setPackageType($data['packageType']);
-        }
-        if (isset($data['productType'])) {
-            $product->setProductType($data['productType']);
-        }
-        if (isset($data['price'])) {
-            $product->setPrice((float) $data['price']);
-        }
-        if (isset($data['initialDate'])) {
-            $product->setInitialDate(new \DateTimeImmutable($data['initialDate']));
-        }
-        if (isset($data['endDateAt'])) {
-            $product->setEndDateAt(new \DateTimeImmutable($data['endDateAt']));
-        }
-
-        $this->em->flush();
 
         return $this->json(
             $this->serializer->normalize($product, 'json', [
@@ -189,7 +176,7 @@ class DashboardCatalogController extends AbstractController
 
     #[Route('/products/{id}/toggle', name: 'dashboard_products_toggle', methods: ['PATCH'])]
     #[DashboardEndpoint(summary: 'Activar/desactivar producto', tag: 'Catalog', responseDto: ToggleOutDto::class)]
-#[IsGranted('ROLE_ADMIN')]
+    #[IsGranted('ROLE_ADMIN')]
     public function toggleProduct(int $id): JsonResponse
     {
         $product = $this->em->getRepository(CommunicationProduct::class)->find($id);
@@ -207,25 +194,17 @@ class DashboardCatalogController extends AbstractController
     }
 
     #[Route('/products/sync', name: 'dashboard_products_sync', methods: ['POST'])]
-    #[DashboardEndpoint(summary: 'Sincronizar productos con proveedor', tag: 'Catalog', responseDto: SyncProductsOutDto::class)]
-#[IsGranted('ROLE_ADMIN')]
-    public function syncProducts(Request $request): JsonResponse
+    #[DashboardEndpoint(summary: 'Sincronizar productos con proveedor', tag: 'Catalog', requestDto: SyncProductsDto::class, responseDto: SyncProductsOutDto::class)]
+    #[IsGranted('ROLE_ADMIN')]
+    public function syncProducts(SyncProductsDto $dto): JsonResponse
     {
-        $envType = $request->request->get('environmentType');
-        if (empty($envType)) {
-            return $this->json(
-                ['error' => ['message' => 'environmentType is required']],
-                Response::HTTP_BAD_REQUEST
-            );
-        }
-
         try {
-            $result = $this->takeProductService->takeProduct($envType);
+            $result = $this->takeProductService->takeProduct($dto->getEnvironmentType());
 
             return $this->json([
                 'synced' => true,
                 'items' => $result['items'],
-                'environmentType' => $envType,
+                'environmentType' => $dto->getEnvironmentType(),
             ]);
         } catch (\Exception $e) {
             return $this->json(
