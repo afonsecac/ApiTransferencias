@@ -19,9 +19,6 @@ use Symfony\Bundle\SecurityBundle\Security;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
-use Symfony\Component\Validator\ConstraintViolation;
-use Symfony\Component\Validator\ConstraintViolationList;
-use Symfony\Component\Validator\Validator\ValidatorInterface;
 
 /**
  * @covers \App\Controller\DashboardClientPackagesController
@@ -31,7 +28,6 @@ class DashboardClientPackagesControllerTest extends TestCase
     private EntityManagerInterface&MockObject $em;
     private Security&MockObject $security;
     private CommunicationPackageService&MockObject $packageService;
-    private ValidatorInterface&MockObject $validator;
     private DashboardClientPackagesController $controller;
 
     protected function setUp(): void
@@ -39,12 +35,10 @@ class DashboardClientPackagesControllerTest extends TestCase
         $this->em             = $this->createMock(EntityManagerInterface::class);
         $this->security       = $this->createMock(Security::class);
         $this->packageService = $this->createMock(CommunicationPackageService::class);
-        $this->validator      = $this->createMock(ValidatorInterface::class);
 
         $this->controller = new DashboardClientPackagesController(
             $this->em,
             $this->security,
-            $this->validator,
             $this->packageService,
         );
 
@@ -212,27 +206,10 @@ class DashboardClientPackagesControllerTest extends TestCase
         $this->assertTrue($data['deleted']);
     }
 
-    // ---- createPrice validation ----
-
-    public function testCreatePriceReturnsValidationErrorWhenFieldsMissing(): void
-    {
-        $violation = new ConstraintViolation('This value should not be null.', null, [], null, 'price', null);
-        $this->validator->method('validate')->willReturn(new ConstraintViolationList([$violation]));
-
-        $dto = new CreatePricePackageDto();
-
-        $response = $this->controller->createPrice($dto);
-
-        $this->assertSame(Response::HTTP_BAD_REQUEST, $response->getStatusCode());
-        $data = json_decode($response->getContent(), true);
-        $this->assertSame('Validation failed', $data['error']['message']);
-        $this->assertNotEmpty($data['error']['details']);
-    }
+    // ---- createPrice ----
 
     public function testCreatePriceReturnsNotFoundWhenAccountOrProductMissing(): void
     {
-        $this->validator->method('validate')->willReturn(new ConstraintViolationList());
-
         $dto = new CreatePricePackageDto(
             price: 10.0,
             priceCurrency: 'USD',
