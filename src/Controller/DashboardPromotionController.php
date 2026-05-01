@@ -4,7 +4,9 @@ namespace App\Controller;
 
 use App\DTO\Out\DeletedOutDto;
 use App\DTO\Out\PaginatedListOutDto;
+use App\DTO\UpdatePromotionDto;
 use App\DTO\UpsertPromotionDto;
+use App\Exception\MyCurrentException;
 use App\Entity\CommunicationProduct;
 use App\Entity\CommunicationPromotions;
 use App\Entity\Environment;
@@ -95,18 +97,21 @@ class DashboardPromotionController extends AbstractController
         return $this->json($result, Response::HTTP_CREATED);
     }
 
-    #[Route('/{id}', name: 'dashboard_promotions_update', methods: ['PUT'])]
+    #[Route('/{id}', name: 'dashboard_promotions_update', methods: ['PATCH', 'PUT'])]
     #[IsGranted('ROLE_ADMIN')]
-    #[DashboardEndpoint(summary: 'Actualizar promoción', tag: 'Promotions', requestDto: UpsertPromotionDto::class)]
-    public function update(int $id, UpsertPromotionDto $dto): JsonResponse
+    #[DashboardEndpoint(summary: 'Actualizar promoción', tag: 'Promotions', requestDto: UpdatePromotionDto::class)]
+    public function update(int $id, UpdatePromotionDto $dto): JsonResponse
     {
         $promotion = $this->repository->find($id);
         if ($promotion === null) {
             return $this->json(['error' => ['message' => 'Promotion not found']], Response::HTTP_NOT_FOUND);
         }
 
-        $this->hydratePromotion($promotion, $dto);
-        $this->em->flush();
+        try {
+            $this->promotionService->update($promotion, $dto);
+        } catch (MyCurrentException $e) {
+            return $this->json(['error' => ['message' => $e->getMessage()]], $e->getCode());
+        }
 
         return $this->json($this->normalizeDetail($promotion));
     }
