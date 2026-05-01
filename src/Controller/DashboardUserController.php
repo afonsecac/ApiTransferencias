@@ -20,8 +20,6 @@ use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Core\Role\RoleHierarchyInterface;
-use Symfony\Component\Validator\Validator\ValidatorInterface;
-
 #[Route('/users')]
 class DashboardUserController extends AbstractController
 {
@@ -45,7 +43,6 @@ class DashboardUserController extends AbstractController
     public function __construct(
         private readonly EntityManagerInterface $em,
         private readonly RoleHierarchyInterface $roleHierarchy,
-        private readonly ValidatorInterface $validator,
         private readonly UserManagementService $userManagementService,
     ) {
     }
@@ -118,15 +115,6 @@ class DashboardUserController extends AbstractController
             return $this->unauthorized();
         }
 
-        $violations = $this->validator->validate($dto);
-        if (count($violations) > 0) {
-            $details = [];
-            foreach ($violations as $v) {
-                $details[] = $v->getPropertyPath() . ': ' . $v->getMessage();
-            }
-            return $this->json(['error' => ['message' => 'Validation failed', 'details' => $details]], Response::HTTP_BAD_REQUEST);
-        }
-
         $targetRole = $dto->getRole() ?? 'ROLE_SYSTEM_USER';
         if (!$this->canAssignRole($currentUser, $targetRole)) {
             return $this->json(['error' => ['message' => 'Cannot assign a role higher than your own.']], Response::HTTP_FORBIDDEN);
@@ -170,15 +158,6 @@ class DashboardUserController extends AbstractController
 
         if (!$this->canManageUser($currentUser, $user)) {
             return $this->json(['error' => ['message' => 'Cannot edit a user with higher or equal role.']], Response::HTTP_FORBIDDEN);
-        }
-
-        $violations = $this->validator->validate($dto);
-        if (count($violations) > 0) {
-            $details = [];
-            foreach ($violations as $v) {
-                $details[] = $v->getPropertyPath() . ': ' . $v->getMessage();
-            }
-            return $this->json(['error' => ['message' => 'Validation failed', 'details' => $details]], Response::HTTP_BAD_REQUEST);
         }
 
         if ($dto->getRole() !== null && !$this->canAssignRole($currentUser, $dto->getRole())) {

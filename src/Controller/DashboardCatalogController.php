@@ -25,8 +25,6 @@ use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Http\Attribute\IsGranted;
 use Symfony\Component\Serializer\Normalizer\AbstractObjectNormalizer;
 use Symfony\Component\Serializer\Normalizer\NormalizerInterface;
-use Symfony\Component\Validator\Validator\ValidatorInterface;
-
 class DashboardCatalogController extends AbstractController
 {
     public function __construct(
@@ -34,7 +32,6 @@ class DashboardCatalogController extends AbstractController
         private readonly NormalizerInterface $serializer,
         private readonly TakeProductService $takeProductService,
         private readonly CommunicationProductService $productService,
-        private readonly ValidatorInterface $validator,
     ) {
     }
 
@@ -164,15 +161,6 @@ class DashboardCatalogController extends AbstractController
             return $this->json(['error' => ['message' => 'Product not found']], Response::HTTP_NOT_FOUND);
         }
 
-        $violations = $this->validator->validate($dto);
-        if (count($violations) > 0) {
-            $details = [];
-            foreach ($violations as $v) {
-                $details[] = $v->getPropertyPath() . ': ' . $v->getMessage();
-            }
-            return $this->json(['error' => ['message' => 'Validation failed', 'details' => $details]], Response::HTTP_BAD_REQUEST);
-        }
-
         try {
             $product = $this->productService->updateProduct($product, $dto);
         } catch (MyCurrentException $e) {
@@ -210,15 +198,6 @@ class DashboardCatalogController extends AbstractController
     #[IsGranted('ROLE_ADMIN')]
     public function syncProducts(SyncProductsDto $dto): JsonResponse
     {
-        $violations = $this->validator->validate($dto);
-        if (count($violations) > 0) {
-            $details = [];
-            foreach ($violations as $v) {
-                $details[] = $v->getPropertyPath() . ': ' . $v->getMessage();
-            }
-            return $this->json(['error' => ['message' => 'Validation failed', 'details' => $details]], Response::HTTP_BAD_REQUEST);
-        }
-
         try {
             $result = $this->takeProductService->takeProduct($dto->getEnvironmentType());
 

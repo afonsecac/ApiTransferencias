@@ -21,8 +21,6 @@ use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Http\Attribute\IsGranted;
 use Symfony\Component\Serializer\Normalizer\AbstractObjectNormalizer;
 use Symfony\Component\Serializer\Normalizer\NormalizerInterface;
-use Symfony\Component\Validator\Validator\ValidatorInterface;
-
 #[Route('/navigation-admin')]
 #[IsGranted('ROLE_SUPER_ADMIN')]
 class DashboardNavigationAdminController extends AbstractController
@@ -30,7 +28,6 @@ class DashboardNavigationAdminController extends AbstractController
     public function __construct(
         private readonly EntityManagerInterface $em,
         private readonly NormalizerInterface $serializer,
-        private readonly ValidatorInterface $validator,
         private readonly NavigationItemService $navigationItemService,
     ) {
     }
@@ -74,15 +71,6 @@ class DashboardNavigationAdminController extends AbstractController
     #[DashboardEndpoint(summary: 'Crear item de navegación', tag: 'Navigation Admin', requestDto: CreateNavigationItemDto::class, responseStatusCode: 201)]
     public function createItem(CreateNavigationItemDto $dto): JsonResponse
     {
-        $violations = $this->validator->validate($dto);
-        if (count($violations) > 0) {
-            $details = [];
-            foreach ($violations as $v) {
-                $details[] = $v->getPropertyPath() . ': ' . $v->getMessage();
-            }
-            return $this->json(['error' => ['message' => 'Validation failed', 'details' => $details]], Response::HTTP_BAD_REQUEST);
-        }
-
         try {
             $item = $this->navigationItemService->createItem($dto);
         } catch (MyCurrentException $e) {
@@ -99,15 +87,6 @@ class DashboardNavigationAdminController extends AbstractController
         $item = $this->em->getRepository(NavigationItem::class)->find($id);
         if ($item === null) {
             return $this->json(['error' => ['message' => 'Item not found']], Response::HTTP_NOT_FOUND);
-        }
-
-        $violations = $this->validator->validate($dto);
-        if (count($violations) > 0) {
-            $details = [];
-            foreach ($violations as $v) {
-                $details[] = $v->getPropertyPath() . ': ' . $v->getMessage();
-            }
-            return $this->json(['error' => ['message' => 'Validation failed', 'details' => $details]], Response::HTTP_BAD_REQUEST);
         }
 
         $item = $this->navigationItemService->updateItem($item, $dto);
@@ -178,15 +157,6 @@ class DashboardNavigationAdminController extends AbstractController
         $item = $this->em->getRepository(NavigationItem::class)->find($itemId);
         if ($item === null) {
             return $this->json(['error' => ['message' => 'Item not found']], Response::HTTP_NOT_FOUND);
-        }
-
-        $violations = $this->validator->validate($dto);
-        if (count($violations) > 0) {
-            $details = [];
-            foreach ($violations as $v) {
-                $details[] = $v->getPropertyPath() . ': ' . $v->getMessage();
-            }
-            return $this->json(['error' => ['message' => 'Validation failed', 'details' => $details]], Response::HTTP_BAD_REQUEST);
         }
 
         try {

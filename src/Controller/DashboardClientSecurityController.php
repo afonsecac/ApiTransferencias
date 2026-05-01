@@ -20,14 +20,11 @@ use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Http\Attribute\IsGranted;
-use Symfony\Component\Validator\Validator\ValidatorInterface;
-
 #[Route('/clients/sec')]
 class DashboardClientSecurityController extends AbstractController
 {
     public function __construct(
         private readonly EntityManagerInterface $em,
-        private readonly ValidatorInterface $validator,
         private readonly AccountSecurityService $accountSecurityService,
     ) {
     }
@@ -70,15 +67,6 @@ class DashboardClientSecurityController extends AbstractController
     #[DashboardEndpoint(summary: 'Actualizar cuenta', tag: 'Client Security', requestDto: UpdateAccountSecurityDto::class, responseDto: AccountSecOutDto::class)]
     public function updateAccount(int $clientId, int $accountId, UpdateAccountSecurityDto $dto): JsonResponse
     {
-        $violations = $this->validator->validate($dto);
-        if (count($violations) > 0) {
-            $details = [];
-            foreach ($violations as $v) {
-                $details[] = $v->getPropertyPath() . ': ' . $v->getMessage();
-            }
-            return $this->json(['error' => ['message' => 'Validation failed', 'details' => $details]], Response::HTTP_BAD_REQUEST);
-        }
-
         $client = $this->findClientWithAccess($clientId);
         if ($client instanceof JsonResponse) {
             return $client;

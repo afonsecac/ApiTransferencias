@@ -19,8 +19,6 @@ use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Http\Attribute\IsGranted;
-use Symfony\Component\Validator\Validator\ValidatorInterface;
-
 #[IsGranted('ROLE_ADMIN')]
 class DashboardCommunicationPriceController extends AbstractController
 {
@@ -34,7 +32,6 @@ class DashboardCommunicationPriceController extends AbstractController
 
     public function __construct(
         private readonly EntityManagerInterface $em,
-        private readonly ValidatorInterface $validator,
         private readonly CommunicationPriceService $priceService,
     ) {
     }
@@ -100,15 +97,6 @@ class DashboardCommunicationPriceController extends AbstractController
     #[DashboardEndpoint(summary: 'Crear communication price', tag: 'Communication Prices', requestDto: CreateCommunicationPriceDto::class, responseDto: CommunicationPriceOutDto::class, responseStatusCode: 201)]
     public function create(CreateCommunicationPriceDto $dto): JsonResponse
     {
-        $violations = $this->validator->validate($dto);
-        if (count($violations) > 0) {
-            $details = [];
-            foreach ($violations as $v) {
-                $details[] = $v->getPropertyPath() . ': ' . $v->getMessage();
-            }
-            return $this->json(['error' => ['message' => 'Validation failed', 'details' => $details]], Response::HTTP_BAD_REQUEST);
-        }
-
         try {
             $cp = $this->priceService->create($dto);
         } catch (MyCurrentException $e) {
@@ -125,15 +113,6 @@ class DashboardCommunicationPriceController extends AbstractController
         $cp = $this->em->getRepository(CommunicationPrice::class)->find($id);
         if ($cp === null) {
             return $this->json(['error' => ['message' => 'Not found']], Response::HTTP_NOT_FOUND);
-        }
-
-        $violations = $this->validator->validate($dto);
-        if (count($violations) > 0) {
-            $details = [];
-            foreach ($violations as $v) {
-                $details[] = $v->getPropertyPath() . ': ' . $v->getMessage();
-            }
-            return $this->json(['error' => ['message' => 'Validation failed', 'details' => $details]], Response::HTTP_BAD_REQUEST);
         }
 
         $cp = $this->priceService->update($cp, $dto);

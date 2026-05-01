@@ -20,8 +20,6 @@ use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Http\Attribute\IsGranted;
 use Symfony\Component\Serializer\Normalizer\AbstractObjectNormalizer;
 use Symfony\Component\Serializer\Normalizer\NormalizerInterface;
-use Symfony\Component\Validator\Validator\ValidatorInterface;
-
 #[Route('/promotions')]
 class DashboardPromotionController extends AbstractController
 {
@@ -30,7 +28,6 @@ class DashboardPromotionController extends AbstractController
         private readonly EntityManagerInterface $em,
         private readonly NormalizerInterface $serializer,
         private readonly CommunicationPromotionService $promotionService,
-        private readonly ValidatorInterface $validator,
     ) {
     }
 
@@ -78,15 +75,6 @@ class DashboardPromotionController extends AbstractController
     #[DashboardEndpoint(summary: 'Crear promoción', tag: 'Promotions', requestDto: UpsertPromotionDto::class, responseStatusCode: 201)]
     public function create(UpsertPromotionDto $dto): JsonResponse
     {
-        $violations = $this->validator->validate($dto);
-        if (count($violations) > 0) {
-            $details = [];
-            foreach ($violations as $v) {
-                $details[] = $v->getPropertyPath() . ': ' . $v->getMessage();
-            }
-            return $this->json(['error' => ['message' => 'Validation failed', 'details' => $details]], Response::HTTP_BAD_REQUEST);
-        }
-
         $promotion = new CommunicationPromotions();
         $this->hydratePromotion($promotion, $dto);
 
@@ -115,15 +103,6 @@ class DashboardPromotionController extends AbstractController
         $promotion = $this->repository->find($id);
         if ($promotion === null) {
             return $this->json(['error' => ['message' => 'Promotion not found']], Response::HTTP_NOT_FOUND);
-        }
-
-        $violations = $this->validator->validate($dto);
-        if (count($violations) > 0) {
-            $details = [];
-            foreach ($violations as $v) {
-                $details[] = $v->getPropertyPath() . ': ' . $v->getMessage();
-            }
-            return $this->json(['error' => ['message' => 'Validation failed', 'details' => $details]], Response::HTTP_BAD_REQUEST);
         }
 
         $this->hydratePromotion($promotion, $dto);

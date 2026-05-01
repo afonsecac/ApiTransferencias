@@ -28,8 +28,6 @@ use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Http\Attribute\IsGranted;
-use Symfony\Component\Validator\Validator\ValidatorInterface;
-
 #[IsGranted('ROLE_ADMIN')]
 class DashboardClientPackagesController extends AbstractController
 {
@@ -52,7 +50,6 @@ class DashboardClientPackagesController extends AbstractController
     public function __construct(
         private readonly EntityManagerInterface $em,
         private readonly Security $security,
-        private readonly ValidatorInterface $validator,
         private readonly CommunicationPackageService $packageService,
     ) {
     }
@@ -136,15 +133,6 @@ class DashboardClientPackagesController extends AbstractController
     #[DashboardEndpoint(summary: 'Crear price package', tag: 'Client Prices', requestDto: CreatePricePackageDto::class, responseDto: PricePackageOutDto::class, responseStatusCode: 201)]
     public function createPrice(CreatePricePackageDto $dto): JsonResponse
     {
-        $violations = $this->validator->validate($dto);
-        if (count($violations) > 0) {
-            $details = [];
-            foreach ($violations as $v) {
-                $details[] = $v->getPropertyPath() . ': ' . $v->getMessage();
-            }
-            return $this->json(['error' => ['message' => 'Validation failed', 'details' => $details]], Response::HTTP_BAD_REQUEST);
-        }
-
         try {
             $pp = $this->packageService->createPrice($dto);
         } catch (MyCurrentException $e) {
@@ -161,15 +149,6 @@ class DashboardClientPackagesController extends AbstractController
         $pp = $this->em->getRepository(CommunicationPricePackage::class)->find($id);
         if ($pp === null) {
             return $this->json(['error' => ['message' => 'Price package not found']], Response::HTTP_NOT_FOUND);
-        }
-
-        $violations = $this->validator->validate($dto);
-        if (count($violations) > 0) {
-            $details = [];
-            foreach ($violations as $v) {
-                $details[] = $v->getPropertyPath() . ': ' . $v->getMessage();
-            }
-            return $this->json(['error' => ['message' => 'Validation failed', 'details' => $details]], Response::HTTP_BAD_REQUEST);
         }
 
         $pp = $this->packageService->updatePrice($pp, $dto);
@@ -213,18 +192,6 @@ class DashboardClientPackagesController extends AbstractController
     #[DashboardEndpoint(summary: 'Crear client package', tag: 'Client Packages', requestDto: CreateClientPackageDto::class, responseDto: ClientPackageDetailOutDto::class, responseStatusCode: 201)]
     public function createPackage(CreateClientPackageDto $dto): JsonResponse
     {
-        $violations = $this->validator->validate($dto);
-        if (count($violations) > 0) {
-            $details = [];
-            foreach ($violations as $v) {
-                $details[] = $v->getPropertyPath() . ': ' . $v->getMessage();
-            }
-            return $this->json(
-                ['error' => ['message' => 'Validation failed', 'details' => $details]],
-                Response::HTTP_BAD_REQUEST
-            );
-        }
-
         try {
             $cp = $this->packageService->create($dto);
         } catch (MyCurrentException $e) {
@@ -290,15 +257,6 @@ class DashboardClientPackagesController extends AbstractController
         $cp = $this->em->getRepository(CommunicationClientPackage::class)->find($id);
         if ($cp === null) {
             return $this->json(['error' => ['message' => 'Package not found']], Response::HTTP_NOT_FOUND);
-        }
-
-        $violations = $this->validator->validate($dto);
-        if (count($violations) > 0) {
-            $details = [];
-            foreach ($violations as $v) {
-                $details[] = $v->getPropertyPath() . ': ' . $v->getMessage();
-            }
-            return $this->json(['error' => ['message' => 'Validation failed', 'details' => $details]], Response::HTTP_BAD_REQUEST);
         }
 
         $cp = $this->packageService->updateClientPackage($cp, $dto);
