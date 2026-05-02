@@ -51,9 +51,15 @@ class CreateSaleInfoProcessor implements ProcessorInterface
             }
         }
 
-        if ($data instanceof CommunicationSaleInfo && $data->getClientTransactionId() !== null) {
+        $clientTransactionId = null;
+        if ($data instanceof CommunicationSaleInfo) {
+            $clientTransactionId = $data->getClientTransactionId();
+        } elseif ($data instanceof ReserveRecharge) {
+            $clientTransactionId = $data->getClientTransactionId();
+        }
+        if ($clientTransactionId !== null) {
             $existing = $this->em->getRepository(CommunicationSaleInfo::class)
-                ->findOneBy(['clientTransactionId' => $data->getClientTransactionId()]);
+                ->findOneBy(['clientTransactionId' => $clientTransactionId]);
             if ($existing !== null) {
                 throw new ConflictHttpException('A transaction with this clientTransactionId already exists.');
             }

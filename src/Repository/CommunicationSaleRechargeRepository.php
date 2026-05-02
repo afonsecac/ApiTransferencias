@@ -26,22 +26,27 @@ class CommunicationSaleRechargeRepository extends ServiceEntityRepository
     }
 
     /**
-     * @return CommunicationSalePackage[]
+     * @return CommunicationSaleRecharge[]
      */
     public function getCurrentActivePromotionsReserves(): array
     {
-        $currentDate = new \DateTimeImmutable('now');
+        $now = new \DateTimeImmutable('now');
+        // Esperar al menos 1 minuto tras el inicio de la promoción antes de enviar al proveedor
+        $activationThreshold = $now->modify('-1 minute');
+
         return $this->createQueryBuilder('r')
-            ->leftJoin('r.promotion', 'p')
-            ->leftJoin('r.package', 'q')
-            ->where('p.createdAt < :currentDate')
-            ->andWhere('p.startAt <= :currentDate')
-            ->andWhere('p.endAt >= :currentDate')
-            ->andWhere('r.state = :state')
-            ->andWhere('q.activeEndAt > :currentDate')
+            ->join('r.promotion', 'p')
+            ->join('r.package', 'q')
+            ->where('r.state = :state')
+            ->andWhere('r.stateProcess = :stateProcess')
+            ->andWhere('p.startAt <= :activationThreshold')
+            ->andWhere('p.endAt >= :now')
+            ->andWhere('q.activeEndAt > :now')
             ->setParameters(new ArrayCollection([
-                new Parameter('currentDate', $currentDate),
+                new Parameter('now', $now),
+                new Parameter('activationThreshold', $activationThreshold),
                 new Parameter('state', CommunicationStateEnum::RESERVED),
+                new Parameter('stateProcess', CommunicationStateEnum::CREATED->value),
             ]))->getQuery()->execute();
     }
 }

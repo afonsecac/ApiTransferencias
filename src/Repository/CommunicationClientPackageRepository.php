@@ -47,6 +47,28 @@ class CommunicationClientPackageRepository extends ServiceEntityRepository
     }
 
     /**
+     * Like getPackageById but also matches packages whose activeStartAt is in the future.
+     * Used for reserve flow where the package belongs to a promotion that hasn't started yet.
+     */
+    public function getPackageByIdForReserve(int $packageId, Account $account): CommunicationClientPackage|null
+    {
+        $currentDate = new \DateTimeImmutable('now');
+
+        return $this->createQueryBuilder('p')
+            ->leftJoin('p.tenant', 'a')
+            ->addSelect('a')
+            ->where('p.id = :id')
+            ->andWhere('a.id = :aId')
+            ->andWhere('p.activeEndAt > :currentDate')
+            ->setParameters(new ArrayCollection([
+                new Parameter('id', $packageId),
+                new Parameter('aId', $account->getId()),
+                new Parameter('currentDate', $currentDate),
+            ]))
+            ->getQuery()->setMaxResults(1)->getOneOrNullResult();
+    }
+
+    /**
      * @param string $env
      * @param int|null $tenant
      * @return CommunicationClientPackage[]

@@ -139,6 +139,50 @@ class CommunicationSaleService extends CommonService
     }
 
     /**
+     * Activa un lote de ventas RESERVED cuya promoción ya comenzó.
+     * Persiste todos los cambios antes de despachar mensajes para evitar race conditions.
+     *
+     * @param CommunicationSaleRecharge[] $sales
+     * @throws \Symfony\Component\Messenger\Exception\ExceptionInterface
+     */
+    public function activateReservedSales(array $sales): int
+    {
+        $now = new \DateTimeImmutable('now');
+        $activated = 0;
+        $toDispatch = [];
+
+        foreach ($sales as $sale) {
+            $promotion = $sale->getPromotion();
+            if ($promotion instanceof CommunicationPromotions && $promotion->getEndAt() < $now) {
+                $sale->setState(CommunicationStateEnum::REJECTED);
+                $sale->setStateProcess(CommunicationStateEnum::REJECTED->value);
+                $sale->setTransactionStatus(['result' => ['message' => 'Promotion expired before activation']]);
+                $this->logger->info("Reserved sale {$sale->getId()} rejected: promotion expired.");
+                continue;
+            }
+
+            $sale->setState(CommunicationStateEnum::PENDING);
+
+            $history = new CommunicationSaleHistory();
+            $history->setState(CommunicationStateEnum::PENDING);
+            $history->setSale($sale);
+            $this->em->persist($history);
+
+            $toDispatch[] = $sale;
+            $activated++;
+            $this->logger->info("Reserved sale {$sale->getId()} activated.");
+        }
+
+        $this->em->flush();
+
+        foreach ($toDispatch as $sale) {
+            $this->messageBus->dispatch(new SaleRechargeMessage($sale->getId()));
+        }
+
+        return $activated;
+    }
+
+    /**
      * @param \App\DTO\ReserveRecharge $reserveDto
      * @return \App\Entity\CommunicationSaleRecharge|null
      * @throws \App\Exception\MyCurrentException
@@ -152,7 +196,7 @@ class CommunicationSaleService extends CommonService
         }
         /** @var \App\Repository\CommunicationClientPackageRepository $clientPackageRepo */
         $clientPackageRepo = $this->em->getRepository(CommunicationClientPackage::class);
-        $package = $clientPackageRepo->getPackageById(
+        $package = $clientPackageRepo->getPackageByIdForReserve(
             $reserveDto->getPackageId(),
             $user
         );
@@ -197,7 +241,7 @@ class CommunicationSaleService extends CommonService
         try {
             $this->em->persist($recharge);
             $comHistoric = new CommunicationSaleHistory();
-            $comHistoric->setState(CommunicationStateEnum::PENDING);
+            $comHistoric->setState(CommunicationStateEnum::RESERVED);
             $comHistoric->setSale($recharge);
             $this->em->persist($comHistoric);
             $this->em->flush();
@@ -341,16 +385,10 @@ class CommunicationSaleService extends CommonService
 
                 return;
             }
-            // Solo procesar si stateProcess es CREATED (no enviada aún)
-            // Si ya está en PENDING o COMPLETED, la recarga ya fue enviada a ETECSA
-            if ($saleRecharge->getStateProcess() !== CommunicationStateEnum::CREATED->value) {
-                $this->logger->info("Skipping recharge {$saleId}: already processed (stateProcess={$saleRecharge->getStateProcess()})");
+            if (!$this->claimForSending($saleRecharge)) {
+                $this->logger->info("Skipping recharge {$saleId}: already being processed (stateProcess={$saleRecharge->getStateProcess()})");
                 return;
             }
-
-            // Lock optimista: marcar como PENDING antes de enviar para evitar reenvíos
-            $saleRecharge->setStateProcess('SENDING');
-            $this->em->flush();
             try {
                 $balance = $this->balanceService->balance($user->getId());
                 /** @var \App\Repository\CommunicationClientPackageRepository $clientPackageRepo */
@@ -667,14 +705,10 @@ class CommunicationSaleService extends CommonService
         if (is_null($sale) || $sale->getState() !== CommunicationStateEnum::PENDING) {
             return;
         }
-        // Evitar reenvío: solo procesar si no fue enviada aún
-        if ($sale->getStateProcess() !== null && $sale->getStateProcess() !== CommunicationStateEnum::CREATED->value) {
-            $this->logger->info("Skipping sale {$saleId}: already processed (stateProcess={$sale->getStateProcess()})");
+        if (!$this->claimForSending($sale)) {
+            $this->logger->info("Skipping sale {$saleId}: already being processed (stateProcess={$sale->getStateProcess()})");
             return;
         }
-        // Lock: marcar como enviándose
-        $sale->setStateProcess('SENDING');
-        $this->em->flush();
 
         $transactionId = $sale->getTransactionId();
         try {
@@ -751,6 +785,32 @@ class CommunicationSaleService extends CommonService
             $this->em->flush();
             $this->logger->error("Sale {$saleId} execution error: " . $exc->getMessage());
         }
+    }
+
+    /**
+     * Marca atómicamente una venta como 'SENDING' usando un UPDATE condicional en BD.
+     * Devuelve true solo si esta instancia del worker ganó la carrera; false si otra
+     * ya tomó la venta (0 filas afectadas). Esto previene envíos duplicados al proveedor
+     * externo cuando múltiples workers reciben el mismo mensaje.
+     */
+    private function claimForSending(CommunicationSaleInfo $sale): bool
+    {
+        $table = $this->em->getClassMetadata(CommunicationSaleInfo::class)->getTableName();
+
+        $affected = $this->em->getConnection()->executeStatement(
+            "UPDATE {$table} SET state_process = :sending WHERE id = :id AND state_process = :created",
+            [
+                'sending' => 'SENDING',
+                'id'      => $sale->getId(),
+                'created' => CommunicationStateEnum::CREATED->value,
+            ]
+        );
+
+        if ($affected > 0) {
+            $this->em->refresh($sale);
+        }
+
+        return $affected > 0;
     }
 
     private function failSale(CommunicationSaleInfo $sale, string $reason): void
