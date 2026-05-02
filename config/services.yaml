@@ -25,6 +25,9 @@ services:
         tags:
             - { name: 'api_platform.doctrine.orm.query_extension.collection' }
             - { name: 'api_platform.doctrine.orm.query_extension.item' }
+    'App\Doctrine\PromotionDateScopeExtension':
+        tags:
+            - { name: 'api_platform.doctrine.orm.query_extension.collection' }
     # default configuration for services in *this* file
     _defaults:
         autowire: true      # Automatically injects dependencies in your services.
