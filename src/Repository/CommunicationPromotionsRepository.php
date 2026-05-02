@@ -116,8 +116,6 @@ class CommunicationPromotionsRepository extends ServiceEntityRepository
             ->where('p.id = :promotionId')
             ->andWhere('cp.id = :packageId')
             ->andWhere('p.startAt > :currentDate')
-            ->andWhere('p.createdAt <= :currentDate')
-            ->andWhere('p.updatedAt <= :currentDate')
             ->setParameters(new ArrayCollection([
                 new Parameter('promotionId', $promotionId),
                 new Parameter('currentDate', $currentDate),
