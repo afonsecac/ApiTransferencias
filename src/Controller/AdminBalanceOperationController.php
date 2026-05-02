@@ -10,6 +10,7 @@ use App\OpenApi\Attribute\DashboardEndpoint;
 use App\Service\BalanceService;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
+use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Attribute\MapQueryParameter;
 use Symfony\Component\Routing\Attribute\Route;
@@ -29,11 +30,16 @@ class AdminBalanceOperationController extends AbstractController
     #[Route(name: 'admin_balance_operation', methods: ['GET'])]
     #[DashboardEndpoint(summary: 'Listar operaciones de balance', tag: 'Balance Operations', responseDto: PaginatedTotalOutDto::class, itemDto: BalanceOperationOutDto::class)]
     public function __invoke(
+        Request $request,
         #[MapQueryParameter] int $page = 0,
         #[MapQueryParameter] int $limit = 10,
         #[MapQueryParameter] string $orderBy = 'createdAt ASC',
         #[MapQueryParameter] array $filter = [],
     ): JsonResponse {
+        if (empty($filter['env']) && $request->headers->has('X-Environment-Id')) {
+            $filter['env'] = (int) $request->headers->get('X-Environment-Id');
+        }
+
         $response = $this->balanceService->getBalanceOperations($filter, $orderBy, $page, $limit);
         $results = $this->serializer->normalize($response->getResults(), 'json', context: [
             AbstractObjectNormalizer::SKIP_NULL_VALUES => true,
