@@ -4,7 +4,9 @@ namespace App\Controller;
 
 use App\DTO\Out\DeletedOutDto;
 use App\DTO\Out\PaginatedListOutDto;
+use App\DTO\UpdatePromotionDto;
 use App\DTO\UpsertPromotionDto;
+use App\Exception\MyCurrentException;
 use App\Entity\CommunicationProduct;
 use App\Entity\CommunicationPromotions;
 use App\Entity\Environment;
@@ -20,8 +22,6 @@ use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Http\Attribute\IsGranted;
 use Symfony\Component\Serializer\Normalizer\AbstractObjectNormalizer;
 use Symfony\Component\Serializer\Normalizer\NormalizerInterface;
-use Symfony\Component\Validator\Validator\ValidatorInterface;
-
 #[Route('/promotions')]
 class DashboardPromotionController extends AbstractController
 {
@@ -30,7 +30,6 @@ class DashboardPromotionController extends AbstractController
         private readonly EntityManagerInterface $em,
         private readonly NormalizerInterface $serializer,
         private readonly CommunicationPromotionService $promotionService,
-        private readonly ValidatorInterface $validator,
     ) {
     }
 
@@ -78,15 +77,6 @@ class DashboardPromotionController extends AbstractController
     #[DashboardEndpoint(summary: 'Crear promoción', tag: 'Promotions', requestDto: UpsertPromotionDto::class, responseStatusCode: 201)]
     public function create(UpsertPromotionDto $dto): JsonResponse
     {
-        $violations = $this->validator->validate($dto);
-        if (count($violations) > 0) {
-            $details = [];
-            foreach ($violations as $v) {
-                $details[] = $v->getPropertyPath() . ': ' . $v->getMessage();
-            }
-            return $this->json(['error' => ['message' => 'Validation failed', 'details' => $details]], Response::HTTP_BAD_REQUEST);
-        }
-
         $promotion = new CommunicationPromotions();
         $this->hydratePromotion($promotion, $dto);
 
@@ -107,27 +97,21 @@ class DashboardPromotionController extends AbstractController
         return $this->json($result, Response::HTTP_CREATED);
     }
 
-    #[Route('/{id}', name: 'dashboard_promotions_update', methods: ['PUT'])]
+    #[Route('/{id}', name: 'dashboard_promotions_update', methods: ['PATCH', 'PUT'])]
     #[IsGranted('ROLE_ADMIN')]
-    #[DashboardEndpoint(summary: 'Actualizar promoción', tag: 'Promotions', requestDto: UpsertPromotionDto::class)]
-    public function update(int $id, UpsertPromotionDto $dto): JsonResponse
+    #[DashboardEndpoint(summary: 'Actualizar promoción', tag: 'Promotions', requestDto: UpdatePromotionDto::class)]
+    public function update(int $id, UpdatePromotionDto $dto): JsonResponse
     {
         $promotion = $this->repository->find($id);
         if ($promotion === null) {
             return $this->json(['error' => ['message' => 'Promotion not found']], Response::HTTP_NOT_FOUND);
         }
 
-        $violations = $this->validator->validate($dto);
-        if (count($violations) > 0) {
-            $details = [];
-            foreach ($violations as $v) {
-                $details[] = $v->getPropertyPath() . ': ' . $v->getMessage();
-            }
-            return $this->json(['error' => ['message' => 'Validation failed', 'details' => $details]], Response::HTTP_BAD_REQUEST);
+        try {
+            $this->promotionService->update($promotion, $dto);
+        } catch (MyCurrentException $e) {
+            return $this->json(['error' => ['message' => $e->getMessage()]], $e->getCode());
         }
-
-        $this->hydratePromotion($promotion, $dto);
-        $this->em->flush();
 
         return $this->json($this->normalizeDetail($promotion));
     }
@@ -166,9 +150,8 @@ class DashboardPromotionController extends AbstractController
             $promotion->setValidityInfo($dto->getValidityInfo());
         }
 
-        $env = $dto->getEnvironment();
-        if (isset($env['id'])) {
-            $environment = $this->em->getRepository(Environment::class)->find($env['id']);
+        if ($dto->getEnvironmentId() !== null) {
+            $environment = $this->em->getRepository(Environment::class)->find($dto->getEnvironmentId());
             if ($environment !== null) {
                 $promotion->setEnvironment($environment);
             }

@@ -11,6 +11,7 @@ use ApiPlatform\Metadata\Get;
 use ApiPlatform\Metadata\GetCollection;
 use App\Repository\CommunicationClientPackageRepository;
 use App\State\CommunicationClientPackageProvider;
+use App\State\UpcomingPackagesProvider;
 use Doctrine\Common\Collections\ArrayCollection;
 use Doctrine\Common\Collections\Collection;
 use Doctrine\ORM\Mapping as ORM;
@@ -32,6 +33,13 @@ use Symfony\Component\Validator\Constraints as Assert;
             description: 'List all available packages',
             name: 'Packages',
             provider: CommunicationClientPackageProvider::class
+        ),
+        new GetCollection(
+            uriTemplate: '/communication/packages/upcoming',
+            description: 'List packages available in upcoming promotions',
+            name: 'UpcomingPackages',
+            provider: UpcomingPackagesProvider::class,
+            paginationEnabled: false,
         ),
     ],
     normalizationContext: ['groups' => ['comPackage:read']],
@@ -239,6 +247,8 @@ class CommunicationClientPackage
     #[Groups(['comPackage:read'])]
     #[ApiProperty]
     private array $promotions;
+
+    private ?array $upcomingPromotions = null;
 
     #[ORM\ManyToOne]
     #[ORM\JoinColumn(nullable: false)]
@@ -586,8 +596,17 @@ class CommunicationClientPackage
         return $this;
     }
 
+    public function setUpcomingPromotions(array $promotions): void
+    {
+        $this->upcomingPromotions = $promotions;
+    }
+
     public function getPromotions(): array
     {
+        if ($this->upcomingPromotions !== null) {
+            return $this->upcomingPromotions;
+        }
+
         $this->promotions = [];
         if ($this->getPromotionItems()->count() > 0) {
             $this->promotions[] = $this->getPromotionItems()->first();

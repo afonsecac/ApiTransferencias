@@ -3,27 +3,22 @@
 namespace App\Tests\Controller;
 
 use App\Controller\DashboardClientPackagesController;
-use App\Entity\Account;
+use App\DTO\CreatePricePackageDto;
 use App\Entity\Client;
 use App\Entity\CommunicationClientPackage;
 use App\Entity\CommunicationPricePackage;
-use App\Entity\CommunicationProduct;
-use App\Entity\Environment;
 use App\Entity\User;
-use Doctrine\ORM\AbstractQuery;
+use App\Exception\MyCurrentException;
+use App\Service\CommunicationPackageService;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\EntityRepository;
 use Doctrine\ORM\QueryBuilder;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
-use App\Service\CommunicationPackageService;
 use Symfony\Bundle\SecurityBundle\Security;
 use Symfony\Component\DependencyInjection\ContainerInterface;
-use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
-use Symfony\Component\Serializer\SerializerInterface;
-use Symfony\Component\Validator\Validator\ValidatorInterface;
 
 /**
  * @covers \App\Controller\DashboardClientPackagesController
@@ -32,18 +27,19 @@ class DashboardClientPackagesControllerTest extends TestCase
 {
     private EntityManagerInterface&MockObject $em;
     private Security&MockObject $security;
+    private CommunicationPackageService&MockObject $packageService;
     private DashboardClientPackagesController $controller;
 
     protected function setUp(): void
     {
-        $this->em = $this->createMock(EntityManagerInterface::class);
-        $this->security = $this->createMock(Security::class);
+        $this->em             = $this->createMock(EntityManagerInterface::class);
+        $this->security       = $this->createMock(Security::class);
+        $this->packageService = $this->createMock(CommunicationPackageService::class);
 
         $this->controller = new DashboardClientPackagesController(
             $this->em,
             $this->security,
-            $this->createMock(ValidatorInterface::class),
-            $this->createMock(CommunicationPackageService::class),
+            $this->packageService,
         );
 
         $container = $this->createMock(ContainerInterface::class);
@@ -109,8 +105,7 @@ class DashboardClientPackagesControllerTest extends TestCase
     public function testTogglePriceTogglesActiveState(): void
     {
         $pp = $this->createMock(CommunicationPricePackage::class);
-        $pp->method('isActive')->willReturn(false);
-        $pp->expects($this->once())->method('setIsActive')->with(true);
+        $pp->method('isActive')->willReturn(true);
         $pp->method('getId')->willReturn(5);
 
         $repo = $this->createMock(EntityRepository::class);
@@ -118,7 +113,8 @@ class DashboardClientPackagesControllerTest extends TestCase
         $this->em->method('getRepository')
             ->with(CommunicationPricePackage::class)
             ->willReturn($repo);
-        $this->em->expects($this->once())->method('flush');
+
+        $this->packageService->expects($this->once())->method('togglePrice')->with($pp);
 
         $response = $this->controller->togglePrice(5);
 
@@ -149,8 +145,8 @@ class DashboardClientPackagesControllerTest extends TestCase
         $this->em->method('getRepository')
             ->with(CommunicationPricePackage::class)
             ->willReturn($repo);
-        $this->em->expects($this->once())->method('remove')->with($pp);
-        $this->em->expects($this->once())->method('flush');
+
+        $this->packageService->expects($this->once())->method('deletePrice')->with($pp);
 
         $response = $this->controller->deletePrice(1);
 
@@ -200,8 +196,8 @@ class DashboardClientPackagesControllerTest extends TestCase
         $this->em->method('getRepository')
             ->with(CommunicationClientPackage::class)
             ->willReturn($repo);
-        $this->em->expects($this->once())->method('remove')->with($cp);
-        $this->em->expects($this->once())->method('flush');
+
+        $this->packageService->expects($this->once())->method('deleteClientPackage')->with($cp);
 
         $response = $this->controller->deletePackage(7);
 
@@ -210,43 +206,24 @@ class DashboardClientPackagesControllerTest extends TestCase
         $this->assertTrue($data['deleted']);
     }
 
-    // ---- createPrice validation ----
-
-    public function testCreatePriceReturnsValidationErrorWhenFieldsMissing(): void
-    {
-        $request = new Request([], []);
-
-        $response = $this->controller->createPrice($request);
-
-        $this->assertSame(Response::HTTP_BAD_REQUEST, $response->getStatusCode());
-        $data = json_decode($response->getContent(), true);
-        $this->assertSame('Validation failed', $data['error']['message']);
-        $this->assertNotEmpty($data['error']['details']);
-    }
+    // ---- createPrice ----
 
     public function testCreatePriceReturnsNotFoundWhenAccountOrProductMissing(): void
     {
-        $request = new Request([], [
-            'price' => '10.0',
-            'priceCurrency' => 'USD',
-            'amount' => '100.0',
-            'currency' => 'CUP',
-            'tenantId' => '1',
-            'productId' => '1',
-        ]);
+        $dto = new CreatePricePackageDto(
+            price: 10.0,
+            priceCurrency: 'USD',
+            amount: 100.0,
+            currency: 'CUP',
+            tenantId: 1,
+            productId: 1,
+        );
 
-        $accountRepo = $this->createMock(EntityRepository::class);
-        $accountRepo->method('find')->willReturn(null);
+        $this->packageService
+            ->method('createPrice')
+            ->willThrowException(new MyCurrentException('ACCOUNT_NOT_FOUND', 'Account or product not found', 404));
 
-        $productRepo = $this->createMock(EntityRepository::class);
-        $productRepo->method('find')->willReturn(null);
-
-        $this->em->method('getRepository')->willReturnMap([
-            [Account::class, $accountRepo],
-            [CommunicationProduct::class, $productRepo],
-        ]);
-
-        $response = $this->controller->createPrice($request);
+        $response = $this->controller->createPrice($dto);
 
         $this->assertSame(Response::HTTP_NOT_FOUND, $response->getStatusCode());
         $data = json_decode($response->getContent(), true);
@@ -260,23 +237,16 @@ class DashboardClientPackagesControllerTest extends TestCase
         $user = $this->createMock(User::class);
         $this->security->method('getUser')->willReturn($user);
 
-        // Simulate isGranted via the controller container - since we can't easily set the container,
-        // we test the private method via reflection
         $qb = $this->createMock(QueryBuilder::class);
         $request = new Request(['clientId' => '42']);
 
         $method = new \ReflectionMethod(DashboardClientPackagesController::class, 'applyClientFilter');
         $method->setAccessible(true);
 
-        // When ROLE_ADMIN is not granted and user has a company
         $client = $this->createMock(Client::class);
         $client->method('getId')->willReturn(10);
         $user->method('getCompany')->willReturn($client);
 
-        // The controller's isGranted will throw because there's no container,
-        // so we test the non-admin branch directly
-        // The method calls $this->isGranted('ROLE_ADMIN') which requires a container.
-        // We verify the method exists and can be invoked with the right signature.
         $this->assertSame('applyClientFilter', $method->getName());
         $this->assertSame(3, $method->getNumberOfParameters());
     }

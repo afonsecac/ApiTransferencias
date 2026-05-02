@@ -3,6 +3,7 @@
 namespace App\Service;
 
 use App\DTO\CreateAdminPromotionDto;
+use App\DTO\UpdatePromotionDto;
 use App\Entity\Account;
 use App\Entity\CommunicationClientPackage;
 use App\Entity\CommunicationPrice;
@@ -119,6 +120,15 @@ class CommunicationPromotionService extends CommonService
         // 3. Por cada precio × cada account → crear PricePackage + ClientPackage
         foreach ($filteredPrices as $price) {
             foreach ($accounts as $account) {
+                $existingPP = $this->em->getRepository(CommunicationPricePackage::class)->findOneBy([
+                    'tenant' => $account,
+                    'priceUsed' => $price,
+                    'product' => $product,
+                ]);
+                if ($existingPP !== null) {
+                    continue;
+                }
+
                 // Crear CommunicationPricePackage
                 $pricePackage = new CommunicationPricePackage();
                 $pricePackage->setProduct($product);
@@ -172,6 +182,7 @@ class CommunicationPromotionService extends CommonService
                     'unit_type' => 'CURRENCY',
                 ]);
                 $clientPackage->setValidity($promotion->getValidityInfo());
+                $clientPackage->setEnvironment($environment);
                 $this->em->persist($clientPackage);
 
                 // Asociar el paquete a la promoción
@@ -184,6 +195,72 @@ class CommunicationPromotionService extends CommonService
         $this->em->flush();
 
         return $packagesCreated;
+    }
+
+    /**
+     * @throws MyCurrentException
+     */
+    public function update(CommunicationPromotions $promotion, UpdatePromotionDto $dto): CommunicationPromotions
+    {
+        if ($dto->getName() !== null) {
+            $promotion->setName($dto->getName());
+        }
+        if ($dto->getDescription() !== null) {
+            $promotion->setDescription($dto->getDescription());
+        }
+        if ($dto->getInfoDescription() !== null) {
+            $promotion->setInfoDescription($dto->getInfoDescription());
+        }
+        if ($dto->getKnowMore() !== null) {
+            $promotion->setKnowMore($dto->getKnowMore());
+        }
+        if ($dto->getTerms() !== null) {
+            $promotion->setTerms($dto->getTerms());
+        }
+        if ($dto->getValidityInfo() !== null) {
+            $promotion->setValidityInfo($dto->getValidityInfo());
+        }
+        if ($dto->getStartAt() !== null) {
+            try {
+                $promotion->setStartAt(new \DateTimeImmutable($dto->getStartAt()));
+            } catch (\Exception) {
+                throw new MyCurrentException('INVALID_DATE', 'Invalid date format for startAt', 400);
+            }
+        }
+        if ($dto->getEndAt() !== null) {
+            try {
+                $promotion->setEndAt(new \DateTimeImmutable($dto->getEndAt()));
+            } catch (\Exception) {
+                throw new MyCurrentException('INVALID_DATE', 'Invalid date format for endAt', 400);
+            }
+        }
+
+        if ($dto->getEnvironmentId() !== null) {
+            $environment = $this->em->getRepository(Environment::class)->find($dto->getEnvironmentId());
+            if ($environment === null) {
+                throw new MyCurrentException('ENVIRONMENT_NOT_FOUND', 'Environment not found', 404);
+            }
+            $promotion->setEnvironment($environment);
+        }
+
+        if ($dto->getProductId() !== null) {
+            $product = $this->em->getRepository(CommunicationProduct::class)->find($dto->getProductId());
+            if ($product === null) {
+                throw new MyCurrentException('PRODUCT_NOT_FOUND', 'Product not found', 404);
+            }
+            $promotion->setProduct($product);
+            if ($promotion->getEnvironment() === null) {
+                $promotion->setEnvironment($product->getEnvironment());
+            }
+        }
+
+        if ($dto->getPriority() !== null) {
+            $promotion->setPriority($dto->getPriority());
+        }
+
+        $this->em->flush();
+
+        return $promotion;
     }
 
     /**
