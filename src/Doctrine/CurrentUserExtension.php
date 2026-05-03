@@ -82,12 +82,6 @@ final class CurrentUserExtension implements QueryCollectionExtensionInterface, Q
                 $environment = $user->getEnvironment();
                 $queryBuilder->andWhere(sprintf('%s.environment = :env', $rootAlias));
                 $queryBuilder->setParameter('env', $environment?->getId());
-                if (CommunicationPromotions::class === $resourceClass) {
-                    $queryBuilder->andWhere(
-                        sprintf(':currentDate BETWEEN %s.createdAt AND %s.endAt', $rootAlias, $rootAlias)
-                    )
-                        ->setParameter('currentDate', $currentDate);
-                }
             } elseif (BankCard::class === $resourceClass) {
                 $queryBuilder->innerJoin(sprintf('%s.beneficiary', $rootAlias), 'b')
                     ->andWhere('b.tenant = :current_user')

@@ -75,12 +75,24 @@ fi
 
 COMPOSE_BASE="docker-compose.vps.yaml"
 COMPOSE_ENV="docker-compose.vps.${ENV}.yaml"
+COMPOSE_REPLICATION_FILE="docker-compose.vps.replication.yaml"
 ENV_FILE=".env.vps"
 
-COMPOSE_CMD="docker compose -f $COMPOSE_BASE -f $COMPOSE_ENV --env-file $ENV_FILE"
+# Incluir overlay de replicacion en prod mientras exista el archivo
+# (ventana de convivencia PG18 — eliminar el archivo tras el cutover ~2026-05-11)
+COMPOSE_REPLICATION_FLAG=""
+if [[ "$ENV" == "prod" ]] && [[ -f "$COMPOSE_REPLICATION_FILE" ]]; then
+    COMPOSE_REPLICATION_FLAG="-f $COMPOSE_REPLICATION_FILE"
+fi
+
+COMPOSE_CMD="docker compose -f $COMPOSE_BASE -f $COMPOSE_ENV $COMPOSE_REPLICATION_FLAG --env-file $ENV_FILE"
 
 info "Entorno: ${CYAN}${ENV}${NC} | Branch: ${CYAN}${GIT_BRANCH}${NC}"
-info "Compose: $COMPOSE_BASE + $COMPOSE_ENV"
+if [[ -n "$COMPOSE_REPLICATION_FLAG" ]]; then
+    info "Compose: $COMPOSE_BASE + $COMPOSE_ENV + ${YELLOW}$COMPOSE_REPLICATION_FILE (replicacion activa)${NC}"
+else
+    info "Compose: $COMPOSE_BASE + $COMPOSE_ENV"
+fi
 
 # ===========================================
 # Verificaciones

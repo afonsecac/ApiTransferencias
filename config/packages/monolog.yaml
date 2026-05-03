@@ -77,7 +77,7 @@ when@prod:
                 path: php://stderr
             grouped:
                 type: group
-                members: [ streamed, deduplicated_http, symfony_mailer_critical ]
+                members: [ streamed, deduplicated_http, deduplicated_critical ]
             streamed:
                 type: stream
                 path: '%kernel.logs_dir%/debug.%kernel.environment%.log'
@@ -98,6 +98,11 @@ when@prod:
                 formatter: monolog.formatter.html
                 content_type: text/html
                 channels: ["!console"]
+            deduplicated_critical:
+                type: deduplication
+                handler: symfony_mailer_critical
+                store: '%kernel.logs_dir%/monolog_dedup_critical.log'
+                time: 60
             symfony_mailer_critical:
                 type: symfony_mailer
                 from_email: '%env(APP_MAILER_FROM)%'
