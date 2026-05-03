@@ -358,62 +358,72 @@ class CommunicationClientPackage
 
     public function getBenefits(): array
     {
+        $promotions = $this->upcomingPromotions !== null
+            ? $this->upcomingPromotions
+            : $this->getPromotionItems();
+
+        return $this->mergeBenefitsWithPromotions($promotions);
+    }
+
+    private function mergeBenefitsWithPromotions(iterable $promotions): array
+    {
         $benefitsOut = [];
         $benefits = $this->benefits;
-        $size = $this->getPromotionItems()->count();
-        if ($size > 0) {
-            foreach ($this->getPromotionItems() as $promotion) {
-                foreach ($promotion->getTerms() as $term) {
-                    $temItem = (object)$term;
-                    $posUnit = array_search($temItem->unit, array_column($benefits, 'unit'), true);
-                    $posUnitType = array_search($temItem->unit_type, array_column($benefits, 'unit_type'), true);
-                    $posType = array_search($temItem->type, array_column($benefits, 'type'), true);
-                    if (is_numeric($posUnit) && $posUnit === $posUnitType && $posType === $posUnitType) {
-                        $currentBenefit = $benefits[$posUnit];
-                        $base = $currentBenefit['amount']['base'];
-                        $promotionAmount = $currentBenefit['amount']['promotion_bonus'];
-                        $operation = $temItem->amount['operation'];
-                        if ($operation === 'MULTI') {
-                            $promotionAmount = $base * $temItem->amount['promotion_bonus'];
-                        } elseif ($operation === 'ADD') {
-                            $base += $temItem->amount['base'];
-                            $promotionAmount += $temItem->amount['promotion_bonus'];
-                        }
+        $size = is_countable($promotions) ? count($promotions) : iterator_count($promotions);
 
-                        $total = $base + $promotionAmount;
-                        $currentBenefit['amount']['base'] = $base;
-                        $currentBenefit['amount']['promotion_bonus'] = $promotionAmount;
-                        $currentBenefit['amount']['total_including_tax'] = $total;
-                        $currentBenefit['amount']['total_excluding_tax'] = $total;
-                        $benefitsOut[] = $currentBenefit;
-                    } else {
-                        $arrayInfo = array_merge([
-                            'additional_information' => null,
-                            'amount' => [],
-                            'type' => 'CREDITS',
-                            'unit' => 'CUP',
-                            'unit_type' => 'CURRENCY',
-                            'schedule' => [
-                                'start' => null,
-                                'end' => null,
-                            ],
-                        ], $term);
-                        $amountMerged = array_merge([
-                            'base' => 0,
-                            'promotion_bonus' => 0,
-                            'total_excluding_tax' => 0,
-                            'total_including_tax' => 0,
-                        ], $term['amount']);
-                        $total = $amountMerged['base'] + $amountMerged['promotion_bonus'];
-                        $amountMerged['total_excluding_tax'] = $total;
-                        $amountMerged['total_including_tax'] = $total;
-                        $arrayInfo['amount'] = $amountMerged;
-                        $benefitsOut[] = $arrayInfo;
+        if ($size === 0) {
+            return $benefits;
+        }
+
+        foreach ($promotions as $promotion) {
+            foreach ($promotion->getTerms() as $term) {
+                $temItem = (object)$term;
+                $posUnit = array_search($temItem->unit, array_column($benefits, 'unit'), true);
+                $posUnitType = array_search($temItem->unit_type, array_column($benefits, 'unit_type'), true);
+                $posType = array_search($temItem->type, array_column($benefits, 'type'), true);
+                if (is_numeric($posUnit) && $posUnit === $posUnitType && $posType === $posUnitType) {
+                    $currentBenefit = $benefits[$posUnit];
+                    $base = $currentBenefit['amount']['base'];
+                    $promotionAmount = $currentBenefit['amount']['promotion_bonus'];
+                    $operation = $temItem->amount['operation'];
+                    if ($operation === 'MULTI') {
+                        $promotionAmount = $base * $temItem->amount['promotion_bonus'];
+                    } elseif ($operation === 'ADD') {
+                        $base += $temItem->amount['base'];
+                        $promotionAmount += $temItem->amount['promotion_bonus'];
                     }
+
+                    $total = $base + $promotionAmount;
+                    $currentBenefit['amount']['base'] = $base;
+                    $currentBenefit['amount']['promotion_bonus'] = $promotionAmount;
+                    $currentBenefit['amount']['total_including_tax'] = $total;
+                    $currentBenefit['amount']['total_excluding_tax'] = $total;
+                    $benefitsOut[] = $currentBenefit;
+                } else {
+                    $arrayInfo = array_merge([
+                        'additional_information' => null,
+                        'amount' => [],
+                        'type' => 'CREDITS',
+                        'unit' => 'CUP',
+                        'unit_type' => 'CURRENCY',
+                        'schedule' => [
+                            'start' => null,
+                            'end' => null,
+                        ],
+                    ], $term);
+                    $amountMerged = array_merge([
+                        'base' => 0,
+                        'promotion_bonus' => 0,
+                        'total_excluding_tax' => 0,
+                        'total_including_tax' => 0,
+                    ], $term['amount']);
+                    $total = $amountMerged['base'] + $amountMerged['promotion_bonus'];
+                    $amountMerged['total_excluding_tax'] = $total;
+                    $amountMerged['total_including_tax'] = $total;
+                    $arrayInfo['amount'] = $amountMerged;
+                    $benefitsOut[] = $arrayInfo;
                 }
             }
-        } else {
-            $benefitsOut = $benefits;
         }
 
         return $benefitsOut;
@@ -488,12 +498,14 @@ class CommunicationClientPackage
 
     public function getValidity(): ?array
     {
+        $promotions = $this->upcomingPromotions !== null
+            ? $this->upcomingPromotions
+            : $this->getPromotionItems();
+
         $validityInfo = $this->validity;
-        if ($this->getPromotionItems()->count() > 0) {
-            foreach ($this->getPromotionItems() as $promotion) {
-                if ($promotion instanceof CommunicationPromotions && $promotion->getValidityInfo()) {
-                    $validityInfo = $promotion->getValidityInfo();
-                }
+        foreach ($promotions as $promotion) {
+            if ($promotion instanceof CommunicationPromotions && $promotion->getValidityInfo()) {
+                $validityInfo = $promotion->getValidityInfo();
             }
         }
         return $validityInfo;
