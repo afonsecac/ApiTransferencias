@@ -238,6 +238,7 @@ class CommunicationSaleService extends CommonService
         $recharge->setTransactionId($transactionId);
         $recharge->setAmount($package->getAmount());
         $recharge->setCurrency($package->getCurrency());
+        $recharge->getCalculatePrice();
         try {
             $this->em->persist($recharge);
             $comHistoric = new CommunicationSaleHistory();

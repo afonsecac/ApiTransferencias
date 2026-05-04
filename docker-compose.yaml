@@ -104,6 +104,7 @@ services:
       async_send_sale_package
       async_check_status
       async_send_notification
+      scheduler_default
       --time-limit=3600
       --memory-limit=256M
       -vv

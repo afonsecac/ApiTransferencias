@@ -116,3 +116,14 @@ services:
         limits:
           cpus: "0.5"
           memory: 128M
+
+  worker-scheduler:
+    <<: *worker-base
+    command: >
+      php bin/console messenger:consume scheduler_default
+      --time-limit=3600 --memory-limit=128M -vv
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 128M
