@@ -19,7 +19,6 @@
 </head>
 <body style="margin:0;padding:0;background-color:#f0f0f0;font-family:Arial,Helvetica,sans-serif;-webkit-font-smoothing:antialiased;">
 
-    <!-- Pre-header invisible text -->
     <div style="display:none;max-height:0;overflow:hidden;mso-hide:all;font-size:1px;color:#f0f0f0;line-height:1px;">
         {% block preheader %}{% endblock %}&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;
     </div>
@@ -29,20 +28,20 @@
             <td align="center" style="padding:32px 10px;">
                 <!--[if mso]><table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" align="center"><tr><td><![endif]-->
                 <table role="presentation" class="email-container" width="600" cellpadding="0" cellspacing="0" border="0"
-                       style="background-color:#ffffff;max-width:600px;width:100%;border-collapse:collapse;">
+                       style="background-color:#ffffff;max-width:600px;width:100%;border-collapse:collapse;border-radius:8px;overflow:hidden;">
 
-                    <!-- TOP ACCENT STRIP -->
+                    <!-- DARK HEADER -->
                     <tr>
-                        <td style="background-color:{% block accent_color %}#AF0101{% endblock %};height:5px;font-size:1px;line-height:5px;">&nbsp;</td>
+                        <td align="center" style="background-color:#1e2a3a;padding:18px 40px;">
+                            {% block brand_header %}{% endblock %}
+                        </td>
                     </tr>
 
                     <!-- LOGO AREA -->
-                    <tr>
-                        <td align="center" class="mob-pad"
-                            style="padding:28px 40px 24px 40px;background-color:#ffffff;border-bottom:1px solid #ebebeb;">
-                            {% block logo %}{% endblock %}
-                        </td>
-                    </tr>
+                    {% block logo_area %}{% endblock %}
+
+                    <!-- COLORED BANNER (title + subtitle) -->
+                    {% block banner %}{% endblock %}
 
                     <!-- BODY CONTENT -->
                     <tr>
@@ -51,9 +50,9 @@
                         </td>
                     </tr>
 
-                    <!-- FOOTER -->
+                    <!-- DARK FOOTER -->
                     <tr>
-                        <td style="background-color:{% block footer_bg_color %}#AF0101{% endblock %};padding:24px 40px;">
+                        <td style="background-color:#1e2a3a;padding:20px 40px;">
                             {% block footer %}{% endblock %}
                         </td>
                     </tr>
