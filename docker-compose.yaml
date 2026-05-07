@@ -98,6 +98,7 @@ services:
     volumes:
       - ./:/var/www
     command: >
+      sh -c "until nc -z rabbitmq 5672 2>/dev/null; do sleep 2; done &&
       php bin/console messenger:consume
       async_notifications_high
       async_clients_high
@@ -107,7 +108,7 @@ services:
       scheduler_default
       --time-limit=3600
       --memory-limit=256M
-      -vv
+      -vv"
     environment:
       - APP_ENV=${APP_ENV:-dev}
       - APP_DEBUG=${APP_DEBUG:-1}

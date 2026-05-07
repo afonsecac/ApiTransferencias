@@ -65,8 +65,9 @@ services:
   worker-notifications:
     <<: *worker-base
     command: >
+      sh -c "until nc -z rabbitmq 5672 2>/dev/null; do sleep 2; done &&
       php bin/console messenger:consume async_notifications_high
-      --time-limit=3600 --memory-limit=128M -vv
+      --time-limit=3600 --memory-limit=128M -vv"
     deploy:
       resources:
         limits:
@@ -76,8 +77,9 @@ services:
   worker-clients:
     <<: *worker-base
     command: >
+      sh -c "until nc -z rabbitmq 5672 2>/dev/null; do sleep 2; done &&
       php bin/console messenger:consume async_clients_high
-      --time-limit=3600 --memory-limit=256M -vv
+      --time-limit=3600 --memory-limit=256M -vv"
     deploy:
       resources:
         limits:
@@ -87,8 +89,9 @@ services:
   worker-packages:
     <<: *worker-base
     command: >
+      sh -c "until nc -z rabbitmq 5672 2>/dev/null; do sleep 2; done &&
       php bin/console messenger:consume async_send_sale_package
-      --time-limit=3600 --memory-limit=256M -vv
+      --time-limit=3600 --memory-limit=256M -vv"
     deploy:
       resources:
         limits:
@@ -98,8 +101,9 @@ services:
   worker-check-status:
     <<: *worker-base
     command: >
+      sh -c "until nc -z rabbitmq 5672 2>/dev/null; do sleep 2; done &&
       php bin/console messenger:consume async_check_status
-      --time-limit=3600 --memory-limit=256M -vv
+      --time-limit=3600 --memory-limit=256M -vv"
     deploy:
       resources:
         limits:
@@ -109,8 +113,9 @@ services:
   worker-balance:
     <<: *worker-base
     command: >
+      sh -c "until nc -z rabbitmq 5672 2>/dev/null; do sleep 2; done &&
       php bin/console messenger:consume async_send_notification
-      --time-limit=3600 --memory-limit=128M -vv
+      --time-limit=3600 --memory-limit=128M -vv"
     deploy:
       resources:
         limits:
@@ -120,8 +125,9 @@ services:
   worker-scheduler:
     <<: *worker-base
     command: >
+      sh -c "until nc -z rabbitmq 5672 2>/dev/null; do sleep 2; done &&
       php bin/console messenger:consume scheduler_default
-      --time-limit=3600 --memory-limit=128M -vv
+      --time-limit=3600 --memory-limit=128M -vv"
     deploy:
       resources:
         limits:
