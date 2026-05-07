@@ -1,17 +1,17 @@
 {% extends 'emails/_base.html.twig' %}
 
-{% set brand   = '#AF0101' %}
-{% set alert_bg = status_en == 'CRITICAL' ? '#AF0101' : '#D97706' %}
+{% set brand   = '#E30613' %}
+{% set alert_bg = status_en == 'CRITICAL' ? '#E30613' : '#D97706' %}
 
 {% block title %}Alerta de saldo — Comremit{% endblock %}
 
 {% block preheader %}⚠ Saldo {{ status_es }} en {{ platform }} — {{ balance|round(2, 'floor') }} {{ currency }}{% endblock %}
 
-{% block accent_color %}#AF0101{% endblock %}
-{% block footer_bg_color %}#AF0101{% endblock %}
+{% block accent_color %}#E30613{% endblock %}
+{% block footer_bg_color %}#E30613{% endblock %}
 
 {% block logo %}
-    <img src="https://www.comremit.com/img/comremit.png" alt="Comremit"
+    <img src="{{ absolute_url(asset('comremit.svg')) }}" alt="Comremit"
          width="180" style="display:block;margin:0 auto;max-width:180px;height:auto;border:0;"/>
 {% endblock %}
 
@@ -131,7 +131,7 @@
     <tr>
         <td align="center">
             <a href="mailto:{{ mail }}"
-               style="color:#AF0101;font-size:14px;font-weight:bold;text-decoration:none;font-family:Arial,Helvetica,sans-serif;">
+               style="color:#E30613;font-size:14px;font-weight:bold;text-decoration:none;font-family:Arial,Helvetica,sans-serif;">
                 {{ mail }}
             </a>
         </td>
