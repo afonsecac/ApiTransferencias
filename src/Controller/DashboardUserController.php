@@ -291,6 +291,8 @@ class DashboardUserController extends AbstractController
 
     private function serializeUser(User $user): array
     {
+        $jp = $user->getJobPosition();
+
         return [
             'id' => $user->getId(),
             'email' => $user->getEmail(),
@@ -299,6 +301,12 @@ class DashboardUserController extends AbstractController
             'lastName' => $user->getLastName(),
             'roles' => $user->getRoles(),
             'jobTitle' => $user->getJobTitle(),
+            'jobPosition' => $jp ? [
+                'id'   => $jp->getId(),
+                'code' => $jp->getCode(),
+                'name' => $jp->getName(),
+                'area' => $jp->getArea()?->value,
+            ] : null,
             'phoneNumber' => $user->getPhoneNumber(),
             'isActive' => $user->isActive(),
             'isCheckValidation' => $user->isCheckValidation(),

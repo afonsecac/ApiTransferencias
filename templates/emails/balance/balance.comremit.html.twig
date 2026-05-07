@@ -1,143 +1,169 @@
 {% extends 'emails/_base.html.twig' %}
 
-{% block title %}Balance Alert{% endblock %}
+{% set brand   = '#E30613' %}
+{% set alert_bg = status_en == 'CRITICAL' ? '#E30613' : '#D97706' %}
+
+{% block title %}Alerta de saldo — Comremit{% endblock %}
+
+{% block preheader %}⚠ Saldo {{ status_es }} en {{ platform }} — {{ balance|round(2, 'floor') }} {{ currency }}{% endblock %}
+
+{% block accent_color %}#E30613{% endblock %}
+{% block footer_bg_color %}#E30613{% endblock %}
 
 {% block logo %}
-    <img src="https://www.comremit.com/img/comremit.png" alt="Comremit"
-         width="200" style="display: block; margin: 0 auto; max-width: 200px; height: auto; border: 0;"/>
+    <img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA1ODEuNjggMTQwLjYxIj48ZGVmcz48c3R5bGU+LmNscy0xe2ZpbGw6I2UzMDYxMzt9LmNscy0ye2ZpbGw6IzNjM2MzYjt9PC9zdHlsZT48L2RlZnM+PHRpdGxlPkNvbXJlbWl0X2xvZ28gY29sb3I8L3RpdGxlPjxnIGlkPSJDYXBhXzIiIGRhdGEtbmFtZT0iQ2FwYSAyIj48ZyBpZD0iQ2FwYV8xLTIiIGRhdGEtbmFtZT0iQ2FwYSAxIj48ZWxsaXBzZSBjbGFzcz0iY2xzLTEiIGN4PSIxMTMuNyIgY3k9IjQwLjQiIHJ4PSIxNS4wMiIgcnk9IjE1LjQ2Ii8+PHBhdGggY2xhc3M9ImNscy0yIiBkPSJNMTQ4LjU3LDgxLjUxYTQuNzksNC43OSwwLDAsMS0xLjQ5LS4yNGwtMTUtNWEyLDIsMCwwLDAtMS41Ni4xNCw0MC40NCw0MC40NCwwLDEsMSwxNy42Ni0xNy41OCwyLDIsMCwwLDAtLjE1LDEuNTZsNSwxNWE0LjY5LDQuNjksMCwwLDEtNC40Miw2LjE2Wm0tMTcuMTQtOGE0LjczLDQuNzMsMCwwLDEsMS40NC4yNGwxNSw1YTIsMiwwLDAsMCwyLjEyLS41LDIsMiwwLDAsMCwuNDktMi4xMWwtNS0xNWE0LjYxLDQuNjEsMCwwLDEsLjI5LTMuNTgsMzcuNzcsMzcuNzcsMCwxLDAtNzAuNjctOS45MWgwQTM3Ljc0LDM3Ljc0LDAsMCwwLDEyOS4zLDc0LjA2LDQuNzgsNC43OCwwLDAsMSwxMzEuNDMsNzMuNTRaIi8+PHBhdGggY2xhc3M9ImNscy0xIiBkPSJNMCw0Mi4xMnYtLjIxQzAsMjAuNjcsMTYuMzUsNCwzOC40MSw0YzE0Ljg5LDAsMjQuNDcsNi4yNSwzMC45MiwxNS4yTDU0LjEzLDMxYy00LjE2LTUuMi05LTguNTQtMTUuOTItOC41NC0xMC4yLDAtMTcuMzksOC42NS0xNy4zOSwxOS4yNnYuMjFjMCwxMC45Myw3LjE5LDE5LjQ3LDE3LjM5LDE5LjQ3LDcuNiwwLDEyLjA3LTMuNTQsMTYuNDUtOC44NUw2OS44NSw2My4zNkM2Myw3Mi44Myw1My43Miw3OS44MSwzNy41OCw3OS44MSwxNi43Niw3OS44MSwwLDYzLjg4LDAsNDIuMTJaIi8+PHBhdGggY2xhc3M9ImNscy0xIiBkPSJNMTYyLjg3LDUuNDhoMjEuMzVMMjAxLjYsMzMuNjksMjE5LDUuNDhoMjEuMzRWNzguMzVoLTIwLjFWMzYuNUwyMDEuNiw2NWgtLjQyTDE4Mi42NiwzNi43MVY3OC4zNUgxNjIuODdaIi8+PHBhdGggY2xhc3M9ImNscy0xIiBkPSJNMjUzLjIxLDUuNDhoMzQuNDZjMTEuMTQsMCwxOC44NCwyLjkxLDIzLjczLDcuOTEsNC4yNyw0LjE2LDYuNDYsOS43OCw2LjQ2LDE3di4yYzAsMTEuMTQtNS45MywxOC41NC0xNSwyMi4zOWwxNy4zOCwyNS40SDI5Ni45M0wyODIuMjUsNTYuMjhoLTguODRWNzguMzVoLTIwLjJabTMzLjUyLDM1YzYuODcsMCwxMC44My0zLjMzLDEwLjgzLTguNjR2LS4yYzAtNS43My00LjE3LTguNjQtMTAuOTMtOC42NEgyNzMuNDFWNDAuNDVaIi8+PHBhdGggY2xhc3M9ImNscy0xIiBkPSJNMzI4LDUuNDhoNTguNjJWMjIuNjVIMzQ4djExaDM1VjQ5LjYySDM0OFY2MS4xN2gzOS4xNVY3OC4zNUgzMjhaIi8+PHBhdGggY2xhc3M9ImNscy0xIiBkPSJNMzk3LjQ1LDUuNDhoMjEuMzRsMTcuMzksMjguMjFMNDUzLjU2LDUuNDhINDc0LjlWNzguMzVINDU0LjgxVjM2LjVMNDM2LjE4LDY1aC0uNDJMNDE3LjIzLDM2LjcxVjc4LjM1SDM5Ny40NVoiLz48cGF0aCBjbGFzcz0iY2xzLTEiIGQ9Ik00ODguMiw1LjJoMjAuM1Y3OC4zNUg0ODguMloiLz48cGF0aCBjbGFzcz0iY2xzLTEiIGQ9Ik01MzkuNjIsMjMuMTdINTE3Ljc2VjUuNDhoNjMuOTJWMjMuMTdINTU5LjgyVjc4LjM1aC0yMC4yWiIvPjxwYXRoIGNsYXNzPSJjbHMtMiIgZD0iTTE2Mi4zNSwxMzYuMTlsMS41Mi0yLjY0YTIwLjA3LDIwLjA3LDAsMCwwLDEyLjQsNC4xNWM3LjI2LDAsMTAuMTctMi41NywxMC4xNy02LjQ2LDAtMTAtMjIuODMtMi42NC0yMi44My0xNi4xNywwLTUuMjEsNC4zNS05LjQzLDEzLjA2LTkuNDMsNC4zNiwwLDkuMTEsMS4zMiwxMS44MSwzLjM3TDE4NywxMTEuNjVhMTcuNjcsMTcuNjcsMCwwLDAtMTAuMzUtMy4xMWMtNi43NCwwLTkuNywyLjc3LTkuNyw2LjQ3LDAsMTAuMzYsMjIuODIsMywyMi44MiwxNi4xNiwwLDUuNjEtNC44MSw5LjQ0LTEzLjU5LDkuNDRDMTcwLjQ3LDE0MC42MSwxNjUuMDUsMTM4LjY5LDE2Mi4zNSwxMzYuMTlaIi8+PHBhdGggY2xhc3M9ImNscy0yIiBkPSJNMjA4LjM4LDEyMy4xMmMwLTEwLjIyLDcuMzMtMTcuNDgsMTcuMjItMTcuNDhzMTcuMjMsNy4yNiwxNy4yMywxNy40OC03LjMzLDE3LjQ5LTE3LjIzLDE3LjQ5UzIwOC4zOCwxMzMuMzUsMjA4LjM4LDEyMy4xMlptMzEuMDgsMGMwLTguNjQtNS45NC0xNC41MS0xMy44Ni0xNC41MXMtMTMuODUsNS44Ny0xMy44NSwxNC41MSw1LjkzLDE0LjUyLDEzLjg1LDE0LjUyUzIzOS40NiwxMzEuNzcsMjM5LjQ2LDEyMy4xMloiLz48cGF0aCBjbGFzcz0iY2xzLTIiIGQ9Ik0yNjYuMjIsMTMxLjMxVjkxLjM5aDMuM3YzOS41MmMwLDQuNDIsMiw2Ljg2LDYuMDcsNi44NmE4LjgyLDguODIsMCwwLDAsMy4zLS42NmwuMjYsMi43N2ExMS40LDExLjQsMCwwLDEtNCwuNzNDMjY5LjMyLDE0MC42MSwyNjYuMjIsMTM3LjA1LDI2Ni4yMiwxMzEuMzFaIi8+PHBhdGggY2xhc3M9ImNscy0yIiBkPSJNMzI5LjIyLDEwNS45djM0LjQ0aC0zLjE3VjEzM2MtMi4yNCw0LjgyLTYuOTMsNy42Ni0xMyw3LjY2LTguNzcsMC0xNC4zOS01LTE0LjM5LTE0LjU5VjEwNS45SDMwMnYxOS44N2MwLDcuNzgsNC4xNiwxMS44NywxMS4zNSwxMS44Nyw3Ljc5LDAsMTIuNjEtNS4yMSwxMi42MS0xMy4zOVYxMDUuOVoiLz48cGF0aCBjbGFzcz0iY2xzLTIiIGQ9Ik0zNzIuNCwxMzguMTdhMTAuNDMsMTAuNDMsMCwwLDEtNy4wNiwyLjQ0Yy02LjA3LDAtOS4zNy0zLjU2LTkuMzctOS4zN1Y5OC4zOGgzLjN2Ny41MmgxMXYyLjg0aC0xMXYyMi4xN2MwLDQuNDIsMi4xOCw2Ljg2LDYuNCw2Ljg2YTgsOCwwLDAsMCw1LjM1LTEuOTFaIi8+PHBhdGggY2xhc3M9ImNscy0yIiBkPSJNMzkzLjY5LDk0Ljg5YTIuNzMsMi43MywwLDAsMSwyLjcxLTIuNzEsMi42OCwyLjY4LDAsMSwxLTIuNzEsMi43MVptMS4wNiwxMWgzLjN2MzQuNDRoLTMuM1oiLz48cGF0aCBjbGFzcz0iY2xzLTIiIGQ9Ik00MjEuMzksMTIzLjEyYzAtMTAuMjIsNy4zMi0xNy40OCwxNy4yMi0xNy40OHMxNy4yMiw3LjI2LDE3LjIyLDE3LjQ4LTcuMzIsMTcuNDktMTcuMjIsMTcuNDlTNDIxLjM5LDEzMy4zNSw0MjEuMzksMTIzLjEyWm0zMS4wOCwwYzAtOC42NC01Ljk0LTE0LjUxLTEzLjg2LTE0LjUxcy0xMy44NSw1Ljg3LTEzLjg1LDE0LjUxLDUuOTMsMTQuNTIsMTMuODUsMTQuNTJTNDUyLjQ3LDEzMS43Nyw0NTIuNDcsMTIzLjEyWiIvPjxwYXRoIGNsYXNzPSJjbHMtMiIgZD0iTTUxMCwxMjAuMjJ2MjAuMTJoLTMuM1YxMjAuNDhjMC03Ljc4LTQuMTYtMTEuODctMTEuMTUtMTEuODctOC4xMiwwLTEzLjA3LDUuMjEtMTMuMDcsMTMuMzl2MTguMzRoLTMuMjlWMTA1LjloMy4xN3Y3LjQ2YzIuMy00LjgyLDcuMTItNy43MiwxMy42NS03LjcyQzUwNC40MywxMDUuNjQsNTEwLDExMC41OSw1MTAsMTIwLjIyWiIvPjxwYXRoIGNsYXNzPSJjbHMtMiIgZD0iTTUzMS43MSwxMzYuMTlsMS41Mi0yLjY0YTIwLjA4LDIwLjA4LDAsMCwwLDEyLjQxLDQuMTVjNy4yNSwwLDEwLjE2LTIuNTcsMTAuMTYtNi40NiwwLTEwLTIyLjgzLTIuNjQtMjIuODMtMTYuMTcsMC01LjIxLDQuMzYtOS40MywxMy4wNy05LjQzLDQuMzUsMCw5LjEsMS4zMiwxMS44MSwzLjM3bC0xLjUyLDIuNjRBMTcuNywxNy43LDAsMCwwLDU0NiwxMDguNTRjLTYuNzMsMC05LjcsMi43Ny05LjcsNi40NywwLDEwLjM2LDIyLjgzLDMsMjIuODMsMTYuMTYsMCw1LjYxLTQuODIsOS40NC0xMy41OSw5LjQ0QzUzOS44MywxNDAuNjEsNTM0LjQyLDEzOC42OSw1MzEuNzEsMTM2LjE5WiIvPjwvZz48L2c+PC9zdmc+"
+         alt="Comremit" width="180" style="display:block;margin:0 auto;max-width:180px;height:auto;border:0;"/>
 {% endblock %}
 
-{% block accent_color %}rgb(175, 1, 1){% endblock %}
-{% block footer_bg_color %}rgb(175, 1, 1){% endblock %}
-
 {% block content %}
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
-        <!-- Title ES -->
-        <tr>
-            <td align="center" style="font-size: 22px; font-weight: bold; color: rgb(175, 1, 1); padding-bottom: 5px; font-family: Arial, Helvetica, sans-serif;">
-                &iexcl;SALDO EN ESTADO {{ status_es }}!
-            </td>
-        </tr>
-        <!-- Title EN -->
-        <tr>
-            <td align="center" style="font-size: 16px; font-weight: bold; color: #888888; padding-bottom: 25px; font-family: Arial, Helvetica, sans-serif;">
-                {{ status_en }} STATE BALANCE!
-            </td>
-        </tr>
-        <!-- Body ES -->
-        <tr>
-            <td style="font-size: 14px; color: #333333; line-height: 22px; padding-bottom: 8px; font-family: Arial, Helvetica, sans-serif;">
-                Estimado cliente {{ name }}, el motivo de este correo electr&oacute;nico es para ponerlo al tanto del estado de su saldo en nuestra plataforma. Sugerimos realizar un dep&oacute;sito para que sus operaciones no se vean afectadas.
-            </td>
-        </tr>
-        <!-- Body EN -->
-        <tr>
-            <td style="font-size: 14px; color: #888888; line-height: 22px; padding-bottom: 20px; font-family: Arial, Helvetica, sans-serif;">
-                Dear customer {{ name }}, the purpose of this email is to inform you about the status of your balance on our platform. We suggest making a deposit so that your operations are not affected.
-            </td>
-        </tr>
-        <!-- Platform ES -->
-        <tr>
-            <td style="font-size: 14px; color: #333333; line-height: 22px; padding-bottom: 8px; font-family: Arial, Helvetica, sans-serif;">
-                La plataforma que se ver&aacute; afectada para realizar las operaciones ser&aacute; la de {{ platform }}.
-            </td>
-        </tr>
-        <!-- Platform EN -->
-        <tr>
-            <td style="font-size: 14px; color: #888888; line-height: 22px; padding-bottom: 25px; font-family: Arial, Helvetica, sans-serif;">
-                The platform that will be affected to carry out the operations will be {{ platform }}.
-            </td>
-        </tr>
-        <!-- Data Table -->
-        <tr>
-            <td align="center" style="padding-bottom: 25px;">
-                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width: 420px; margin: 0 auto; border: 1px solid #dddddd; border-collapse: collapse;">
-                    <!-- Row: Balance -->
-                    <tr>
-                        <td style="background-color: #f8f8f8; padding: 12px 15px; font-size: 13px; font-weight: bold; color: rgb(175, 1, 1); border-bottom: 1px solid #dddddd; width: 50%; font-family: Arial, Helvetica, sans-serif;">
-                            Saldo Actual / Current Amount
-                        </td>
-                        <td style="background-color: #f8f8f8; padding: 12px 15px; font-size: 14px; color: #333333; border-bottom: 1px solid #dddddd; font-family: Arial, Helvetica, sans-serif;">
-                            {{ balance | round(2, 'floor') }}
-                        </td>
-                    </tr>
-                    <!-- Row: Currency -->
-                    <tr>
-                        <td style="padding: 12px 15px; font-size: 13px; font-weight: bold; color: rgb(175, 1, 1); border-bottom: 1px solid #dddddd; font-family: Arial, Helvetica, sans-serif;">
-                            Moneda / Currency
-                        </td>
-                        <td style="padding: 12px 15px; font-size: 14px; color: #333333; border-bottom: 1px solid #dddddd; font-family: Arial, Helvetica, sans-serif;">
-                            {{ currency }}
-                        </td>
-                    </tr>
-                    <!-- Row: Date -->
-                    <tr>
-                        <td style="background-color: #f8f8f8; padding: 12px 15px; font-size: 13px; font-weight: bold; color: rgb(175, 1, 1); font-family: Arial, Helvetica, sans-serif;">
-                            Fecha / Date
-                        </td>
-                        <td style="background-color: #f8f8f8; padding: 12px 15px; font-size: 14px; color: #333333; font-family: Arial, Helvetica, sans-serif;">
-                            {{ 'now' | date('d/m/Y') }}
-                        </td>
-                    </tr>
-                </table>
-            </td>
-        </tr>
-        <!-- Divider -->
-        <tr>
-            <td style="padding-bottom: 20px;">
-                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
-                    <tr>
-                        <td style="border-top: 1px solid #dddddd; font-size: 1px; line-height: 1px;">&nbsp;</td>
-                    </tr>
-                </table>
-            </td>
-        </tr>
-        <!-- Thank you -->
-        <tr>
-            <td align="center" style="font-size: 14px; font-weight: bold; color: #333333; padding-bottom: 10px; font-family: Arial, Helvetica, sans-serif;">
-                &iexcl;Muchas gracias por elegirnos!
-            </td>
-        </tr>
-        <!-- Contact label -->
-        <tr>
-            <td align="center" style="font-size: 13px; color: #666666; padding-bottom: 5px; font-family: Arial, Helvetica, sans-serif;">
-                Cont&aacute;ctenos a / Contact us at
-            </td>
-        </tr>
-        <!-- Contact email -->
-        <tr>
-            <td align="center" style="padding-bottom: 5px;">
-                <a href="mailto:{{ mail }}" style="color: rgb(175, 1, 1); font-size: 14px; font-weight: bold; text-decoration: underline; font-family: Arial, Helvetica, sans-serif;">
-                    {{ mail }}
-                </a>
-            </td>
-        </tr>
-    </table>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+
+    <!-- ALERT BANNER -->
+    <tr>
+        <td style="padding-bottom:28px;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                    <td align="center"
+                        style="background-color:{{ alert_bg }};padding:16px 24px;border-radius:4px;">
+                        <span style="color:#ffffff;font-size:11px;font-weight:bold;letter-spacing:2px;text-transform:uppercase;font-family:Arial,Helvetica,sans-serif;">
+                            &#9888;&#xFE0E;&nbsp;&nbsp;SALDO EN ESTADO {{ status_es }}&nbsp;&nbsp;&bull;&nbsp;&nbsp;{{ status_en }} BALANCE
+                        </span>
+                    </td>
+                </tr>
+            </table>
+        </td>
+    </tr>
+
+    <!-- GREETING + MESSAGE ES -->
+    <tr>
+        <td style="font-size:14px;color:#1a1a1a;line-height:24px;padding-bottom:6px;font-family:Arial,Helvetica,sans-serif;">
+            Estimado cliente <strong>{{ name }}</strong>,<br/>
+            el saldo de su cuenta en la plataforma <strong>{{ platform }}</strong> ha alcanzado un nivel
+            <strong style="color:{{ alert_bg }};">{{ status_es|lower }}</strong>.
+            Le recomendamos realizar un dep&oacute;sito para evitar interrupciones en sus operaciones.
+        </td>
+    </tr>
+
+    <!-- MESSAGE EN -->
+    <tr>
+        <td style="font-size:13px;color:#888888;line-height:22px;padding-bottom:28px;font-family:Arial,Helvetica,sans-serif;">
+            Dear <strong>{{ name }}</strong>, your account balance on the <strong>{{ platform }}</strong> platform
+            has reached a <strong>{{ status_en|lower }}</strong> level.
+            We recommend making a deposit to avoid service interruptions.
+        </td>
+    </tr>
+
+    <!-- DATA CARD -->
+    <tr>
+        <td style="padding-bottom:28px;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+                   style="border:1px solid #e0e0e0;border-collapse:collapse;border-radius:4px;">
+
+                <!-- Amount row — highlighted -->
+                <tr>
+                    <td style="background-color:#fafafa;padding:14px 18px;font-size:12px;font-weight:bold;
+                                color:#666666;text-transform:uppercase;letter-spacing:0.5px;
+                                border-bottom:1px solid #e0e0e0;width:45%;
+                                font-family:Arial,Helvetica,sans-serif;">
+                        Saldo Actual<br/>
+                        <span style="font-weight:normal;text-transform:none;letter-spacing:0;">Current Balance</span>
+                    </td>
+                    <td style="background-color:#fafafa;padding:14px 18px;font-size:22px;font-weight:bold;
+                                color:{{ alert_bg }};border-bottom:1px solid #e0e0e0;
+                                font-family:Arial,Helvetica,sans-serif;">
+                        {{ balance|number_format(2, '.', ',') }}&nbsp;<span style="font-size:14px;color:#888888;">{{ currency }}</span>
+                    </td>
+                </tr>
+
+                <!-- Platform row -->
+                <tr>
+                    <td style="padding:12px 18px;font-size:12px;font-weight:bold;color:#666666;
+                                text-transform:uppercase;letter-spacing:0.5px;
+                                border-bottom:1px solid #e0e0e0;
+                                font-family:Arial,Helvetica,sans-serif;">
+                        Plataforma<br/>
+                        <span style="font-weight:normal;text-transform:none;letter-spacing:0;">Platform</span>
+                    </td>
+                    <td style="padding:12px 18px;font-size:14px;color:#1a1a1a;
+                                border-bottom:1px solid #e0e0e0;
+                                font-family:Arial,Helvetica,sans-serif;">
+                        {{ platform }}
+                    </td>
+                </tr>
+
+                <!-- Date row -->
+                <tr>
+                    <td style="background-color:#fafafa;padding:12px 18px;font-size:12px;font-weight:bold;
+                                color:#666666;text-transform:uppercase;letter-spacing:0.5px;
+                                font-family:Arial,Helvetica,sans-serif;">
+                        Fecha / Date
+                    </td>
+                    <td style="background-color:#fafafa;padding:12px 18px;font-size:14px;color:#1a1a1a;
+                                font-family:Arial,Helvetica,sans-serif;">
+                        {{ 'now'|date('d/m/Y H:i') }} (UTC)
+                    </td>
+                </tr>
+
+            </table>
+        </td>
+    </tr>
+
+    <!-- SEPARATOR -->
+    <tr>
+        <td style="padding-bottom:20px;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr><td style="border-top:1px solid #e0e0e0;font-size:1px;line-height:1px;">&nbsp;</td></tr>
+            </table>
+        </td>
+    </tr>
+
+    <!-- CONTACT -->
+    <tr>
+        <td align="center" style="font-size:13px;color:#666666;padding-bottom:6px;font-family:Arial,Helvetica,sans-serif;">
+            &iexcl;Gracias por confiar en nosotros! &mdash; Thank you for trusting us!
+        </td>
+    </tr>
+    <tr>
+        <td align="center" style="font-size:13px;color:#888888;padding-bottom:4px;font-family:Arial,Helvetica,sans-serif;">
+            Cont&aacute;ctenos / Contact us
+        </td>
+    </tr>
+    <tr>
+        <td align="center">
+            <a href="mailto:{{ mail }}"
+               style="color:#E30613;font-size:14px;font-weight:bold;text-decoration:none;font-family:Arial,Helvetica,sans-serif;">
+                {{ mail }}
+            </a>
+        </td>
+    </tr>
+
+</table>
 {% endblock %}
 
 {% block footer %}
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
-        <tr>
-            <td align="center" style="color: #ffffff; font-size: 14px; font-weight: bold; padding-bottom: 8px; font-family: Arial, Helvetica, sans-serif;">
-                Comremit Solutions SL
-            </td>
-        </tr>
-        <tr>
-            <td align="center" style="color: rgba(255,255,255,0.85); font-size: 12px; line-height: 18px; padding-bottom: 5px; font-family: Arial, Helvetica, sans-serif;">
-                Pasaje del Carme, 24, Sant Cugat del Vall&eacute;s, 08173. Barcelona, Espa&ntilde;a
-            </td>
-        </tr>
-        <tr>
-            <td align="center" style="color: rgba(255,255,255,0.85); font-size: 12px; padding-bottom: 8px; font-family: Arial, Helvetica, sans-serif;">
-                CIF: B10583565
-            </td>
-        </tr>
-        <tr>
-            <td align="center">
-                <a href="https://dashboard.comremit.com" style="color: #ffffff; font-size: 12px; text-decoration: underline; font-family: Arial, Helvetica, sans-serif;">
-                    dashboard.comremit.com
-                </a>
-            </td>
-        </tr>
-    </table>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+    <tr>
+        <td align="center" style="color:#ffffff;font-size:14px;font-weight:bold;padding-bottom:6px;font-family:Arial,Helvetica,sans-serif;">
+            Comremit Solutions SL
+        </td>
+    </tr>
+    <tr>
+        <td align="center" style="color:rgba(255,255,255,0.8);font-size:12px;line-height:18px;padding-bottom:4px;font-family:Arial,Helvetica,sans-serif;">
+            Pasaje del Carme, 24 &mdash; Sant Cugat del Vall&eacute;s, 08173 &mdash; Barcelona, Espa&ntilde;a
+        </td>
+    </tr>
+    <tr>
+        <td align="center" style="color:rgba(255,255,255,0.6);font-size:11px;padding-bottom:10px;font-family:Arial,Helvetica,sans-serif;">
+            CIF: B10583565
+        </td>
+    </tr>
+    <tr>
+        <td align="center">
+            <a href="https://dashboard.comremit.com"
+               style="color:rgba(255,255,255,0.9);font-size:12px;text-decoration:underline;font-family:Arial,Helvetica,sans-serif;">
+                dashboard.comremit.com
+            </a>
+        </td>
+    </tr>
+</table>
 {% endblock %}

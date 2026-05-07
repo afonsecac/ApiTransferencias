@@ -35,6 +35,8 @@ class CreateUserDto implements IInput
     #[Assert\Length(max: 20)]
     protected ?string $phoneNumber;
 
+    protected ?int $jobPositionId;
+
     public function __construct(
         ?string $email = null,
         ?string $firstName = null,
@@ -45,16 +47,18 @@ class CreateUserDto implements IInput
         ?string $middleName = null,
         ?string $jobTitle = null,
         ?string $phoneNumber = null,
+        ?int $jobPositionId = null,
     ) {
-        $this->email       = $email;
-        $this->firstName   = $firstName;
-        $this->lastName    = $lastName;
-        $this->password    = $password;
-        $this->role        = $role;
-        $this->companyId   = $companyId;
-        $this->middleName  = $middleName;
-        $this->jobTitle    = $jobTitle;
-        $this->phoneNumber = $phoneNumber;
+        $this->email          = $email;
+        $this->firstName      = $firstName;
+        $this->lastName       = $lastName;
+        $this->password       = $password;
+        $this->role           = $role;
+        $this->companyId      = $companyId;
+        $this->middleName     = $middleName;
+        $this->jobTitle       = $jobTitle;
+        $this->phoneNumber    = $phoneNumber;
+        $this->jobPositionId  = $jobPositionId;
     }
 
     public function getEmail(): ?string { return $this->email; }
@@ -83,4 +87,7 @@ class CreateUserDto implements IInput
 
     public function getPhoneNumber(): ?string { return $this->phoneNumber; }
     public function setPhoneNumber(?string $v): void { $this->phoneNumber = $v; }
+
+    public function getJobPositionId(): ?int { return $this->jobPositionId; }
+    public function setJobPositionId(?int $v): void { $this->jobPositionId = $v; }
 }
