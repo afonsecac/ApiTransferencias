@@ -40,6 +40,24 @@ class BalanceMessageHandler
             $contractWith = $client->getContractWith() ?? 'comremit';
             $emailContact = $contractWith === 'comremit' ? 'administrador@comremit.com' : 'support@sendmundo.com';
 
+            // Destinatarios: email general del cliente + usuarios del área financiera del mismo cliente
+            $recipients = [];
+            if ($client->getCompanyEmail()) {
+                $recipients[] = new Address($client->getCompanyEmail(), $client->getCompanyName());
+            }
+
+            $financeUsers = $this->getFinanceUsers((int) $client->getId());
+            foreach ($financeUsers as $user) {
+                if ($user->getEmail() && $user->isActive()) {
+                    $fullName = trim($user->getFirstName() . ' ' . $user->getLastName());
+                    $recipients[] = new Address($user->getEmail(), $fullName);
+                }
+            }
+
+            if (empty($recipients)) {
+                return;
+            }
+
             $this->logger->info("The send notification to low balance");
 
             $context = [
@@ -59,24 +77,6 @@ class BalanceMessageHandler
                 ->htmlTemplate('emails/balance/balance.' . $contractWith . '.html.twig')
                 ->context($context)
                 ->text('The balance mail');
-
-            // Destinatarios: email general del cliente + usuarios del área financiera del mismo cliente
-            $recipients = [];
-            if ($client->getCompanyEmail()) {
-                $recipients[] = new Address($client->getCompanyEmail(), $client->getCompanyName());
-            }
-
-            $financeUsers = $this->getFinanceUsers((int) $client->getId());
-            foreach ($financeUsers as $user) {
-                if ($user->getEmail() && $user->isActive()) {
-                    $fullName = trim($user->getFirstName() . ' ' . $user->getLastName());
-                    $recipients[] = new Address($user->getEmail(), $fullName);
-                }
-            }
-
-            if (empty($recipients)) {
-                return;
-            }
 
             $firstRecipient = array_shift($recipients);
             $mail->to($firstRecipient);

@@ -5,8 +5,10 @@ namespace App\Tests\MessageHandler;
 use App\Entity\Account;
 use App\Entity\Client;
 use App\Entity\Environment;
+use App\Enums\JobPositionAreaEnum;
 use App\Message\BalanceMessage;
 use App\MessageHandler\BalanceMessageHandler;
+use App\Repository\JobPositionRepository;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\EntityRepository;
 use PHPUnit\Framework\MockObject\MockObject;
@@ -25,6 +27,7 @@ class BalanceMessageHandlerTest extends TestCase
     private MailerInterface&MockObject $mailer;
     private LoggerInterface&MockObject $logger;
     private ParameterBagInterface&MockObject $parameterBag;
+    private JobPositionRepository&MockObject $jobPositionRepository;
     private BalanceMessageHandler $handler;
 
     protected function setUp(): void
@@ -33,12 +36,17 @@ class BalanceMessageHandlerTest extends TestCase
         $this->mailer = $this->createMock(MailerInterface::class);
         $this->logger = $this->createMock(LoggerInterface::class);
         $this->parameterBag = $this->createMock(ParameterBagInterface::class);
+        $this->jobPositionRepository = $this->createMock(JobPositionRepository::class);
+        $this->jobPositionRepository->method('findByArea')
+            ->with(JobPositionAreaEnum::FINANCE)
+            ->willReturn([]);
 
         $this->handler = new BalanceMessageHandler(
             $this->em,
             $this->mailer,
             $this->logger,
             $this->parameterBag,
+            $this->jobPositionRepository,
         );
     }
 
