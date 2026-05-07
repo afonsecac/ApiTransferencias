@@ -31,6 +31,8 @@ class UpdateUserDto implements IInput
 
     protected ?int $companyId;
 
+    protected ?int $jobPositionId;
+
     public function __construct(
         ?string $email = null,
         ?string $firstName = null,
@@ -41,16 +43,18 @@ class UpdateUserDto implements IInput
         ?string $role = null,
         ?string $password = null,
         ?int $companyId = null,
+        ?int $jobPositionId = null,
     ) {
-        $this->email       = $email;
-        $this->firstName   = $firstName;
-        $this->lastName    = $lastName;
-        $this->middleName  = $middleName;
-        $this->jobTitle    = $jobTitle;
-        $this->phoneNumber = $phoneNumber;
-        $this->role        = $role;
-        $this->password    = $password;
-        $this->companyId   = $companyId;
+        $this->email         = $email;
+        $this->firstName     = $firstName;
+        $this->lastName      = $lastName;
+        $this->middleName    = $middleName;
+        $this->jobTitle      = $jobTitle;
+        $this->phoneNumber   = $phoneNumber;
+        $this->role          = $role;
+        $this->password      = $password;
+        $this->companyId     = $companyId;
+        $this->jobPositionId = $jobPositionId;
     }
 
     public function getEmail(): ?string { return $this->email; }
@@ -79,4 +83,7 @@ class UpdateUserDto implements IInput
 
     public function getCompanyId(): ?int { return $this->companyId; }
     public function setCompanyId(?int $v): void { $this->companyId = $v; }
+
+    public function getJobPositionId(): ?int { return $this->jobPositionId; }
+    public function setJobPositionId(?int $v): void { $this->jobPositionId = $v; }
 }

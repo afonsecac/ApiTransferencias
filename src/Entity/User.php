@@ -99,6 +99,11 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface, IInput
     #[ORM\Column(length: 2, nullable: true)]
     private ?string $langPreference = null;
 
+    #[ORM\ManyToOne]
+    #[ORM\JoinColumn(nullable: true)]
+    #[Groups(['profile', 'user:job_position'])]
+    private ?JobPosition $jobPosition = null;
+
     public function __construct()
     {
         $this->historicPasswords = new ArrayCollection();
@@ -445,6 +450,18 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface, IInput
     public function setLangPreference(?string $langPreference): static
     {
         $this->langPreference = $langPreference;
+
+        return $this;
+    }
+
+    public function getJobPosition(): ?JobPosition
+    {
+        return $this->jobPosition;
+    }
+
+    public function setJobPosition(?JobPosition $jobPosition): static
+    {
+        $this->jobPosition = $jobPosition;
 
         return $this;
     }

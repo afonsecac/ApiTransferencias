@@ -66,11 +66,14 @@ class DashboardSalesController extends AbstractController
             $qb->andWhere('s INSTANCE OF App\Entity\CommunicationSalePackage');
         }
 
-        // Filtro por client id — admins pueden filtrar por cualquier cliente; el resto solo ve el suyo
+        // Filtro por client id / account id — admins pueden filtrar por cualquier cliente o cuenta; el resto solo ve el suyo
         $clientId = $request->query->get('clientId');
+        $accountId = $request->query->get('accountId');
         $user = $this->getUser();
         if ($this->isGranted('ROLE_ADMIN')) {
-            if (!empty($clientId)) {
+            if (!empty($accountId)) {
+                $qb->andWhere('a.id = :accountId')->setParameter('accountId', $accountId);
+            } elseif (!empty($clientId)) {
                 $qb->andWhere('c.id = :clientId')->setParameter('clientId', $clientId);
             }
         } elseif ($user instanceof User && $user->getCompany() !== null) {

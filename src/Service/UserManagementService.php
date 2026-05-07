@@ -5,6 +5,7 @@ namespace App\Service;
 use App\DTO\CreateUserDto;
 use App\DTO\UpdateUserDto;
 use App\Entity\Client;
+use App\Entity\JobPosition;
 use App\Entity\User;
 use App\Exception\MyCurrentException;
 use Doctrine\ORM\EntityManagerInterface;
@@ -52,6 +53,13 @@ class UserManagementService
         if ($dto->getPhoneNumber() !== null) {
             $user->setPhoneNumber(mb_substr($dto->getPhoneNumber(), 0, 20));
         }
+        if ($dto->getJobPositionId() !== null) {
+            $jobPosition = $this->em->getRepository(JobPosition::class)->find($dto->getJobPositionId());
+            if ($jobPosition === null) {
+                throw new MyCurrentException('JOB_POSITION_NOT_FOUND', 'Job position not found', 404);
+            }
+            $user->setJobPosition($jobPosition);
+        }
 
         $this->em->persist($user);
         $this->em->flush();
@@ -96,6 +104,17 @@ class UserManagementService
             $client = $this->em->getRepository(Client::class)->find($dto->getCompanyId());
             if ($client !== null) {
                 $user->setCompany($client);
+            }
+        }
+        if ($dto->getJobPositionId() !== null) {
+            if ($dto->getJobPositionId() === 0) {
+                $user->setJobPosition(null);
+            } else {
+                $jobPosition = $this->em->getRepository(JobPosition::class)->find($dto->getJobPositionId());
+                if ($jobPosition === null) {
+                    throw new MyCurrentException('JOB_POSITION_NOT_FOUND', 'Job position not found', 404);
+                }
+                $user->setJobPosition($jobPosition);
             }
         }
 
