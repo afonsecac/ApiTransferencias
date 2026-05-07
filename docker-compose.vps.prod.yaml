@@ -35,6 +35,20 @@ x-worker-base: &worker-base
     - app
 
 services:
+  # Configuración de replicación lógica — activa durante la ventana de migración (Fases 3-8).
+  # El puerto 10.8.0.2:5432 expone PostgreSQL en la interfaz WireGuard para que Nodo A
+  # pueda suscribirse.  Eliminar esta sección en la Fase 9 (desmantelamiento).
+  database:
+    command: >
+      postgres
+      -c wal_level=logical
+      -c max_wal_senders=10
+      -c max_replication_slots=10
+      -c max_logical_replication_workers=8
+      -c track_commit_timestamp=on
+    ports:
+      - "10.8.0.2:5432:5432"
+
   php-fpm:
     build:
       target: app
@@ -65,7 +79,7 @@ services:
   worker-notifications:
     <<: *worker-base
     command: >
-      sh -c "until nc -z rabbitmq 5672 2>/dev/null; do sleep 2; done &&
+      sh -c "until nc -z rabbitmq 15672 2>/dev/null; do sleep 2; done &&
       php bin/console messenger:consume async_notifications_high
       --time-limit=3600 --memory-limit=128M -vv"
     deploy:
@@ -77,7 +91,7 @@ services:
   worker-clients:
     <<: *worker-base
     command: >
-      sh -c "until nc -z rabbitmq 5672 2>/dev/null; do sleep 2; done &&
+      sh -c "until nc -z rabbitmq 15672 2>/dev/null; do sleep 2; done &&
       php bin/console messenger:consume async_clients_high
       --time-limit=3600 --memory-limit=256M -vv"
     deploy:
@@ -89,7 +103,7 @@ services:
   worker-packages:
     <<: *worker-base
     command: >
-      sh -c "until nc -z rabbitmq 5672 2>/dev/null; do sleep 2; done &&
+      sh -c "until nc -z rabbitmq 15672 2>/dev/null; do sleep 2; done &&
       php bin/console messenger:consume async_send_sale_package
       --time-limit=3600 --memory-limit=256M -vv"
     deploy:
@@ -101,7 +115,7 @@ services:
   worker-check-status:
     <<: *worker-base
     command: >
-      sh -c "until nc -z rabbitmq 5672 2>/dev/null; do sleep 2; done &&
+      sh -c "until nc -z rabbitmq 15672 2>/dev/null; do sleep 2; done &&
       php bin/console messenger:consume async_check_status
       --time-limit=3600 --memory-limit=256M -vv"
     deploy:
@@ -113,7 +127,7 @@ services:
   worker-balance:
     <<: *worker-base
     command: >
-      sh -c "until nc -z rabbitmq 5672 2>/dev/null; do sleep 2; done &&
+      sh -c "until nc -z rabbitmq 15672 2>/dev/null; do sleep 2; done &&
       php bin/console messenger:consume async_send_notification
       --time-limit=3600 --memory-limit=128M -vv"
     deploy:
@@ -125,7 +139,7 @@ services:
   worker-scheduler:
     <<: *worker-base
     command: >
-      sh -c "until nc -z rabbitmq 5672 2>/dev/null; do sleep 2; done &&
+      sh -c "until nc -z rabbitmq 15672 2>/dev/null; do sleep 2; done &&
       php bin/console messenger:consume scheduler_default
       --time-limit=3600 --memory-limit=128M -vv"
     deploy:

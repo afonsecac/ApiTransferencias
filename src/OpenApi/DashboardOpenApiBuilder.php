@@ -121,7 +121,10 @@ final class DashboardOpenApiBuilder
         $tag = $attr->tag ?? $this->inferTag($path);
         $summary = $attr->summary ?? $this->inferSummary($httpMethod, $path);
 
-        $parameters = $this->buildPathParameters($path, $route);
+        $parameters = [
+            ...$this->buildPathParameters($path, $route),
+            ...$this->buildQueryParameters($httpMethod, $reflMethod),
+        ];
 
         $requestBody = null;
         if (in_array(strtoupper($httpMethod), self::BODY_METHODS)) {
@@ -161,6 +164,52 @@ final class DashboardOpenApiBuilder
                 description: '',
                 required: true,
                 schema: ['type' => $type],
+            );
+        }
+
+        return $params;
+    }
+
+    private function buildQueryParameters(string $httpMethod, \ReflectionMethod $reflMethod): array
+    {
+        $params = [];
+
+        foreach ($reflMethod->getParameters() as $param) {
+            $mapAttr = $param->getAttributes(\Symfony\Component\HttpKernel\Attribute\MapQueryParameter::class);
+            if (empty($mapAttr)) {
+                continue;
+            }
+
+            $attrInstance = $mapAttr[0]->newInstance();
+            $name = $attrInstance->name ?? $param->getName();
+            $required = !$param->isOptional() && !$param->isDefaultValueAvailable();
+
+            $type = $param->getType();
+            $typeName = $type instanceof \ReflectionNamedType ? $type->getName() : 'string';
+            $nullable = $type instanceof \ReflectionNamedType && $type->allowsNull();
+
+            $oaType = match ($typeName) {
+                'int'   => 'integer',
+                'float' => 'number',
+                'bool'  => 'boolean',
+                'array' => 'array',
+                default => 'string',
+            };
+
+            $schema = $oaType === 'array'
+                ? ['type' => 'object', 'additionalProperties' => true]
+                : ['type' => $oaType];
+
+            if ($nullable || $param->isDefaultValueAvailable()) {
+                $schema['nullable'] = true;
+            }
+
+            $params[] = new Parameter(
+                name: $name,
+                in: 'query',
+                description: '',
+                required: $required,
+                schema: $schema,
             );
         }
 
@@ -216,6 +265,27 @@ final class DashboardOpenApiBuilder
 
         $responseDto = $attr->responseDto;
         $itemDto = $attr->itemDto;
+
+        if ($attr->responseIsFile) {
+            $responses = [
+                $statusCode => new Response(
+                    description: 'Archivo descargable',
+                    content: new \ArrayObject([
+                        'application/vnd.ms-excel' => new MediaType(
+                            schema: new \ArrayObject(['type' => 'string', 'format' => 'binary']),
+                        ),
+                    ]),
+                ),
+                '401' => new Response(description: 'No autenticado'),
+                '403' => new Response(description: 'Sin permisos'),
+            ];
+
+            if (str_contains($path, '{')) {
+                $responses['404'] = new Response(description: 'No encontrado');
+            }
+
+            return $responses;
+        }
 
         if ($responseDto !== null && class_exists($responseDto)) {
             $this->reflector->resetVisited();
