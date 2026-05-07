@@ -4,6 +4,8 @@ namespace App\Service;
 
 use App\DTO\AccountBalanceDto;
 use App\DTO\BalanceInDto;
+use App\DTO\Out\ExportOperationItemOutDto;
+use App\DTO\Out\ExportResultOutDto;
 use App\DTO\PaginationResult;
 use App\Entity\Account;
 use App\Entity\BalanceOperation;
@@ -432,11 +434,7 @@ class BalanceService extends CommonService
         $this->em->persist($notification);
     }
 
-    /**
-     * @param int $accountId
-     * @return array
-     */
-    public function exportToExcel(int $accountId): array
+    public function exportToExcel(int $accountId): ExportResultOutDto
     {
         $user = $this->security->getUser();
         if (!$user instanceof User) {
@@ -463,70 +461,75 @@ class BalanceService extends CommonService
         $balanceRepo = $this->em->getRepository(BalanceOperation::class);
         $lastMarked = $balanceRepo->getLastMarkedAsReported($accountId);
         $previousAmount = $balanceRepo->getPreviousAmount($accountId);
-        $arrayToExcelExport = [];
-        $opItems = [];
+
+        /** @var ExportOperationItemOutDto[] $items */
+        $items = [];
+
         if (!is_null($lastMarked)) {
-            $arrayToExcelExport[] = [
-                'id' => $lastMarked->getId(),
-                'amount' => round($previousAmount, 2),
-                'currency' => $lastMarked->getCurrency(),
-                'operation_type' => 'SALDO ANTERIOR',
-                'date' => $lastMarked->getCreatedAt()?->format('c'),
-                'phone' => '',
-                'system_reference' => '',
-                'client_reference' => '',
-                'legacy_reference' => '',
-                'package' => '',
-            ];
+            $prev = new ExportOperationItemOutDto();
+            $prev->id = $lastMarked->getId();
+            $prev->amount = round($previousAmount, 2);
+            $prev->currency = $lastMarked->getCurrency();
+            $prev->operation_type = 'SALDO ANTERIOR';
+            $prev->date = $lastMarked->getCreatedAt()?->format('c');
+            $items[] = $prev;
         }
+
         $operations = $balanceRepo->filterNoMarkedTransactions($accountId);
         $currentTime = new \DateTimeImmutable('now');
         $lastId = null;
-        foreach ($operations as $key => $operation) {
+
+        foreach ($operations as $operation) {
             $operation->setMarkAsReported(true);
             $operation->setReportedDateAt($currentTime);
-            $phone = '';
-            if ($operation->getOperationType(
-                ) === BalanceOperationEnum::DEBIT->value && $operation->getCommunicationSale()) {
+
+            $phone = null;
+            if ($operation->getOperationType() === BalanceOperationEnum::DEBIT->value
+                && $operation->getCommunicationSale()
+            ) {
                 $comSaleRecharge = $this->em->getRepository(CommunicationSaleRecharge::class)->find(
                     $operation->getCommunicationSale()->getId()
                 );
                 $phone = $comSaleRecharge?->getPhoneNumber();
             }
-            $opItems[] = [
-                'id' => $operation->getId(),
-                'amount' => round($operation->getTotalAmount(), 2),
-                'currency' => $operation->getTotalCurrency(),
-                'operation_type' => $operation->getOperationType(),
-                'date' => $operation->getCreatedAt()?->format('c'),
-                'phone' => $phone,
-                'system_reference' => $operation->getCommunicationSale()?->getId(),
-                'client_reference' => $operation->getCommunicationSale()?->getClientTransactionId(),
-                'legacy_reference' => $operation->getCommunicationSale()?->getTransactionId(),
-                'package' => $operation->getCommunicationSale()?->getPackage()?->getName(),
-            ];
-            $operation->setMarkAsReported(true);
-            $operation->setReportedDateAt($currentTime);
+
+            $item = new ExportOperationItemOutDto();
+            $item->id = $operation->getId();
+            $item->amount = round($operation->getTotalAmount(), 2);
+            $item->currency = $operation->getTotalCurrency();
+            $item->operation_type = $operation->getOperationType();
+            $item->date = $operation->getCreatedAt()?->format('c');
+            $item->phone = $phone;
+            $item->system_reference = $operation->getCommunicationSale()?->getId();
+            $item->client_reference = $operation->getCommunicationSale()?->getClientTransactionId();
+            $item->legacy_reference = $operation->getCommunicationSale()?->getTransactionId();
+            $item->package = $operation->getCommunicationSale()?->getPackage()?->getName();
+            $items[] = $item;
+
             $lastId = $operation->getId();
         }
-        $arrayToExcelExport = array_merge($arrayToExcelExport, $opItems);
-        $name = 'Report_'.$currentTime->format('c').'_'.$account?->getEnvironment()?->getType();
-        $arrayResponse = [
-            'name' => $name.'.csv',
-            'operations' => $arrayToExcelExport,
-        ];
+
+        $name = 'Report_' . $currentTime->format('c') . '_' . $account?->getEnvironment()?->getType();
+
+        $result = new ExportResultOutDto();
+        $result->name = $name . '.csv';
+        $result->operations = $items;
+
         if (!is_null($lastId)) {
             $report = new ReportMarked();
             $report->setAccount($account);
             $report->setClient($account?->getClient());
             $report->setCreatedAt($currentTime);
             $report->setName($name);
-            $report->setDataArray($arrayResponse);
+            $report->setDataArray(['name' => $result->name, 'operations' => array_map(
+                fn(ExportOperationItemOutDto $o) => (array) $o,
+                $items
+            )]);
             $report->setLastOperationMarked($lastId);
             $this->em->persist($report);
             $this->em->flush();
         }
 
-        return $arrayResponse;
+        return $result;
     }
 }

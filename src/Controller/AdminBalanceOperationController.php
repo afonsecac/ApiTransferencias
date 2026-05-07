@@ -4,7 +4,6 @@ namespace App\Controller;
 
 use App\DTO\BalanceInDto;
 use App\DTO\Out\BalanceOperationOutDto;
-use App\DTO\Out\ExportResultOutDto;
 use App\DTO\Out\PaginatedTotalOutDto;
 use App\OpenApi\Attribute\DashboardEndpoint;
 use App\Service\BalanceService;
@@ -111,20 +110,29 @@ class AdminBalanceOperationController extends AbstractController
     }
 
     #[Route("/export", name: 'admin_balance_operation_export', methods: ['GET'])]
-    #[DashboardEndpoint(summary: 'Exportar operaciones de balance', tag: 'Balance Operations', responseDto: ExportResultOutDto::class)]
+    #[DashboardEndpoint(summary: 'Exportar operaciones de balance', tag: 'Balance Operations', responseIsFile: true)]
     public function exportBalance(
         #[MapQueryParameter] int $accountId
-    ) {
-        $operations = $this->balanceService->exportToExcel($accountId);
-        return $this->json($operations);
+    ): Response {
+        $result = $this->balanceService->exportToExcel($accountId);
 
-//        return new Response(
-//            $this->serializer->serialize($operations, 'csv'),
-//            Response::HTTP_OK,
-//            [
-//                'Content-Type' => 'application/vnd.ms-excel',
-//                'Content-Disposition' => 'attachment; filename="reports.xls"',
-//            ]
-//        );
+        $handle = fopen('php://memory', 'r+');
+        $first = true;
+        foreach ($result->operations as $item) {
+            $row = (array) $item;
+            if ($first) {
+                fputcsv($handle, array_keys($row));
+                $first = false;
+            }
+            fputcsv($handle, array_values($row));
+        }
+        rewind($handle);
+        $csv = stream_get_contents($handle);
+        fclose($handle);
+
+        return new Response($csv, Response::HTTP_OK, [
+            'Content-Type' => 'application/vnd.ms-excel',
+            'Content-Disposition' => 'attachment; filename="' . $result->name . '"',
+        ]);
     }
 }

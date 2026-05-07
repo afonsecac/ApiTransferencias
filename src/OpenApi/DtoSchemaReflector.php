@@ -70,7 +70,8 @@ final class DtoSchemaReflector
             $typeName = $type->getName();
             $nullable  = $type->allowsNull();
 
-            $propSchema = $this->typeToSchema($typeName, $nullable, $schemas, $propName === 'results' ? $itemDto : null);
+            $arrayItemDto = $propName === 'results' ? $itemDto : $this->getDocblockArrayClass($prop);
+            $propSchema = $this->typeToSchema($typeName, $nullable, $schemas, $arrayItemDto);
 
             foreach ($prop->getAttributes() as $attr) {
                 $this->applyConstraint($attr, $propSchema, $required, $propName);
@@ -108,6 +109,19 @@ final class DtoSchemaReflector
     public function resetVisited(): void
     {
         $this->visited = [];
+    }
+
+    /** Extrae la clase item de un docblock `@var ClassName[]` en una propiedad array. */
+    private function getDocblockArrayClass(\ReflectionProperty $prop): ?string
+    {
+        $doc = $prop->getDocComment();
+        if (!$doc || !preg_match('/@var\s+([\\\\\w]+)\[\]/', $doc, $m)) {
+            return null;
+        }
+        $raw = $m[1];
+        $fqcn = str_starts_with($raw, '\\') ? ltrim($raw, '\\') : $prop->getDeclaringClass()->getNamespaceName() . '\\' . $raw;
+
+        return class_exists($fqcn) ? $fqcn : (class_exists($raw) ? $raw : null);
     }
 
     private function typeToSchema(string $typeName, bool $nullable, \ArrayObject $schemas, ?string $itemDto): array

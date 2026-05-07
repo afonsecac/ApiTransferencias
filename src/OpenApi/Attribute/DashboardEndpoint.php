@@ -14,5 +14,6 @@ final class DashboardEndpoint
         public ?string $itemDto = null,
         public ?int $responseStatusCode = null,
         public bool $responseIsArray = false,
+        public bool $responseIsFile = false,
     ) {}
 }
