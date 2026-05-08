@@ -2,10 +2,13 @@
 
 namespace App\OpenApi;
 
+use ApiPlatform\OpenApi\Model\Components;
+use ApiPlatform\OpenApi\Model\Info;
 use ApiPlatform\OpenApi\Model\MediaType;
 use ApiPlatform\OpenApi\Model\Operation;
 use ApiPlatform\OpenApi\Model\Parameter;
 use ApiPlatform\OpenApi\Model\PathItem;
+use ApiPlatform\OpenApi\Model\Paths;
 use ApiPlatform\OpenApi\Model\RequestBody;
 use ApiPlatform\OpenApi\Model\Response;
 use ApiPlatform\OpenApi\OpenApi;
@@ -23,6 +26,27 @@ final class DashboardOpenApiBuilder
         private readonly RouterInterface $router,
         private readonly DtoSchemaReflector $reflector,
     ) {}
+
+    public function buildStandalone(): OpenApi
+    {
+        $securitySchemes = new \ArrayObject([
+            'Token' => new \ArrayObject([
+                'type'        => 'apiKey',
+                'in'          => 'header',
+                'name'        => 'Authorization',
+                'description' => 'Token de acceso. Formato: Bearer <token>',
+            ]),
+        ]);
+
+        $openApi = new OpenApi(
+            info: new Info('Dashboard API', '1.0.0', 'Endpoints de gestión del panel de administración'),
+            servers: [],
+            paths: new Paths(),
+            components: new Components(securitySchemes: $securitySchemes),
+        );
+
+        return $this->build($openApi);
+    }
 
     public function build(OpenApi $openApi): OpenApi
     {

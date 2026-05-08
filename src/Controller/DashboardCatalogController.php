@@ -2,8 +2,10 @@
 
 namespace App\Controller;
 
+use App\DTO\CreateCommunicationProductDto;
 use App\DTO\SyncProductsDto;
 use App\DTO\UpdateProductDto;
+use App\DTO\Out\CommunicationProductOutDto;
 use App\DTO\Out\PaginatedListOutDto;
 use App\DTO\Out\SyncProductsOutDto;
 use App\DTO\Out\ToggleOutDto;
@@ -151,27 +153,49 @@ class DashboardCatalogController extends AbstractController
         ]);
     }
 
-    #[Route('/products/{id}', name: 'dashboard_products_update', methods: ['PUT'])]
-    #[DashboardEndpoint(summary: 'Actualizar producto', tag: 'Catalog', requestDto: UpdateProductDto::class)]
+    #[Route('/products', name: 'dashboard_products_create', methods: ['POST'])]
+    #[DashboardEndpoint(
+        summary: 'Crear producto manualmente',
+        description: 'Da de alta un CommunicationProduct sin pasar por la sincronización con el proveedor. Requiere ROLE_SUPER_ADMIN.',
+        tag: 'Catalog',
+        requestDto: CreateCommunicationProductDto::class,
+        responseDto: CommunicationProductOutDto::class,
+        responseStatusCode: 201,
+    )]
+    #[IsGranted('ROLE_SUPER_ADMIN')]
+    public function createProduct(CreateCommunicationProductDto $dto): JsonResponse
+    {
+        try {
+            $product = $this->productService->createProduct($dto);
+        } catch (MyCurrentException $e) {
+            return $this->json(['error' => ['message' => $e->getMessage(), 'code' => $e->getCodeWork()]], $e->getCode());
+        }
+
+        return $this->json(CommunicationProductOutDto::fromEntity($product), Response::HTTP_CREATED);
+    }
+
+    #[Route('/products/{id}', name: 'dashboard_products_update', methods: ['PATCH'], requirements: ['id' => '\d+'])]
+    #[DashboardEndpoint(
+        summary: 'Actualizar producto (parcial)',
+        tag: 'Catalog',
+        requestDto: UpdateProductDto::class,
+        responseDto: CommunicationProductOutDto::class,
+    )]
     #[IsGranted('ROLE_ADMIN')]
     public function updateProduct(int $id, UpdateProductDto $dto): JsonResponse
     {
         $product = $this->em->getRepository(CommunicationProduct::class)->find($id);
         if ($product === null) {
-            return $this->json(['error' => ['message' => 'Product not found']], Response::HTTP_NOT_FOUND);
+            return $this->json(['error' => ['message' => 'Product not found', 'code' => 'PRODUCT_NOT_FOUND']], Response::HTTP_NOT_FOUND);
         }
 
         try {
             $product = $this->productService->updateProduct($product, $dto);
         } catch (MyCurrentException $e) {
-            return $this->json(['error' => ['message' => $e->getMessage()]], $e->getCode());
+            return $this->json(['error' => ['message' => $e->getMessage(), 'code' => $e->getCodeWork()]], $e->getCode());
         }
 
-        return $this->json(
-            $this->serializer->normalize($product, 'json', [
-                'groups' => ['product:read'],
-            ])
-        );
+        return $this->json(CommunicationProductOutDto::fromEntity($product));
     }
 
     #[Route('/products/{id}/toggle', name: 'dashboard_products_toggle', methods: ['PATCH'])]

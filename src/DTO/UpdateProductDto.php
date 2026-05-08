@@ -9,8 +9,10 @@ class UpdateProductDto implements IInput
     #[Assert\Length(max: 255)]
     protected ?string $description;
 
+    #[Assert\Length(max: 255)]
     protected ?string $packageType;
 
+    #[Assert\Length(max: 255)]
     protected ?string $productType;
 
     #[Assert\PositiveOrZero]
@@ -20,6 +22,14 @@ class UpdateProductDto implements IInput
 
     protected ?string $endDateAt;
 
+    #[Assert\Positive]
+    protected ?int $packageId;
+
+    protected ?bool $enabled;
+
+    #[Assert\Positive]
+    protected ?int $environmentId;
+
     public function __construct(
         ?string $description = null,
         ?string $packageType = null,
@@ -27,13 +37,19 @@ class UpdateProductDto implements IInput
         ?float $price = null,
         ?string $initialDate = null,
         ?string $endDateAt = null,
+        ?int $packageId = null,
+        ?bool $enabled = null,
+        ?int $environmentId = null,
     ) {
-        $this->description  = $description;
-        $this->packageType  = $packageType;
-        $this->productType  = $productType;
-        $this->price        = $price;
-        $this->initialDate  = $initialDate;
-        $this->endDateAt    = $endDateAt;
+        $this->description   = $description;
+        $this->packageType   = $packageType;
+        $this->productType   = $productType;
+        $this->price         = $price;
+        $this->initialDate   = $initialDate;
+        $this->endDateAt     = $endDateAt;
+        $this->packageId     = $packageId;
+        $this->enabled       = $enabled;
+        $this->environmentId = $environmentId;
     }
 
     public function getDescription(): ?string { return $this->description; }
@@ -53,4 +69,13 @@ class UpdateProductDto implements IInput
 
     public function getEndDateAt(): ?string { return $this->endDateAt; }
     public function setEndDateAt(?string $v): void { $this->endDateAt = $v; }
+
+    public function getPackageId(): ?int { return $this->packageId; }
+    public function setPackageId(?int $v): void { $this->packageId = $v; }
+
+    public function getEnabled(): ?bool { return $this->enabled; }
+    public function setEnabled(?bool $v): void { $this->enabled = $v; }
+
+    public function getEnvironmentId(): ?int { return $this->environmentId; }
+    public function setEnvironmentId(?int $v): void { $this->environmentId = $v; }
 }
