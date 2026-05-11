@@ -29,6 +29,14 @@ framework:
             policy: 'sliding_window'
             limit: 10
             interval: '1 minute'
+        activate_account:
+            policy: 'fixed_window'
+            limit: 5
+            interval: '15 minutes'
+        resend_activation:
+            policy: 'fixed_window'
+            limit: 3
+            interval: '15 minutes'
 #    serializer:
 #        enable_annotations: true
 

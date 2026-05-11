@@ -18,7 +18,6 @@ class CreateUserDto implements IInput
     #[Assert\Length(max: 120)]
     protected ?string $lastName;
 
-    #[Assert\NotBlank]
     #[Assert\Length(min: 8)]
     protected ?string $password;
 

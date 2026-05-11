@@ -54,6 +54,7 @@ security:
         - { path: '^/dashboard/api/docs', roles: PUBLIC_ACCESS }
         - { path: '^/dashboard/api/forgot-password', roles: PUBLIC_ACCESS }
         - { path: '^/dashboard/api/reset-password', roles: PUBLIC_ACCESS }
+        - { path: '^/dashboard/api/activate', roles: PUBLIC_ACCESS }
         - { path: '^/dashboard/api/refresh', roles: PUBLIC_ACCESS }
         - { path: '^/api', roles: ROLE_API_USER }
         - { path: '^/dashboard/api', roles: ROLE_SYSTEM_USER }

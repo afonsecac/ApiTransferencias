@@ -1,0 +1,146 @@
+{% extends 'emails/_base.html.twig' %}
+
+{% block title %}Activaci&oacute;n de cuenta &mdash; Comremit{% endblock %}
+
+{% block preheader %}Tu c&oacute;digo de activaci&oacute;n es {{ code }}. V&aacute;lido por 24 horas.{% endblock %}
+
+{% block brand_header %}
+<span style="font-size:20px;font-weight:bold;color:#ffffff;font-family:Arial,Helvetica,sans-serif;letter-spacing:0.5px;">
+    Comremit
+</span>
+{% endblock %}
+
+{% block logo_area %}
+<tr>
+    <td align="center" style="background-color:#ffffff;padding:20px 40px 16px 40px;border-bottom:1px solid #ebebeb;">
+        <img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA1ODEuNjggMTQwLjYxIj48ZGVmcz48c3R5bGU+LmNscy0xe2ZpbGw6I2UzMDYxMzt9LmNscy0ye2ZpbGw6IzNjM2MzYjt9PC9zdHlsZT48L2RlZnM+PHRpdGxlPkNvbXJlbWl0X2xvZ28gY29sb3I8L3RpdGxlPjxnIGlkPSJDYXBhXzIiIGRhdGEtbmFtZT0iQ2FwYSAyIj48ZyBpZD0iQ2FwYV8xLTIiIGRhdGEtbmFtZT0iQ2FwYSAxIj48ZWxsaXBzZSBjbGFzcz0iY2xzLTEiIGN4PSIxMTMuNyIgY3k9IjQwLjQiIHJ4PSIxNS4wMiIgcnk9IjE1LjQ2Ii8+PHBhdGggY2xhc3M9ImNscy0yIiBkPSJNMTQ4LjU3LDgxLjUxYTQuNzksNC43OSwwLDAsMS0xLjQ5LS4yNGwtMTUtNWEyLDIsMCwwLDAtMS41Ni4xNCw0MC40NCw0MC40NCwwLDEsMSwxNy42Ni0xNy41OCwyLDIsMCwwLDAtLjE1LDEuNTZsNSwxNWE0LjY5LDQuNjksMCwwLDEtNC40Miw2LjE2Wm0tMTcuMTQtOGE0LjczLDQuNzMsMCwwLDEsMS40NC4yNGwxNSw1YTIsMiwwLDAsMCwyLjEyLS41LDIsMiwwLDAsMCwuNDktMi4xMWwtNS0xNWE0LjYxLDQuNjEsMCwwLDEsLjI5LTMuNTgsMzcuNzcsMzcuNzcsMCwxLDAtNzAuNjctOS45MWgwQTM3Ljc0LDM3Ljc0LDAsMCwwLDEyOS4zLDc0LjA2LDQuNzgsNC43OCwwLDAsMSwxMzEuNDMsNzMuNTRaIi8+PHBhdGggY2xhc3M9ImNscy0xIiBkPSJNMCw0Mi4xMnYtLjIxQzAsMjAuNjcsMTYuMzUsNCwzOC40MSw0YzE0Ljg5LDAsMjQuNDcsNi4yNSwzMC45MiwxNS4yTDU0LjEzLDMxYy00LjE2LTUuMi05LTguNTQtMTUuOTItOC41NC0xMC4yLDAtMTcuMzksOC42NS0xNy4zOSwxOS4yNnYuMjFjMCwxMC45Myw3LjE5LDE5LjQ3LDE3LjM5LDE5LjQ3LDcuNiwwLDEyLjA3LTMuNTQsMTYuNDUtOC44NUw2OS44NSw2My4zNkM2Myw3Mi44Myw1My43Miw3OS44MSwzNy41OCw3OS44MSwxNi43Niw3OS44MSwwLDYzLjg4LDAsNDIuMTJaIi8+PHBhdGggY2xhc3M9ImNscy0xIiBkPSJNMTYyLjg3LDUuNDhoMjEuMzVMMjAxLjYsMzMuNjksMjE5LDUuNDhoMjEuMzRWNzguMzVoLTIwLjFWMzYuNUwyMDEuNiw2NWgtLjQyTDE4Mi42NiwzNi43MVY3OC4zNUgxNjIuODdaIi8+PHBhdGggY2xhc3M9ImNscy0xIiBkPSJNMjUzLjIxLDUuNDhoMzQuNDZjMTEuMTQsMCwxOC44NCwyLjkxLDIzLjczLDcuOTEsNC4yNyw0LjE2LDYuNDYsOS43OCw2LjQ2LDE3di4yYzAsMTEuMTQtNS45MywxOC41NC0xNSwyMi4zOWwxNy4zOCwyNS40SDI5Ni45M0wyODIuMjUsNTYuMjhoLTguODRWNzguMzVoLTIwLjJabTMzLjUyLDM1YzYuODcsMCwxMC44My0zLjMzLDEwLjgzLTguNjR2LS4yYzAtNS43My00LjE3LTguNjQtMTAuOTMtOC42NEgyNzMuNDFWNDAuNDVaIi8+PHBhdGggY2xhc3M9ImNscy0xIiBkPSJNMzI4LDUuNDhoNTguNjJWMjIuNjVIMzQ4djExaDM1VjQ5LjYySDM0OFY2MS4xN2gzOS4xNVY3OC4zNUgzMjhaIi8+PHBhdGggY2xhc3M9ImNscy0xIiBkPSJNMzk3LjQ1LDUuNDhoMjEuMzRsMTcuMzksMjguMjFMNDUzLjU2LDUuNDhINDc0LjlWNzguMzVINDU0LjgxVjM2LjVMNDM2LjE4LDY1aC0uNDJMNDE3LjIzLDM2LjcxVjc4LjM1SDM5Ny40NVoiLz48cGF0aCBjbGFzcz0iY2xzLTEiIGQ9Ik00ODguMiw1LjJoMjAuM1Y3OC4zNUg0ODguMloiLz48cGF0aCBjbGFzcz0iY2xzLTEiIGQ9Ik01MzkuNjIsMjMuMTdINTE3Ljc2VjUuNDhoNjMuOTJWMjMuMTdINTU5LjgyVjc4LjM1aC0yMC4yWiIvPjxwYXRoIGNsYXNzPSJjbHMtMiIgZD0iTTE2Mi4zNSwxMzYuMTlsMS41Mi0yLjY0YTIwLjA3LDIwLjA3LDAsMCwwLDEyLjQsNC4xNWM3LjI2LDAsMTAuMTctMi41NywxMC4xNy02LjQ2LDAtMTAtMjIuODMtMi42NC0yMi44My0xNi4xNywwLTUuMjEsNC4zNS05LjQzLDEzLjA2LTkuNDMsNC4zNiwwLDkuMTEsMS4zMiwxMS44MSwzLjM3TDE4NywxMTEuNjVhMTcuNjcsMTcuNjcsMCwwLDAtMTAuMzUtMy4xMWMtNi43NCwwLTkuNywyLjc3LTkuNyw2LjQ3LDAsMTAuMzYsMjIuODIsMywyMi44MiwxNi4xNiwwLDUuNjEtNC44MSw5LjQ0LTEzLjU5LDkuNDRDMTcwLjQ3LDE0MC42MSwxNjUuMDUsMTM4LjY5LDE2Mi4zNSwxMzYuMTlaIi8+PHBhdGggY2xhc3M9ImNscy0yIiBkPSJNMjA4LjM4LDEyMy4xMmMwLTEwLjIyLDcuMzMtMTcuNDgsMTcuMjItMTcuNDhzMTcuMjMsNy4yNiwxNy4yMywxNy40OC03LjMzLDE3LjQ5LTE3LjIzLDE3LjQ5UzIwOC4zOCwxMzMuMzUsMjA4LjM4LDEyMy4xMlptMzEuMDgsMGMwLTguNjQtNS45NC0xNC41MS0xMy44Ni0xNC41MXMtMTMuODUsNS44Ny0xMy44NSwxNC41MSw1LjkzLDE0LjUyLDEzLjg1LDE0LjUyUzIzOS40NiwxMzEuNzcsMjM5LjQ2LDEyMy4xMloiLz48cGF0aCBjbGFzcz0iY2xzLTIiIGQ9Ik0yNjYuMjIsMTMxLjMxVjkxLjM5aDMuM3YzOS41MmMwLDQuNDIsMiw2Ljg2LDYuMDcsNi44NmE4LjgyLDguODIsMCwwLDAsMy4zLS42NmwuMjYsMi43N2ExMS40LDExLjQsMCwwLDEtNCwuNzNDMjY5LjMyLDE0MC42MSwyNjYuMjIsMTM3LjA1LDI2Ni4yMiwxMzEuMzFaIi8+PHBhdGggY2xhc3M9ImNscy0yIiBkPSJNMzI5LjIyLDEwNS45djM0LjQ0aC0zLjE3VjEzM2MtMi4yNCw0LjgyLTYuOTMsNy42Ni0xMyw3LjY2LTguNzcsMC0xNC4zOS01LDE0LjM5LTE0LjU5VjEwNS45SDMwMnYxOS44N2MwLDcuNzgsNC4xNiwxMS44NywxMS4zNSwxMS44Nyw3Ljc5LDAsMTIuNjEtNS4yMSwxMi42MS0xMy4zOVYxMDUuOVoiLz48cGF0aCBjbGFzcz0iY2xzLTIiIGQ9Ik0zNzIuNCwxMzguMTdhMTAuNDMsMTAuNDMsMCwwLDEtNy4wNiwyLjQ0Yy02LjA3LDAtOS4zNy0zLjU2LTkuMzctOS4zN1Y5OC4zOGgzLjN2Ny41MmgxMXYyLjg0aC0xMXYyMi4xN2MwLDQuNDIsMi4xOCw2Ljg2LDYuNCw2Ljg2YTgsOCwwLDAsMCw1LjM1LTEuOTFaIi8+PHBhdGggY2xhc3M9ImNscy0yIiBkPSJNMzkzLjY5LDk0Ljg5YTIuNzMsMi43MywwLDAsMSwyLjcxLTIuNzEsMi42OCwyLjY4LDAsMSwxLTIuNzEsMi43MVptMS4wNiwxMWgzLjN2MzQuNDRoLTMuM1oiLz48cGF0aCBjbGFzcz0iY2xzLTIiIGQ9Ik00MjEuMzksMTIzLjEyYzAtMTAuMjIsNy4zMi0xNy40OCwxNy4yMi0xNy40OHMxNy4yMiw3LjI2LDE3LjIyLDE3LjQ4LTcuMzIsMTcuNDktMTcuMjIsMTcuNDlTNDIxLjM5LDEzMy4zNSw0MjEuMzksMTIzLjEyWm0zMS4wOCwwYzAtOC42NC01Ljk0LTE0LjUxLTEzLjg2LTE0LjUxcy0xMy44NSw1Ljg3LTEzLjg1LDE0LjUxLDUuOTMsMTQuNTIsMTMuODUsMTQuNTJTNDUyLjQ3LDEzMS43Nyw0NTIuNDcsMTIzLjEyWiIvPjxwYXRoIGNsYXNzPSJjbHMtMiIgZD0iTTUxMCwxMjAuMjJ2MjAuMTJoLTMuM1YxMjAuNDhjMC03Ljc4LTQuMTYtMTEuODctMTEuMTUtMTEuODctOC4xMiwwLTEzLjA3LDUuMjEtMTMuMDcsMTMuMzl2MTguMzRoLTMuMjlWMTA1LjloMy4xN3Y3LjQ2YzIuMy00LjgyLDcuMTItNy43MiwxMy42NS03LjcyQzUwNC40MywxMDUuNjQsNTEwLDExMC41OSw1MTAsMTIwLjIyWiIvPjxwYXRoIGNsYXNzPSJjbHMtMiIgZD0iTTUzMS43MSwxMzYuMTlsMS41Mi0yLjY0YTIwLjA4LDIwLjA4LDAsMCwwLDEyLjQxLDQuMTVjNy4yNSwwLDEwLjE2LTIuNTcsMTAuMTYtNi40NiwwLTEwLTIyLjgzLTIuNjQtMjIuODMtMTYuMTcsMC01LjIxLDQuMzYtOS40MywxMy4wNy05LjQzLDQuMzUsMCw5LjEsMS4zMiwxMS44MSwzLjM3bC0xLjUyLDIuNjRBMTcuNywxNy43LDAsMCwwLDU0NiwxMDguNTRjLTYuNzMsMC05LjcsMi43Ny05LjcsNi40NywwLDEwLjM2LDIyLjgzLDMsMjIuODMsMTYuMTYsMCw1LjYxLTQuODIsOS40NC0xMy41OSw5LjQ0QzUzOS44MywxNDAuNjEsNTM0LjQyLDEzOC42OSw1MzEuNzEsMTM2LjE5WiIvPjwvZz48L2c+PC9zdmc+"
+             alt="Comremit" width="160" style="display:block;margin:0 auto;max-width:160px;height:auto;border:0;"/>
+    </td>
+</tr>
+{% endblock %}
+
+{% block banner %}
+<tr>
+    <td align="center" style="background-color:#E30613;padding:28px 40px 24px 40px;">
+        <p style="margin:0 0 6px 0;font-size:24px;font-weight:bold;color:#ffffff;
+                  font-family:Arial,Helvetica,sans-serif;line-height:1.2;">
+            Activa tu cuenta
+        </p>
+        <p style="margin:0;font-size:14px;color:rgba(255,255,255,0.85);font-family:Arial,Helvetica,sans-serif;">
+            Activate your account
+        </p>
+    </td>
+</tr>
+{% endblock %}
+
+{% block content %}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+
+    <!-- GREETING -->
+    <tr>
+        <td style="font-size:15px;color:#1a1a1a;line-height:22px;padding-bottom:16px;font-family:Arial,Helvetica,sans-serif;">
+            {% if firstName %}Hola <strong>{{ firstName }}</strong>,{% else %}Hola,{% endif %}<br/>
+            Tu cuenta en Comremit ha sido creada. Para empezar a utilizarla, actívala introduciendo el código de verificación en el enlace de abajo y elige tu contraseña.<br/><br/>
+            <em style="color:#888888;font-size:13px;">Hi{% if firstName %} <strong>{{ firstName }}</strong>{% endif %}, your Comremit account has been created. To get started, activate it using the verification code at the link below and set your password.</em>
+        </td>
+    </tr>
+
+    <!-- INSTRUCTION -->
+    <tr>
+        <td style="font-size:14px;color:#1a1a1a;line-height:22px;padding-bottom:6px;font-family:Arial,Helvetica,sans-serif;">
+            Introduce el siguiente c&oacute;digo de verificaci&oacute;n en la plataforma:
+        </td>
+    </tr>
+    <tr>
+        <td style="font-size:13px;color:#888888;line-height:20px;padding-bottom:28px;font-family:Arial,Helvetica,sans-serif;">
+            Enter the verification code below in the platform:
+        </td>
+    </tr>
+
+    <!-- CODE UNDERLINE -->
+    <tr>
+        <td align="center" style="padding:8px 0 20px 0;">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 auto;">
+                <tr>
+                    {% for char in code|split('') %}
+                    <td style="width:38px;padding:4px 2px 12px 2px;
+                                border-bottom:3px solid #E30613;
+                                font-size:36px;font-weight:bold;text-align:center;vertical-align:middle;
+                                color:#1a1a1a;line-height:1;
+                                font-family:'Courier New',Courier,monospace,Arial,Helvetica,sans-serif;">{{ char }}</td>
+                    {% if not loop.last %}
+                    <td style="width:12px;font-size:1px;line-height:1px;border:0;">&nbsp;</td>
+                    {% endif %}
+                    {% endfor %}
+                </tr>
+            </table>
+        </td>
+    </tr>
+
+    <!-- VALIDITY NOTE -->
+    <tr>
+        <td align="center" style="font-size:12px;color:#888888;padding-bottom:28px;font-family:Arial,Helvetica,sans-serif;">
+            V&aacute;lido por 24 horas &mdash; Valid for 24 hours
+        </td>
+    </tr>
+
+    <!-- CTA BUTTON -->
+    <tr>
+        <td align="center" style="padding-bottom:32px;">
+            <a href="{{ activationUrl }}"
+               style="display:inline-block;background-color:#E30613;color:#ffffff;text-decoration:none;
+                      font-size:15px;font-weight:bold;padding:14px 32px;border-radius:4px;
+                      font-family:Arial,Helvetica,sans-serif;">
+                Activar mi cuenta &nbsp;/&nbsp; Activate my account
+            </a>
+        </td>
+    </tr>
+
+    <!-- SEPARATOR -->
+    <tr>
+        <td style="padding-bottom:20px;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr><td style="border-top:1px solid #e0e0e0;font-size:1px;line-height:1px;">&nbsp;</td></tr>
+            </table>
+        </td>
+    </tr>
+
+    <!-- DISCLAIMER -->
+    <tr>
+        <td style="font-size:12px;color:#999999;line-height:20px;font-family:Arial,Helvetica,sans-serif;">
+            <strong style="color:#555555;">ES:</strong> Si no esperabas este mensaje, puedes ignorarlo de forma segura.<br/>
+            <strong style="color:#555555;">EN:</strong> If you were not expecting this email, you can safely ignore it.
+        </td>
+    </tr>
+
+</table>
+{% endblock %}
+
+{% block footer %}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+    <tr>
+        <td align="center" style="color:#ffffff;font-size:13px;font-weight:bold;padding-bottom:4px;font-family:Arial,Helvetica,sans-serif;">
+            Comremit Solutions SL
+        </td>
+    </tr>
+    <tr>
+        <td align="center" style="color:rgba(255,255,255,0.6);font-size:11px;line-height:18px;padding-bottom:10px;font-family:Arial,Helvetica,sans-serif;">
+            Pasaje del Carme, 24 &mdash; Sant Cugat del Vall&eacute;s, 08173 &mdash; Barcelona, Espa&ntilde;a &mdash; CIF: B10583565
+        </td>
+    </tr>
+    <tr>
+        <td align="center" style="padding-bottom:10px;">
+            <a href="https://dashboard.comremit.com"
+               style="color:rgba(255,255,255,0.8);font-size:12px;text-decoration:underline;font-family:Arial,Helvetica,sans-serif;">
+                dashboard.comremit.com
+            </a>
+        </td>
+    </tr>
+    <tr>
+        <td align="center" style="border-top:1px solid rgba(255,255,255,0.12);padding-top:12px;
+                                   font-size:11px;color:rgba(255,255,255,0.45);font-family:Arial,Helvetica,sans-serif;">
+            Este es un mensaje autom&aacute;tico &mdash; por favor no respondas a este correo.
+        </td>
+    </tr>
+</table>
+{% endblock %}

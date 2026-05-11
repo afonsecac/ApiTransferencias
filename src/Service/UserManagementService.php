@@ -9,6 +9,7 @@ use App\Entity\JobPosition;
 use App\Entity\User;
 use App\Exception\MyCurrentException;
 use Doctrine\ORM\EntityManagerInterface;
+use Psr\Log\LoggerInterface;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 
 class UserManagementService
@@ -16,6 +17,8 @@ class UserManagementService
     public function __construct(
         private readonly EntityManagerInterface $em,
         private readonly UserPasswordHasherInterface $passwordHasher,
+        private readonly UserService $userService,
+        private readonly LoggerInterface $logger,
     ) {}
 
     /**
@@ -33,6 +36,8 @@ class UserManagementService
             throw new MyCurrentException('EMAIL_ALREADY_IN_USE', 'Email already in use.', 409);
         }
 
+        $rawPassword = $dto->getPassword() ?? bin2hex(random_bytes(16));
+
         $user = new User();
         $user->setEmail($dto->getEmail());
         $user->setFirstName(mb_substr($dto->getFirstName(), 0, 60));
@@ -42,7 +47,7 @@ class UserManagementService
         $user->setIsActive(true);
         $user->setIsCheckValidation(false);
         $user->setPermission([]);
-        $user->setPassword($this->passwordHasher->hashPassword($user, $dto->getPassword()));
+        $user->setPassword($this->passwordHasher->hashPassword($user, $rawPassword));
 
         if ($dto->getMiddleName() !== null) {
             $user->setMiddleName(mb_substr($dto->getMiddleName(), 0, 60));
@@ -63,6 +68,12 @@ class UserManagementService
 
         $this->em->persist($user);
         $this->em->flush();
+
+        try {
+            $this->userService->dispatchActivationEmail($user);
+        } catch (\Throwable $e) {
+            $this->logger->error('Failed to dispatch activation email for user ' . $user->getId() . ': ' . $e->getMessage());
+        }
 
         return $user;
     }

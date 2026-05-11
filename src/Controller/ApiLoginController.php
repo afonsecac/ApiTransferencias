@@ -2,10 +2,13 @@
 
 namespace App\Controller;
 
+use App\DTO\ActivateAccountDto;
 use App\DTO\ForgotPassword;
+use App\DTO\Out\ActivateAccountOutDto;
 use App\DTO\Out\AuthTokenOutDto;
 use App\DTO\Out\LogoutOutDto;
 use App\DTO\ResetPassword;
+use App\Exception\MyCurrentException;
 use App\Entity\User;
 use App\OpenApi\Attribute\DashboardEndpoint;
 use App\Service\RefreshTokenService;
@@ -29,6 +32,7 @@ class ApiLoginController extends AbstractController
         private readonly RateLimiterFactory $dashboardLoginIpLimiter,
         private readonly RateLimiterFactory $forgotPasswordLimiter,
         private readonly RateLimiterFactory $resetPasswordLimiter,
+        private readonly RateLimiterFactory $activateAccountLimiter,
     ) {
     }
 
@@ -154,6 +158,30 @@ class ApiLoginController extends AbstractController
 
         $response = $this->userService->resetPassword($resetPassword);
         return $this->json($response, $response['status'] ?? Response::HTTP_OK);
+    }
+
+    #[Route('/activate', name: 'app_dashboard_activate', methods: ['POST'])]
+    #[DashboardEndpoint(summary: 'Activar cuenta de usuario', tag: 'Auth', requestDto: ActivateAccountDto::class, responseDto: ActivateAccountOutDto::class)]
+    public function activate(ActivateAccountDto $dto, Request $request): JsonResponse
+    {
+        $clientIp = $request->getClientIp() ?? 'unknown';
+        $limiter = $this->activateAccountLimiter->create($clientIp);
+        if (!$limiter->consume()->isAccepted()) {
+            return $this->json([
+                'error' => ['message' => 'Too many requests. Please try again later.'],
+            ], Response::HTTP_TOO_MANY_REQUESTS);
+        }
+
+        try {
+            $result = $this->userService->activateAccount($dto);
+        } catch (MyCurrentException $e) {
+            return $this->json(
+                ['error' => ['message' => $e->getMessage()]],
+                $e->getCode() === 409 ? Response::HTTP_CONFLICT : $e->getCode()
+            );
+        }
+
+        return $this->json($result, Response::HTTP_OK);
     }
 
     #[Route('/logout', name: 'app_dashboard_logout', methods: ['POST'])]
