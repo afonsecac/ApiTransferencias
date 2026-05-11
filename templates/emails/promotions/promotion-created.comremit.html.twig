@@ -1,0 +1,221 @@
+{% extends 'emails/_base.html.twig' %}
+
+{% block title %}Nueva Promoci&oacute;n &mdash; Comremit{% endblock %}
+
+{% block preheader %}Nueva promoci&oacute;n: {{ promotionName }}. Vigente del {{ startAt }} al {{ endAt }}.{% endblock %}
+
+{% block brand_header %}
+<span style="font-size:20px;font-weight:bold;color:#ffffff;font-family:Arial,Helvetica,sans-serif;letter-spacing:0.5px;">
+    Comremit
+</span>
+{% endblock %}
+
+{% block logo_area %}
+<tr>
+    <td align="center" style="background-color:#ffffff;padding:20px 40px 16px 40px;border-bottom:1px solid #ebebeb;">
+        <img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA1ODEuNjggMTQwLjYxIj48ZGVmcz48c3R5bGU+LmNscy0xe2ZpbGw6I2UzMDYxMzt9LmNscy0ye2ZpbGw6IzNjM2MzYjt9PC9zdHlsZT48L2RlZnM+PHRpdGxlPkNvbXJlbWl0X2xvZ28gY29sb3I8L3RpdGxlPjxnIGlkPSJDYXBhXzIiIGRhdGEtbmFtZT0iQ2FwYSAyIj48ZyBpZD0iQ2FwYV8xLTIiIGRhdGEtbmFtZT0iQ2FwYSAxIj48ZWxsaXBzZSBjbGFzcz0iY2xzLTEiIGN4PSIxMTMuNyIgY3k9IjQwLjQiIHJ4PSIxNS4wMiIgcnk9IjE1LjQ2Ii8+PHBhdGggY2xhc3M9ImNscy0yIiBkPSJNMTQ4LjU3LDgxLjUxYTQuNzksNC43OSwwLDAsMS0xLjQ5LS4yNGwtMTUtNWEyLDIsMCwwLDAtMS41Ni4xNCw0MC40NCw0MC40NCwwLDEsMSwxNy42Ni0xNy41OCwyLDIsMCwwLDAtLjE1LDEuNTZsNSwxNWE0LjY5LDQuNjksMCwwLDEtNC40Miw2LjE2Wm0tMTcuMTQtOGE0LjczLDQuNzMsMCwwLDEsMS40NC4yNGwxNSw1YTIsMiwwLDAsMCwyLjEyLS41LDIsMiwwLDAsMCwuNDktMi4xMWwtNS0xNWE0LjYxLDQuNjEsMCwwLDEsLjI5LTMuNTgsMzcuNzcsMzcuNzcsMCwxLDAtNzAuNjctOS45MWgwQTM3Ljc0LDM3Ljc0LDAsMCwwLDEyOS4zLDc0LjA2LDQuNzgsNC43OCwwLDAsMSwxMzEuNDMsNzMuNTRaIi8+PHBhdGggY2xhc3M9ImNscy0xIiBkPSJNMCw0Mi4xMnYtLjIxQzAsMjAuNjcsMTYuMzUsNCwzOC40MSw0YzE0Ljg5LDAsMjQuNDcsNi4yNSwzMC45MiwxNS4yTDU0LjEzLDMxYy00LjE2LTUuMi05LTguNTQtMTUuOTItOC41NC0xMC4yLDAtMTcuMzksOC42NS0xNy4zOSwxOS4yNnYuMjFjMCwxMC45Myw3LjE5LDE5LjQ3LDE3LjM5LDE5LjQ3LDcuNiwwLDEyLjA3LTMuNTQsMTYuNDUtOC44NUw2OS44NSw2My4zNkM2Myw3Mi44Myw1My43Miw3OS44MSwzNy41OCw3OS44MSwxNi43Niw3OS44MSwwLDYzLjg4LDAsNDIuMTJaIi8+PHBhdGggY2xhc3M9ImNscy0xIiBkPSJNMTYyLjg3LDUuNDhoMjEuMzVMMjAxLjYsMzMuNjksMjE5LDUuNDhoMjEuMzRWNzguMzVoLTIwLjFWMzYuNUwyMDEuNiw2NWgtLjQyTDE4Mi42NiwzNi43MVY3OC4zNUgxNjIuODdaIi8+PHBhdGggY2xhc3M9ImNscy0xIiBkPSJNMjUzLjIxLDUuNDhoMzQuNDZjMTEuMTQsMCwxOC44NCwyLjkxLDIzLjczLDcuOTEsNC4yNyw0LjE2LDYuNDYsOS43OCw2LjQ2LDE3di4yYzAsMTEuMTQtNS45MywxOC41NC0xNSwyMi4zOWwxNy4zOCwyNS40SDI5Ni45M0wyODIuMjUsNTYuMjhoLTguODRWNzguMzVoLTIwLjJabTMzLjUyLDM1YzYuODcsMCwxMC44My0zLjMzLDEwLjgzLTguNjR2LS4yYzAtNS43My00LjE3LTguNjQtMTAuOTMtOC42NEgyNzMuNDFWNDAuNDVaIi8+PHBhdGggY2xhc3M9ImNscy0xIiBkPSJNMzI4LDUuNDhoNTguNjJWMjIuNjVIMzQ4djExaDM1VjQ5LjYySDM0OFY2MS4xN2gzOS4xNVY3OC4zNUgzMjhaIi8+PHBhdGggY2xhc3M9ImNscy0xIiBkPSJNMzk3LjQ1LDUuNDhoMjEuMzRsMTcuMzksMjguMjFMNDUzLjU2LDUuNDhINDc0LjlWNzguMzVINDU0LjgxVjM2LjVMNDM2LjE4LDY1aC0uNDJMNDE3LjIzLDM2LjcxVjc4LjM1SDM5Ny40NVoiLz48cGF0aCBjbGFzcz0iY2xzLTEiIGQ9Ik00ODguMiw1LjJoMjAuM1Y3OC4zNUg0ODguMloiLz48cGF0aCBjbGFzcz0iY2xzLTEiIGQ9Ik01MzkuNjIsMjMuMTdINTE3Ljc2VjUuNDhoNjMuOTJWMjMuMTdINTU5LjgyVjc4LjM1aC0yMC4yWiIvPjxwYXRoIGNsYXNzPSJjbHMtMiIgZD0iTTE2Mi4zNSwxMzYuMTlsMS41Mi0yLjY0YTIwLjA3LDIwLjA3LDAsMCwwLDEyLjQsNC4xNWM3LjI2LDAsMTAuMTctMi41NywxMC4xNy02LjQ2LDAtMTAtMjIuODMtMi42NC0yMi44My0xNi4xNywwLTUuMjEsNC4zNS05LjQzLDEzLjA2LTkuNDMsNC4zNiwwLDkuMTEsMS4zMiwxMS44MSwzLjM3TDE4NywxMTEuNjVhMTcuNjcsMTcuNjcsMCwwLDAtMTAuMzUtMy4xMWMtNi43NCwwLTkuNywyLjc3LTkuNyw2LjQ3LDAsMTAuMzYsMjIuODIsMywyMi44MiwxNi4xNiwwLDUuNjEtNC44MSw5LjQ0LTEzLjU5LDkuNDRDMTcwLjQ3LDE0MC42MSwxNjUuMDUsMTM4LjY5LDE2Mi4zNSwxMzYuMTlaIi8+PHBhdGggY2xhc3M9ImNscy0yIiBkPSJNMjA4LjM4LDEyMy4xMmMwLTEwLjIyLDcuMzMtMTcuNDgsMTcuMjItMTcuNDhzMTcuMjMsNy4yNiwxNy4yMywxNy40OC03LjMzLDE3LjQ5LTE3LjIzLDE3LjQ5UzIwOC4zOCwxMzMuMzUsMjA4LjM4LDEyMy4xMlptMzEuMDgsMGMwLTguNjQtNS45NC0xNC41MS0xMy44Ni0xNC41MXMtMTMuODUsNS44Ny0xMy44NSwxNC41MSw1LjkzLDE0LjUyLDEzLjg1LDE0LjUyUzIzOS40NiwxMzEuNzcsMjM5LjQ2LDEyMy4xMlpaIi8+PHBhdGggY2xhc3M9ImNscy0yIiBkPSJNMjY2LjIyLDEzMS4zMVY5MS4zOWgzLjN2MzkuNTJjMCw0LjQyLDIsNi44Niw2LjA3LDYuODZhOC44Miw4LjgyLDAsMCwwLDMuMy0uNjZsLjI2LDIuNzdhMTEuNCwxMS40LDAsMCwxLTQsLjczQzI2OS4zMiwxNDAuNjEsMjY2LjIyLDEzNy4wNSwyNjYuMjIsMTMxLjMxWiIvPjxwYXRoIGNsYXNzPSJjbHMtMiIgZD0iTTMyOS4yMiwxMDUuOXYzNC40NGgtMy4xN1YxMzNjLTIuMjQsNC44Mi02LjkzLDcuNjYtMTMsNy42Ni04Ljc3LDAtMTQuMzktNSwxNC4zOS0xNC41OVYxMDUuOUgzMDJ2MTkuODdjMCw3Ljc4LDQuMTYsMTEuODcsMTEuMzUsMTEuODcsNy43OSwwLDEyLjYxLTUuMjEsMTIuNjEtMTMuMzlWMTA1LjlaIi8+PHBhdGggY2xhc3M9ImNscy0yIiBkPSJNMzcyLjQsMTM4LjE3YTEwLjQzLDEwLjQzLDAsMCwxLTcuMDYsMi40NGMtNi4wNywwLTkuMzctMy41Ni05LjM3LTkuMzdWOTguMzhoMy4zdjcuNTJoMTF2Mi44NGgtMTF2MjIuMTdjMCw0LjQyLDIuMTgsNi44Niw2LjQsNi44NmE4LDgsMCwwLDAsNS4zNS0xLjkxWiIvPjxwYXRoIGNsYXNzPSJjbHMtMiIgZD0iTTM5My42OSw5NC44OWEyLjczLDIuNzMsMCwwLDEsMi43MS0yLjcxLDIuNjgsMi42OCwwLDEsMS0yLjcxLDIuNzFabTEuMDYsMTFoMy4zdjM0LjQ0aC0zLjNaIi8+PHBhdGggY2xhc3M9ImNscy0yIiBkPSJNNDIxLjM5LDEyMy4xMmMwLTEwLjIyLDcuMzItMTcuNDgsMTcuMjItMTcuNDhzMTcuMjIsNy4yNiwxNy4yMiwxNy40OC03LjMyLDE3LjQ5LTE3LjIyLDE3LjQ5UzQyMS4zOSwxMzMuMzUsNDIxLjM5LDEyMy4xMlptMzEuMDgsMGMwLTguNjQtNS45NC0xNC41MS0xMy44Ni0xNC41MXMtMTMuODUsNS44Ny0xMy44NSwxNC41MSw1LjkzLDE0LjUyLDEzLjg1LDE0LjUyUzQ1Mi40NywxMzEuNzcsNDUyLjQ3LDEyMy4xMlpaIi8+PHBhdGggY2xhc3M9ImNscy0yIiBkPSJNNTEwLDEyMC4yMnYyMC4xMmgtMy4zVjEyMC40OGMwLTcuNzgtNC4xNi0xMS44Ny0xMS4xNS0xMS44Ny04LjEyLDAtMTMuMDcsNS4yMS0xMy4wNywxMy4zOXYxOC4zNGgtMy4yOVYxMDUuOWgzLjE3djcuNDZjMi4zLTQuODIsNy4xMi03LjcyLDEzLjY1LTcuNzJDNTA0LjQzLDEwNS42NCw1MTAsMTEwLjU5LDUxMCwxMjAuMjJaIi8+PHBhdGggY2xhc3M9ImNscy0yIiBkPSJNNTMxLjcxLDEzNi4xOWwxLjUyLTIuNjRhMjAuMDgsMjAuMDgsMCwwLDAsMTIuNDEsNC4xNWM3LjI1LDAsMTAuMTYtMi41NywxMC4xNi02LjQ2LDAtMTAtMjIuODMtMi42NC0yMi44My0xNi4xNywwLTUuMjEsNC4zNi05LjQzLDEzLjA3LTkuNDMsNC4zNSwwLDkuMSwxLjMyLDExLjgxLDMuMzdsLTEuNTIsMi42NEExNy43LDE3LjcsMCwwLDAsNTQ2LDEwOC41NGMtNi43MywwLTkuNywyLjc3LTkuNyw2LjQ3LDAsMTAuMzYsMjIuODMsMiwyMi44MywxNi4xNiwwLDUuNjEtNC44Miw5LjQ0LTEzLjU5LDkuNDRDNTM5LjgzLDE0MC42MSw1MzQuNDIsMTM4LjY5LDUzMS43MSwxMzYuMTlaIi8+PC9nPjwvZz48L3N2Zz4="
+             alt="Comremit" width="160" style="display:block;margin:0 auto;max-width:160px;height:auto;border:0;"/>
+    </td>
+</tr>
+{% endblock %}
+
+{% block banner %}
+<tr>
+    <td align="center" style="background-color:#E30613;padding:28px 40px 24px 40px;">
+        <p style="margin:0 0 6px 0;font-size:24px;font-weight:bold;color:#ffffff;
+                  font-family:Arial,Helvetica,sans-serif;line-height:1.2;">
+            Nueva Promoci&oacute;n
+        </p>
+        <p style="margin:0;font-size:14px;color:rgba(255,255,255,0.85);font-family:Arial,Helvetica,sans-serif;">
+            New Promotion
+        </p>
+    </td>
+</tr>
+{% endblock %}
+
+{% block content %}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+
+    <!-- GREETING -->
+    <tr>
+        <td style="font-size:15px;color:#1a1a1a;line-height:22px;padding-bottom:20px;font-family:Arial,Helvetica,sans-serif;">
+            {% if firstName %}Hola <strong>{{ firstName }}</strong>,{% else %}Hola,{% endif %}<br/>
+            Se ha creado una nueva promoci&oacute;n en la plataforma.<br/>
+            <em style="color:#888888;font-size:13px;">
+                {% if firstName %}Hi <strong>{{ firstName }}</strong>,{% else %}Hi,{% endif %}
+                a new promotion has been created on the platform.
+            </em>
+        </td>
+    </tr>
+
+    <!-- PROMOTION NAME -->
+    <tr>
+        <td style="padding-bottom:6px;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                    <td style="border-left:4px solid #E30613;padding:10px 16px;background-color:#fafafa;">
+                        <p style="margin:0 0 4px 0;font-size:18px;font-weight:bold;color:#1a1a1a;font-family:Arial,Helvetica,sans-serif;">
+                            {{ promotionName }}
+                        </p>
+                        {% if description %}
+                        <p style="margin:0;font-size:13px;color:#555555;font-family:Arial,Helvetica,sans-serif;">
+                            {{ description }}
+                        </p>
+                        {% endif %}
+                    </td>
+                </tr>
+            </table>
+        </td>
+    </tr>
+
+    <!-- DATES -->
+    <tr>
+        <td style="padding:16px 0 20px 0;">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"
+                   style="background-color:#fff5f5;border-radius:6px;border:1px solid #f5c6c6;">
+                <tr>
+                    <td style="padding:14px 20px;">
+                        <p style="margin:0 0 6px 0;font-size:12px;font-weight:bold;color:#E30613;text-transform:uppercase;
+                                  letter-spacing:0.5px;font-family:Arial,Helvetica,sans-serif;">
+                            Vigencia / Validity period
+                        </p>
+                        <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
+                            <tr>
+                                <td style="width:50%;padding-right:12px;vertical-align:top;">
+                                    <p style="margin:0 0 2px 0;font-size:11px;color:#888888;font-family:Arial,Helvetica,sans-serif;">
+                                        Desde / From
+                                    </p>
+                                    <p style="margin:0;font-size:14px;font-weight:bold;color:#1a1a1a;font-family:'Courier New',Courier,monospace;">
+                                        {{ startAt }}
+                                    </p>
+                                </td>
+                                <td style="width:50%;padding-left:12px;border-left:1px solid #f5c6c6;vertical-align:top;">
+                                    <p style="margin:0 0 2px 0;font-size:11px;color:#888888;font-family:Arial,Helvetica,sans-serif;">
+                                        Hasta / To
+                                    </p>
+                                    <p style="margin:0;font-size:14px;font-weight:bold;color:#1a1a1a;font-family:'Courier New',Courier,monospace;">
+                                        {{ endAt }}
+                                    </p>
+                                </td>
+                            </tr>
+                        </table>
+                    </td>
+                </tr>
+            </table>
+        </td>
+    </tr>
+
+    {% if infoDescription %}
+    <!-- INFO DESCRIPTION -->
+    <tr>
+        <td style="font-size:14px;color:#333333;line-height:21px;padding-bottom:20px;font-family:Arial,Helvetica,sans-serif;">
+            {{ infoDescription }}
+        </td>
+    </tr>
+    {% endif %}
+
+    {% if packages is not empty %}
+    <!-- PACKAGES TABLE -->
+    <tr>
+        <td style="padding-bottom:6px;">
+            <p style="margin:0 0 8px 0;font-size:13px;font-weight:bold;color:#1a1a1a;font-family:Arial,Helvetica,sans-serif;text-transform:uppercase;letter-spacing:0.5px;">
+                Paquetes creados / Created packages
+            </p>
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+                   style="border-collapse:collapse;font-family:Arial,Helvetica,sans-serif;font-size:13px;">
+                <thead>
+                    <tr style="background-color:#E30613;">
+                        <th style="padding:9px 12px;text-align:left;color:#ffffff;font-weight:bold;">Paquete / Package</th>
+                        <th style="padding:9px 12px;text-align:right;color:#ffffff;font-weight:bold;">Precio / Price</th>
+                        <th style="padding:9px 12px;text-align:right;color:#ffffff;font-weight:bold;">Importe / Amount</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for pkg in packages %}
+                    <tr style="background-color:{{ loop.index is odd ? '#ffffff' : '#fafafa' }};">
+                        <td style="padding:8px 12px;color:#1a1a1a;border-bottom:1px solid #ebebeb;">{{ pkg.name }}</td>
+                        <td style="padding:8px 12px;text-align:right;color:#1a1a1a;border-bottom:1px solid #ebebeb;font-family:'Courier New',Courier,monospace;">
+                            {{ pkg.price }} {{ pkg.priceCurrency }}
+                        </td>
+                        <td style="padding:8px 12px;text-align:right;color:#1a1a1a;border-bottom:1px solid #ebebeb;font-family:'Courier New',Courier,monospace;">
+                            {{ pkg.amount }} {{ pkg.currency }}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </td>
+    </tr>
+    {% endif %}
+
+    {% if terms is not empty %}
+    <!-- TERMS -->
+    <tr>
+        <td style="padding-top:20px;padding-bottom:6px;">
+            <p style="margin:0 0 8px 0;font-size:13px;font-weight:bold;color:#1a1a1a;font-family:Arial,Helvetica,sans-serif;text-transform:uppercase;letter-spacing:0.5px;">
+                T&eacute;rminos / Terms
+            </p>
+            <ul style="margin:0;padding-left:20px;font-size:13px;color:#555555;line-height:20px;font-family:Arial,Helvetica,sans-serif;">
+                {% for term in terms %}
+                <li style="margin-bottom:4px;">
+                    {% if term.additional_information is defined %}
+                        <strong>{{ term.additional_information }}</strong>
+                        {% if term.type is defined %}&nbsp;<span style="color:#888888;">({{ term.type }})</span>{% endif %}
+                    {% else %}
+                        {{ term|json_encode }}
+                    {% endif %}
+                </li>
+                {% endfor %}
+            </ul>
+        </td>
+    </tr>
+    {% endif %}
+
+    <!-- SEPARATOR -->
+    <tr>
+        <td style="padding-top:24px;padding-bottom:20px;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr><td style="border-top:1px solid #e0e0e0;font-size:1px;line-height:1px;">&nbsp;</td></tr>
+            </table>
+        </td>
+    </tr>
+
+    <!-- DISCLAIMER -->
+    <tr>
+        <td style="font-size:12px;color:#999999;line-height:20px;font-family:Arial,Helvetica,sans-serif;">
+            <strong style="color:#555555;">ES:</strong> Este mensaje es solo para usuarios del &aacute;rea de tecnolog&iacute;a. No respondas a este correo.<br/>
+            <strong style="color:#555555;">EN:</strong> This message is intended for technology area users only. Please do not reply to this email.
+        </td>
+    </tr>
+
+</table>
+{% endblock %}
+
+{% block footer %}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+    <tr>
+        <td align="center" style="color:#ffffff;font-size:13px;font-weight:bold;padding-bottom:4px;font-family:Arial,Helvetica,sans-serif;">
+            Comremit Solutions SL
+        </td>
+    </tr>
+    <tr>
+        <td align="center" style="color:rgba(255,255,255,0.6);font-size:11px;line-height:18px;padding-bottom:10px;font-family:Arial,Helvetica,sans-serif;">
+            Pasaje del Carme, 24 &mdash; Sant Cugat del Vall&eacute;s, 08173 &mdash; Barcelona, Espa&ntilde;a &mdash; CIF: B10583565
+        </td>
+    </tr>
+    <tr>
+        <td align="center" style="padding-bottom:10px;">
+            <a href="https://dashboard.comremit.com"
+               style="color:rgba(255,255,255,0.8);font-size:12px;text-decoration:underline;font-family:Arial,Helvetica,sans-serif;">
+                dashboard.comremit.com
+            </a>
+        </td>
+    </tr>
+    <tr>
+        <td align="center" style="border-top:1px solid rgba(255,255,255,0.12);padding-top:12px;
+                                   font-size:11px;color:rgba(255,255,255,0.45);font-family:Arial,Helvetica,sans-serif;">
+            Este es un mensaje autom&aacute;tico &mdash; por favor no respondas a este correo.
+        </td>
+    </tr>
+</table>
+{% endblock %}

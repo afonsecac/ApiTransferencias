@@ -11,11 +11,37 @@ use App\Entity\CommunicationPricePackage;
 use App\Entity\CommunicationProduct;
 use App\Entity\CommunicationPromotions;
 use App\Entity\Environment;
+use App\Entity\User;
+use App\Enums\JobPositionAreaEnum;
 use App\Exception\MyCurrentException;
+use App\Message\PromotionCreatedMessage;
+use App\Repository\EnvironmentRepository;
+use App\Repository\SysConfigRepository;
+use Doctrine\ORM\EntityManagerInterface;
 use Psr\Log\LoggerInterface;
+use Symfony\Bundle\SecurityBundle\Security;
+use Symfony\Component\DependencyInjection\ParameterBag\ParameterBagInterface;
+use Symfony\Component\Mailer\MailerInterface;
+use Symfony\Component\Messenger\MessageBusInterface;
+use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
+use Symfony\Component\Serializer\SerializerInterface;
 
 class CommunicationPromotionService extends CommonService
 {
+    public function __construct(
+        EntityManagerInterface $em,
+        Security $security,
+        ParameterBagInterface $parameters,
+        MailerInterface $mailer,
+        LoggerInterface $logger,
+        UserPasswordHasherInterface $passwordHasher,
+        EnvironmentRepository $environmentRepository,
+        SysConfigRepository $sysConfigRepo,
+        SerializerInterface $serializer,
+        private readonly MessageBusInterface $messageBus,
+    ) {
+        parent::__construct($em, $security, $parameters, $mailer, $logger, $passwordHasher, $environmentRepository, $sysConfigRepo, $serializer);
+    }
     /**
      * Crea los CommunicationClientPackage y CommunicationPricePackage
      * asociados a una promoción a partir del rango de precios.
@@ -116,6 +142,7 @@ class CommunicationPromotionService extends CommonService
         }
 
         $packagesCreated = 0;
+        $clientsWithNewPackages = [];
 
         // 3. Por cada precio × cada account → crear PricePackage + ClientPackage
         foreach ($filteredPrices as $price) {
@@ -189,12 +216,49 @@ class CommunicationPromotionService extends CommonService
                 $promotion->addProduct($clientPackage);
 
                 $packagesCreated++;
+
+                $client = $account->getClient();
+                if ($client !== null) {
+                    $clientsWithNewPackages[$client->getId()] = $client;
+                }
             }
         }
 
         $this->em->flush();
 
+        $this->dispatchPromotionEmails($promotion, $clientsWithNewPackages);
+
         return $packagesCreated;
+    }
+
+    private function dispatchPromotionEmails(CommunicationPromotions $promotion, array $clientsWithNewPackages): void
+    {
+        foreach ($clientsWithNewPackages as $client) {
+            $techUsers = $this->em->createQueryBuilder()
+                ->select('u')
+                ->from(User::class, 'u')
+                ->join('u.jobPosition', 'jp')
+                ->where('u.company = :client')
+                ->andWhere('u.isActive = :active')
+                ->andWhere('u.isCheckValidation = :validated')
+                ->andWhere('jp.area = :area')
+                ->setParameter('client', $client)
+                ->setParameter('active', true)
+                ->setParameter('validated', true)
+                ->setParameter('area', JobPositionAreaEnum::TECHNOLOGY)
+                ->getQuery()
+                ->getResult();
+
+            foreach ($techUsers as $user) {
+                $this->messageBus->dispatch(new PromotionCreatedMessage(
+                    $promotion->getId(),
+                    $user->getEmail(),
+                    $user->getFirstName(),
+                    $client->getId(),
+                    $client->getContractWith(),
+                ));
+            }
+        }
     }
 
     /**

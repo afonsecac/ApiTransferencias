@@ -41,7 +41,6 @@ class AccountActivationMessageHandler
                 'code'          => $message->getCode(),
                 'activationUrl' => $activationUrl,
                 'firstName'     => $message->getFirstName(),
-                'email'         => $message->getEmail(),
             ]);
 
         $this->mailer->send($mail);

@@ -49,7 +49,6 @@ class TestAccountActivationEmailCommand extends Command
                 'code'          => 'A7X3K9',
                 'activationUrl' => $activationUrl,
                 'firstName'     => 'Alexander',
-                'email'         => 'alexander.afonsecac@gmail.com',
             ])
             ->text('Your activation code is: A7X3K9. Activate here: ' . $activationUrl);
 
