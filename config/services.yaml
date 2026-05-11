@@ -9,6 +9,8 @@ parameters:
     app.microsoft.url: '%env(MICROSOFT_URL)%'
     app.phoneNumber: '%env(APP_TEST_PHONE)%'
     app.email.from: '%env(APP_MAILER_FROM)%'
+    app.dashboard.url.comremit:  '%env(COMREMIT_DASHBOARD_URL)%'
+    app.dashboard.url.sendmundo: '%env(SENDMUNDO_DASHBOARD_URL)%'
     app.jwt.expired: '%env(JWT_TIMEOUT)%'
     app.jwt.issuer: '%env(default:jwt_iss_default:JWT_ISSUER)%'
     app.jwt.audience: '%env(default:jwt_aud_default:JWT_AUDIENCE)%'

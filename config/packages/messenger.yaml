@@ -93,6 +93,8 @@ framework:
              'App\Message\BalanceMessage': async_send_notification
              'App\Message\SalePackageMessage': async_send_sale_package
              'App\Message\ForgotPasswordMessage': async_notifications_high
+             'App\Message\AccountActivationMessage': async_notifications_high
+             'App\Message\PromotionCreatedMessage': async_notifications_high
 
 # when@test:
 #    framework:

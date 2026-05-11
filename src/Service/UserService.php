@@ -3,6 +3,7 @@
 namespace App\Service;
 
 use App\DTO\AccountPermission;
+use App\DTO\ActivateAccountDto;
 use App\DTO\ForgotPassword;
 use App\DTO\ResetPassword;
 use App\Entity\Account;
@@ -14,6 +15,8 @@ use App\Entity\User;
 use App\Entity\UserCode;
 use App\Entity\UserPassword;
 use App\Entity\UserSession;
+use App\Exception\MyCurrentException;
+use App\Message\AccountActivationMessage;
 use App\Message\ForgotPasswordMessage;
 use App\Repository\EnvironmentRepository;
 use App\Repository\SysConfigRepository;
@@ -74,6 +77,11 @@ class UserService extends CommonService
     public function findByEmail(string $email): ?User
     {
         return $this->em->getRepository(User::class)->findOneBy(['email' => $email]);
+    }
+
+    public function findById(int $id): ?User
+    {
+        return $this->em->getRepository(User::class)->find($id);
     }
 
     public function update(User $user): User
@@ -508,5 +516,85 @@ class UserService extends CommonService
         }
 
         throw new AccessDeniedException('Insufficient permissions to access account information.');
+    }
+
+    /**
+     * Genera o reutiliza un UserCode de activación y despacha el email al usuario.
+     *
+     * @throws MyCurrentException si la cuenta ya está activada
+     * @throws \DateMalformedStringException
+     * @throws \Random\RandomException
+     * @throws \Symfony\Component\Messenger\Exception\ExceptionInterface
+     */
+    public function dispatchActivationEmail(User $user): void
+    {
+        if ($user->isCheckValidation() === true) {
+            throw new MyCurrentException('ACCOUNT_ALREADY_ACTIVATED', 'Account is already activated', 409);
+        }
+
+        /** @var \App\Repository\UserCodeRepository $userCodeRepo */
+        $userCodeRepo = $this->em->getRepository(UserCode::class);
+        $userCode = $userCodeRepo->getLastCodeByEmail($user->getEmail());
+        if (is_null($userCode)) {
+            $userCode = new UserCode();
+            $userCode->setCode(DashboardUtil::generateUniqueCode());
+            $userCode->setUserInfo($user);
+            $userCode->setInvalidAt((new \DateTimeImmutable('now'))->modify('+24 hours'));
+            $this->em->persist($userCode);
+            $this->em->flush();
+        }
+
+        $this->messageBus->dispatch(
+            new AccountActivationMessage(
+                $user->getEmail(),
+                $userCode->getCode(),
+                $user->getCompany()?->getContractWith(),
+                $user->getFirstName()
+            )
+        );
+    }
+
+    /**
+     * Activa la cuenta del usuario: valida el código, hashea la nueva contraseña y marca isCheckValidation=true.
+     *
+     * @throws MyCurrentException
+     */
+    public function activateAccount(ActivateAccountDto $dto): array
+    {
+        if ($dto->getPassword() !== $dto->getPasswordConfirm()) {
+            throw new MyCurrentException('PASSWORD_MISMATCH', 'Passwords do not match', 400);
+        }
+
+        /** @var \App\Repository\UserCodeRepository $userCodeRepo */
+        $userCodeRepo = $this->em->getRepository(UserCode::class);
+        $userCode = $userCodeRepo->getByCodeAndEmailNotUsed($dto->getCode(), $dto->getEmail());
+        if (is_null($userCode)) {
+            throw new MyCurrentException('ACTIVATION_CODE_INVALID', 'Activation code is invalid or expired', 404);
+        }
+
+        $user = $userCode->getUserInfo();
+        if (is_null($user)) {
+            throw new MyCurrentException('USER_NOT_FOUND', 'User not found', 404);
+        }
+
+        if ($user->isCheckValidation() === true) {
+            throw new MyCurrentException('ACCOUNT_ALREADY_ACTIVATED', 'Account is already activated', 409);
+        }
+
+        $userPassword = new UserPassword();
+        $userPassword->setUserHistoric($user);
+        $userPassword->setHistoricPassword($user->getPassword());
+        $this->em->persist($userPassword);
+
+        $user->setPassword($this->passwordHasher->hashPassword($user, $dto->getPassword()));
+        $user->setCheckValidation(true);
+        $user->setIsCheckValidationAt(new \DateTimeImmutable('now'));
+
+        $userCode->setEmailValidated(true);
+        $userCode->setUsedAt(new \DateTimeImmutable('now'));
+
+        $this->em->flush();
+
+        return ['activated' => true];
     }
 }

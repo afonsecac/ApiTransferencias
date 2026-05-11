@@ -1,0 +1,209 @@
+{% extends 'emails/_base.html.twig' %}
+
+{% block title %}Nueva Promoci&oacute;n &mdash; SendMundo{% endblock %}
+
+{% block preheader %}Nueva promoci&oacute;n: {{ promotionName }}. Vigente del {{ startAt }} al {{ endAt }}.{% endblock %}
+
+{% block brand_header %}
+<span style="font-size:20px;font-weight:bold;color:#ffffff;font-family:Arial,Helvetica,sans-serif;letter-spacing:0.5px;">
+    SendMundo
+</span>
+{% endblock %}
+
+{% block logo_area %}
+<tr>
+    <td align="center" style="background-color:#ffffff;padding:20px 40px 16px 40px;border-bottom:1px solid #ebebeb;">
+        <span style="font-size:22px;font-weight:bold;color:#D9000D;font-family:Arial,Helvetica,sans-serif;letter-spacing:1px;">
+            SendMundo
+        </span>
+    </td>
+</tr>
+{% endblock %}
+
+{% block banner %}
+<tr>
+    <td align="center" style="background-color:#D9000D;padding:28px 40px 24px 40px;">
+        <p style="margin:0 0 6px 0;font-size:24px;font-weight:bold;color:#ffffff;
+                  font-family:Arial,Helvetica,sans-serif;line-height:1.2;">
+            Nueva Promoci&oacute;n
+        </p>
+        <p style="margin:0;font-size:14px;color:rgba(255,255,255,0.85);font-family:Arial,Helvetica,sans-serif;">
+            New Promotion
+        </p>
+    </td>
+</tr>
+{% endblock %}
+
+{% block content %}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+
+    <!-- GREETING -->
+    <tr>
+        <td style="font-size:15px;color:#1a1a1a;line-height:22px;padding-bottom:20px;font-family:Arial,Helvetica,sans-serif;">
+            {% if firstName %}Hola <strong>{{ firstName }}</strong>,{% else %}Hola,{% endif %}<br/>
+            Se ha creado una nueva promoci&oacute;n en la plataforma.<br/>
+            <em style="color:#888888;font-size:13px;">
+                {% if firstName %}Hi <strong>{{ firstName }}</strong>,{% else %}Hi,{% endif %}
+                a new promotion has been created on the platform.
+            </em>
+        </td>
+    </tr>
+
+    <!-- PROMOTION NAME -->
+    <tr>
+        <td style="padding-bottom:6px;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                    <td style="border-left:4px solid #D9000D;padding:10px 16px;background-color:#fafafa;">
+                        <p style="margin:0 0 4px 0;font-size:18px;font-weight:bold;color:#1a1a1a;font-family:Arial,Helvetica,sans-serif;">
+                            {{ promotionName }}
+                        </p>
+                        {% if description %}
+                        <p style="margin:0;font-size:13px;color:#555555;font-family:Arial,Helvetica,sans-serif;">
+                            {{ description }}
+                        </p>
+                        {% endif %}
+                    </td>
+                </tr>
+            </table>
+        </td>
+    </tr>
+
+    <!-- DATES -->
+    <tr>
+        <td style="padding:16px 0 20px 0;">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"
+                   style="background-color:#fff5f5;border-radius:6px;border:1px solid #f5c6c6;">
+                <tr>
+                    <td style="padding:14px 20px;">
+                        <p style="margin:0 0 6px 0;font-size:12px;font-weight:bold;color:#D9000D;text-transform:uppercase;
+                                  letter-spacing:0.5px;font-family:Arial,Helvetica,sans-serif;">
+                            Vigencia / Validity period
+                        </p>
+                        <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
+                            <tr>
+                                <td style="width:50%;padding-right:12px;vertical-align:top;">
+                                    <p style="margin:0 0 2px 0;font-size:11px;color:#888888;font-family:Arial,Helvetica,sans-serif;">
+                                        Desde / From
+                                    </p>
+                                    <p style="margin:0;font-size:14px;font-weight:bold;color:#1a1a1a;font-family:'Courier New',Courier,monospace;">
+                                        {{ startAt }}
+                                    </p>
+                                </td>
+                                <td style="width:50%;padding-left:12px;border-left:1px solid #f5c6c6;vertical-align:top;">
+                                    <p style="margin:0 0 2px 0;font-size:11px;color:#888888;font-family:Arial,Helvetica,sans-serif;">
+                                        Hasta / To
+                                    </p>
+                                    <p style="margin:0;font-size:14px;font-weight:bold;color:#1a1a1a;font-family:'Courier New',Courier,monospace;">
+                                        {{ endAt }}
+                                    </p>
+                                </td>
+                            </tr>
+                        </table>
+                    </td>
+                </tr>
+            </table>
+        </td>
+    </tr>
+
+    {% if infoDescription %}
+    <!-- INFO DESCRIPTION -->
+    <tr>
+        <td style="font-size:14px;color:#333333;line-height:21px;padding-bottom:20px;font-family:Arial,Helvetica,sans-serif;">
+            {{ infoDescription }}
+        </td>
+    </tr>
+    {% endif %}
+
+    {% if packages is not empty %}
+    <!-- PACKAGES TABLE -->
+    <tr>
+        <td style="padding-bottom:6px;">
+            <p style="margin:0 0 8px 0;font-size:13px;font-weight:bold;color:#1a1a1a;font-family:Arial,Helvetica,sans-serif;text-transform:uppercase;letter-spacing:0.5px;">
+                Paquetes creados / Created packages
+            </p>
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+                   style="border-collapse:collapse;font-family:Arial,Helvetica,sans-serif;font-size:13px;">
+                <thead>
+                    <tr style="background-color:#D9000D;">
+                        <th style="padding:9px 12px;text-align:left;color:#ffffff;font-weight:bold;">Paquete / Package</th>
+                        <th style="padding:9px 12px;text-align:right;color:#ffffff;font-weight:bold;">Precio / Price</th>
+                        <th style="padding:9px 12px;text-align:right;color:#ffffff;font-weight:bold;">Importe / Amount</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for pkg in packages %}
+                    <tr style="background-color:{{ loop.index is odd ? '#ffffff' : '#fafafa' }};">
+                        <td style="padding:8px 12px;color:#1a1a1a;border-bottom:1px solid #ebebeb;">{{ pkg.name }}</td>
+                        <td style="padding:8px 12px;text-align:right;color:#1a1a1a;border-bottom:1px solid #ebebeb;font-family:'Courier New',Courier,monospace;">
+                            {{ pkg.price }} {{ pkg.priceCurrency }}
+                        </td>
+                        <td style="padding:8px 12px;text-align:right;color:#1a1a1a;border-bottom:1px solid #ebebeb;font-family:'Courier New',Courier,monospace;">
+                            {{ pkg.amount }} {{ pkg.currency }}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </td>
+    </tr>
+    {% endif %}
+
+    {% if terms is not empty %}
+    <!-- TERMS -->
+    <tr>
+        <td style="padding-top:20px;padding-bottom:6px;">
+            <p style="margin:0 0 8px 0;font-size:13px;font-weight:bold;color:#1a1a1a;font-family:Arial,Helvetica,sans-serif;text-transform:uppercase;letter-spacing:0.5px;">
+                T&eacute;rminos / Terms
+            </p>
+            <ul style="margin:0;padding-left:20px;font-size:13px;color:#555555;line-height:20px;font-family:Arial,Helvetica,sans-serif;">
+                {% for term in terms %}
+                <li style="margin-bottom:4px;">
+                    {% if term.additional_information is defined %}
+                        <strong>{{ term.additional_information }}</strong>
+                        {% if term.type is defined %}&nbsp;<span style="color:#888888;">({{ term.type }})</span>{% endif %}
+                    {% else %}
+                        {{ term|json_encode }}
+                    {% endif %}
+                </li>
+                {% endfor %}
+            </ul>
+        </td>
+    </tr>
+    {% endif %}
+
+    <!-- SEPARATOR -->
+    <tr>
+        <td style="padding-top:24px;padding-bottom:20px;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr><td style="border-top:1px solid #e0e0e0;font-size:1px;line-height:1px;">&nbsp;</td></tr>
+            </table>
+        </td>
+    </tr>
+
+    <!-- DISCLAIMER -->
+    <tr>
+        <td style="font-size:12px;color:#999999;line-height:20px;font-family:Arial,Helvetica,sans-serif;">
+            <strong style="color:#555555;">ES:</strong> Este mensaje es solo para usuarios del &aacute;rea de tecnolog&iacute;a. No respondas a este correo.<br/>
+            <strong style="color:#555555;">EN:</strong> This message is intended for technology area users only. Please do not reply to this email.
+        </td>
+    </tr>
+
+</table>
+{% endblock %}
+
+{% block footer %}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+    <tr>
+        <td align="center" style="color:#ffffff;font-size:13px;font-weight:bold;padding-bottom:4px;font-family:Arial,Helvetica,sans-serif;">
+            SendMundo SL
+        </td>
+    </tr>
+    <tr>
+        <td align="center" style="border-top:1px solid rgba(255,255,255,0.12);padding-top:12px;
+                                   font-size:11px;color:rgba(255,255,255,0.45);font-family:Arial,Helvetica,sans-serif;">
+            Este es un mensaje autom&aacute;tico &mdash; por favor no respondas a este correo.
+        </td>
+    </tr>
+</table>
+{% endblock %}

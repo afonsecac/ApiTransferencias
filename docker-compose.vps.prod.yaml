@@ -25,6 +25,8 @@ x-worker-base: &worker-base
     JWT_TIMEOUT: ${JWT_TIMEOUT:-30}
     APP_TEST_PHONE: ${APP_TEST_PHONE}
     APP_MAILER_FROM: ${APP_MAILER_FROM}
+    COMREMIT_DASHBOARD_URL: ${COMREMIT_DASHBOARD_URL}
+    SENDMUNDO_DASHBOARD_URL: ${SENDMUNDO_DASHBOARD_URL}
   depends_on:
     database:
       condition: service_healthy
