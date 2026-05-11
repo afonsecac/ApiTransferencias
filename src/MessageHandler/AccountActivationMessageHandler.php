@@ -29,7 +29,7 @@ class AccountActivationMessageHandler
         $senderName = $contractWith === 'comremit' ? 'No Reply (Comremit Solutions SL)' : 'No Reply - (SendMundo SL)';
 
         $baseUrl = $this->parameterBag->get('app.dashboard.url.' . $contractWith);
-        $activationUrl = $baseUrl . '/activate?email=' . urlencode($message->getEmail());
+        $activationUrl = $baseUrl . '/reset-password?email=' . urlencode($message->getEmail());
 
         $mail = (new TemplatedEmail())
             ->from(new Address($this->parameterBag->get('app.email.from'), $senderName))

@@ -37,7 +37,7 @@ class TestAccountActivationEmailCommand extends Command
     {
         $brand = strtolower($input->getArgument('brand'));
         $baseUrl = $this->parameterBag->get('app.dashboard.url.' . $brand);
-        $activationUrl = $baseUrl . '/activate?email=' . urlencode('alexander.afonsecac@gmail.com');
+        $activationUrl = $baseUrl . '/reset-password?email=' . urlencode('alexander.afonsecac@gmail.com');
 
         $mail = (new TemplatedEmail())
             ->from(new Address($this->parameterBag->get('app.email.from'), 'Support Account'))
