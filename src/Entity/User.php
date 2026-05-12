@@ -194,15 +194,6 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface, IInput
         return $this;
     }
 
-    /**
-     * @see UserInterface
-     */
-    public function eraseCredentials(): void
-    {
-        // If you store any temporary, sensitive data on the user, clear it here
-        // $this->plainPassword = null;
-    }
-
     public function getCompany(): ?Client
     {
         return $this->company;
