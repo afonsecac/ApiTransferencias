@@ -2,6 +2,7 @@
 
 namespace App\Service;
 
+use App\DTO\ChangePasswordDto;
 use App\DTO\CreateUserDto;
 use App\DTO\UpdateUserDto;
 use App\Entity\Client;
@@ -146,6 +147,23 @@ class UserManagementService
     {
         $user->setRemovedAt(new \DateTimeImmutable('now'));
         $user->setIsActive(false);
+        $this->em->flush();
+    }
+
+    /** @throws MyCurrentException */
+    public function changePassword(User $user, ChangePasswordDto $dto): void
+    {
+        if (!$this->passwordHasher->isPasswordValid($user, $dto->getCurrentPassword())) {
+            throw new MyCurrentException('INVALID_CURRENT_PASSWORD', 'Current password is incorrect.', 422);
+        }
+        if ($dto->getNewPassword() !== $dto->getConfirmPassword()) {
+            throw new MyCurrentException('PASSWORDS_DO_NOT_MATCH', 'New password and confirmation do not match.', 422);
+        }
+        if ($this->passwordHasher->isPasswordValid($user, $dto->getNewPassword())) {
+            throw new MyCurrentException('SAME_PASSWORD', 'New password must be different from the current one.', 422);
+        }
+
+        $user->setPassword($this->passwordHasher->hashPassword($user, $dto->getNewPassword()));
         $this->em->flush();
     }
 }

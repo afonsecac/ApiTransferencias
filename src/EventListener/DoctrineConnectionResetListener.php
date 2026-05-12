@@ -20,9 +20,7 @@ class DoctrineConnectionResetListener
     public function __invoke(WorkerMessageReceivedEvent $event): void
     {
         $connection = $this->em->getConnection();
-        if ($connection->isConnected()) {
-            $connection->close();
-        }
+        $connection->close();
         $this->em->clear();
     }
 }

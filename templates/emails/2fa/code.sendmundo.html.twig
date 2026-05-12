@@ -1,0 +1,40 @@
+{% extends 'emails/_base.html.twig' %}
+
+{% block title %}Código de verificación &mdash; SendMundo{% endblock %}
+{% block preheader %}Tu código de verificación es {{ code }}. Válido por 10 minutos.{% endblock %}
+
+{% block brand_header %}
+<span style="font-size:20px;font-weight:bold;color:#ffffff;font-family:Arial,Helvetica,sans-serif;">SendMundo</span>
+{% endblock %}
+
+{% block banner %}
+<tr>
+    <td align="center" style="background-color:#0057B8;padding:28px 40px 24px 40px;">
+        <p style="margin:0 0 6px 0;font-size:24px;font-weight:bold;color:#ffffff;font-family:Arial,Helvetica,sans-serif;">
+            Verificación en dos pasos
+        </p>
+        <p style="margin:0;font-size:14px;color:rgba(255,255,255,0.85);font-family:Arial,Helvetica,sans-serif;">
+            Two-factor authentication
+        </p>
+    </td>
+</tr>
+{% endblock %}
+
+{% block content %}
+<tr>
+    <td style="padding:32px 40px 24px 40px;font-family:Arial,Helvetica,sans-serif;font-size:15px;color:#333333;line-height:1.6;">
+        <p style="margin:0 0 16px 0;">Hola <strong>{{ firstName }}</strong>,</p>
+        <p style="margin:0 0 24px 0;">
+            Usa el siguiente código para completar tu inicio de sesión. Válido durante <strong>10 minutos</strong>.
+        </p>
+        <div style="text-align:center;margin:0 0 24px 0;">
+            <span style="display:inline-block;background:#f4f4f4;border:1px solid #dddddd;border-radius:6px;
+                         padding:16px 40px;font-size:32px;font-weight:bold;letter-spacing:8px;color:#0057B8;
+                         font-family:monospace;">{{ code }}</span>
+        </div>
+        <p style="margin:0;font-size:13px;color:#888888;">
+            Si no intentaste iniciar sesión, ignora este correo.
+        </p>
+    </td>
+</tr>
+{% endblock %}

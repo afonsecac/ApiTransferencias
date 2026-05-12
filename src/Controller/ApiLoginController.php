@@ -12,6 +12,7 @@ use App\Exception\MyCurrentException;
 use App\Entity\User;
 use App\OpenApi\Attribute\DashboardEndpoint;
 use App\Service\RefreshTokenService;
+use App\Service\TwoFactorService;
 use App\Service\UserService;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -25,9 +26,10 @@ use Symfony\Component\Serializer\Normalizer\NormalizerInterface;
 class ApiLoginController extends AbstractController
 {
     public function __construct(
-        private readonly UserService $userService,
+        private readonly UserService        $userService,
         private readonly NormalizerInterface $serializer,
         private readonly RefreshTokenService $refreshTokenService,
+        private readonly TwoFactorService   $twoFactorService,
         private readonly RateLimiterFactory $dashboardLoginLimiter,
         private readonly RateLimiterFactory $dashboardLoginIpLimiter,
         private readonly RateLimiterFactory $forgotPasswordLimiter,
@@ -62,6 +64,16 @@ class ApiLoginController extends AbstractController
             return $this->json([
                 'error' => ['message' => 'Too many login attempts. Please try again later.'],
             ], Response::HTTP_TOO_MANY_REQUESTS);
+        }
+
+        // Si el usuario requiere 2FA, devolver pending token en lugar del JWT
+        if ($this->twoFactorService->requiresTwoFactor($user)) {
+            $verification = $this->twoFactorService->startLoginVerification($user);
+            return $this->json([
+                'requires2fa'  => true,
+                'pendingToken' => $verification['pendingToken'],
+                'method'       => $verification['method'],
+            ]);
         }
 
         $user->setCurrentIp($clientIp);

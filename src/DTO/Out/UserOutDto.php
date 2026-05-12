@@ -14,6 +14,7 @@ final class UserOutDto
     public ?string $phoneNumber = null;
     public bool $isActive;
     public bool $isCheckValidation;
+    public bool $twoFactorEnabled;
     public ?CompanyRefOutDto $company = null;
     public ?string $createdAt = null;
     public ?string $removedAt = null;
