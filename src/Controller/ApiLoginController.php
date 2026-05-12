@@ -18,8 +18,9 @@ use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\RateLimiter\RateLimiterFactory;
-use Symfony\Component\Routing\Annotation\Route;
+use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Http\Attribute\CurrentUser;
 use Symfony\Component\Serializer\Normalizer\NormalizerInterface;
 
@@ -30,10 +31,15 @@ class ApiLoginController extends AbstractController
         private readonly NormalizerInterface $serializer,
         private readonly RefreshTokenService $refreshTokenService,
         private readonly TwoFactorService   $twoFactorService,
+        #[Autowire('limiter.dashboard_login')]
         private readonly RateLimiterFactory $dashboardLoginLimiter,
+        #[Autowire('limiter.dashboard_login_ip')]
         private readonly RateLimiterFactory $dashboardLoginIpLimiter,
+        #[Autowire('limiter.forgot_password')]
         private readonly RateLimiterFactory $forgotPasswordLimiter,
+        #[Autowire('limiter.reset_password')]
         private readonly RateLimiterFactory $resetPasswordLimiter,
+        #[Autowire('limiter.activate_account')]
         private readonly RateLimiterFactory $activateAccountLimiter,
     ) {
     }

@@ -34,11 +34,11 @@ use Symfony\Component\Mailer\MailerInterface;
 use Symfony\Component\Messenger\MessageBusInterface;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 use Symfony\Component\Serializer\SerializerInterface;
+use App\Service\Etecsa\EtecsaGatewayClient;
 use Symfony\Contracts\HttpClient\Exception\ClientExceptionInterface;
 use Symfony\Contracts\HttpClient\Exception\RedirectionExceptionInterface;
 use Symfony\Contracts\HttpClient\Exception\ServerExceptionInterface;
 use Symfony\Contracts\HttpClient\Exception\TransportExceptionInterface;
-use Symfony\Contracts\HttpClient\HttpClientInterface;
 
 class CommunicationSaleService extends CommonService
 {
@@ -103,7 +103,6 @@ class CommunicationSaleService extends CommonService
      * @param \App\Repository\EnvironmentRepository $environmentRepository
      * @param \App\Repository\SysConfigRepository $sysConfigRepo
      * @param \Symfony\Component\Serializer\SerializerInterface $serializer
-     * @param \Symfony\Contracts\HttpClient\HttpClientInterface $httpClient
      * @param \App\Service\ConfigureSequenceService $configureSequence
      * @param \Symfony\Component\Messenger\MessageBusInterface $messageBus
      * @param \App\Service\HistoricalSaleService $historicalSaleService
@@ -119,7 +118,7 @@ class CommunicationSaleService extends CommonService
         EnvironmentRepository $environmentRepository,
         SysConfigRepository $sysConfigRepo,
         SerializerInterface $serializer,
-        private readonly HttpClientInterface $httpClient,
+        private readonly EtecsaGatewayClient $etecsaClient,
         private readonly ConfigureSequenceService $configureSequence,
         private readonly MessageBusInterface $messageBus,
         private readonly HistoricalSaleService $historicalSaleService,
@@ -469,18 +468,13 @@ class CommunicationSaleService extends CommonService
                     'environment' => $environment->getType(),
                 ];
 
-                $rechargeResponse = $this->httpClient->request(
-                    'POST',
-                    $urlRecharge,
-                    [
-                        'headers' => [
-                            'Content-Type' => 'application/json',
-                            'Accept' => 'application/json',
-                        ],
-                        'body' => $this->serializer->serialize($body, 'json', []),
-                    ]
+                $rechargeInfo = $this->etecsaClient->recharge(
+                    $environment,
+                    $phoneNumber,
+                    (int) $productCode,
+                    (float) $destination->amount,
+                    $saleRecharge->getTransactionId(),
                 );
-                $rechargeInfo = $rechargeResponse->toArray();
                 $saleRecharge->setTransactionStatus($rechargeInfo);
                 $saleRecharge->setStateProcess(CommunicationStateEnum::PENDING->value);
                 $rechargeResult = (object)((object)$rechargeInfo)->result;
@@ -754,19 +748,12 @@ class CommunicationSaleService extends CommonService
                 'environment' => $user->getEnvironment()?->getType(),
             ];
 
-            $saleResponse = $this->httpClient->request(
-                'POST',
-                $urlSale,
-                [
-                    'headers' => [
-                        'Content-Type' => 'application/json',
-                        'Accept' => 'application/json',
-                    ],
-                    'body' => $this->serializer->serialize($body, 'json', []),
-                ]
+            $saleInfo = $this->etecsaClient->sellPackage(
+                $user->getEnvironment(),
+                $transactionId,
+                $body['packageInfo'],
+                $body['client'],
             );
-
-            $saleInfo = $saleResponse->toArray();
             $saleResult = (object)((object)$saleInfo)->result;
             $code = null;
             if (property_exists($saleResult, 'code')) {
@@ -897,21 +884,11 @@ class CommunicationSaleService extends CommonService
             'transactionId' => $sale->getTransactionId(),
         ];
 
-        $rechargeResponse = null;
         try {
-            $rechargeResponse = $this->httpClient->request(
-                'POST',
-                $url,
-                [
-                    'headers' => [
-                        'Content-Type' => 'application/json',
-                        'Accept' => 'application/json',
-                    ],
-                    'body' => $this->serializer->serialize($body, 'json'),
-                ]
+            $response = $this->etecsaClient->getSaleInfo(
+                $tenant->getEnvironment(),
+                $sale->getTransactionId(),
             );
-
-            $response = $rechargeResponse->toArray();
             $responseInfo = (object)$response;
             $statusResponse = strtoupper($responseInfo->status);
             $result = isset($responseInfo->result) ? (object)$responseInfo->result : null;
@@ -1005,9 +982,8 @@ class CommunicationSaleService extends CommonService
             }
             $this->em->flush();
         } catch (\Exception $e) {
-            $infoResponse = $rechargeResponse !== null ? json_decode($rechargeResponse->getContent(false), true) : [];
             $message = $e->getMessage();
-            $this->logger->error($rechargeResponse !== null ? $rechargeResponse->getContent(false) : $message, is_array($infoResponse) ? $infoResponse : []);
+            $this->logger->error($message);
             if ($e instanceof ClientException && $e->getCode() === 404 && $isProcess) {
                 // TO-DO: Recheck info to process
                 // $this->tryAgainWithTransaction($saleId);

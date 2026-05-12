@@ -24,6 +24,7 @@ use Doctrine\ORM\NonUniqueResultException;
 use Symfony\Bundle\SecurityBundle\Security;
 use Symfony\Component\HttpFoundation\Exception\BadRequestException;
 use Symfony\Component\HttpKernel\Exception\TooManyRequestsHttpException;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\Serializer\Encoder\JsonEncoder;
 use Symfony\Component\Serializer\Encoder\XmlEncoder;
@@ -55,6 +56,7 @@ class CreateTransactionProcessor implements ProcessorInterface
         private readonly SenderRepository $senderRepository,
         private readonly BalanceOperationRepository $balanceRepository,
         private readonly TransferCalculatorService $transferCalculatorService,
+        #[Autowire('limiter.api_transfer')]
         private readonly RateLimiterFactory $apiTransferLimiter,
     ) {
         $encoders = [new XmlEncoder(), new JsonEncoder()];

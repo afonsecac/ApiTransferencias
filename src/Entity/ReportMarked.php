@@ -37,7 +37,7 @@ class ReportMarked
     #[ORM\JoinColumn(nullable: false)]
     private ?Account $account = null;
 
-    #[ORM\Column(type: Types::ARRAY, nullable: true)]
+    #[ORM\Column(type: Types::JSON, nullable: true)]
     #[Groups(['report:read'])]
     private ?array $dataArray = null;
 

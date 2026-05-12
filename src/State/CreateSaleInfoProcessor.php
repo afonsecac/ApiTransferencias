@@ -15,6 +15,7 @@ use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\SecurityBundle\Security;
 use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 use Symfony\Component\HttpKernel\Exception\TooManyRequestsHttpException;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Contracts\HttpClient\Exception\ClientExceptionInterface;
 use Symfony\Contracts\HttpClient\Exception\RedirectionExceptionInterface;
@@ -27,6 +28,7 @@ class CreateSaleInfoProcessor implements ProcessorInterface
         private readonly CommunicationSaleService $saleService,
         private readonly EntityManagerInterface $em,
         private readonly Security $security,
+        #[Autowire('limiter.api_recharge')]
         private readonly RateLimiterFactory $apiRechargeLimiter,
     ) {
     }
