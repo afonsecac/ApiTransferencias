@@ -2,6 +2,7 @@
 
 namespace App\Controller;
 
+use App\DTO\ChangePasswordDto;
 use App\DTO\CreateUserDto;
 use App\DTO\UpdateUserDto;
 use App\DTO\Out\DeletedOutDto;
@@ -137,7 +138,7 @@ class DashboardUserController extends AbstractController
         return $this->json($this->serializeUser($user), Response::HTTP_CREATED);
     }
 
-    #[Route('/{id}', name: 'dashboard_users_update', methods: ['PUT'], requirements: ['id' => '\d+'])]
+    #[Route('/{id}', name: 'dashboard_users_update', methods: ['PATCH'], requirements: ['id' => '\d+'])]
     #[DashboardEndpoint(summary: 'Actualizar usuario', tag: 'Users', requestDto: UpdateUserDto::class, responseDto: UserOutDto::class)]
     public function update(int $id, UpdateUserDto $dto): JsonResponse
     {
@@ -151,21 +152,19 @@ class DashboardUserController extends AbstractController
             return $this->json(['error' => ['message' => 'User not found']], Response::HTTP_NOT_FOUND);
         }
 
-        $access = $this->checkClientAccess($currentUser, $user);
-        if ($access !== null) {
-            return $access;
+        $isSelf       = $currentUser->getId() === $user->getId();
+        $isSuperAdmin = $this->isGranted('ROLE_SUPER_ADMIN');
+
+        if (!$isSelf && !$isSuperAdmin) {
+            return $this->json(['error' => ['message' => 'Access denied']], Response::HTTP_FORBIDDEN);
         }
 
-        if (!$this->canManageUser($currentUser, $user)) {
-            return $this->json(['error' => ['message' => 'Cannot edit a user with higher or equal role.']], Response::HTTP_FORBIDDEN);
-        }
-
-        if ($dto->getRole() !== null && !$this->canAssignRole($currentUser, $dto->getRole())) {
-            return $this->json(['error' => ['message' => 'Cannot assign a role higher than your own.']], Response::HTTP_FORBIDDEN);
+        if ($dto->getRole() !== null && !$isSuperAdmin) {
+            return $this->json(['error' => ['message' => 'Only a super admin can change roles.']], Response::HTTP_FORBIDDEN);
         }
 
         try {
-            $user = $this->userManagementService->update($user, $dto, $this->isGranted('ROLE_ADMIN'));
+            $user = $this->userManagementService->update($user, $dto, $isSuperAdmin);
         } catch (MyCurrentException $e) {
             $status = $e->getCode() === 409 ? Response::HTTP_CONFLICT : $e->getCode();
             return $this->json(['error' => ['message' => $e->getMessage()]], $status);
@@ -236,6 +235,24 @@ class DashboardUserController extends AbstractController
         $this->userManagementService->delete($user);
 
         return $this->json(['deleted' => true]);
+    }
+
+    #[Route('/me/password', name: 'dashboard_users_change_password', methods: ['PATCH'])]
+    #[DashboardEndpoint(summary: 'Cambiar contraseña del usuario autenticado', tag: 'Users', requestDto: ChangePasswordDto::class)]
+    public function changePassword(ChangePasswordDto $dto): JsonResponse
+    {
+        $currentUser = $this->getAuthUser();
+        if ($currentUser === null) {
+            return $this->unauthorized();
+        }
+
+        try {
+            $this->userManagementService->changePassword($currentUser, $dto);
+        } catch (MyCurrentException $e) {
+            return $this->json(['error' => ['message' => $e->getMessage()]], $e->getCode());
+        }
+
+        return $this->json(['passwordChanged' => true]);
     }
 
     // ─── Helpers ────────────────────────────────
@@ -310,6 +327,7 @@ class DashboardUserController extends AbstractController
             'phoneNumber' => $user->getPhoneNumber(),
             'isActive' => $user->isActive(),
             'isCheckValidation' => $user->isCheckValidation(),
+            'twoFactorEnabled' => $user->isTwoFactorEnabled(),
             'company' => $user->getCompany() ? [
                 'id' => $user->getCompany()->getId(),
                 'companyName' => $user->getCompany()->getCompanyName(),

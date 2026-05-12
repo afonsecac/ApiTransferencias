@@ -104,6 +104,25 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface, IInput
     #[Groups(['profile', 'user:job_position'])]
     private ?JobPosition $jobPosition = null;
 
+    #[ORM\Column(length: 255, nullable: true)]
+    private ?string $twoFactorSecret = null;
+
+    #[ORM\Column]
+    #[Groups(['profile'])]
+    private bool $twoFactorEnabled = false;
+
+    #[ORM\Column(length: 64, nullable: true)]
+    private ?string $twoFactorPendingToken = null;
+
+    #[ORM\Column(nullable: true)]
+    private ?DateTimeImmutable $twoFactorPendingTokenExpiresAt = null;
+
+    #[ORM\Column(length: 6, nullable: true)]
+    private ?string $twoFactorEmailCode = null;
+
+    #[ORM\Column(nullable: true)]
+    private ?DateTimeImmutable $twoFactorEmailCodeExpiresAt = null;
+
     public function __construct()
     {
         $this->historicPasswords = new ArrayCollection();
@@ -465,4 +484,22 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface, IInput
 
         return $this;
     }
+
+    public function getTwoFactorSecret(): ?string { return $this->twoFactorSecret; }
+    public function setTwoFactorSecret(?string $v): void { $this->twoFactorSecret = $v; }
+
+    public function isTwoFactorEnabled(): bool { return $this->twoFactorEnabled; }
+    public function setTwoFactorEnabled(bool $v): void { $this->twoFactorEnabled = $v; }
+
+    public function getTwoFactorPendingToken(): ?string { return $this->twoFactorPendingToken; }
+    public function setTwoFactorPendingToken(?string $v): void { $this->twoFactorPendingToken = $v; }
+
+    public function getTwoFactorPendingTokenExpiresAt(): ?DateTimeImmutable { return $this->twoFactorPendingTokenExpiresAt; }
+    public function setTwoFactorPendingTokenExpiresAt(?DateTimeImmutable $v): void { $this->twoFactorPendingTokenExpiresAt = $v; }
+
+    public function getTwoFactorEmailCode(): ?string { return $this->twoFactorEmailCode; }
+    public function setTwoFactorEmailCode(?string $v): void { $this->twoFactorEmailCode = $v; }
+
+    public function getTwoFactorEmailCodeExpiresAt(): ?DateTimeImmutable { return $this->twoFactorEmailCodeExpiresAt; }
+    public function setTwoFactorEmailCodeExpiresAt(?DateTimeImmutable $v): void { $this->twoFactorEmailCodeExpiresAt = $v; }
 }

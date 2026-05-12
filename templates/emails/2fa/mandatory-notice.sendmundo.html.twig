@@ -1,0 +1,40 @@
+{% extends 'emails/_base.html.twig' %}
+
+{% block title %}Verificación en dos pasos requerida &mdash; SendMundo{% endblock %}
+{% block preheader %}El acceso requerirá 2FA a partir del {{ deadline }}.{% endblock %}
+
+{% block brand_header %}
+<span style="font-size:20px;font-weight:bold;color:#ffffff;font-family:Arial,Helvetica,sans-serif;">SendMundo</span>
+{% endblock %}
+
+{% block banner %}
+<tr>
+    <td align="center" style="background-color:#0057B8;padding:28px 40px 24px 40px;">
+        <p style="margin:0 0 6px 0;font-size:24px;font-weight:bold;color:#ffffff;font-family:Arial,Helvetica,sans-serif;">
+            Acción requerida: activa el 2FA
+        </p>
+        <p style="margin:0;font-size:14px;color:rgba(255,255,255,0.85);font-family:Arial,Helvetica,sans-serif;">
+            Action required: enable two-factor authentication
+        </p>
+    </td>
+</tr>
+{% endblock %}
+
+{% block content %}
+<tr>
+    <td style="padding:32px 40px 24px 40px;font-family:Arial,Helvetica,sans-serif;font-size:15px;color:#333333;line-height:1.6;">
+        <p style="margin:0 0 16px 0;">Hola <strong>{{ firstName }}</strong>,</p>
+        <p style="margin:0 0 16px 0;">
+            A partir del <strong>{{ deadline }}</strong>, el acceso al dashboard requerirá
+            verificación en dos pasos (2FA).
+        </p>
+        <p style="margin:0 0 24px 0;">
+            Por favor, configura tu 2FA antes de esa fecha iniciando sesión y accediendo a
+            la configuración de seguridad de tu cuenta.
+        </p>
+        <p style="margin:0;font-size:13px;color:#888888;">
+            Hasta esa fecha el uso del 2FA sigue siendo opcional.
+        </p>
+    </td>
+</tr>
+{% endblock %}

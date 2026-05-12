@@ -246,6 +246,19 @@ deploy() {
         backup_db
     fi
 
+    log "Levantando base de datos..."
+    $COMPOSE_CMD up -d database
+    log "Esperando a que la base de datos este lista..."
+    for i in $(seq 1 30); do
+        if $COMPOSE_CMD exec -T database pg_isready -U "$(get_env_val POSTGRES_USER)" > /dev/null 2>&1; then
+            break
+        fi
+        sleep 1
+    done
+
+    log "Ejecutando migraciones..."
+    $COMPOSE_CMD run --rm php-fpm php bin/console doctrine:migrations:migrate --no-interaction
+
     log "Desplegando..."
     $COMPOSE_CMD up -d --remove-orphans --force-recreate
 
