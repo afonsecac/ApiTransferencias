@@ -57,7 +57,7 @@ use Symfony\Component\Validator\Constraints as Assert;
 class Sender
 {
     #[ORM\Id]
-    #[ORM\GeneratedValue]
+    #[ORM\GeneratedValue(strategy: 'SEQUENCE')]
     #[ORM\Column]
     #[Groups(['sender:read'])]
     #[ApiProperty(identifier: true)]

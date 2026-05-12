@@ -11,7 +11,7 @@ use Symfony\Component\Serializer\Attribute\Groups;
 class ReportMarked
 {
     #[ORM\Id]
-    #[ORM\GeneratedValue]
+    #[ORM\GeneratedValue(strategy: 'SEQUENCE')]
     #[ORM\Column]
     #[Groups(['reports:list', 'report:read'])]
     private ?int $id = null;

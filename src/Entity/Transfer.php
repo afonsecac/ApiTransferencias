@@ -46,7 +46,7 @@ use Symfony\Component\Validator\Constraints as Assert;
 class Transfer
 {
     #[ORM\Id]
-    #[ORM\GeneratedValue]
+    #[ORM\GeneratedValue(strategy: 'SEQUENCE')]
     #[ORM\Column]
     #[ApiProperty(identifier: true)]
     #[Groups(['tx:read', 'balance:reading'])]

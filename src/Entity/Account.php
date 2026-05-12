@@ -20,7 +20,7 @@ use Symfony\Component\Uid\Uuid;
 class Account implements UserInterface
 {
     #[ORM\Id]
-    #[ORM\GeneratedValue]
+    #[ORM\GeneratedValue(strategy: 'SEQUENCE')]
     #[ORM\Column]
     #[Groups(['balance:reading', 'profile', 'accounts:read'])]
     private ?int $id = null;

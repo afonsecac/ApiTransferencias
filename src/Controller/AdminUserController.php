@@ -27,7 +27,7 @@ class AdminUserController extends AbstractController
 {
     public function __construct(
         private readonly UserService $userService,
-        #[Autowire('limiter.resend_activation')]
+        #[Autowire(service: 'limiter.resend_activation')]
         private readonly RateLimiterFactory $resendActivationLimiter,
     ) {
     }

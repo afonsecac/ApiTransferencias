@@ -13,7 +13,7 @@ use Symfony\Component\Serializer\Attribute\Groups;
 class NavigationItem
 {
     #[ORM\Id]
-    #[ORM\GeneratedValue]
+    #[ORM\GeneratedValue(strategy: 'SEQUENCE')]
     #[ORM\Column]
     #[Groups(['navigation', 'navItem:read'])]
     private ?int $id = null;

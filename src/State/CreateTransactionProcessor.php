@@ -56,7 +56,7 @@ class CreateTransactionProcessor implements ProcessorInterface
         private readonly SenderRepository $senderRepository,
         private readonly BalanceOperationRepository $balanceRepository,
         private readonly TransferCalculatorService $transferCalculatorService,
-        #[Autowire('limiter.api_transfer')]
+        #[Autowire(service: 'limiter.api_transfer')]
         private readonly RateLimiterFactory $apiTransferLimiter,
     ) {
         $encoders = [new XmlEncoder(), new JsonEncoder()];

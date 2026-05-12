@@ -26,7 +26,7 @@ use Symfony\Component\Validator\Constraints as Assert;
 class Province
 {
     #[ORM\Id]
-    #[ORM\GeneratedValue]
+    #[ORM\GeneratedValue(strategy: 'SEQUENCE')]
     #[ORM\Column]
     #[Groups(['province:read'])]
     #[ApiProperty(identifier: true)]

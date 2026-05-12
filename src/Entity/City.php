@@ -22,7 +22,7 @@ use Symfony\Component\Validator\Constraints as Assert;
 class City
 {
     #[ORM\Id]
-    #[ORM\GeneratedValue]
+    #[ORM\GeneratedValue(strategy: 'SEQUENCE')]
     #[ORM\Column]
     #[Groups(['city:read'])]
     #[ApiProperty(identifier: true)]

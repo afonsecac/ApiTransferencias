@@ -59,7 +59,7 @@ use Symfony\Component\Validator\Constraints as Assert;
 class BankCard
 {
     #[ORM\Id]
-    #[ORM\GeneratedValue]
+    #[ORM\GeneratedValue(strategy: 'SEQUENCE')]
     #[ORM\Column]
     #[ApiProperty(identifier: true)]
     #[Groups(['bankCard:read'])]

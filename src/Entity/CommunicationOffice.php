@@ -32,7 +32,7 @@ use Symfony\Component\Serializer\Attribute\Groups;
 class CommunicationOffice
 {
     #[ORM\Id]
-    #[ORM\GeneratedValue]
+    #[ORM\GeneratedValue(strategy: 'SEQUENCE')]
     #[ORM\Column]
     #[ApiProperty(identifier: true)]
     #[Groups(['comOffices:read'])]

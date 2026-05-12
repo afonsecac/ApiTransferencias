@@ -36,7 +36,7 @@ use Symfony\Component\Validator\Constraints as Assert;
 class Country
 {
     #[ORM\Id]
-    #[ORM\GeneratedValue]
+    #[ORM\GeneratedValue(strategy: 'SEQUENCE')]
     #[ORM\Column]
     #[Groups(['country:read'])]
     #[ApiProperty(identifier: true)]

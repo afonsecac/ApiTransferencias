@@ -39,7 +39,7 @@ use Symfony\Component\Validator\Constraints as Assert;
 class CommunicationPromotions
 {
     #[ORM\Id]
-    #[ORM\GeneratedValue]
+    #[ORM\GeneratedValue(strategy: 'SEQUENCE')]
     #[ORM\Column]
     #[Groups(['comProm:read', 'comPackage:read', 'promotion:list', 'promotion:detail'])]
     #[ApiProperty(identifier: true)]

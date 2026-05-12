@@ -28,7 +28,7 @@ class CreateSaleInfoProcessor implements ProcessorInterface
         private readonly CommunicationSaleService $saleService,
         private readonly EntityManagerInterface $em,
         private readonly Security $security,
-        #[Autowire('limiter.api_recharge')]
+        #[Autowire(service: 'limiter.api_recharge')]
         private readonly RateLimiterFactory $apiRechargeLimiter,
     ) {
     }

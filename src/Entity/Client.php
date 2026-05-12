@@ -21,7 +21,7 @@ use Symfony\Component\Serializer\Attribute\Groups;
 class Client
 {
     #[ORM\Id]
-    #[ORM\GeneratedValue]
+    #[ORM\GeneratedValue(strategy: 'SEQUENCE')]
     #[ORM\Column]
     #[Groups(['balance:reading', 'profile', 'accounts:read', 'reports:list', 'report:read', 'client:list', 'permission:read'])]
     private ?int $id = null;
