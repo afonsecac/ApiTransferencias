@@ -37,12 +37,9 @@ api_platform:
             pagination:
                 items_per_page_parameter_name: itemsPerPage
         stateless: false
-        servers: 'https://api-tx.sendmundo.com'
         cache_headers:
             vary: ['Content-Type', 'Authorization', 'Origin', 'X-AUTH-TOKEN']
         extra_properties:
             standard_put: true
             rfc_7807_compliant_errors: false
-    event_listeners_backward_compatibility_layer: false
-    keep_legacy_inflector: false
 #    enable_entrypoint: https://api-tx.sendmundo.com
