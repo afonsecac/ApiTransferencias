@@ -24,6 +24,7 @@ class TwoFactorService
         private readonly EntityManagerInterface $em,
         private readonly SysConfigRepository    $sysConfigRepo,
         private readonly MessageBusInterface    $bus,
+        private readonly string                 $appEnv,
     ) {}
 
     public function getConfig(): array
@@ -65,7 +66,7 @@ class TwoFactorService
             return [
                 'method' => 'totp',
                 'secret' => $secret,
-                'otpUri' => TwoFactorHelper::generateTotpUri($secret, $user->getEmail(), 'Dashboard'),
+                'otpUri' => TwoFactorHelper::generateTotpUri($secret, $user->getEmail(), $this->buildIssuer($user)),
             ];
         }
 
@@ -237,6 +238,22 @@ class TwoFactorService
         }
         $config->setPropertyValue($value);
         $this->em->flush();
+    }
+
+    private function buildIssuer(User $user): string
+    {
+        $brand = match (strtolower($user->getCompany()?->getContractWith() ?? 'comremit')) {
+            'sendmundo' => 'SendMundo',
+            default     => 'Comremit',
+        };
+
+        $suffix = match ($this->appEnv) {
+            'prod'  => '',
+            'staging' => ' (staging)',
+            default => ' (local)',
+        };
+
+        return "Dashboard {$brand}{$suffix}";
     }
 
     private function dispatchMandatoryNotices(string $deadline): void
