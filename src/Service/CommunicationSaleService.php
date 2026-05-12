@@ -897,7 +897,10 @@ class CommunicationSaleService extends CommonService
             if ($fullResponse !== null) {
                 $fullResponseObj = isset($fullResponse->SaleRecharge) ? (object) $fullResponse->SaleRecharge : null;
                 if ($fullResponseObj !== null) {
-                    $isTrue = $statusResponse === "COMPLETED" && $fullResponseObj->RechargeStateCode === "OK";
+                    $rechargeStateCode = ($fullResponseObj->RechargeStateCode ?? '');
+                    $rechargeState     = ($fullResponseObj->RechargeState ?? '');
+                    $isTrue = $statusResponse === "COMPLETED"
+                        && ($rechargeStateCode === "OK" || $rechargeState === "Realizada");
                 }
             }
             $sale->setTransactionStatus($response);
