@@ -3,13 +3,13 @@
 namespace App\Service;
 
 use ApiPlatform\Symfony\Security\Exception\AccessDeniedException;
-use App\DTO\Out\InfoResult;
 use App\DTO\RequestInfo;
 use App\Entity\CommunicationSalePackage;
 use App\Entity\CommunicationSaleRecharge;
 use App\Entity\User;
 use App\Repository\EnvironmentRepository;
 use App\Repository\SysConfigRepository;
+use App\Service\Etecsa\EtecsaGatewayClient;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\EntityNotFoundException;
 use Psr\Log\LoggerInterface;
@@ -18,26 +18,9 @@ use Symfony\Component\DependencyInjection\ParameterBag\ParameterBagInterface;
 use Symfony\Component\Mailer\MailerInterface;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 use Symfony\Component\Serializer\SerializerInterface;
-use Symfony\Contracts\HttpClient\Exception\ClientExceptionInterface;
-use Symfony\Contracts\HttpClient\Exception\RedirectionExceptionInterface;
-use Symfony\Contracts\HttpClient\Exception\ServerExceptionInterface;
-use Symfony\Contracts\HttpClient\Exception\TransportExceptionInterface;
-use Symfony\Contracts\HttpClient\HttpClientInterface;
 
 class CommunicationInfoService extends CommonService
 {
-    /**
-     * @param \Doctrine\ORM\EntityManagerInterface $em
-     * @param \Symfony\Bundle\SecurityBundle\Security $security
-     * @param \Symfony\Component\DependencyInjection\ParameterBag\ParameterBagInterface $parameters
-     * @param \Symfony\Component\Mailer\MailerInterface $mailer
-     * @param \Psr\Log\LoggerInterface $logger
-     * @param \Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface $passwordHasher
-     * @param \App\Repository\EnvironmentRepository $environmentRepository
-     * @param \App\Repository\SysConfigRepository $sysConfigRepo
-     * @param \Symfony\Component\Serializer\SerializerInterface $serializer
-     * @param \Symfony\Contracts\HttpClient\HttpClientInterface $httpClient
-     */
     public function __construct(
         EntityManagerInterface $em,
         Security $security,
@@ -48,7 +31,7 @@ class CommunicationInfoService extends CommonService
         EnvironmentRepository $environmentRepository,
         SysConfigRepository $sysConfigRepo,
         SerializerInterface $serializer,
-        private readonly HttpClientInterface $httpClient,
+        private readonly EtecsaGatewayClient $etecsaClient,
     ) {
         parent::__construct(
             $em,
@@ -63,14 +46,6 @@ class CommunicationInfoService extends CommonService
         );
     }
 
-    /**
-     * @param \App\DTO\RequestInfo $requestInfo
-     * @return mixed|object|string|void
-     * @throws \Symfony\Contracts\HttpClient\Exception\ClientExceptionInterface
-     * @throws \Symfony\Contracts\HttpClient\Exception\RedirectionExceptionInterface
-     * @throws \Symfony\Contracts\HttpClient\Exception\ServerExceptionInterface
-     * @throws \Symfony\Contracts\HttpClient\Exception\TransportExceptionInterface
-     */
     public function querySale(RequestInfo $requestInfo)
     {
         $user = $this->security->getUser();
@@ -94,6 +69,8 @@ class CommunicationInfoService extends CommonService
                 'clientTransactionId' => $requestInfo->getClientTxId(),
             ];
         }
+
+        // Guardia: no consultar a la gateway si la venta no fue enviada previamente
         $operationSale = $this->em->getRepository($class)->findOneBy($params);
         $date = new \DateTimeImmutable('now');
         if (is_null($operationSale)) {
@@ -107,37 +84,9 @@ class CommunicationInfoService extends CommonService
         if (is_null($tenant)) {
             return;
         }
-        $url = $tenant->getEnvironment()?->getBasePath().'/information/status';
 
-        $body = [
-            'environment' => $tenant->getEnvironment()?->getType(),
-            'transactionId' => $operationSale->getTransactionId(),
-        ];
+        $env = $tenant->getEnvironment();
 
-        try {
-            $queryResponse = $this->httpClient->request(
-                'POST',
-                $url,
-                [
-                    'headers' => [
-                        'Content-Type' => 'application/json',
-                        'Accept' => 'application/json',
-                    ],
-                    'body' => $this->serializer->serialize($body, 'json'),
-                ]
-            );
-
-            $serviceResult = $queryResponse->getContent();
-
-            return $this->serializer->deserialize(
-                $serviceResult,
-                InfoResult::class,
-                'json',
-            );
-        } catch (ClientExceptionInterface| TransportExceptionInterface | RedirectionExceptionInterface | ServerExceptionInterface $e) {
-            throw $e;
-        } catch (\Exception $ex) {
-            throw $ex;
-        }
+        return $this->etecsaClient->getStatus($env, $operationSale->getTransactionId());
     }
 }

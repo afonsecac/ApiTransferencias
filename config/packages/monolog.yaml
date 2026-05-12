@@ -1,6 +1,7 @@
 monolog:
     channels:
         - deprecation # Deprecations are logged in the dedicated "deprecation" channel when it exists
+        - etecsa
 
 when@dev:
     monolog:
@@ -27,6 +28,11 @@ when@dev:
                 path: '%kernel.logs_dir%/debug.%kernel.environment%.log'
                 level: debug
                 max_files: 10
+            etecsa_log:
+                type: stream
+                path: '%kernel.logs_dir%/etecsa.log'
+                level: debug
+                channels: [ etecsa ]
 
 
 when@test:
@@ -62,6 +68,11 @@ when@prod:
                 path: "%kernel.logs_dir%/info.%kernel.environment%.log"
                 max_files: 10
                 level: info
+            etecsa_log:
+                type: stream
+                path: '%kernel.logs_dir%/etecsa.log'
+                level: info
+                channels: [ etecsa ]
             nested:
                 type: stream
                 path: php://stderr
