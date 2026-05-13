@@ -992,12 +992,22 @@ class CommunicationSaleService extends CommonService
                 $retryCount = (int) ($currentStatus['retryCount'] ?? 0);
 
                 if ($sale instanceof CommunicationSaleRecharge && $retryCount < 3) {
-                    $currentStatus['retryCount'] = $retryCount + 1;
-                    $sale->setTransactionStatus($currentStatus);
-                    $sale->setStateProcess(CommunicationStateEnum::CREATED->value);
-                    $this->em->flush();
-                    $this->messageBus->dispatch(new SaleRechargeMessage($sale->getId()));
-                    $this->logger->info("Sale {$saleId}: not found in ApiComm, resending (attempt {$currentStatus['retryCount']})");
+                    $now = new \DateTimeImmutable();
+                    $lastRetryAt = isset($currentStatus['lastRetryAt'])
+                        ? new \DateTimeImmutable($currentStatus['lastRetryAt'])
+                        : null;
+                    $referenceTime = $lastRetryAt ?? $sale->getCreatedAt();
+                    $secondsElapsed = $now->getTimestamp() - $referenceTime->getTimestamp();
+
+                    if ($secondsElapsed >= 4 * 3600) {
+                        $currentStatus['retryCount'] = $retryCount + 1;
+                        $currentStatus['lastRetryAt'] = $now->format(\DateTimeInterface::ATOM);
+                        $sale->setTransactionStatus($currentStatus);
+                        $sale->setStateProcess(CommunicationStateEnum::CREATED->value);
+                        $this->em->flush();
+                        $this->messageBus->dispatch(new SaleRechargeMessage($sale->getId()));
+                        $this->logger->info("Sale {$saleId}: not found in ApiComm, resending (attempt {$currentStatus['retryCount']})");
+                    }
                 } else {
                     $sale->setStateProcess(CommunicationStateEnum::FAILED->value);
                     $this->em->flush();
