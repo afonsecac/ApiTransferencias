@@ -987,7 +987,7 @@ class CommunicationSaleService extends CommonService
         } catch (\Exception $e) {
             $message = $e->getMessage();
             $this->logger->error($message);
-            if ($e instanceof ClientException && $e->getCode() === 404 && $isProcess) {
+            if ($e instanceof ClientException && $e->getCode() === 404) {
                 $currentStatus = $sale->getTransactionStatus();
                 $retryCount = (int) ($currentStatus['retryCount'] ?? 0);
 
