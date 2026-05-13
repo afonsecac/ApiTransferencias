@@ -341,13 +341,13 @@ class CommunicationSaleService extends CommonService
     public function tryAgainWithTransaction(int $saleId): void
     {
         $recharge = $this->em->getRepository(CommunicationSaleRecharge::class)->find($saleId);
-        $recharge?->setState(CommunicationStateEnum::PENDING);
+        if ($recharge === null) {
+            return;
+        }
+        $recharge->setState(CommunicationStateEnum::PENDING);
+        $recharge->setStateProcess(CommunicationStateEnum::CREATED->value);
         $this->em->flush();
-        $this->messageBus->dispatch(
-            new SaleRechargeMessage(
-                $saleId
-            )
-        );
+        $this->messageBus->dispatch(new SaleRechargeMessage($saleId));
     }
 
     /**
@@ -988,10 +988,20 @@ class CommunicationSaleService extends CommonService
             $message = $e->getMessage();
             $this->logger->error($message);
             if ($e instanceof ClientException && $e->getCode() === 404 && $isProcess) {
-                // TO-DO: Recheck info to process
-                // $this->tryAgainWithTransaction($saleId);
-                $sale->setStateProcess(CommunicationStateEnum::FAILED->value);
-                $this->em->flush();
+                $currentStatus = $sale->getTransactionStatus();
+                $retryCount = (int) ($currentStatus['retryCount'] ?? 0);
+
+                if ($sale instanceof CommunicationSaleRecharge && $retryCount < 3) {
+                    $currentStatus['retryCount'] = $retryCount + 1;
+                    $sale->setTransactionStatus($currentStatus);
+                    $sale->setStateProcess(CommunicationStateEnum::CREATED->value);
+                    $this->em->flush();
+                    $this->messageBus->dispatch(new SaleRechargeMessage($sale->getId()));
+                    $this->logger->info("Sale {$saleId}: not found in ApiComm, resending (attempt {$currentStatus['retryCount']})");
+                } else {
+                    $sale->setStateProcess(CommunicationStateEnum::FAILED->value);
+                    $this->em->flush();
+                }
             } elseif ($e->getCode() === 400) {
                 $comInfo = [
                     'status' => [

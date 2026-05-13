@@ -38,6 +38,7 @@ class EtecsaGatewayClient extends CommonService
         private readonly HttpClientInterface $httpClient,
         #[Autowire('@monolog.logger.etecsa')] private readonly LoggerInterface $etecsaLogger,
         #[Autowire('%env(API_COMMUNICATIONS_KEY)%')] private readonly string $apiKey,
+        #[Autowire('%env(APP_TEST_PHONE)%')] private readonly string $testPhone,
     ) {
         parent::__construct($em, $security, $parameters, $mailer, $logger, $passwordHasher, $environmentRepository, $sysConfigRepo, $serializer);
     }
@@ -52,6 +53,10 @@ class EtecsaGatewayClient extends CommonService
         float $productPrice,
         string $transactionId,
     ): array {
+        if ($env->getType() === 'TEST' && str_ends_with($phoneNumber, '60')) {
+            $phoneNumber = $this->testPhone;
+        }
+
         $body = [
             'phoneNumber' => $phoneNumber,
             'productCode' => $productCode,
