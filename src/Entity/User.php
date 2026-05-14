@@ -194,6 +194,8 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface, IInput
         return $this;
     }
 
+    public function eraseCredentials(): void {}
+
     public function getCompany(): ?Client
     {
         return $this->company;
