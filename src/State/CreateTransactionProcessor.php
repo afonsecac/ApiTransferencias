@@ -126,12 +126,10 @@ class CreateTransactionProcessor implements ProcessorInterface
                             'reason' => $data->getReasonNote(),
                             'senderId' => $sender->getRebusSenderId(),
                             'beneficiaryId' => $beneficiary->getRebusId(),
-                            'tenantProcessorId' => (int)$this->configRepository->findOneBy([
-                                'propertyName' => 'rebuspay.tenant.account.'.strtolower(
-                                        $user->getEnvironmentName()
-                                    ).'.value',
-                                'isActive' => true,
-                            ])?->getPropertyValue(),
+                            'tenantProcessorId' => (int)$this->configRepository->findCachedValue(
+                                'rebuspay.tenant.account.' . strtolower($user->getEnvironmentName()) . '.value',
+                                mustBeActive: true,
+                            ),
                         ], 'json', []
                     );
                     $response = $this->httpClient->request(

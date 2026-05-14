@@ -137,6 +137,13 @@ class CommunicationSaleService extends CommonService
         );
     }
 
+    private const DISPATCH_ENABLED_KEY = 'communications.dispatch.enabled';
+
+    private function isDispatchEnabled(): bool
+    {
+        return $this->sysConfigRepo->findCachedValue(self::DISPATCH_ENABLED_KEY) !== '0';
+    }
+
     /**
      * Activa un lote de ventas RESERVED cuya promoción ya comenzó.
      * Persiste todos los cambios antes de despachar mensajes para evitar race conditions.
@@ -174,8 +181,12 @@ class CommunicationSaleService extends CommonService
 
         $this->em->flush();
 
-        foreach ($toDispatch as $sale) {
-            $this->messageBus->dispatch(new SaleRechargeMessage($sale->getId()));
+        if ($this->isDispatchEnabled()) {
+            foreach ($toDispatch as $sale) {
+                $this->messageBus->dispatch(new SaleRechargeMessage($sale->getId()));
+            }
+        } else {
+            $this->logger->info('Communications dispatch disabled: ' . count($toDispatch) . ' activated sale(s) queued in DB, pending dispatch.');
         }
 
         return $activated;
@@ -308,11 +319,11 @@ class CommunicationSaleService extends CommonService
             $this->em->persist($comHistoric);
             $this->em->flush();
 
-            $this->messageBus->dispatch(
-                new SaleRechargeMessage(
-                    $recharge->getId()
-                )
-            );
+            if ($this->isDispatchEnabled()) {
+                $this->messageBus->dispatch(new SaleRechargeMessage($recharge->getId()));
+            } else {
+                $this->logger->info("Communications dispatch disabled: recharge {$recharge->getId()} saved, pending dispatch.");
+            }
         } catch (\Exception $ex) {
             if (str_contains($ex->getMessage(), "unique_identification_client")) {
                 throw new MyCurrentException(
@@ -670,8 +681,12 @@ class CommunicationSaleService extends CommonService
             $this->em->persist($comHistoric);
             $this->em->flush();
 
-            $this->messageBus->dispatch(new SalePackageMessage($sale->getId()));
-        }  catch (\Exception $ex) {
+            if ($this->isDispatchEnabled()) {
+                $this->messageBus->dispatch(new SalePackageMessage($sale->getId()));
+            } else {
+                $this->logger->info("Communications dispatch disabled: sale package {$sale->getId()} saved, pending dispatch.");
+            }
+        } catch (\Exception $ex) {
             if (str_contains($ex->getMessage(), "unique_identification_client")) {
                 throw new MyCurrentException(
                     "102",

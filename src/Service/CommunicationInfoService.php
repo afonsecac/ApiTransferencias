@@ -32,6 +32,7 @@ class CommunicationInfoService extends CommonService
         SysConfigRepository $sysConfigRepo,
         SerializerInterface $serializer,
         private readonly EtecsaGatewayClient $etecsaClient,
+        private readonly HistoricalSaleService $historicalSaleService,
     ) {
         parent::__construct(
             $em,
@@ -87,6 +88,19 @@ class CommunicationInfoService extends CommonService
 
         $env = $tenant->getEnvironment();
 
-        return $this->etecsaClient->getStatus($env, $operationSale->getTransactionId());
+        $result = $this->etecsaClient->getStatus($env, $operationSale->getTransactionId());
+
+        $state = $operationSale->getState();
+        if ($state !== null) {
+            $infoArray = json_decode($this->serializer->serialize($result, 'json'), true) ?? [];
+            $this->historicalSaleService->createHistoricalCommunication(
+                $operationSale->getId(),
+                $state,
+                $infoArray
+            );
+            $this->em->flush();
+        }
+
+        return $result;
     }
 }
