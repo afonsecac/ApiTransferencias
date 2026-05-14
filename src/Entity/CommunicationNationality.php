@@ -25,7 +25,7 @@ use Symfony\Component\Serializer\Attribute\Groups;
 class CommunicationNationality
 {
     #[ORM\Id]
-    #[ORM\GeneratedValue]
+    #[ORM\GeneratedValue(strategy: 'SEQUENCE')]
     #[ORM\Column]
     #[ApiProperty(identifier: true)]
     #[Groups(['comNationality:read'])]

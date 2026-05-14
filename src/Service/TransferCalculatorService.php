@@ -92,9 +92,9 @@ class TransferCalculatorService extends CommonService
                                 'fromCurrency' => $data->getSendCurrency(),
                                 'toCurrency' => $data->getSendCurrency(),
                                 'sendAmount' => $data->getSendAmount(),
-                                'tenantProcessorId' => (int)$this->sysConfigRepo->findOneBy([
-                                    'propertyName' => 'rebuspay.tenant.account.' . strtolower($user->getEnvironmentName()) . '.value',
-                                ])?->getPropertyValue(),
+                                'tenantProcessorId' => (int)$this->sysConfigRepo->findCachedValue(
+                                    'rebuspay.tenant.account.' . strtolower($user->getEnvironmentName()) . '.value'
+                                ),
                             ], 'json', []
                         ),
                     ]

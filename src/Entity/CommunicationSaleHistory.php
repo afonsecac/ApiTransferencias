@@ -7,14 +7,14 @@ use App\Enums\CommunicationStateEnum;
 use App\Repository\CommunicationSaleHistoryRepository;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
-use Symfony\Component\Serializer\Annotation\Groups;
+use Symfony\Component\Serializer\Attribute\Groups;
 
 #[ORM\Entity(repositoryClass: CommunicationSaleHistoryRepository::class)]
 #[ORM\HasLifecycleCallbacks]
 class CommunicationSaleHistory
 {
     #[ORM\Id]
-    #[ORM\GeneratedValue]
+    #[ORM\GeneratedValue(strategy: 'SEQUENCE')]
     #[ORM\Column]
     private ?int $id = null;
 

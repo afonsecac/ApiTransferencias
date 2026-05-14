@@ -95,6 +95,9 @@ framework:
              'App\Message\ForgotPasswordMessage': async_notifications_high
              'App\Message\AccountActivationMessage': async_notifications_high
              'App\Message\PromotionCreatedMessage': async_notifications_high
+             'App\Message\Etecsa\SyncCatalogsMessage': async_clients_high
+             'App\Message\Etecsa\SyncProductsMessage': async_clients_high
+             'App\Message\DispatchPendingEmailMessage': async_notifications_high
 
 # when@test:
 #    framework:

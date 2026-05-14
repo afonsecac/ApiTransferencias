@@ -226,7 +226,7 @@ class TwoFactorService
 
     private function readValue(string $key, ?string $default): ?string
     {
-        return $this->sysConfigRepo->findOneBy(['propertyName' => $key])?->getPropertyValue() ?? $default;
+        return $this->sysConfigRepo->findCachedValue($key) ?? $default;
     }
 
     private function writeValue(string $key, string $value): void
@@ -238,6 +238,7 @@ class TwoFactorService
         }
         $config->setPropertyValue($value);
         $this->em->flush();
+        $this->sysConfigRepo->invalidateCache();
     }
 
     private function buildIssuer(User $user): string

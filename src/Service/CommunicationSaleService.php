@@ -34,11 +34,11 @@ use Symfony\Component\Mailer\MailerInterface;
 use Symfony\Component\Messenger\MessageBusInterface;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 use Symfony\Component\Serializer\SerializerInterface;
+use App\Service\Etecsa\EtecsaGatewayClient;
 use Symfony\Contracts\HttpClient\Exception\ClientExceptionInterface;
 use Symfony\Contracts\HttpClient\Exception\RedirectionExceptionInterface;
 use Symfony\Contracts\HttpClient\Exception\ServerExceptionInterface;
 use Symfony\Contracts\HttpClient\Exception\TransportExceptionInterface;
-use Symfony\Contracts\HttpClient\HttpClientInterface;
 
 class CommunicationSaleService extends CommonService
 {
@@ -103,7 +103,6 @@ class CommunicationSaleService extends CommonService
      * @param \App\Repository\EnvironmentRepository $environmentRepository
      * @param \App\Repository\SysConfigRepository $sysConfigRepo
      * @param \Symfony\Component\Serializer\SerializerInterface $serializer
-     * @param \Symfony\Contracts\HttpClient\HttpClientInterface $httpClient
      * @param \App\Service\ConfigureSequenceService $configureSequence
      * @param \Symfony\Component\Messenger\MessageBusInterface $messageBus
      * @param \App\Service\HistoricalSaleService $historicalSaleService
@@ -119,7 +118,7 @@ class CommunicationSaleService extends CommonService
         EnvironmentRepository $environmentRepository,
         SysConfigRepository $sysConfigRepo,
         SerializerInterface $serializer,
-        private readonly HttpClientInterface $httpClient,
+        private readonly EtecsaGatewayClient $etecsaClient,
         private readonly ConfigureSequenceService $configureSequence,
         private readonly MessageBusInterface $messageBus,
         private readonly HistoricalSaleService $historicalSaleService,
@@ -136,6 +135,13 @@ class CommunicationSaleService extends CommonService
             $sysConfigRepo,
             $serializer
         );
+    }
+
+    private const DISPATCH_ENABLED_KEY = 'communications.dispatch.enabled';
+
+    private function isDispatchEnabled(): bool
+    {
+        return $this->sysConfigRepo->findCachedValue(self::DISPATCH_ENABLED_KEY) !== '0';
     }
 
     /**
@@ -175,8 +181,12 @@ class CommunicationSaleService extends CommonService
 
         $this->em->flush();
 
-        foreach ($toDispatch as $sale) {
-            $this->messageBus->dispatch(new SaleRechargeMessage($sale->getId()));
+        if ($this->isDispatchEnabled()) {
+            foreach ($toDispatch as $sale) {
+                $this->messageBus->dispatch(new SaleRechargeMessage($sale->getId()));
+            }
+        } else {
+            $this->logger->info('Communications dispatch disabled: ' . count($toDispatch) . ' activated sale(s) queued in DB, pending dispatch.');
         }
 
         return $activated;
@@ -309,11 +319,11 @@ class CommunicationSaleService extends CommonService
             $this->em->persist($comHistoric);
             $this->em->flush();
 
-            $this->messageBus->dispatch(
-                new SaleRechargeMessage(
-                    $recharge->getId()
-                )
-            );
+            if ($this->isDispatchEnabled()) {
+                $this->messageBus->dispatch(new SaleRechargeMessage($recharge->getId()));
+            } else {
+                $this->logger->info("Communications dispatch disabled: recharge {$recharge->getId()} saved, pending dispatch.");
+            }
         } catch (\Exception $ex) {
             if (str_contains($ex->getMessage(), "unique_identification_client")) {
                 throw new MyCurrentException(
@@ -342,13 +352,13 @@ class CommunicationSaleService extends CommonService
     public function tryAgainWithTransaction(int $saleId): void
     {
         $recharge = $this->em->getRepository(CommunicationSaleRecharge::class)->find($saleId);
-        $recharge?->setState(CommunicationStateEnum::PENDING);
+        if ($recharge === null) {
+            return;
+        }
+        $recharge->setState(CommunicationStateEnum::PENDING);
+        $recharge->setStateProcess(CommunicationStateEnum::CREATED->value);
         $this->em->flush();
-        $this->messageBus->dispatch(
-            new SaleRechargeMessage(
-                $saleId
-            )
-        );
+        $this->messageBus->dispatch(new SaleRechargeMessage($saleId));
     }
 
     /**
@@ -469,18 +479,13 @@ class CommunicationSaleService extends CommonService
                     'environment' => $environment->getType(),
                 ];
 
-                $rechargeResponse = $this->httpClient->request(
-                    'POST',
-                    $urlRecharge,
-                    [
-                        'headers' => [
-                            'Content-Type' => 'application/json',
-                            'Accept' => 'application/json',
-                        ],
-                        'body' => $this->serializer->serialize($body, 'json', []),
-                    ]
+                $rechargeInfo = $this->etecsaClient->recharge(
+                    $environment,
+                    $phoneNumber,
+                    (int) $productCode,
+                    (float) $destination->amount,
+                    $saleRecharge->getTransactionId(),
                 );
-                $rechargeInfo = $rechargeResponse->toArray();
                 $saleRecharge->setTransactionStatus($rechargeInfo);
                 $saleRecharge->setStateProcess(CommunicationStateEnum::PENDING->value);
                 $rechargeResult = (object)((object)$rechargeInfo)->result;
@@ -676,8 +681,12 @@ class CommunicationSaleService extends CommonService
             $this->em->persist($comHistoric);
             $this->em->flush();
 
-            $this->messageBus->dispatch(new SalePackageMessage($sale->getId()));
-        }  catch (\Exception $ex) {
+            if ($this->isDispatchEnabled()) {
+                $this->messageBus->dispatch(new SalePackageMessage($sale->getId()));
+            } else {
+                $this->logger->info("Communications dispatch disabled: sale package {$sale->getId()} saved, pending dispatch.");
+            }
+        } catch (\Exception $ex) {
             if (str_contains($ex->getMessage(), "unique_identification_client")) {
                 throw new MyCurrentException(
                     "102",
@@ -754,19 +763,12 @@ class CommunicationSaleService extends CommonService
                 'environment' => $user->getEnvironment()?->getType(),
             ];
 
-            $saleResponse = $this->httpClient->request(
-                'POST',
-                $urlSale,
-                [
-                    'headers' => [
-                        'Content-Type' => 'application/json',
-                        'Accept' => 'application/json',
-                    ],
-                    'body' => $this->serializer->serialize($body, 'json', []),
-                ]
+            $saleInfo = $this->etecsaClient->sellPackage(
+                $user->getEnvironment(),
+                $transactionId,
+                $body['packageInfo'],
+                $body['client'],
             );
-
-            $saleInfo = $saleResponse->toArray();
             $saleResult = (object)((object)$saleInfo)->result;
             $code = null;
             if (property_exists($saleResult, 'code')) {
@@ -897,21 +899,11 @@ class CommunicationSaleService extends CommonService
             'transactionId' => $sale->getTransactionId(),
         ];
 
-        $rechargeResponse = null;
         try {
-            $rechargeResponse = $this->httpClient->request(
-                'POST',
-                $url,
-                [
-                    'headers' => [
-                        'Content-Type' => 'application/json',
-                        'Accept' => 'application/json',
-                    ],
-                    'body' => $this->serializer->serialize($body, 'json'),
-                ]
+            $response = $this->etecsaClient->getSaleInfo(
+                $tenant->getEnvironment(),
+                $sale->getTransactionId(),
             );
-
-            $response = $rechargeResponse->toArray();
             $responseInfo = (object)$response;
             $statusResponse = strtoupper($responseInfo->status);
             $result = isset($responseInfo->result) ? (object)$responseInfo->result : null;
@@ -920,7 +912,10 @@ class CommunicationSaleService extends CommonService
             if ($fullResponse !== null) {
                 $fullResponseObj = isset($fullResponse->SaleRecharge) ? (object) $fullResponse->SaleRecharge : null;
                 if ($fullResponseObj !== null) {
-                    $isTrue = $statusResponse === "COMPLETED" && $fullResponseObj->RechargeStateCode === "OK";
+                    $rechargeStateCode = ($fullResponseObj->RechargeStateCode ?? '');
+                    $rechargeState     = ($fullResponseObj->RechargeState ?? '');
+                    $isTrue = $statusResponse === "COMPLETED"
+                        && ($rechargeStateCode === "OK" || $rechargeState === "Realizada");
                 }
             }
             $sale->setTransactionStatus($response);
@@ -1005,14 +1000,33 @@ class CommunicationSaleService extends CommonService
             }
             $this->em->flush();
         } catch (\Exception $e) {
-            $infoResponse = $rechargeResponse !== null ? json_decode($rechargeResponse->getContent(false), true) : [];
             $message = $e->getMessage();
-            $this->logger->error($rechargeResponse !== null ? $rechargeResponse->getContent(false) : $message, is_array($infoResponse) ? $infoResponse : []);
-            if ($e instanceof ClientException && $e->getCode() === 404 && $isProcess) {
-                // TO-DO: Recheck info to process
-                // $this->tryAgainWithTransaction($saleId);
-                $sale->setStateProcess(CommunicationStateEnum::FAILED->value);
-                $this->em->flush();
+            $this->logger->error($message);
+            if ($e->getCode() === 404) {
+                $currentStatus = $sale->getTransactionStatus();
+                $retryCount = (int) ($currentStatus['retryCount'] ?? 0);
+
+                if ($sale instanceof CommunicationSaleRecharge && $retryCount < 3) {
+                    $now = new \DateTimeImmutable();
+                    $lastRetryAt = isset($currentStatus['lastRetryAt'])
+                        ? new \DateTimeImmutable($currentStatus['lastRetryAt'])
+                        : null;
+                    $referenceTime = $lastRetryAt ?? $sale->getCreatedAt();
+                    $secondsElapsed = $now->getTimestamp() - $referenceTime->getTimestamp();
+
+                    if ($secondsElapsed >= 4 * 3600) {
+                        $currentStatus['retryCount'] = $retryCount + 1;
+                        $currentStatus['lastRetryAt'] = $now->format(\DateTimeInterface::ATOM);
+                        $sale->setTransactionStatus($currentStatus);
+                        $sale->setStateProcess(CommunicationStateEnum::CREATED->value);
+                        $this->em->flush();
+                        $this->messageBus->dispatch(new SaleRechargeMessage($sale->getId()));
+                        $this->logger->info("Sale {$saleId}: not found in ApiComm, resending (attempt {$currentStatus['retryCount']})");
+                    }
+                } else {
+                    $sale->setStateProcess(CommunicationStateEnum::FAILED->value);
+                    $this->em->flush();
+                }
             } elseif ($e->getCode() === 400) {
                 $comInfo = [
                     'status' => [

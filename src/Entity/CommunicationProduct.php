@@ -11,7 +11,7 @@ use Symfony\Component\Serializer\Attribute\Groups;
 class CommunicationProduct
 {
     #[ORM\Id]
-    #[ORM\GeneratedValue]
+    #[ORM\GeneratedValue(strategy: 'SEQUENCE')]
     #[ORM\Column]
     #[Groups(['product:read'])]
     private ?int $id = null;

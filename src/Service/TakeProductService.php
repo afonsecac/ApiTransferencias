@@ -3,15 +3,13 @@
 namespace App\Service;
 
 use App\Entity\Account;
-use App\Entity\CommunicationNationality;
-use App\Entity\CommunicationOffice;
 use App\Entity\CommunicationPackage;
 use App\Entity\CommunicationPriceTable;
 use App\Entity\CommunicationProduct;
-use App\Entity\CommunicationProvinces;
 use App\Exception\MyCurrentException;
 use App\Repository\EnvironmentRepository;
 use App\Repository\SysConfigRepository;
+use App\Service\Etecsa\EtecsaCatalogSyncService;
 use Doctrine\ORM\EntityManagerInterface;
 use Psr\Log\LoggerInterface;
 use Symfony\Bundle\SecurityBundle\Security;
@@ -19,41 +17,32 @@ use Symfony\Component\DependencyInjection\ParameterBag\ParameterBagInterface;
 use Symfony\Component\Mailer\MailerInterface;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 use Symfony\Component\Serializer\SerializerInterface;
-use Symfony\Contracts\HttpClient\Exception\ClientExceptionInterface;
-use Symfony\Contracts\HttpClient\Exception\DecodingExceptionInterface;
-use Symfony\Contracts\HttpClient\Exception\RedirectionExceptionInterface;
-use Symfony\Contracts\HttpClient\Exception\ServerExceptionInterface;
-use Symfony\Contracts\HttpClient\Exception\TransportExceptionInterface;
-use Symfony\Contracts\HttpClient\HttpClientInterface;
 
+/**
+ * @deprecated Usar EtecsaCatalogSyncService directamente.
+ * Los métodos takeProduct() y takeOtherData() delegan en EtecsaCatalogSyncService.
+ * Este servicio se mantiene para compatibilidad con app:takeOther:command y app:takeProduct.
+ */
 class TakeProductService extends CommonService
 {
     public function __construct(
-        EntityManagerInterface               $em,
-        Security                             $security,
-        ParameterBagInterface                $parameters,
-        MailerInterface                      $mailer,
-        LoggerInterface                      $logger,
-        UserPasswordHasherInterface          $passwordHasher,
-        EnvironmentRepository                $environmentRepository,
-        SysConfigRepository                  $sysConfigRepo,
-        SerializerInterface                  $serializer,
-        private readonly HttpClientInterface $httpClient
-    )
-    {
+        EntityManagerInterface $em,
+        Security $security,
+        ParameterBagInterface $parameters,
+        MailerInterface $mailer,
+        LoggerInterface $logger,
+        UserPasswordHasherInterface $passwordHasher,
+        EnvironmentRepository $environmentRepository,
+        SysConfigRepository $sysConfigRepo,
+        SerializerInterface $serializer,
+        private readonly EtecsaCatalogSyncService $catalogSyncService,
+    ) {
         parent::__construct($em, $security, $parameters, $mailer, $logger, $passwordHasher, $environmentRepository, $sysConfigRepo, $serializer);
     }
 
 
     /**
-     * @param string $env
-     * @return array
-     * @throws \Symfony\Contracts\HttpClient\Exception\ClientExceptionInterface
-     * @throws \Symfony\Contracts\HttpClient\Exception\DecodingExceptionInterface
-     * @throws \Symfony\Contracts\HttpClient\Exception\RedirectionExceptionInterface
-     * @throws \Symfony\Contracts\HttpClient\Exception\ServerExceptionInterface
-     * @throws \Symfony\Contracts\HttpClient\Exception\TransportExceptionInterface
-     * @throws \Exception
+     * @deprecated Usar EtecsaCatalogSyncService::syncProducts()
      */
     public function takeProduct(string $env): array
     {
@@ -61,83 +50,25 @@ class TakeProductService extends CommonService
             $environments = $this->environmentRepository->findBy([
                 'scope' => 'ET',
                 'isActive' => true,
-                'type' => $env
+                'type' => $env,
             ]);
 
             $items = 0;
-
-            foreach ($environments as $key => $item) {
-                $response = $this->httpClient->request(
-                    'POST',
-                    $item->getBasePath() . '/information/packages',
-                    [
-                        'headers' => [
-                            'Content-Type' => 'application/json',
-                            'Accept' => 'application/json',
-                        ],
-                        'body' => $this->serializer->serialize([
-                            'environment' => $item->getType(),
-                        ], 'json', []),
-                    ]
-                );
-
-                $products = (object)$response->toArray();
-                $currentDate = new \DateTimeImmutable();
-                $existingProducts = $this->em->getRepository(CommunicationProduct::class)->findBy([
-                    'environment' => $item,
-                ]);
-                $existingByPackageId = [];
-                foreach ($existingProducts as $ep) {
-                    $existingByPackageId[$ep->getPackageId()] = true;
-                }
-                foreach ($products as $productItem) {
-                    $currentProduct = (object)$productItem;
-                    $endDate = !is_null($currentProduct->FinalDate) ? new \DateTimeImmutable($currentProduct->FinalDate) : null;
-                    if ((is_null($endDate) || $currentDate <= $endDate) && $currentProduct->Enabled && !isset($existingByPackageId[$currentProduct->Id])) {
-                        $product = new CommunicationProduct();
-                        $product->setPackageType($currentProduct->PackageType);
-                        $product->setEnvironment($item);
-                        $product->setPackageId($currentProduct->Id);
-                        $product->setDescription($currentProduct->Description);
-                        $product->setEnabled($currentProduct->Enabled);
-                        if (!is_null($currentProduct->InitialDate)) {
-                            $product->setInitialDate(new \DateTimeImmutable($currentProduct->InitialDate));
-                        }
-                        if (!is_null($endDate)) {
-                            $product->setEndDateAt($endDate);
-                        }
-                        $product->setPrice($currentProduct->Price);
-                        $product->setProductType($currentProduct->PackageType);
-                        $this->em->persist($product);
-                        ++$items;
-                    }
-                }
+            foreach ($environments as $item) {
+                $result = $this->catalogSyncService->syncProducts($item);
+                $items += $result->created;
             }
 
-            if ($items > 0) {
-                $this->em->flush();
-            }
-
-            return [
-                'items' => $items,
-                'isProcessed' => true
-            ];
+            return ['items' => $items, 'isProcessed' => true];
         } catch (\Exception $exception) {
             $this->logger->error($exception->getMessage());
-            if ($exception->getCode()) {
-                $codeExc = (string)$exception->getCode();
-            } else
-                $codeExc = 'Unknown error';
+            $codeExc = $exception->getCode() ? (string) $exception->getCode() : 'Unknown error';
             throw new MyCurrentException($codeExc, $exception->getMessage());
         }
     }
 
     /**
-     * @throws TransportExceptionInterface
-     * @throws ServerExceptionInterface
-     * @throws RedirectionExceptionInterface
-     * @throws DecodingExceptionInterface
-     * @throws ClientExceptionInterface
+     * @deprecated Usar EtecsaCatalogSyncService::syncNationalities() / syncProvinces() / syncOffices()
      */
     public function takeOtherData(): void
     {
@@ -146,107 +77,11 @@ class TakeProductService extends CommonService
             'isActive' => true,
         ]);
 
-        foreach ($environments as $key => $item) {
-            $nationalitiesResponse = $this->httpClient->request(
-                'POST',
-                $item->getBasePath() . '/information/nationalities',
-                [
-                    'headers' => [
-                        'Content-Type' => 'application/json',
-                        'Accept' => 'application/json',
-                    ],
-                    'body' => $this->serializer->serialize([
-                        'environment' => $item->getType(),
-                    ], 'json', []),
-                ]
-            );
-
-            $nationalitiesET = $nationalitiesResponse->toArray();
-            if (count($nationalitiesET) > 0) {
-                $info = $this->em->getRepository(CommunicationNationality::class)->deleteAll($item);
-            }
-            foreach ($nationalitiesET as $nationalityItemET) {
-                $ntItem = (object)$nationalityItemET;
-
-                $nationality = new CommunicationNationality();
-                $nationality->setEnvironment($item);
-                $nationality->setComId($ntItem->Id);
-                $nationality->setName($ntItem->Name);
-                $nationality->setCodeAlpha3($ntItem->Abbreviation);
-
-                $this->em->persist($nationality);
-            }
-
-            $provincesResponse = $this->httpClient->request(
-                'POST',
-                $item->getBasePath() . '/information/provinces',
-                [
-                    'headers' => [
-                        'Content-Type' => 'application/json',
-                        'Accept' => 'application/json',
-                    ],
-                    'body' => $this->serializer->serialize([
-                        'environment' => $item->getType(),
-                    ], 'json', []),
-                ]
-            );
-
-            $provincesET = $provincesResponse->toArray();
-            foreach ($provincesET as $provinceItemET) {
-                $prvItem = (object)$provinceItemET;
-                if (property_exists($prvItem, 'Id') && !is_null($prvItem->Id)) {
-
-                    $commercialOfficesResponse = $this->httpClient->request(
-                        'POST',
-                        $item->getBasePath() . '/information/commercialOffices',
-                        [
-                            'headers' => [
-                                'Content-Type' => 'application/json',
-                                'Accept' => 'application/json',
-                            ],
-                            'body' => $this->serializer->serialize([
-                                'environment' => $item->getType(),
-                                'provinceId' => $prvItem->Id,
-                            ], 'json', []),
-                        ]
-                    );
-
-                    $provincesComm = $this->em->getRepository(CommunicationProvinces::class)->findOneBy([
-                        'environment' => $item,
-                        'comId' => $prvItem->Id,
-                    ]);
-
-                    $commercialOfficesET = $commercialOfficesResponse->toArray();
-                    if (!is_null($provincesComm) && count($commercialOfficesET) > 0) {
-                        $this->em->getRepository(CommunicationOffice::class)->deleteAll($item, $provincesComm->getId());
-                        $this->em->remove($provincesComm);
-                    }
-                    $province = new CommunicationProvinces();
-                    $province->setName($prvItem->Name);
-                    $province->setComId($prvItem->Id);
-                    $province->setEnvironment($item);
-
-                    $this->em->persist($province);
-                    foreach ($commercialOfficesET as $commercialOfficeItemET) {
-                        $coItem = (object)$commercialOfficeItemET;
-
-                        if (property_exists($coItem, 'Id') && !is_null($coItem->Id)) {
-                            $comOffice = new CommunicationOffice();
-                            $comOffice->setComId($coItem->Id);
-                            $comOffice->setName($coItem->Name);
-                            $comOffice->setEnvironment($item);
-                            $comOffice->setProvince($province);
-                            $comOffice->setIsActive(true);
-                            $comOffice->setIsAirport(false);
-
-                            $this->em->persist($comOffice);
-                        }
-                    }
-                }
-            }
+        foreach ($environments as $item) {
+            $this->catalogSyncService->syncNationalities($item);
+            $this->catalogSyncService->syncProvinces($item);
+            $this->catalogSyncService->syncOffices($item);
         }
-
-        $this->em->flush();
     }
 
     /**
