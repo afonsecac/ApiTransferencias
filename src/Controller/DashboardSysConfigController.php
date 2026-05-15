@@ -168,7 +168,8 @@ class DashboardSysConfigController extends AbstractController
         return [
             'id'            => $config->getId(),
             'propertyName'  => $config->getPropertyName(),
-            'propertyValue' => $config->getPropertyValue(),
+            'propertyValue' => $config->isEncrypted() ? '***' : $config->getPropertyValue(),
+            'isEncrypted'   => $config->isEncrypted(),
             'isActive'      => $config->isActive(),
             'clients'       => $config->getClients(),
             'createdAt'     => $config->getCreatedAt()?->format('c'),

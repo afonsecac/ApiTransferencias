@@ -3,6 +3,7 @@
 namespace App\Repository;
 
 use App\Entity\SysConfig;
+use App\Service\SysConfigCipher;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
@@ -25,12 +26,15 @@ class SysConfigRepository extends ServiceEntityRepository
         ManagerRegistry $registry,
         #[Autowire(service: 'cache.sys_config')]
         private readonly TagAwareCacheInterface $cache,
+        #[Autowire('%env(default::SYS_CONFIG_ENCRYPTION_KEY)%')]
+        private readonly string $encryptionKey = '',
     ) {
         parent::__construct($registry, SysConfig::class);
     }
 
     /**
      * Devuelve el propertyValue de una configuración, usando caché.
+     * Si el valor está cifrado, lo descifra antes de devolver (y cachea el valor descifrado).
      * Para lecturas de escritura (update de la entidad), usar findOneBy() directamente.
      */
     public function findCachedValue(string $propertyName, bool $mustBeActive = false): ?string
@@ -43,7 +47,15 @@ class SysConfigRepository extends ServiceEntityRepository
             if ($mustBeActive) {
                 $criteria['isActive'] = true;
             }
-            return $this->findOneBy($criteria)?->getPropertyValue();
+            $config = $this->findOneBy($criteria);
+            if ($config === null) {
+                return null;
+            }
+            $value = $config->getPropertyValue();
+            if ($config->isEncrypted() && $value !== null && $this->encryptionKey !== '') {
+                $value = SysConfigCipher::decrypt($value, $this->encryptionKey);
+            }
+            return $value;
         });
     }
 

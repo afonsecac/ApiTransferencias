@@ -22,16 +22,21 @@ class CreateSysConfigDto implements IInput
     #[OAProperty(schema: ['type' => 'array', 'items' => ['type' => 'integer'], 'nullable' => true], description: 'IDs de clientes a los que aplica esta variable. null significa que aplica a todos')]
     protected ?array $clients;
 
+    #[OAProperty(description: 'Si true, el valor se almacena cifrado en la BD y sólo se expone como "***" en la API')]
+    protected ?bool $isEncrypted;
+
     public function __construct(
         ?string $propertyName = null,
         ?string $propertyValue = null,
         ?bool $isActive = null,
         ?array $clients = null,
+        ?bool $isEncrypted = null,
     ) {
         $this->propertyName  = $propertyName;
         $this->propertyValue = $propertyValue;
         $this->isActive      = $isActive;
         $this->clients       = $clients;
+        $this->isEncrypted   = $isEncrypted;
     }
 
     public function getPropertyName(): ?string { return $this->propertyName; }
@@ -45,4 +50,7 @@ class CreateSysConfigDto implements IInput
 
     public function getClients(): ?array { return $this->clients; }
     public function setClients(?array $v): void { $this->clients = $v; }
+
+    public function getIsEncrypted(): ?bool { return $this->isEncrypted; }
+    public function setIsEncrypted(?bool $v): void { $this->isEncrypted = $v; }
 }
