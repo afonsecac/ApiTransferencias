@@ -54,7 +54,7 @@ use Symfony\Component\Validator\Constraints as Assert;
 class CommunicationClientPackage
 {
     #[ORM\Id]
-    #[ORM\GeneratedValue]
+    #[ORM\GeneratedValue(strategy: 'SEQUENCE')]
     #[ORM\Column]
     #[Groups(['comPackage:read', 'comProm:read'])]
     #[ApiProperty(identifier: true)]

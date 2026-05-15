@@ -11,7 +11,7 @@ use phpDocumentor\Reflection\Types\Void_;
 class CommunicationPrice
 {
     #[ORM\Id]
-    #[ORM\GeneratedValue]
+    #[ORM\GeneratedValue(strategy: 'SEQUENCE')]
     #[ORM\Column]
     private ?int $id = null;
 

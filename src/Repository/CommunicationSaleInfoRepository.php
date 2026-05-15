@@ -23,6 +23,36 @@ class CommunicationSaleInfoRepository extends ServiceEntityRepository
     }
 
     /**
+     * Ventas en estado PENDING con stateProcess=CREATED: fueron persistidas pero nunca encoladas
+     * (porque el dispatch estaba deshabilitado cuando se crearon).
+     *
+     * @return CommunicationSaleInfo[]
+     */
+    public function findPendingUndispatched(): array
+    {
+        return $this->createQueryBuilder('s')
+            ->andWhere('s.state = :state')
+            ->andWhere('s.stateProcess = :stateProcess')
+            ->setParameter('state', CommunicationStateEnum::PENDING)
+            ->setParameter('stateProcess', CommunicationStateEnum::CREATED->value)
+            ->orderBy('s.createdAt', 'ASC')
+            ->getQuery()
+            ->getResult();
+    }
+
+    public function countPendingUndispatched(): int
+    {
+        return (int) $this->createQueryBuilder('s')
+            ->select('COUNT(s.id)')
+            ->andWhere('s.state = :state')
+            ->andWhere('s.stateProcess = :stateProcess')
+            ->setParameter('state', CommunicationStateEnum::PENDING)
+            ->setParameter('stateProcess', CommunicationStateEnum::CREATED->value)
+            ->getQuery()
+            ->getSingleScalarResult();
+    }
+
+    /**
      * @return CommunicationSaleInfo[]
      * @throws \DateMalformedStringException
      */

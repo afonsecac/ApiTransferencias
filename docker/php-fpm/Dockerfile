@@ -5,9 +5,11 @@ WORKDIR /app
 
 COPY composer.json composer.lock ./
 
-RUN composer install --no-scripts --no-autoloader --prefer-dist --no-progress --ignore-platform-reqs
+# ext-amqp is not present in the composer image but IS installed in php-base.
+# Only ignore that extension; let composer enforce the php>=8.4 requirement.
+RUN composer install --no-scripts --no-autoloader --prefer-dist --no-progress --ignore-platform-req=ext-amqp
 
-# Stage 2: PHP base (used for development)
+# Stage 2: PHP base (used for development) — requires PHP 8.4+
 FROM php:8.4-fpm-alpine AS php-base
 
 RUN apk add --no-cache \

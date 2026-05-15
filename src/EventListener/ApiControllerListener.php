@@ -27,7 +27,7 @@ class ApiControllerListener
     public function __invoke(ControllerEvent $event): void {
         $request = $event->getRequest();
         $language = $request->getLocale();
-        $pathTo = $request->get('_route');
+        $pathTo = $request->attributes->get('_route');
 
         if ($pathTo === 'app_api_login' || $pathTo === 'app_offer') {
             return;

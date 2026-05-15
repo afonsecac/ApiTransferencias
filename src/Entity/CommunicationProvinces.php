@@ -22,7 +22,7 @@ use Symfony\Component\Serializer\Attribute\Groups;
 class CommunicationProvinces
 {
     #[ORM\Id]
-    #[ORM\GeneratedValue]
+    #[ORM\GeneratedValue(strategy: 'SEQUENCE')]
     #[ORM\Column]
     #[ApiProperty(identifier: true)]
     #[Groups(['comProvinces:read'])]

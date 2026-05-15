@@ -14,8 +14,8 @@ parameters:
     app.jwt.expired: '%env(JWT_TIMEOUT)%'
     app.jwt.issuer: '%env(default:jwt_iss_default:JWT_ISSUER)%'
     app.jwt.audience: '%env(default:jwt_aud_default:JWT_AUDIENCE)%'
-    jwt_iss_default: 'https://api-tx.sendmundo.com'
-    jwt_aud_default: 'https://dashboard.sendmundo.com'
+    jwt_iss_default: 'https://api.prod.comremit.com'
+    jwt_aud_default: 'https://dashboard.comremit.com'
     phrase_key: '%env(JWT_PHRASE_KEY)%'
 
 

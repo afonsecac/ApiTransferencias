@@ -88,9 +88,9 @@ class CalculatorProcessor implements ProcessorInterface
                                     'fromCurrency' => $data->getSendCurrency(),
                                     'toCurrency' => $data->getSendCurrency(),
                                     'sendAmount' => $data->getSendAmount(),
-                                    'tenantProcessorId' => (int)$this->configRepository->findOneBy([
-                                        'propertyName' => 'rebuspay.tenant.account.'.strtolower($user->getEnvironmentName()).'.value'
-                                ])?->getPropertyValue()
+                                    'tenantProcessorId' => (int)$this->configRepository->findCachedValue(
+                                        'rebuspay.tenant.account.' . strtolower($user->getEnvironmentName()) . '.value'
+                                    )
                                 ], 'json', []
                             ),
                         ]

@@ -19,16 +19,23 @@ final class DtoSchemaReflector
      */
     public function reflect(string $className, \ArrayObject $schemas, ?string $itemDto = null): array
     {
-        if (isset($this->visited[$className])) {
-            return ['$ref' => '#/components/schemas/' . (new \ReflectionClass($className))->getShortName()];
-        }
-        $this->visited[$className] = true;
-
         if (!class_exists($className)) {
             return ['type' => 'object'];
         }
 
         $rc = new \ReflectionClass($className);
+        // When the same wrapper DTO is used with different item types (e.g. PaginatedListOutDto<User>
+        // vs PaginatedListOutDto<SysConfig>), generate a unique schema name per combination so
+        // they don't overwrite each other in the shared $schemas map.
+        $schemaName = $itemDto !== null
+            ? $rc->getShortName() . 'Of' . (new \ReflectionClass($itemDto))->getShortName()
+            : $rc->getShortName();
+
+        $cacheKey = $className . ($itemDto !== null ? '::' . $itemDto : '');
+        if (isset($this->visited[$cacheKey])) {
+            return ['$ref' => '#/components/schemas/' . $schemaName];
+        }
+        $this->visited[$cacheKey] = true;
         $allProps = [];
 
         // Incluir propiedades heredadas (para ClientPackageDetailOutDto → ClientPackageOutDto)
@@ -100,7 +107,6 @@ final class DtoSchemaReflector
             $schema['required'] = array_values(array_unique($required));
         }
 
-        $schemaName = $rc->getShortName();
         $schemas[$schemaName] = $schema;
 
         return ['$ref' => '#/components/schemas/' . $schemaName];

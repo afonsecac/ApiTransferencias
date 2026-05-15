@@ -14,7 +14,7 @@ use App\State\CreateBeneficiaryCardProcessor;
 use App\State\SoftDeleteBankCardProcessor;
 use DateTimeImmutable;
 use Doctrine\ORM\Mapping as ORM;
-use Symfony\Component\Serializer\Annotation\Groups;
+use Symfony\Component\Serializer\Attribute\Groups;
 use Symfony\Component\Validator\Constraints as Assert;
 
 #[ORM\Entity(repositoryClass: BankCardRepository::class)]
@@ -59,7 +59,7 @@ use Symfony\Component\Validator\Constraints as Assert;
 class BankCard
 {
     #[ORM\Id]
-    #[ORM\GeneratedValue]
+    #[ORM\GeneratedValue(strategy: 'SEQUENCE')]
     #[ORM\Column]
     #[ApiProperty(identifier: true)]
     #[Groups(['bankCard:read'])]

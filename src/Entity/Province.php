@@ -10,7 +10,7 @@ use ApiPlatform\Metadata\Link;
 use App\Repository\ProvinceRepository;
 use Doctrine\ORM\Mapping as ORM;
 use Symfony\Bridge\Doctrine\Types\UuidType;
-use Symfony\Component\Serializer\Annotation\Groups;
+use Symfony\Component\Serializer\Attribute\Groups;
 use Symfony\Component\Uid\Uuid;
 use Symfony\Component\Validator\Constraints as Assert;
 
@@ -26,7 +26,7 @@ use Symfony\Component\Validator\Constraints as Assert;
 class Province
 {
     #[ORM\Id]
-    #[ORM\GeneratedValue]
+    #[ORM\GeneratedValue(strategy: 'SEQUENCE')]
     #[ORM\Column]
     #[Groups(['province:read'])]
     #[ApiProperty(identifier: true)]

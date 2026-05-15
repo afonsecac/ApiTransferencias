@@ -78,14 +78,10 @@ class BalanceService extends CommonService
             $criticalBalance = $account->getCriticalBalance() ?? $account->getClient()?->getCriticalBalance();
             $minBalance = $account->getMinBalance() ?? $account->getClient()?->getMinBalance();
             if (is_null($criticalBalance)) {
-                $criticalBalance = (float)$this->sysConfigRepo->findOneBy([
-                    'propertyName' => 'client.critical.balance.operation',
-                ])?->getPropertyValue();
+                $criticalBalance = (float)$this->sysConfigRepo->findCachedValue('client.critical.balance.operation');
             }
             if (is_null($minBalance)) {
-                $minBalance = (float)$this->sysConfigRepo->findOneBy([
-                    'propertyName' => 'client.min.balance.operation',
-                ])?->getPropertyValue();
+                $minBalance = (float)$this->sysConfigRepo->findCachedValue('client.min.balance.operation');
             }
             /** @var \App\Repository\EmailNotificationRepository $emailNotifRepo */
             $emailNotifRepo = $this->em->getRepository(EmailNotification::class);

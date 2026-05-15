@@ -12,7 +12,7 @@ use Symfony\Component\Uid\Uuid;
 class UserPassword
 {
     #[ORM\Id]
-    #[ORM\GeneratedValue]
+    #[ORM\GeneratedValue(strategy: 'SEQUENCE')]
     #[ORM\Column]
     private ?int $id = null;
 

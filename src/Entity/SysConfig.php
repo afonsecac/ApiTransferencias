@@ -11,7 +11,7 @@ use Doctrine\ORM\Mapping as ORM;
 class SysConfig
 {
     #[ORM\Id]
-    #[ORM\GeneratedValue]
+    #[ORM\GeneratedValue(strategy: 'SEQUENCE')]
     #[ORM\Column]
     private ?int $id = null;
 
@@ -35,6 +35,9 @@ class SysConfig
 
     #[ORM\Column(type: Types::JSON, nullable: true)]
     private ?array $clients = null;
+
+    #[ORM\Column]
+    private bool $isEncrypted = false;
 
     public function getId(): ?int
     {
@@ -121,6 +124,18 @@ class SysConfig
     public function setClients(?array $clients): static
     {
         $this->clients = $clients;
+
+        return $this;
+    }
+
+    public function isEncrypted(): bool
+    {
+        return $this->isEncrypted;
+    }
+
+    public function setIsEncrypted(bool $isEncrypted): static
+    {
+        $this->isEncrypted = $isEncrypted;
 
         return $this;
     }

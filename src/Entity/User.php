@@ -19,7 +19,7 @@ use Symfony\Component\Serializer\Attribute\Groups;
 class User implements UserInterface, PasswordAuthenticatedUserInterface, IInput
 {
     #[ORM\Id]
-    #[ORM\GeneratedValue]
+    #[ORM\GeneratedValue(strategy: 'SEQUENCE')]
     #[ORM\Column]
     #[Groups(['profile', 'permission:read'])]
     private ?int $id = null;
@@ -194,14 +194,7 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface, IInput
         return $this;
     }
 
-    /**
-     * @see UserInterface
-     */
-    public function eraseCredentials(): void
-    {
-        // If you store any temporary, sensitive data on the user, clear it here
-        // $this->plainPassword = null;
-    }
+    public function eraseCredentials(): void {}
 
     public function getCompany(): ?Client
     {

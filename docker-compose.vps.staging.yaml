@@ -86,6 +86,7 @@ services:
       APP_MAILER_FROM: ${APP_MAILER_FROM}
       COMREMIT_DASHBOARD_URL: ${COMREMIT_DASHBOARD_URL}
       SENDMUNDO_DASHBOARD_URL: ${SENDMUNDO_DASHBOARD_URL}
+      SYS_CONFIG_ENCRYPTION_KEY: ${SYS_CONFIG_ENCRYPTION_KEY}
     depends_on:
       database:
         condition: service_healthy

@@ -14,7 +14,7 @@ use Symfony\Component\Serializer\Attribute\Groups;
 class JobPosition
 {
     #[ORM\Id]
-    #[ORM\GeneratedValue]
+    #[ORM\GeneratedValue(strategy: 'SEQUENCE')]
     #[ORM\Column]
     #[Groups(['job_position:list', 'job_position:detail', 'user:job_position'])]
     private ?int $id = null;

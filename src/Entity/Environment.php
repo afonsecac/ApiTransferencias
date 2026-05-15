@@ -24,7 +24,7 @@ use Symfony\Component\Uid\Uuid;
 class Environment
 {
     #[ORM\Id]
-    #[ORM\GeneratedValue]
+    #[ORM\GeneratedValue(strategy: 'SEQUENCE')]
     #[ORM\Column]
     #[Groups(['balance:reading', 'profile', 'accounts:read', 'promotion:list', 'promotion:detail', 'product:read', 'env:list'])]
     private ?int $id = null;

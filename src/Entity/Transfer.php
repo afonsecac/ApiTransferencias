@@ -14,7 +14,7 @@ use App\State\TransferProvider;
 use DateTimeImmutable;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
-use Symfony\Component\Serializer\Annotation\Groups;
+use Symfony\Component\Serializer\Attribute\Groups;
 use Symfony\Component\Validator\Constraints as Assert;
 
 #[ORM\Entity(repositoryClass: TransferRepository::class)]
@@ -46,7 +46,7 @@ use Symfony\Component\Validator\Constraints as Assert;
 class Transfer
 {
     #[ORM\Id]
-    #[ORM\GeneratedValue]
+    #[ORM\GeneratedValue(strategy: 'SEQUENCE')]
     #[ORM\Column]
     #[ApiProperty(identifier: true)]
     #[Groups(['tx:read', 'balance:reading'])]
