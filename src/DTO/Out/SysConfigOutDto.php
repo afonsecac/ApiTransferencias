@@ -11,8 +11,11 @@ final class SysConfigOutDto
     #[OAProperty(description: 'Clave única de la variable')]
     public string $propertyName;
 
-    #[OAProperty(description: 'Valor de la variable')]
+    #[OAProperty(description: 'Valor de la variable. "***" cuando isEncrypted es true')]
     public string $propertyValue;
+
+    #[OAProperty(description: 'Indica si el valor está cifrado en la BD. La API devuelve "***" en propertyValue cuando es true')]
+    public bool $isEncrypted = false;
 
     #[OAProperty(description: 'Indica si la variable está activa')]
     public ?bool $isActive = null;
