@@ -87,20 +87,26 @@ class DashboardCommunicationsDispatchController extends AbstractController
                         'pendingCount'    => $count,
                         'dispatchEnabled' => $enabled,
                     ]) . "\n\n";
-                    ob_flush();
+                    if (ob_get_level() > 0) {
+                        ob_flush();
+                    }
                     flush();
                 }
 
                 // Heartbeat cada ciclo para mantener la conexión viva
                 echo ": ping\n\n";
-                ob_flush();
+                if (ob_get_level() > 0) {
+                    ob_flush();
+                }
                 flush();
 
                 sleep(3);
             }
 
             echo "event: close\ndata: {}\n\n";
-            ob_flush();
+            if (ob_get_level() > 0) {
+                ob_flush();
+            }
             flush();
         });
 
