@@ -26,7 +26,7 @@ class SysConfigRepository extends ServiceEntityRepository
         ManagerRegistry $registry,
         #[Autowire(service: 'cache.sys_config')]
         private readonly TagAwareCacheInterface $cache,
-        #[Autowire('%env(default::SYS_CONFIG_ENCRYPTION_KEY)%')]
+        #[Autowire('%env(string:default::SYS_CONFIG_ENCRYPTION_KEY)%')]
         private readonly string $encryptionKey = '',
     ) {
         parent::__construct($registry, SysConfig::class);

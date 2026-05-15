@@ -17,7 +17,7 @@ class SysConfigAdminService
     public function __construct(
         private readonly EntityManagerInterface $em,
         private readonly SysConfigRepository $sysConfigRepo,
-        #[Autowire('%env(default::SYS_CONFIG_ENCRYPTION_KEY)%')]
+        #[Autowire('%env(string:default::SYS_CONFIG_ENCRYPTION_KEY)%')]
         private readonly string $encryptionKey = '',
     ) {}
 

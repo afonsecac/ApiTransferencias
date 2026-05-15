@@ -6,6 +6,9 @@ final class SysConfigCipher
 {
     public static function encrypt(string $plaintext, string $hexKey): string
     {
+        if (strlen($hexKey) !== 64 || !ctype_xdigit($hexKey)) {
+            throw new \RuntimeException('SYS_CONFIG_ENCRYPTION_KEY debe ser exactamente 64 caracteres hexadecimales (openssl rand -hex 32)');
+        }
         $key = sodium_hex2bin($hexKey);
         $nonce = random_bytes(SODIUM_CRYPTO_SECRETBOX_NONCEBYTES);
         $ciphertext = sodium_crypto_secretbox($plaintext, $nonce, $key);
@@ -14,6 +17,9 @@ final class SysConfigCipher
 
     public static function decrypt(string $encoded, string $hexKey): string
     {
+        if (strlen($hexKey) !== 64 || !ctype_xdigit($hexKey)) {
+            throw new \RuntimeException('SYS_CONFIG_ENCRYPTION_KEY debe ser exactamente 64 caracteres hexadecimales (openssl rand -hex 32)');
+        }
         $key = sodium_hex2bin($hexKey);
         $decoded = base64_decode($encoded, true);
         if ($decoded === false || strlen($decoded) <= SODIUM_CRYPTO_SECRETBOX_NONCEBYTES) {
