@@ -37,7 +37,6 @@ class EtecsaGatewayClient extends CommonService
         SerializerInterface $serializer,
         private readonly HttpClientInterface $httpClient,
         #[Autowire('@monolog.logger.etecsa')] private readonly LoggerInterface $etecsaLogger,
-        #[Autowire('%env(API_COMMUNICATIONS_KEY)%')] private readonly string $apiKey,
         #[Autowire('%env(APP_TEST_PHONE)%')] private readonly string $testPhone,
     ) {
         parent::__construct($em, $security, $parameters, $mailer, $logger, $passwordHasher, $environmentRepository, $sysConfigRepo, $serializer);
@@ -189,13 +188,18 @@ class EtecsaGatewayClient extends CommonService
         $url = $env->getBasePath() . $path;
         $start = microtime(true);
 
+        $apiKey = $this->sysConfigRepo->findCachedValue('api.' . strtolower($env->getType()) . '.communications.key');
+        $headers = [
+            'Content-Type' => 'application/json',
+            'Accept'       => 'application/json',
+        ];
+        if ($apiKey !== null && $apiKey !== '') {
+            $headers['X-Api-Key'] = $apiKey;
+        }
+
         try {
             $response = $this->httpClient->request('POST', $url, [
-                'headers' => [
-                    'Content-Type'  => 'application/json',
-                    'Accept'        => 'application/json',
-                    'X-Api-Key'     => $this->apiKey,
-                ],
+                'headers' => $headers,
                 'body' => $this->serializer->serialize($body, 'json'),
             ]);
 

@@ -7,7 +7,9 @@ use App\DTO\UpdateSysConfigDto;
 use App\Entity\SysConfig;
 use App\Exception\MyCurrentException;
 use App\Repository\SysConfigRepository;
+use App\Service\SysConfigCipher;
 use Doctrine\ORM\EntityManagerInterface;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\Response;
 
 class SysConfigAdminService
@@ -15,6 +17,8 @@ class SysConfigAdminService
     public function __construct(
         private readonly EntityManagerInterface $em,
         private readonly SysConfigRepository $sysConfigRepo,
+        #[Autowire('%env(default::SYS_CONFIG_ENCRYPTION_KEY)%')]
+        private readonly string $encryptionKey = '',
     ) {}
 
     public function create(CreateSysConfigDto $dto): SysConfig
@@ -28,9 +32,17 @@ class SysConfigAdminService
             );
         }
 
+        $isEncrypted = $dto->getIsEncrypted() ?? false;
+        $value = $dto->getPropertyValue();
+        if ($isEncrypted) {
+            $this->assertEncryptionKeyAvailable();
+            $value = SysConfigCipher::encrypt($value, $this->encryptionKey);
+        }
+
         $config = new SysConfig();
         $config->setPropertyName($dto->getPropertyName());
-        $config->setPropertyValue($dto->getPropertyValue());
+        $config->setPropertyValue($value);
+        $config->setIsEncrypted($isEncrypted);
         $config->setIsActive($dto->getIsActive() ?? true);
         $config->setClients($dto->getClients());
 
@@ -55,8 +67,29 @@ class SysConfigAdminService
             $config->setPropertyName($dto->getPropertyName());
         }
 
+        $currentIsEncrypted = $config->isEncrypted();
+        $newIsEncrypted = $dto->getIsEncrypted() ?? $currentIsEncrypted;
+
         if ($dto->getPropertyValue() !== null) {
-            $config->setPropertyValue($dto->getPropertyValue());
+            $value = $dto->getPropertyValue();
+            if ($newIsEncrypted) {
+                $this->assertEncryptionKeyAvailable();
+                $value = SysConfigCipher::encrypt($value, $this->encryptionKey);
+            }
+            $config->setPropertyValue($value);
+        } elseif ($newIsEncrypted !== $currentIsEncrypted) {
+            // Cambio de modo sin nuevo valor: re-cifrar o descifrar el valor existente
+            $stored = $config->getPropertyValue() ?? '';
+            $this->assertEncryptionKeyAvailable();
+            if ($newIsEncrypted) {
+                $config->setPropertyValue(SysConfigCipher::encrypt($stored, $this->encryptionKey));
+            } else {
+                $config->setPropertyValue(SysConfigCipher::decrypt($stored, $this->encryptionKey));
+            }
+        }
+
+        if ($dto->getIsEncrypted() !== null) {
+            $config->setIsEncrypted($newIsEncrypted);
         }
 
         if ($dto->getIsActive() !== null) {
@@ -87,5 +120,16 @@ class SysConfigAdminService
         $config->setRemovedAt(new \DateTimeImmutable('now'));
         $this->em->flush();
         $this->sysConfigRepo->invalidateCache();
+    }
+
+    private function assertEncryptionKeyAvailable(): void
+    {
+        if ($this->encryptionKey === '') {
+            throw new MyCurrentException(
+                'SYS_CONFIG_ENCRYPTION_KEY_MISSING',
+                'La variable de entorno SYS_CONFIG_ENCRYPTION_KEY no está configurada.',
+                Response::HTTP_INTERNAL_SERVER_ERROR
+            );
+        }
     }
 }

@@ -36,6 +36,9 @@ class SysConfig
     #[ORM\Column(type: Types::JSON, nullable: true)]
     private ?array $clients = null;
 
+    #[ORM\Column]
+    private bool $isEncrypted = false;
+
     public function getId(): ?int
     {
         return $this->id;
@@ -121,6 +124,18 @@ class SysConfig
     public function setClients(?array $clients): static
     {
         $this->clients = $clients;
+
+        return $this;
+    }
+
+    public function isEncrypted(): bool
+    {
+        return $this->isEncrypted;
+    }
+
+    public function setIsEncrypted(bool $isEncrypted): static
+    {
+        $this->isEncrypted = $isEncrypted;
 
         return $this;
     }
