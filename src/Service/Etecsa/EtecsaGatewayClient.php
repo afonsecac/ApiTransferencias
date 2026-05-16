@@ -70,8 +70,8 @@ class EtecsaGatewayClient extends CommonService
     /**
      * POST /sale/package — venta de paquete turístico.
      *
-     * @param array{id: int, packageType: string} $packageInfo
-     * @param array{id: string, name: string, identificationType: int, arrivalDate: string|null, isAirport: bool, commercialOfficeId: string, provinceId: int, nationality: int} $client
+     * @param array{id: string|null, packageType: string|null} $packageInfo
+     * @param array{id: string|null, name: string|null, identificationType: int, arrivalDate: string|null, isAirport: bool|null, commercialOfficeId: int|null, provinceId: int|null, nationality: int|null} $client
      */
     public function sellPackage(
         Environment $env,
@@ -174,6 +174,96 @@ class EtecsaGatewayClient extends CommonService
         }
 
         return $this->post($env, '/information/commercialOffices', $body);
+    }
+
+    /**
+     * POST /tur/check-phone — verifica si un número admite SIM Temporal TURISTA.
+     */
+    public function checkPhone(Environment $env, string $phoneNumber): array
+    {
+        return $this->post($env, '/tur/check-phone', [
+            'environment' => $env->getType(),
+            'phoneNumber' => $phoneNumber,
+        ]);
+    }
+
+    /**
+     * POST /tur/sale — encola la venta individual de SIM Temporal TURISTA.
+     *
+     * @param array<string, mixed>|null $client Datos del cliente (ClientInput)
+     */
+    public function sellTur(
+        Environment $env,
+        string $transactionId,
+        string $phoneNumber,
+        string $packageCode,
+        ?array $client = null,
+    ): array {
+        $body = [
+            'transactionId' => $transactionId,
+            'environment' => $env->getType(),
+            'phoneNumber' => $phoneNumber,
+            'packageCode' => $packageCode,
+        ];
+
+        if ($client !== null) {
+            $body['client'] = $client;
+        }
+
+        return $this->post($env, '/tur/sale', $body);
+    }
+
+    /**
+     * POST /tur/sale/batch — encola la venta por lotes de SIM Temporal TURISTA.
+     *
+     * @param array<int, array<string, mixed>> $clients Lista de TurClientInput
+     */
+    public function sellTurBatch(
+        Environment $env,
+        string $transactionId,
+        string $packageCode,
+        array $clients = [],
+    ): array {
+        return $this->post($env, '/tur/sale/batch', [
+            'transactionId' => $transactionId,
+            'environment' => $env->getType(),
+            'packageCode' => $packageCode,
+            'clients' => $clients,
+        ]);
+    }
+
+    /**
+     * POST /tur/sale-info — estado de una venta individual TUR.
+     */
+    public function getTurSaleInfo(Environment $env, string $transactionId, ?string $orderId = null): array
+    {
+        $body = [
+            'transactionId' => $transactionId,
+            'environment' => $env->getType(),
+        ];
+
+        if ($orderId !== null) {
+            $body['orderId'] = $orderId;
+        }
+
+        return $this->post($env, '/tur/sale-info', $body);
+    }
+
+    /**
+     * POST /tur/batch-info — estado global de un lote TUR.
+     */
+    public function getTurBatchInfo(Environment $env, string $transactionId, ?string $orderId = null): array
+    {
+        $body = [
+            'transactionId' => $transactionId,
+            'environment' => $env->getType(),
+        ];
+
+        if ($orderId !== null) {
+            $body['orderId'] = $orderId;
+        }
+
+        return $this->post($env, '/tur/batch-info', $body);
     }
 
     // -------------------------------------------------------------------------

@@ -746,6 +746,9 @@ class CommunicationSaleService extends CommonService
             }
             $urlSale = $user->getEnvironment()?->getBasePath().'/sale/package';
 
+            $officeComId = $commercialOffice->getComId();
+            $packageProductId = $package->getPriceClientPackage()?->getProduct()?->getPackageId();
+
             $body = [
                 'client' => [
                     'id' => $sale->getIdentificationNumber(),
@@ -753,12 +756,12 @@ class CommunicationSaleService extends CommonService
                     'identificationType' => $sale->getIdentificationType() ?? 1,
                     'arrivalDate' => $sale->getArrivalAt() ? $sale->getArrivalAt()->format('Y-m-d') : null,
                     'isAirport' => $commercialOffice->isIsAirport(),
-                    'commercialOfficeId' => $commercialOffice->getComId(),
+                    'commercialOfficeId' => $officeComId !== null ? (int) $officeComId : null,
                     'provinceId' => $commercialOffice->getProvince()?->getComId(),
                     'nationality' => $nationality->getComId(),
                 ],
                 'packageInfo' => [
-                    'id' => $package->getPriceClientPackage()?->getProduct()?->getPackageId(),
+                    'id' => $packageProductId !== null ? (string) $packageProductId : null,
                     'packageType' => $package->getPriceClientPackage()?->getProduct()?->getPackageType(),
                 ],
                 'transactionId' => $transactionId,
