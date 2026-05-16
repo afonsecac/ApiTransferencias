@@ -11,6 +11,7 @@ use App\Repository\EmailNotificationRepository;
 use App\Repository\EnvironmentRepository;
 use App\Repository\SysConfigRepository;
 use App\Service\BalanceService;
+use App\Service\Etecsa\EtecsaGatewayClient;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\EntityRepository;
 use PHPUnit\Framework\MockObject\MockObject;
@@ -23,7 +24,6 @@ use Symfony\Component\Messenger\Envelope;
 use Symfony\Component\Messenger\MessageBusInterface;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 use Symfony\Component\Serializer\SerializerInterface;
-use Symfony\Contracts\HttpClient\HttpClientInterface;
 
 /**
  * @covers \App\Service\BalanceService
@@ -50,7 +50,7 @@ class BalanceServiceTest extends TestCase
         $passwordHasher = $this->createMock(UserPasswordHasherInterface::class);
         $environmentRepository = $this->createMock(EnvironmentRepository::class);
         $serializer = $this->createMock(SerializerInterface::class);
-        $httpClient = $this->createMock(HttpClientInterface::class);
+        $etecsaClient = $this->createMock(EtecsaGatewayClient::class);
 
         $this->service = new BalanceService(
             $this->em,
@@ -63,7 +63,7 @@ class BalanceServiceTest extends TestCase
             $this->sysConfigRepo,
             $serializer,
             $this->messageBus,
-            $httpClient,
+            $etecsaClient,
         );
     }
 

@@ -188,7 +188,7 @@ class EtecsaGatewayClient extends CommonService
         $url = $env->getBasePath() . $path;
         $start = microtime(true);
 
-        $apiKey = $this->sysConfigRepo->findCachedValue('api.' . strtolower($env->getType()) . '.communications.key');
+        $apiKey = $this->sysConfigRepo->findCachedValue('api.' . strtolower($env->getType()) . '.communications.key', mustBeActive: true);
         $headers = [
             'Content-Type' => 'application/json',
             'Accept'       => 'application/json',
