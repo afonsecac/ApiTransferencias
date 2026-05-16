@@ -139,9 +139,11 @@ class EtecsaGatewayClient extends CommonService
     {
         $data = $this->post($env, '/information/balance', ['environment' => $env->getType()]);
 
+        $balance = $data['balance'] ?? [];
+
         return new EtecsaBalanceDto(
-            cupAmount: (float) ($data['CupBalance'] ?? $data['cupBalance'] ?? $data['cup'] ?? 0.0),
-            usdAmount: (float) ($data['UsdBalance'] ?? $data['usdBalance'] ?? $data['usd'] ?? 0.0),
+            cupAmount: (float) ($balance['CUP'] ?? $balance['cup'] ?? $data['CupBalance'] ?? $data['cupBalance'] ?? $data['cup'] ?? 0.0),
+            usdAmount: (float) ($balance['USD'] ?? $balance['usd'] ?? $data['UsdBalance'] ?? $data['usdBalance'] ?? $data['usd'] ?? 0.0),
             fetchedAt: new \DateTimeImmutable(),
         );
     }
