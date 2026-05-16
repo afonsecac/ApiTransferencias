@@ -62,10 +62,12 @@ class AdminBalanceOperationController extends AbstractController
     #[Route("/platform-balance", name: 'admin_balance_operation_platform_balance', methods: ['GET'])]
     #[DashboardEndpoint(summary: 'Balance de plataforma por entorno', tag: 'Balance Operations')]
     public function getPlatformBalance(
+        Request $request,
         #[MapQueryParameter] ?string $environmentType = null
     ): JsonResponse
     {
-        return $this->json($this->balanceService->getBalancePlatform($environmentType ?? ''));
+        $type = $environmentType ?? $request->headers->get('X-Environment-Type') ?? '';
+        return $this->json($this->balanceService->getBalancePlatform($type));
     }
 
     /**

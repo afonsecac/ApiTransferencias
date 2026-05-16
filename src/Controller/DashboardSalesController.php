@@ -2,6 +2,7 @@
 
 namespace App\Controller;
 
+use App\Exception\MyCurrentException;
 use App\DTO\Out\PaginatedListOutDto;
 use App\DTO\Out\SaleCheckStatusOutDto;
 use App\DTO\Out\SaleInfoDetailOutDto;
@@ -204,13 +205,16 @@ class DashboardSalesController extends AbstractController
             $updated = $this->saleService->checkSaleInfo($sale->getId());
             return $this->json([
                 'id' => $updated->getId(),
-                'state' => $updated->getState()->value,
+                'state' => $updated->getState()?->value,
                 'transactionStatus' => $updated->getTransactionStatus(),
             ]);
+        } catch (MyCurrentException $e) {
+            return $this->json(['error' => ['message' => $e->getMessage()]], $e->getCode());
         } catch (\Exception $e) {
-            return $this->json([
-                'error' => ['message' => $e->getMessage()],
-            ], Response::HTTP_INTERNAL_SERVER_ERROR);
+            return $this->json(
+                ['error' => ['message' => $e->getMessage()]],
+                Response::HTTP_INTERNAL_SERVER_ERROR
+            );
         }
     }
 

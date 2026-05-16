@@ -38,7 +38,9 @@ use App\Service\Etecsa\EtecsaGatewayClient;
 use Symfony\Contracts\HttpClient\Exception\ClientExceptionInterface;
 use Symfony\Contracts\HttpClient\Exception\RedirectionExceptionInterface;
 use Symfony\Contracts\HttpClient\Exception\ServerExceptionInterface;
+use Symfony\Component\HttpFoundation\Response;
 use Symfony\Contracts\HttpClient\Exception\TransportExceptionInterface;
+use App\Entity\User;
 
 class CommunicationSaleService extends CommonService
 {
@@ -744,6 +746,9 @@ class CommunicationSaleService extends CommonService
             }
             $urlSale = $user->getEnvironment()?->getBasePath().'/sale/package';
 
+            $officeComId = $commercialOffice->getComId();
+            $packageProductId = $package->getPriceClientPackage()?->getProduct()?->getPackageId();
+
             $body = [
                 'client' => [
                     'id' => $sale->getIdentificationNumber(),
@@ -751,12 +756,12 @@ class CommunicationSaleService extends CommonService
                     'identificationType' => $sale->getIdentificationType() ?? 1,
                     'arrivalDate' => $sale->getArrivalAt() ? $sale->getArrivalAt()->format('Y-m-d') : null,
                     'isAirport' => $commercialOffice->isIsAirport(),
-                    'commercialOfficeId' => $commercialOffice->getComId(),
+                    'commercialOfficeId' => $officeComId !== null ? (int) $officeComId : null,
                     'provinceId' => $commercialOffice->getProvince()?->getComId(),
                     'nationality' => $nationality->getComId(),
                 ],
                 'packageInfo' => [
-                    'id' => $package->getPriceClientPackage()?->getProduct()?->getPackageId(),
+                    'id' => $packageProductId !== null ? (string) $packageProductId : null,
                     'packageType' => $package->getPriceClientPackage()?->getProduct()?->getPackageType(),
                 ],
                 'transactionId' => $transactionId,
@@ -825,22 +830,37 @@ class CommunicationSaleService extends CommonService
         $this->logger->error("Sale {$sale->getId()} failed: {$reason}");
     }
 
-    public function checkSaleInfo(int $saleId): CommunicationSaleInfo|null
+    /**
+     * @throws MyCurrentException
+     */
+    public function checkSaleInfo(int $saleId): CommunicationSaleInfo
     {
-        $user = $this->security->getUser();
         $communicationSale = $this->em->getRepository(CommunicationSaleInfo::class)->find($saleId);
+        if (is_null($communicationSale)) {
+            throw new MyCurrentException('SALE_NOT_FOUND', 'Sale not found', Response::HTTP_NOT_FOUND);
+        }
+
+        $user = $this->security->getUser();
+        $tenant = $communicationSale->getTenant();
+
+        $authorized = false;
+        if ($this->security->isGranted('ROLE_ADMIN')) {
+            $authorized = true;
+        } elseif ($user instanceof User && $user->getCompany() !== null) {
+            $authorized = $tenant?->getClient()?->getId() === $user->getCompany()->getId();
+        } elseif ($user instanceof Account) {
+            $authorized = $user->getId() === $tenant?->getId();
+        }
+
+        if (!$authorized) {
+            throw new MyCurrentException('FORBIDDEN_SALE_CHECK', 'Not authorized to check this sale', Response::HTTP_FORBIDDEN);
+        }
+
         try {
-            if (is_null($communicationSale)) {
-                return null;
-            }
-            if (!$user instanceof Account || $user->getId() !== $communicationSale->getTenant()?->getId()) {
-                return null;
-            }
             $this->checkStatusOrder($saleId);
             $communicationSale = $this->em->getRepository(CommunicationSaleInfo::class)->find($saleId);
         } catch (\Exception $exc) {
-            $message = $exc->getMessage();
-            $this->logger->info($message);
+            $this->logger->info($exc->getMessage());
         }
 
         return $communicationSale;
