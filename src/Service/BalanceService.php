@@ -19,8 +19,10 @@ use App\Entity\ReportMarked;
 use App\Entity\User;
 use App\Enums\BalanceOperationEnum;
 use App\Enums\BalanceStateEnum;
+use App\DTO\Etecsa\EtecsaBalanceDto;
 use App\Exception\MyCurrentException;
 use App\Message\BalanceMessage;
+use App\Service\Etecsa\EtecsaGatewayClient;
 use App\Repository\EnvironmentRepository;
 use App\Repository\SysConfigRepository;
 use Doctrine\ORM\EntityManagerInterface;
@@ -33,8 +35,6 @@ use Symfony\Component\Mailer\MailerInterface;
 use Symfony\Component\Messenger\MessageBusInterface;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 use Symfony\Component\Serializer\SerializerInterface;
-use Symfony\Contracts\HttpClient\HttpClientInterface;
-
 class BalanceService extends CommonService
 {
     public function __construct(
@@ -48,7 +48,7 @@ class BalanceService extends CommonService
         SysConfigRepository $sysConfigRepo,
         SerializerInterface $serializer,
         private readonly MessageBusInterface $messageBus,
-        private readonly HttpClientInterface $httpClient,
+        private readonly EtecsaGatewayClient $etecsaClient,
     ) {
         parent::__construct(
             $em,
@@ -158,18 +158,16 @@ class BalanceService extends CommonService
 
     /**
      * @param string $env
-     * @return array
      * @throws \Symfony\Contracts\HttpClient\Exception\ClientExceptionInterface
-     * @throws \Symfony\Contracts\HttpClient\Exception\DecodingExceptionInterface
      * @throws \Symfony\Contracts\HttpClient\Exception\RedirectionExceptionInterface
      * @throws \Symfony\Contracts\HttpClient\Exception\ServerExceptionInterface
      * @throws \Symfony\Contracts\HttpClient\Exception\TransportExceptionInterface
      */
-    public function getBalancePlatform(string $env): array
+    public function getBalancePlatform(string $env): ?EtecsaBalanceDto
     {
         $user = $this->security->getUser();
         if (!$user instanceof User) {
-            return [];
+            return null;
         }
         if (!$this->security->isGranted('ROLE_ADMIN')) {
             throw new AccessDeniedException();
@@ -180,23 +178,10 @@ class BalanceService extends CommonService
             'isActive' => true,
         ]);
         if (is_null($environment)) {
-            return [];
+            return null;
         }
-        $balanceResponse = $this->httpClient->request(
-            'POST',
-            $environment->getBasePath().'/information/balance',
-            [
-                'headers' => [
-                    'Content-Type' => 'application/json',
-                    'Accept' => 'application/json',
-                ],
-                'body' => $this->serializer->serialize([
-                    'environment' => $environment->getType(),
-                ], 'json', []),
-            ]
-        );
 
-        return $balanceResponse->toArray();
+        return $this->etecsaClient->getBalance($environment);
     }
 
     /**
