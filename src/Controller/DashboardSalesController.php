@@ -20,6 +20,7 @@ use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Messenger\MessageBusInterface;
+use Symfony\Component\Messenger\Stamp\DelayStamp;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Http\Attribute\IsGranted;
 use Symfony\Component\Serializer\Normalizer\AbstractObjectNormalizer;
@@ -235,7 +236,7 @@ class DashboardSalesController extends AbstractController
             ], Response::HTTP_BAD_REQUEST);
         }
 
-        $this->messageBus->dispatch(new CheckSaleMessage($sale->getId()));
+        $this->messageBus->dispatch(new CheckSaleMessage($sale->getId()), [new DelayStamp(2000)]);
 
         return $this->json([
             'id' => $sale->getId(),
