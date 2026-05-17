@@ -200,7 +200,7 @@ class CommunicationSaleInfo
     /**
      * @var Collection<int, CommunicationSaleHistory>
      */
-    #[ORM\OneToMany(targetEntity: CommunicationSaleHistory::class, mappedBy: 'sale', indexBy: 'id')]
+    #[ORM\OneToMany(targetEntity: CommunicationSaleHistory::class, mappedBy: 'sale')]
     #[ORM\OrderBy(['updatedAt' => 'DESC'])]
     #[ApiProperty]
     #[Groups(['comSales:read', 'sale:detail'])]
