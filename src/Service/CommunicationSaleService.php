@@ -911,6 +911,8 @@ class CommunicationSaleService extends CommonService
             $statusResponse = strtoupper($responseInfo->status);
             $result = isset($responseInfo->result) ? (object)$responseInfo->result : null;
             $fullResponse = isset($responseInfo->fullResponse) ? (object) $responseInfo->fullResponse : null;
+            $rechargeStateCode = '';
+            $rechargeState     = '';
             $isTrue = false;
             if ($fullResponse !== null) {
                 $fullResponseObj = isset($fullResponse->saleRecharge) ? (object) $fullResponse->saleRecharge : null;
@@ -949,6 +951,13 @@ class CommunicationSaleService extends CommonService
                 $this->historicalSaleService->createHistoricalCommunication(
                     $sale->getId(),
                     CommunicationStateEnum::COMPLETED,
+                    $response
+                );
+            } elseif (in_array($rechargeStateCode, ['PE', 'PR'], true)) {
+                // ETECSA aún procesando la recarga — registrar en historial y mantener PENDING
+                $this->historicalSaleService->createHistoricalCommunication(
+                    $sale->getId(),
+                    CommunicationStateEnum::PENDING,
                     $response
                 );
             } elseif (!is_null($result) && isset($responseInfo->status) && $result->valueOk && $responseInfo->status === CommunicationStateEnum::REJECTED->value) {
