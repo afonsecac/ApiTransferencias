@@ -32,6 +32,7 @@ use Symfony\Component\HttpClient\Exception\ClientException;
 use Symfony\Component\HttpClient\Exception\TimeoutException;
 use Symfony\Component\Mailer\MailerInterface;
 use Symfony\Component\Messenger\MessageBusInterface;
+use Symfony\Component\Messenger\Stamp\DelayStamp;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 use Symfony\Component\Serializer\SerializerInterface;
 use App\Service\Etecsa\EtecsaGatewayClient;
@@ -528,7 +529,7 @@ class CommunicationSaleService extends CommonService
                 $this->em->flush();
                 // Solo despachar check si la venta sigue pendiente (no si fue rechazada)
                 if ($saleRecharge->getState() === CommunicationStateEnum::PENDING) {
-                    $this->messageBus->dispatch(new CheckSaleMessage($saleId));
+                    $this->messageBus->dispatch(new CheckSaleMessage($saleId), [new DelayStamp(2000)]);
                 }
             } catch (ClientExceptionInterface|TimeoutException $exc) {
                 // Timeout/error de cliente: la petición pudo haber llegado a ETECSA.
@@ -787,7 +788,7 @@ class CommunicationSaleService extends CommonService
             $sale->setTransactionStatus($saleInfo);
             $sale->setStateProcess(CommunicationStateEnum::PENDING->value);
             $this->em->flush();
-            $this->messageBus->dispatch(new CheckSaleMessage($sale->getId()));
+            $this->messageBus->dispatch(new CheckSaleMessage($sale->getId()), [new DelayStamp(2000)]);
         } catch (\Exception $exc) {
             $sale->setStateProcess(CommunicationStateEnum::PENDING->value);
             $this->em->flush();
@@ -878,23 +879,11 @@ class CommunicationSaleService extends CommonService
      */
     public function checkStatusSaleInfo(int $saleId): void
     {
-        $this->checkStatusOrder($saleId, true);
+        $this->checkStatusOrder($saleId);
     }
 
-    /**
-     * @param int $saleId
-     * @param bool|null $isProcess
-     * @return void
-     * @throws \Symfony\Component\Messenger\Exception\ExceptionInterface
-     * @throws \Symfony\Contracts\HttpClient\Exception\ClientExceptionInterface
-     * @throws \Symfony\Contracts\HttpClient\Exception\DecodingExceptionInterface
-     * @throws \Symfony\Contracts\HttpClient\Exception\RedirectionExceptionInterface
-     * @throws \Symfony\Contracts\HttpClient\Exception\ServerExceptionInterface
-     * @throws \Symfony\Contracts\HttpClient\Exception\TransportExceptionInterface
-     */
-    public function checkStatusOrder(int $saleId, ?bool $isProcess = null): void
+    public function checkStatusOrder(int $saleId): void
     {
-        sleep(2);
         $sale = $this->em->getRepository(CommunicationSaleInfo::class)->find($saleId);
         if (is_null($sale) || $sale->getState() !== CommunicationStateEnum::PENDING) {
             return;
@@ -912,12 +901,6 @@ class CommunicationSaleService extends CommonService
         if (is_null($tenant)) {
             return;
         }
-        $url = $tenant->getEnvironment()?->getBasePath().'/sale/sale-info';
-
-        $body = [
-            'environment' => $tenant->getEnvironment()?->getType(),
-            'transactionId' => $sale->getTransactionId(),
-        ];
 
         try {
             $response = $this->etecsaClient->getSaleInfo(
@@ -928,26 +911,27 @@ class CommunicationSaleService extends CommonService
             $statusResponse = strtoupper($responseInfo->status);
             $result = isset($responseInfo->result) ? (object)$responseInfo->result : null;
             $fullResponse = isset($responseInfo->fullResponse) ? (object) $responseInfo->fullResponse : null;
+            $rechargeStateCode = '';
+            $rechargeState     = '';
             $isTrue = false;
             if ($fullResponse !== null) {
-                $fullResponseObj = isset($fullResponse->SaleRecharge) ? (object) $fullResponse->SaleRecharge : null;
+                $fullResponseObj = isset($fullResponse->saleRecharge) ? (object) $fullResponse->saleRecharge : null;
                 if ($fullResponseObj !== null) {
-                    $rechargeStateCode = ($fullResponseObj->RechargeStateCode ?? '');
-                    $rechargeState     = ($fullResponseObj->RechargeState ?? '');
+                    $rechargeStateCode = ($fullResponseObj->rechargeStateCode ?? '');
+                    $rechargeState     = ($fullResponseObj->rechargeState ?? '');
                     $isTrue = $statusResponse === "COMPLETED"
                         && ($rechargeStateCode === "OK" || $rechargeState === "Realizada");
                 }
             }
             $sale->setTransactionStatus($response);
-            if ($isTrue || (property_exists($responseInfo, 'orderId') && isset($responseInfo->orderId))) {
+            if ($isTrue || isset($responseInfo->orderId)) {
                 // Evitar procesar si ya fue completada (check concurrente)
                 $this->em->refresh($sale);
                 if ($sale->getState() === CommunicationStateEnum::COMPLETED) {
                     return;
                 }
-                if (property_exists($responseInfo, 'orderId') && isset($responseInfo->orderId)) {
-                    $orderId = $responseInfo->orderId;
-                    $sale->setTransactionOrder($orderId);
+                if (isset($responseInfo->orderId)) {
+                    $sale->setTransactionOrder($responseInfo->orderId);
                 }
                 if ($sale instanceof CommunicationSaleRecharge) {
                     $sale->setState(CommunicationStateEnum::COMPLETED);
@@ -969,6 +953,13 @@ class CommunicationSaleService extends CommonService
                     CommunicationStateEnum::COMPLETED,
                     $response
                 );
+            } elseif (in_array($rechargeStateCode, ['PE', 'PR'], true)) {
+                // ETECSA aún procesando la recarga — registrar en historial y mantener PENDING
+                $this->historicalSaleService->createHistoricalCommunication(
+                    $sale->getId(),
+                    CommunicationStateEnum::PENDING,
+                    $response
+                );
             } elseif (!is_null($result) && isset($responseInfo->status) && $result->valueOk && $responseInfo->status === CommunicationStateEnum::REJECTED->value) {
                 $sale->setState(CommunicationStateEnum::REJECTED);
                 $sale->setStateProcess(CommunicationStateEnum::REJECTED->value);
@@ -980,7 +971,7 @@ class CommunicationSaleService extends CommonService
             } elseif (!is_null($result) && !$result->valueOk) {
                 if (!is_null($result->code)) {
                     $message = self::ETECSA_INFO_ERROR[$result->code];
-                    $response['result']['message'] = mb_convert_encoding($message, 'ISO-8859-1', 'UTF-8');
+                    $response['result']['message'] = mb_convert_encoding($message, 'UTF-8', 'ISO-8859-1');
                     $sale->setTransactionStatus($response);
                     if (in_array($result->code, ['151', '152', '153', '198', '199', '200'], true)) {
                         $sale->setState(CommunicationStateEnum::REJECTED);
@@ -1004,7 +995,7 @@ class CommunicationSaleService extends CommonService
                     $sale->setStateProcess(CommunicationStateEnum::REJECTED->value);
                     $this->historicalSaleService->createHistoricalCommunication(
                         $sale->getId(),
-                        CommunicationStateEnum::PENDING,
+                        CommunicationStateEnum::REJECTED,
                         $response
                     );
                 }
@@ -1044,7 +1035,7 @@ class CommunicationSaleService extends CommonService
                         $this->logger->info("Sale {$saleId}: not found in ApiComm, resending (attempt {$currentStatus['retryCount']})");
                     }
                 } else {
-                    $sale->setStateProcess(CommunicationStateEnum::FAILED->value);
+                    $this->logger->critical("Sale {$saleId}: not found in ApiComm after max retries, requires manual review.");
                     $this->em->flush();
                 }
             } elseif ($e->getCode() === 400) {
@@ -1065,7 +1056,7 @@ class CommunicationSaleService extends CommonService
                     $comInfo
                 );
                 $this->em->flush();
-                $this->messageBus->dispatch(new CheckSaleMessage($saleId));
+                $this->messageBus->dispatch(new CheckSaleMessage($saleId), [new DelayStamp(2000)]);
             } else {
                 $comInfo = [
                     'status' => [
@@ -1103,7 +1094,7 @@ class CommunicationSaleService extends CommonService
         $saleInfoRepo = $this->em->getRepository(CommunicationSaleInfo::class);
         $sales = $saleInfoRepo->getLastPending();
         foreach ($sales as $sale) {
-            $this->checkStatusOrder($sale->getId(), true);
+            $this->checkStatusOrder($sale->getId());
         }
     }
 }
