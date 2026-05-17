@@ -11,6 +11,7 @@ use Symfony\Component\Serializer\Attribute\Groups;
 
 #[ORM\Entity(repositoryClass: CommunicationSaleHistoryRepository::class)]
 #[ORM\HasLifecycleCallbacks]
+#[ORM\Index(name: 'idx_com_sale_history_updated_at', columns: ['updated_at'])]
 class CommunicationSaleHistory
 {
     #[ORM\Id]
