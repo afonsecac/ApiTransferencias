@@ -2,6 +2,7 @@
 
 namespace App\Controller;
 
+use App\DTO\CreateClientDto;
 use App\DTO\Out\ClientOutDto;
 use App\DTO\Out\CompanyRefOutDto;
 use App\DTO\Out\PaginatedListOutDto;
@@ -13,6 +14,7 @@ use App\Service\ClientService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
+use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Attribute\MapQueryParameter;
 use Symfony\Component\Routing\Attribute\Route;
@@ -24,6 +26,28 @@ class AdminClientController extends AbstractController
         private readonly ClientService $clientService,
         private readonly EntityManagerInterface $em,
     ) {
+    }
+
+    #[Route('', name: 'admin_client_create', methods: ['POST'])]
+    #[DashboardEndpoint(summary: 'Crear cliente', tag: 'Admin Clients', requestDto: CreateClientDto::class, responseDto: ClientOutDto::class)]
+    public function create(CreateClientDto $dto, Request $request): JsonResponse
+    {
+        if (!$this->isGranted('ROLE_SUPER_ADMIN')) {
+            return $this->json(['error' => ['message' => 'Access denied']], Response::HTTP_FORBIDDEN);
+        }
+
+        $environmentId = (int) $request->headers->get('X-Environment-Id');
+        if ($environmentId === 0) {
+            return $this->json(['error' => ['message' => 'X-Environment-Id header is required']], Response::HTTP_BAD_REQUEST);
+        }
+
+        try {
+            $client = $this->clientService->create($dto, $environmentId);
+        } catch (MyCurrentException $e) {
+            return $this->json(['error' => ['message' => $e->getMessage()]], $e->getCode());
+        }
+
+        return $this->json($this->serializeClient($client), Response::HTTP_CREATED);
     }
 
     #[Route('/all', name: 'admin_client_all', methods: ['GET'])]
