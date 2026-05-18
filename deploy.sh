@@ -87,6 +87,13 @@ fi
 
 COMPOSE_CMD="docker compose -f $COMPOSE_BASE -f $COMPOSE_ENV $COMPOSE_REPLICATION_FLAG --env-file $ENV_FILE"
 
+# Servicios worker segun entorno
+if [[ "$ENV" == "prod" ]]; then
+    WORKER_SERVICES="worker-notifications worker-clients worker-packages worker-check-status worker-balance worker-scheduler"
+else
+    WORKER_SERVICES="worker"
+fi
+
 info "Entorno: ${CYAN}${ENV}${NC} | Branch: ${CYAN}${GIT_BRANCH}${NC}"
 if [[ -n "$COMPOSE_REPLICATION_FLAG" ]]; then
     info "Compose: $COMPOSE_BASE + $COMPOSE_ENV + ${YELLOW}$COMPOSE_REPLICATION_FILE (replicacion activa)${NC}"
@@ -259,6 +266,9 @@ deploy() {
     log "Ejecutando migraciones..."
     $COMPOSE_CMD run --rm php-fpm php bin/console doctrine:migrations:migrate --no-interaction
 
+    log "Deteniendo workers (SIGTERM graceful)..."
+    $COMPOSE_CMD stop --timeout 60 $WORKER_SERVICES 2>/dev/null || true
+
     log "Desplegando..."
     $COMPOSE_CMD up -d --remove-orphans --force-recreate
 
@@ -300,6 +310,9 @@ deploy_with_migrate() {
         sleep 1
     done
     $COMPOSE_CMD run --rm php-fpm php bin/console doctrine:migrations:migrate --no-interaction
+
+    log "Deteniendo workers (SIGTERM graceful)..."
+    $COMPOSE_CMD stop --timeout 60 $WORKER_SERVICES 2>/dev/null || true
 
     log "Desplegando aplicacion..."
     $COMPOSE_CMD up -d --remove-orphans --force-recreate
@@ -396,6 +409,9 @@ rollback() {
     log "Commit actual: $CURRENT_COMMIT → $(git rev-parse --short HEAD)"
     log "Reconstruyendo imagenes..."
     $COMPOSE_CMD build
+
+    log "Deteniendo workers (SIGTERM graceful)..."
+    $COMPOSE_CMD stop --timeout 60 $WORKER_SERVICES 2>/dev/null || true
 
     log "Redesplegando..."
     $COMPOSE_CMD up -d --remove-orphans

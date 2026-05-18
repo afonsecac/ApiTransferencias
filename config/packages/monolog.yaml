@@ -116,6 +116,7 @@ when@prod:
                 handler: symfony_mailer_critical
                 store: '%kernel.logs_dir%/monolog_dedup_critical.log'
                 time: 3600
+                channels: ["!console"]
             symfony_mailer_critical:
                 type: symfony_mailer
                 from_email: '%env(APP_MAILER_FROM)%'
