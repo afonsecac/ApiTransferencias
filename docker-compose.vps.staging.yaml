@@ -93,6 +93,7 @@ services:
       rabbitmq:
         condition: service_healthy
     restart: unless-stopped
+    stop_grace_period: 60s
     deploy:
       resources:
         limits:

@@ -267,7 +267,7 @@ deploy() {
     $COMPOSE_CMD run --rm php-fpm php bin/console doctrine:migrations:migrate --no-interaction
 
     log "Deteniendo workers (SIGTERM graceful)..."
-    $COMPOSE_CMD stop $WORKER_SERVICES 2>/dev/null || true
+    $COMPOSE_CMD stop --timeout 60 $WORKER_SERVICES 2>/dev/null || true
 
     log "Desplegando..."
     $COMPOSE_CMD up -d --remove-orphans --force-recreate
@@ -312,7 +312,7 @@ deploy_with_migrate() {
     $COMPOSE_CMD run --rm php-fpm php bin/console doctrine:migrations:migrate --no-interaction
 
     log "Deteniendo workers (SIGTERM graceful)..."
-    $COMPOSE_CMD stop $WORKER_SERVICES 2>/dev/null || true
+    $COMPOSE_CMD stop --timeout 60 $WORKER_SERVICES 2>/dev/null || true
 
     log "Desplegando aplicacion..."
     $COMPOSE_CMD up -d --remove-orphans --force-recreate
@@ -411,7 +411,7 @@ rollback() {
     $COMPOSE_CMD build
 
     log "Deteniendo workers (SIGTERM graceful)..."
-    $COMPOSE_CMD stop $WORKER_SERVICES 2>/dev/null || true
+    $COMPOSE_CMD stop --timeout 60 $WORKER_SERVICES 2>/dev/null || true
 
     log "Redesplegando..."
     $COMPOSE_CMD up -d --remove-orphans

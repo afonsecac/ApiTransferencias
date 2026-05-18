@@ -95,6 +95,7 @@ class BalanceService extends CommonService
             if ($balance <= $criticalBalance) {
                 $tryCritical = $lastNotification->getCriticalTry() ?? 0;
                 $lastNotification->setCriticalTry($tryCritical + 1);
+                $this->em->flush();
                 $this->messageBus->dispatch(
                     new BalanceMessage(
                         'CRITICAL',
@@ -105,6 +106,8 @@ class BalanceService extends CommonService
                 );
             } elseif ($balance <= $minBalance) {
                 if (is_null($lastNotification->getMinInfo())) {
+                    $lastNotification->setMinInfo(1);
+                    $this->em->flush();
                     $this->messageBus->dispatch(
                         new BalanceMessage(
                             'RISK',
@@ -113,7 +116,6 @@ class BalanceService extends CommonService
                             $userId
                         )
                     );
-                    $lastNotification->setMinInfo(1);
                 }
             }
         }
