@@ -1,0 +1,139 @@
+{% extends 'emails/_base.html.twig' %}
+
+{% block title %}Bienvenido a SendMundo &mdash; Datos de acceso{% endblock %}
+
+{% block preheader %}Tu cuenta ha sido creada en el entorno {{ environmentType }}. Aquí encontrarás tus credenciales de acceso.{% endblock %}
+
+{% block brand_header %}
+<span style="font-size:20px;font-weight:bold;color:#ffffff;font-family:Arial,Helvetica,sans-serif;letter-spacing:0.5px;">
+    SendMundo
+</span>
+{% endblock %}
+
+{% block logo_area %}
+<tr>
+    <td align="center" style="background-color:#ffffff;padding:20px 40px 16px 40px;border-bottom:1px solid #ebebeb;">
+        <img src="https://www.sendmundo.com/img/header/comremit-logo.svg"
+             alt="SendMundo" width="160" style="display:block;margin:0 auto;max-width:160px;height:auto;border:0;"/>
+    </td>
+</tr>
+{% endblock %}
+
+{% block banner %}
+<tr>
+    <td align="center" style="background-color:#D9000D;padding:28px 40px 24px 40px;">
+        <p style="margin:0 0 6px 0;font-size:24px;font-weight:bold;color:#ffffff;
+                  font-family:Arial,Helvetica,sans-serif;line-height:1.2;">
+            Bienvenido a SendMundo
+        </p>
+        <p style="margin:0;font-size:14px;color:rgba(255,255,255,0.85);font-family:Arial,Helvetica,sans-serif;">
+            Welcome to SendMundo
+        </p>
+    </td>
+</tr>
+{% endblock %}
+
+{% block content %}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+
+    <!-- GREETING -->
+    <tr>
+        <td style="font-size:15px;color:#1a1a1a;line-height:22px;padding-bottom:20px;font-family:Arial,Helvetica,sans-serif;">
+            Hola <strong>{{ companyName }}</strong>,<br/>
+            Tu cuenta en SendMundo ha sido creada en el entorno <strong>{{ environmentType }}</strong>. A continuación encontrarás tus credenciales de acceso a la API.<br/><br/>
+            <em style="color:#888888;font-size:13px;">Hi <strong>{{ companyName }}</strong>, your SendMundo account has been created in the <strong>{{ environmentType }}</strong> environment. Below you will find your API access credentials.</em>
+        </td>
+    </tr>
+
+    <!-- ACCESS TOKEN LABEL -->
+    <tr>
+        <td style="font-size:14px;color:#1a1a1a;line-height:22px;padding-bottom:4px;font-family:Arial,Helvetica,sans-serif;">
+            Token de acceso a la API / API access token:
+        </td>
+    </tr>
+
+    <!-- ACCESS TOKEN BLOCK -->
+    <tr>
+        <td align="center" style="padding:8px 0 24px 0;">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 auto;width:100%;">
+                <tr>
+                    <td style="background-color:#f5f5f5;border:1px solid #e0e0e0;border-radius:6px;padding:14px 20px;">
+                        <code style="font-family:'Courier New',Courier,monospace;font-size:13px;color:#333333;word-break:break-all;display:block;">{{ accessToken }}</code>
+                    </td>
+                </tr>
+            </table>
+        </td>
+    </tr>
+
+    <!-- ENVIRONMENT -->
+    <tr>
+        <td style="padding-bottom:20px;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f0f7ff;border-left:4px solid #2563eb;border-radius:0 4px 4px 0;padding:12px 16px;">
+                <tr>
+                    <td style="font-size:13px;color:#1e40af;font-family:Arial,Helvetica,sans-serif;line-height:20px;padding:12px 16px;">
+                        <strong>Entorno / Environment:</strong> {{ environmentType }}
+                    </td>
+                </tr>
+            </table>
+        </td>
+    </tr>
+
+    {% if origin is not null and origin != '*' %}
+    <!-- IP RESTRICTION -->
+    <tr>
+        <td style="padding-bottom:20px;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#fffbeb;border-left:4px solid #d97706;border-radius:0 4px 4px 0;">
+                <tr>
+                    <td style="font-size:13px;color:#92400e;font-family:Arial,Helvetica,sans-serif;line-height:20px;padding:12px 16px;">
+                        <strong>ES:</strong> El acceso a la API está restringido desde las siguientes IPs: <strong>{{ origin }}</strong><br/>
+                        <strong>EN:</strong> API access is restricted from the following IPs: <strong>{{ origin }}</strong>
+                    </td>
+                </tr>
+            </table>
+        </td>
+    </tr>
+    {% endif %}
+
+    <!-- SEPARATOR -->
+    <tr>
+        <td style="padding-bottom:20px;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr><td style="border-top:1px solid #e0e0e0;font-size:1px;line-height:1px;">&nbsp;</td></tr>
+            </table>
+        </td>
+    </tr>
+
+    <!-- DISCLAIMER -->
+    <tr>
+        <td style="font-size:12px;color:#999999;line-height:20px;font-family:Arial,Helvetica,sans-serif;">
+            <strong style="color:#555555;">ES:</strong> Mantén este token seguro y no lo compartas. Si crees que ha sido comprometido, contacta con soporte.<br/>
+            <strong style="color:#555555;">EN:</strong> Keep this token safe and do not share it. If you believe it has been compromised, contact support.
+        </td>
+    </tr>
+
+</table>
+{% endblock %}
+
+{% block footer %}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+    <tr>
+        <td align="center" style="color:#ffffff;font-size:13px;font-weight:bold;padding-bottom:4px;font-family:Arial,Helvetica,sans-serif;">
+            SendMundo SL
+        </td>
+    </tr>
+    <tr>
+        <td align="center" style="padding-bottom:10px;">
+            <a href="https://www.sendmundo.com"
+               style="color:rgba(255,255,255,0.8);font-size:12px;text-decoration:underline;font-family:Arial,Helvetica,sans-serif;">
+                sendmundo.com
+            </a>
+        </td>
+    </tr>
+    <tr>
+        <td align="center" style="border-top:1px solid rgba(255,255,255,0.12);padding-top:12px;
+                                   font-size:11px;color:rgba(255,255,255,0.45);font-family:Arial,Helvetica,sans-serif;">
+            Este es un mensaje autom&aacute;tico &mdash; por favor no respondas a este correo.
+        </td>
+    </tr>
+</table>
+{% endblock %}

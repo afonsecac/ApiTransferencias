@@ -9,11 +9,37 @@ use App\Entity\Client;
 use App\Entity\Environment;
 use App\EntityPaginator\PaginatorResponse;
 use App\Exception\MyCurrentException;
+use App\Message\ClientCreatedMessage;
+use App\Repository\EnvironmentRepository;
+use App\Repository\SysConfigRepository;
 use App\Service\CommonService;
 use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
+use Doctrine\ORM\EntityManagerInterface;
+use Psr\Log\LoggerInterface;
+use Symfony\Bundle\SecurityBundle\Security;
+use Symfony\Component\DependencyInjection\ParameterBag\ParameterBagInterface;
+use Symfony\Component\Mailer\MailerInterface;
+use Symfony\Component\Messenger\MessageBusInterface;
+use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
+use Symfony\Component\Serializer\SerializerInterface;
 
 class ClientService extends CommonService
 {
+    public function __construct(
+        EntityManagerInterface      $em,
+        Security                    $security,
+        ParameterBagInterface       $parameters,
+        MailerInterface             $mailer,
+        LoggerInterface             $logger,
+        UserPasswordHasherInterface $passwordHasher,
+        EnvironmentRepository       $environmentRepository,
+        SysConfigRepository         $sysConfigRepo,
+        SerializerInterface         $serializer,
+        private readonly MessageBusInterface $messageBus,
+    ) {
+        parent::__construct($em, $security, $parameters, $mailer, $logger, $passwordHasher, $environmentRepository, $sysConfigRepo, $serializer);
+    }
+
     /**
      * @param array $params
      * @return \App\EntityPaginator\PaginatorResponse
@@ -59,6 +85,9 @@ class ClientService extends CommonService
         $account = new Account();
         $account->setEnvironment($environment);
         $account->setClient($client);
+        $account->setIsActive(false);
+        $account->setOrigin('*');
+        $account->setEnvironmentName($environment->getType() ?? '');
         if ($dto->getContractCurrency() !== null) {
             $account->setContractCurrency($dto->getContractCurrency());
         }
@@ -74,6 +103,15 @@ class ClientService extends CommonService
                 409
             );
         }
+
+        $this->messageBus->dispatch(new ClientCreatedMessage(
+            email:           $client->getCompanyEmail(),
+            companyName:     $client->getCompanyName(),
+            accessToken:     (string) $account->getAccessToken(),
+            environmentType: $account->getEnvironmentName(),
+            contractWith:    $client->getContractWith(),
+            origin:          $account->getOrigin(),
+        ));
 
         return $client;
     }
