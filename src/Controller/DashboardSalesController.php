@@ -9,9 +9,12 @@ use App\DTO\Out\SaleInfoDetailOutDto;
 use App\DTO\Out\SaleInfoListOutDto;
 use App\DTO\Out\SaleRetryOutDto;
 use App\Entity\CommunicationSaleInfo;
+use App\Entity\CommunicationSalePackage;
+use App\Entity\CommunicationSaleRecharge;
 use App\Entity\User;
 use App\Enums\CommunicationStateEnum;
 use App\Message\CheckSaleMessage;
+use App\Message\SalePackageMessage;
 use App\OpenApi\Attribute\DashboardEndpoint;
 use App\Service\CommunicationSaleService;
 use Doctrine\ORM\EntityManagerInterface;
@@ -236,7 +239,16 @@ class DashboardSalesController extends AbstractController
             ], Response::HTTP_BAD_REQUEST);
         }
 
-        $this->messageBus->dispatch(new CheckSaleMessage($sale->getId()), [new DelayStamp(2000)]);
+        if ($sale instanceof CommunicationSalePackage) {
+            $sale->setState(CommunicationStateEnum::PENDING);
+            $sale->setStateProcess(CommunicationStateEnum::CREATED->value);
+            $this->em->flush();
+            $this->messageBus->dispatch(new SalePackageMessage($sale->getId()));
+        } elseif ($sale instanceof CommunicationSaleRecharge) {
+            $this->saleService->tryAgainWithTransaction($sale->getId());
+        } else {
+            $this->messageBus->dispatch(new CheckSaleMessage($sale->getId()), [new DelayStamp(2000)]);
+        }
 
         return $this->json([
             'id' => $sale->getId(),
