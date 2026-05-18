@@ -20,10 +20,8 @@ framework:
                   vhost: '%env(MESSENGER_TRANSPORT_VHOST)%'
                   exchange:
                     name: high
-                    durable: true
                   queues:
                     notifications_send_emails:
-                      durable: true
                       binding_keys: [ notifications_send_emails ]
               retry_strategy:
                   max_retries: 2
@@ -36,10 +34,8 @@ framework:
                    vhost: '%env(MESSENGER_TRANSPORT_VHOST)%'
                    exchange:
                      name: high
-                     durable: true
                    queues:
                      recharge_mobile_send:
-                       durable: true
                        binding_keys: [ recharge_mobile_send ]
                retry_strategy:
                    max_retries: 5
@@ -53,10 +49,8 @@ framework:
                    vhost: '%env(MESSENGER_TRANSPORT_VHOST)%'
                    exchange:
                      name: highest
-                     durable: true
                    queues:
                      send_sale_package:
-                        durable: true
                         binding_keys: [ send_sale_package ]
                retry_strategy:
                    max_retries: 5
@@ -70,10 +64,8 @@ framework:
                    vhost: '%env(MESSENGER_TRANSPORT_VHOST)%'
                    exchange:
                      name: highest
-                     durable: true
                    queues:
                       check_status_recharge:
-                        durable: true
                         binding_keys: [ check_status_recharge ]
                retry_strategy:
                    max_retries: 5
@@ -87,10 +79,8 @@ framework:
                    vhost: '%env(MESSENGER_TRANSPORT_VHOST)%'
                    exchange:
                      name: medium
-                     durable: true
                    queues:
                      send_balance_notification:
-                       durable: true
                        binding_keys: [ send_balance_notification ]
               retry_strategy:
                   max_retries: 1
