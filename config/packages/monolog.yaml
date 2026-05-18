@@ -57,6 +57,7 @@ when@prod:
                 action_level: error
                 handler: grouped
                 max_files: 10
+                channels: ["!console"]
             security:
                 type: stream
                 path: "%kernel.logs_dir%/security.%kernel.environment%.log"
