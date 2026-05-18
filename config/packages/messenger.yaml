@@ -98,6 +98,7 @@ framework:
              'App\Message\Etecsa\SyncCatalogsMessage': async_clients_high
              'App\Message\Etecsa\SyncProductsMessage': async_clients_high
              'App\Message\DispatchPendingEmailMessage': async_notifications_high
+             'App\Message\ClientCreatedMessage': async_notifications_high
 
 # when@test:
 #    framework:
