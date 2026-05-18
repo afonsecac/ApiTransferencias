@@ -930,6 +930,7 @@ class CommunicationSaleService extends CommonService
                 if ($sale->getState() === CommunicationStateEnum::COMPLETED) {
                     return;
                 }
+                $sale->setTransactionStatus($response);
                 if (isset($responseInfo->orderId)) {
                     $sale->setTransactionOrder($responseInfo->orderId);
                 }
