@@ -46,34 +46,33 @@ use App\Entity\User;
 class CommunicationSaleService extends CommonService
 {
     const ETECSA_INFO_ERROR = [
-
         '100' => 'No se especificaron productos para la venta',
-        '101' => 'Se enviÃ³ una Recarga junto a compra de artÃ­culos solamente.',
-        '102' => 'Se enviÃ³ mÃ¡s de una ActivaciÃ³n en la misma transacciÃ³n.',
-        '103' => 'Se enviÃ³ mÃ¡s de una Recarga en la misma transacciÃ³n.',
+        '101' => 'Se envió una Recarga junto a compra de artículos solamente.',
+        '102' => 'Se envió más de una Activación en la misma transacción.',
+        '103' => 'Se envió más de una Recarga en la misma transacción.',
         '104' => 'Los datos del cliente no son correctos.',
-        '105' => 'Monto de la recarga asociada a una ActivaciÃ³n no permitido',
-        '107' => 'El identificador de la transacciÃ³n no es vÃ¡lido',
+        '105' => 'Monto de la recarga asociada a una Activación no permitido',
+        '107' => 'El identificador de la transacción no es válido',
         '108' => 'Monto de la recarga no permitido',
-        '109' => 'El paquete especificado no estÃ¡ habilitado',
+        '109' => 'El paquete especificado no está habilitado',
         '110' => 'El paquete especificado no existe',
         '111' => 'No fue especificado un paquete para la venta',
-        '112' => 'Los datos para la modificacion de la venta no son vÃ¡lidos',
-        '151' => 'El numero de telefono no existe',
-        '152' => 'Servicio celular del cliente en estado no vÃ¡lido para ser recargado',
-        '153' => 'Tipo de servicio celular del cliente no vÃ¡lido para ser recargado',
-        '198' => 'CombinaciÃ³n de productos no vÃ¡lida',
+        '112' => 'Los datos para la modificación de la venta no son válidos',
+        '151' => 'El número de teléfono no existe',
+        '152' => 'Servicio celular del cliente en estado no válido para ser recargado',
+        '153' => 'Tipo de servicio celular del cliente no válido para ser recargado',
+        '198' => 'Combinación de productos no válida',
         '199' => 'Datos de la venta incorrectos',
         '200' => 'La venta de productos no pudo ejecutarse satisfactoriamente',
-        '201' => 'La ActivaciÃ³n no pudo ejecutarse satisfactoriamente',
+        '201' => 'La Activación no pudo ejecutarse satisfactoriamente',
         '202' => 'La Recarga no pudo ejecutarse satisfactoriamente.',
         '203' => 'La venta de Terminales no pudo ejecutarse satisfactoriamente',
         '204' => 'La venta de Accesorios no pudo ejecutarse satisfactoriamente',
-        '205' => 'No se pudo cambiar la contraseÃ±a de usuario',
+        '205' => 'No se pudo cambiar la contraseña de usuario',
         '206' => 'La venta del paquete no pudo ejecutarse satisfactoriamente',
         '207' => 'No se pudieron modificar los datos de venta',
         '208' => 'No se pudo cancelar la venta',
-        '209' => 'No se pudo realizar el chequeo de los datos de la activaciÃ³n de lÃ­nea celular',
+        '209' => 'No se pudo realizar el chequeo de los datos de la activación de línea celular',
         '300' => 'No se pudo obtener el estado de la venta',
         '301' => 'No se pudieron obtener los datos de la venta',
         '302' => 'No se pudieron obtener los datos de las ventas',
@@ -83,18 +82,30 @@ class CommunicationSaleService extends CommonService
         '306' => 'No se pudieron obtener los datos del distribuidor',
         '307' => 'No se pudieron obtener los paquetes para la venta',
         '308' => 'No se pudieron obtener los elementos de paquetes',
-        '309' => 'No se pudieron obtener los datos de los tipos de identificaciÃ³n',
+        '309' => 'No se pudieron obtener los datos de los tipos de identificación',
         '310' => 'No se pudieron obtener los datos de los Municipios',
         '311' => 'No se pudieron obtener los datos de las Nacionalidades',
         '901' => 'El distribuidor no tiene permitida la venta de Activaciones',
         '902' => 'El distribuidor no tiene permitida la venta de Recargas',
         '903' => 'El distribuidor no tiene permitida la venta de Terminales y Accesorios',
-        '904' => 'El distribuidor no tiene permitida la venta de Activaciones Temportales TURISTA',
+        '904' => 'El distribuidor no tiene permitida la venta de Activaciones Temporales TURISTA',
         '905' => 'El distribuidor no tiene permitida la venta de Recursos TURISTA',
         '-1' => 'Su transaccion se esta procesando',
         '-2' => 'Su orden aun se esta procesando',
         '-3' => 'Ha ocurrido una falla durante el proceso de procesamiento de la recarga. Pronto nos pondremos en contacto.',
     ];
+
+    private const REJECTED_ETECSA_ERROR_CODES = ['151', '152', '153', '198', '199', '200'];
+
+    private static function describeEtecsaErrorCode(int|string|null $code): string
+    {
+        if ($code === null || $code === '') {
+            return 'Unexpected message during the sale';
+        }
+        $key = (string) $code;
+        return self::ETECSA_INFO_ERROR[$key]
+            ?? sprintf('Código de error desconocido del proveedor: %s', $key);
+    }
 
     /**
      * @param \Doctrine\ORM\EntityManagerInterface $em
@@ -329,16 +340,10 @@ class CommunicationSaleService extends CommonService
             }
         } catch (\Exception $ex) {
             if (str_contains($ex->getMessage(), "unique_identification_client")) {
-                throw new MyCurrentException(
-                    "103",
-                    mb_convert_encoding(self::ETECSA_INFO_ERROR['103'], 'ISO-8859-1', 'UTF-8')
-                );
+                throw new MyCurrentException("103", self::describeEtecsaErrorCode('103'));
             }
             if (str_contains($ex->getMessage(), "unique_transaction_id")) {
-                throw new MyCurrentException(
-                    "103",
-                    mb_convert_encoding(self::ETECSA_INFO_ERROR['103'], 'ISO-8859-1', 'UTF-8')
-                );
+                throw new MyCurrentException("103", self::describeEtecsaErrorCode('103'));
             }
             $this->logger->error("Recharge persist failed: " . $ex->getMessage());
             throw $ex;
@@ -494,25 +499,18 @@ class CommunicationSaleService extends CommonService
                 $rechargeResult = (object)((object)$rechargeInfo)->result;
                 if ((int)$rechargeResult->code !== -1) {
                     $code = $rechargeResult->code;
-                    $errMsg = null;
-                    if (is_numeric($code)) {
-                        $errMsg = self::ETECSA_INFO_ERROR[$code];
-                    }
+                    $errMsg = self::describeEtecsaErrorCode($code);
                     $saleRecharge->setState(CommunicationStateEnum::REJECTED);
                     $this->historicalSaleService->createHistoricalCommunication(
                         $saleRecharge->getId(),
                         CommunicationStateEnum::REJECTED
                     );
 
-
-                    if ($errMsg) {
-                        $errMsg = mb_convert_encoding($errMsg, 'ISO-8859-1', 'UTF-8');
-                    }
                     $comInfo = [
                         'error' => [
                             'message' => sprintf(
                                 "action=Recharge, Message=%s",
-                                $errMsg ?? 'Unexpected message during the sale'
+                                $errMsg
                             ),
                             'orderID' => $orderId,
                             'code' => sprintf(
@@ -691,10 +689,7 @@ class CommunicationSaleService extends CommonService
             }
         } catch (\Exception $ex) {
             if (str_contains($ex->getMessage(), "unique_identification_client")) {
-                throw new MyCurrentException(
-                    "102",
-                    mb_convert_encoding(self::ETECSA_INFO_ERROR['102'], 'ISO-8859-1', 'UTF-8')
-                );
+                throw new MyCurrentException("102", self::describeEtecsaErrorCode('102'));
             }
         }
 
@@ -782,8 +777,14 @@ class CommunicationSaleService extends CommonService
             }
             if ($code === -1) {
                 $sale->setState(CommunicationStateEnum::PENDING);
-            } elseif (isset($code) && $code > 0) {
+            } elseif ($code !== null && in_array((string) $code, self::REJECTED_ETECSA_ERROR_CODES, true)) {
+                $sale->setState(CommunicationStateEnum::REJECTED);
+            } elseif ($code !== null && $code > 0) {
                 $sale->setState(CommunicationStateEnum::FAILED);
+            }
+            if ($code !== null && $code !== -1) {
+                $saleResult->message = self::describeEtecsaErrorCode($code);
+                $saleInfo = array_merge((array) $saleInfo, ['result' => $saleResult]);
             }
             $sale->setTransactionStatus($saleInfo);
             $sale->setStateProcess(CommunicationStateEnum::PENDING->value);
@@ -971,10 +972,9 @@ class CommunicationSaleService extends CommonService
                 );
             } elseif (!is_null($result) && !$result->valueOk) {
                 if (!is_null($result->code)) {
-                    $message = self::ETECSA_INFO_ERROR[$result->code];
-                    $response['result']['message'] = mb_convert_encoding($message, 'UTF-8', 'ISO-8859-1');
+                    $response['result']['message'] = self::describeEtecsaErrorCode($result->code);
                     $sale->setTransactionStatus($response);
-                    if (in_array($result->code, ['151', '152', '153', '198', '199', '200'], true)) {
+                    if (in_array((string) $result->code, self::REJECTED_ETECSA_ERROR_CODES, true)) {
                         $sale->setState(CommunicationStateEnum::REJECTED);
                         $sale->setStateProcess(CommunicationStateEnum::REJECTED->value);
                         $this->historicalSaleService->createHistoricalCommunication(
@@ -992,6 +992,12 @@ class CommunicationSaleService extends CommonService
                         );
                     }
                 } else {
+                    // Cubacel a veces embebe el código como "Error 153" en el campo message en lugar de un campo code separado
+                    $rawMessage = $result->message ?? $result->Message ?? null;
+                    if (is_string($rawMessage) && preg_match('/^Error\s+(\d+)$/i', $rawMessage, $matches)) {
+                        $response['result']['message'] = self::describeEtecsaErrorCode($matches[1]);
+                        $sale->setTransactionStatus($response);
+                    }
                     $sale->setState(CommunicationStateEnum::REJECTED);
                     $sale->setStateProcess(CommunicationStateEnum::REJECTED->value);
                     $this->historicalSaleService->createHistoricalCommunication(
