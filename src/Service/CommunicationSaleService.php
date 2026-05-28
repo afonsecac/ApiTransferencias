@@ -802,6 +802,31 @@ class CommunicationSaleService extends CommonService
      * ya tomó la venta (0 filas afectadas). Esto previene envíos duplicados al proveedor
      * externo cuando múltiples workers reciben el mismo mensaje.
      */
+    /**
+     * Atomic transition PENDING→COMPLETED. Returns true only if this worker won the race.
+     * Prevents duplicate balance_operation inserts when multiple workers check the same sale.
+     */
+    private function claimForCompleting(CommunicationSaleInfo $sale): bool
+    {
+        $table = $this->em->getClassMetadata(CommunicationSaleInfo::class)->getTableName();
+
+        $affected = $this->em->getConnection()->executeStatement(
+            "UPDATE {$table} SET state = :completed, state_process = :completedProcess WHERE id = :id AND state = :pending",
+            [
+                'completed'        => CommunicationStateEnum::COMPLETED->value,
+                'completedProcess' => CommunicationStateEnum::COMPLETED->value,
+                'id'               => $sale->getId(),
+                'pending'          => CommunicationStateEnum::PENDING->value,
+            ]
+        );
+
+        if ($affected > 0) {
+            $this->em->refresh($sale);
+        }
+
+        return $affected > 0;
+    }
+
     private function claimForSending(CommunicationSaleInfo $sale): bool
     {
         $table = $this->em->getClassMetadata(CommunicationSaleInfo::class)->getTableName();
@@ -925,22 +950,20 @@ class CommunicationSaleService extends CommonService
             }
             $sale->setTransactionStatus($response);
             if ($isTrue || isset($responseInfo->orderId)) {
-                // Evitar procesar si ya fue completada (check concurrente)
-                $this->em->refresh($sale);
-                if ($sale->getState() === CommunicationStateEnum::COMPLETED) {
+                $canComplete = ($sale instanceof CommunicationSaleRecharge)
+                    || (isset($responseInfo->fullResponse['Sale']) && $sale instanceof CommunicationSalePackage);
+                if (!$canComplete) {
                     return;
                 }
+
                 $sale->setTransactionStatus($response);
                 if (isset($responseInfo->orderId)) {
                     $sale->setTransactionOrder($responseInfo->orderId);
                 }
-                if ($sale instanceof CommunicationSaleRecharge) {
-                    $sale->setState(CommunicationStateEnum::COMPLETED);
-                    $sale->setStateProcess(CommunicationStateEnum::COMPLETED->value);
-                } elseif (isset($responseInfo->fullResponse['Sale']) && $sale instanceof CommunicationSalePackage) {
-                    $sale->setState(CommunicationStateEnum::COMPLETED);
-                    $sale->setStateProcess(CommunicationStateEnum::COMPLETED->value);
-                } else {
+
+                // Atomic claim: only one concurrent worker proceeds to create the balance.
+                if (!$this->claimForCompleting($sale)) {
+                    $this->logger->info("Sale {$saleId}: already completed by another worker, skipping balance.");
                     return;
                 }
 
@@ -1036,8 +1059,22 @@ class CommunicationSaleService extends CommonService
                         $this->logger->info("Sale {$saleId}: not found in ApiComm, resending (attempt {$currentStatus['retryCount']})");
                     }
                 } else {
-                    $this->logger->critical("Sale {$saleId}: not found in ApiComm after max retries, requires manual review.");
+                    $now = new \DateTimeImmutable();
+                    $currentStatus['gatewayMissing'] = true;
+                    $currentStatus['markedRejectedAt'] = $now->format(\DateTimeInterface::ATOM);
+                    $currentStatus['reason'] = $sale instanceof CommunicationSaleRecharge
+                        ? 'Not found in ApiComm after max retries'
+                        : 'Not found in ApiComm';
+                    $sale->setState(CommunicationStateEnum::REJECTED);
+                    $sale->setStateProcess(CommunicationStateEnum::REJECTED->value);
+                    $sale->setTransactionStatus($currentStatus);
+                    $this->historicalSaleService->createHistoricalCommunication(
+                        $sale->getId(),
+                        CommunicationStateEnum::REJECTED,
+                        $currentStatus
+                    );
                     $this->em->flush();
+                    $this->logger->critical("Sale {$saleId}: not found in ApiComm, marked REJECTED for manual review.");
                 }
             } elseif ($e->getCode() === 400) {
                 $comInfo = [

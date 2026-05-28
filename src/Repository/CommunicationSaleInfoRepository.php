@@ -58,10 +58,11 @@ class CommunicationSaleInfoRepository extends ServiceEntityRepository
      */
     public function getLastPending(): array
     {
-        $currentDate = (new \DateTimeImmutable('now'))->modify('-5 seconds');
         return $this->createQueryBuilder('csi')
             ->andWhere('csi.state = :status')
+            ->andWhere('csi.stateProcess = :pendingProcess')
             ->setParameter('status', CommunicationStateEnum::PENDING)
+            ->setParameter('pendingProcess', CommunicationStateEnum::PENDING->value)
             ->getQuery()->execute();
     }
 
