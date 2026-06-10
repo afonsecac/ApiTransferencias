@@ -12,26 +12,17 @@ RUN composer install --no-scripts --no-autoloader --prefer-dist --no-progress --
 # Stage 2: PHP base (used for development) — requires PHP 8.4+
 FROM php:8.4-fpm-alpine AS php-base
 
-RUN apk add --no-cache \
-    icu-dev \
-    postgresql-dev \
-    rabbitmq-c-dev \
-    linux-headers \
-    libzip-dev \
-    $PHPIZE_DEPS
+# Use mlocati/docker-php-extension-installer for pre-built binaries (~30s vs ~9min from source)
+COPY --from=mlocati/php-extension-installer:latest /usr/bin/install-php-extensions /usr/local/bin/
 
-RUN docker-php-ext-install \
+RUN install-php-extensions \
     pdo_pgsql \
     intl \
     opcache \
     zip \
-    sockets
-
-RUN pecl install amqp apcu \
-    && docker-php-ext-enable amqp apcu
-
-# Cleanup build dependencies
-RUN apk del $PHPIZE_DEPS
+    sockets \
+    amqp \
+    apcu
 
 COPY docker/php-fpm/php.ini $PHP_INI_DIR/conf.d/app.ini
 COPY docker/php-fpm/www.conf /usr/local/etc/php-fpm.d/www.conf
