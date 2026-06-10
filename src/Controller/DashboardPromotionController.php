@@ -94,6 +94,10 @@ class DashboardPromotionController extends AbstractController
         $result = $this->normalizeDetail($promotion);
         $result['packagesCreated'] = $packagesCreated;
 
+        if ($packagesCreated === 0) {
+            $result['warning'] = 'No se generaron paquetes para esta promoción. Verifica que existan precios activos en el rango indicado y cuentas activas en el environment.';
+        }
+
         return $this->json($result, Response::HTTP_CREATED);
     }
 

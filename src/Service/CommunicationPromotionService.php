@@ -60,6 +60,14 @@ class CommunicationPromotionService extends CommonService
         $product = $promotion->getProduct();
 
         if ($amountFrom <= 0 || $amountTo <= 0 || $amountStep <= 0 || $environment === null || $product === null) {
+            $this->logger->warning('createPackagesForPromotion: parámetros inválidos o entidad nula', [
+                'promotionId' => $promotion->getId(),
+                'amountFrom' => $amountFrom,
+                'amountTo' => $amountTo,
+                'amountStep' => $amountStep,
+                'hasEnvironment' => $environment !== null,
+                'hasProduct' => $product !== null,
+            ]);
             return 0;
         }
 
@@ -117,6 +125,14 @@ class CommunicationPromotionService extends CommonService
         }
 
         if (empty($filteredPrices)) {
+            $this->logger->warning('createPackagesForPromotion: no se encontraron precios en el rango', [
+                'promotionId' => $promotion->getId(),
+                'currency' => $currency,
+                'amountFrom' => $amountFrom,
+                'amountTo' => $amountTo,
+                'amountStep' => $amountStep,
+                'referenceRate' => $referenceRate,
+            ]);
             return 0;
         }
 
@@ -138,39 +154,45 @@ class CommunicationPromotionService extends CommonService
         }
 
         if (empty($accounts)) {
+            $this->logger->warning('createPackagesForPromotion: no hay cuentas activas para el environment', [
+                'promotionId' => $promotion->getId(),
+                'environmentId' => $environment->getId(),
+                'clientIdsFilter' => $clientIds,
+            ]);
             return 0;
         }
 
         $packagesCreated = 0;
         $clientsWithNewPackages = [];
 
-        // 3. Por cada precio × cada account → crear PricePackage + ClientPackage
+        // 3. Por cada precio × cada account → crear (o reutilizar) PricePackage + crear ClientPackage propio de la promoción
         foreach ($filteredPrices as $price) {
             foreach ($accounts as $account) {
-                $existingPP = $this->em->getRepository(CommunicationPricePackage::class)->findOneBy([
+                // Buscar PricePackage existente para este tenant+precio+producto
+                $pricePackage = $this->em->getRepository(CommunicationPricePackage::class)->findOneBy([
                     'tenant' => $account,
                     'priceUsed' => $price,
                     'product' => $product,
                 ]);
-                if ($existingPP !== null) {
-                    continue;
-                }
 
-                // Crear CommunicationPricePackage
-                $pricePackage = new CommunicationPricePackage();
-                $pricePackage->setProduct($product);
-                $pricePackage->setPriceUsed($price);
-                $pricePackage->setPrice($price->getStartPrice());
-                $pricePackage->setPriceCurrency($currency);
-                $pricePackage->setAmount($price->getAmount());
-                $pricePackage->setCurrency($price->getCurrency());
-                $pricePackage->setTenant($account);
-                $pricePackage->setEnvironment($environment);
-                $pricePackage->setIsActive(true);
-                $pricePackage->setActiveStartAt($promotion->getStartAt());
-                $pricePackage->setActiveEndAt($promotion->getEndAt());
-                $pricePackage->setName(sprintf('Cubacel %d %s', (int) $price->getStartPrice(), $currency));
-                $this->em->persist($pricePackage);
+                if ($pricePackage === null) {
+                    // Crear CommunicationPricePackage nuevo
+                    $pricePackage = new CommunicationPricePackage();
+                    $pricePackage->setProduct($product);
+                    $pricePackage->setPriceUsed($price);
+                    $pricePackage->setPrice($price->getStartPrice());
+                    $pricePackage->setPriceCurrency($currency);
+                    $pricePackage->setAmount($price->getAmount());
+                    $pricePackage->setCurrency($price->getCurrency());
+                    $pricePackage->setTenant($account);
+                    $pricePackage->setEnvironment($environment);
+                    $pricePackage->setIsActive(true);
+                    $pricePackage->setActiveStartAt($promotion->getStartAt());
+                    $pricePackage->setActiveEndAt($promotion->getEndAt());
+                    $pricePackage->setName(sprintf('Cubacel %d %s', (int) $price->getStartPrice(), $currency));
+                    $this->em->persist($pricePackage);
+                }
+                // Si ya existía: se reutiliza sin duplicar
 
                 // Crear CommunicationClientPackage
                 $clientPackage = new CommunicationClientPackage();
