@@ -88,15 +88,14 @@ class CommunicationInfoService extends CommonService
 
         $env = $tenant->getEnvironment();
 
-        $result = $this->etecsaClient->getStatus($env, $operationSale->getTransactionId());
+        $result = $this->etecsaClient->getSaleInfo($env, $operationSale->getTransactionId());
 
         $state = $operationSale->getState();
         if ($state !== null) {
-            $infoArray = json_decode($this->serializer->serialize($result, 'json'), true) ?? [];
             $this->historicalSaleService->createHistoricalCommunication(
                 $operationSale->getId(),
                 $state,
-                $infoArray
+                $result
             );
             $this->em->flush();
         }
