@@ -23,14 +23,10 @@ services:
           cpus: "0.25"
           memory: 64M
 
-  database:
-    ports:
-      - "5432:5432"
-
-  rabbitmq:
-    ports:
-      - "5672:5672"
-      - "15672:15672"
+  # No publicar la BD ni el broker en el host del VPS. La app y los workers los
+  # alcanzan por la red interna de Docker (service name), no hace falta bindear
+  # puertos al host, que quedarían expuestos según el firewall del VPS.
+  # Para acceso puntual de depuración, usar un túnel SSH en lugar de abrir el puerto.
 
   # ============================================
   # MAILCATCHER - Captura emails en staging
@@ -42,6 +38,9 @@ services:
       - traefik.http.routers.mail.rule=Host(`mail.${DOMAIN}`)
       - traefik.http.routers.mail.entrypoints=websecure
       - traefik.http.routers.mail.tls.certresolver=letsencrypt
+      # Restringir el visor de correos a la allowlist administrativa (definida en
+      # docker-compose.vps.yaml). Por defecto solo loopback si no se configura.
+      - traefik.http.routers.mail.middlewares=admin-allowlist
       - traefik.http.services.mail.loadbalancer.server.port=1080
     restart: always
     networks:

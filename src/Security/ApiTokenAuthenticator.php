@@ -64,21 +64,21 @@ class ApiTokenAuthenticator extends AbstractAuthenticator
         if (is_null($permission) || !$permission->getClient()?->isIsActive()) {
             throw new CustomUserMessageAuthenticationException('User not found');
         }
-        $ips = $request->headers->get('X-Forwarded-For') ?? $request->headers->get('x-forwarded-for');
-        $otherIps = $request->getClientIps();
-        if (is_null($ips) && count($otherIps) !== 0) {
-            $ips = implode(",", $otherIps);
-        }
+        // La IP real del cliente la resuelve Symfony a partir de trusted_proxies
+        // (config/packages/framework.yaml). Sin esa configuración, X-Forwarded-For
+        // es falsificable; con ella, getClientIp() ignora las cabeceras que no
+        // provengan de un proxy de confianza.
+        $clientIp = $request->getClientIp();
         $referer = $request->headers->get("Referer");
         $host = $request->headers->get("host");
         $isWebPage = !is_null($referer) && !is_null($host) && str_contains($referer, $host);
 
-        $isLocal = !empty($ips) && (str_contains($ips, "127.0.0.1") || str_contains($ips, "::1"));
+        $isLocal = in_array($clientIp, ['127.0.0.1', '::1'], true);
         $origin = $permission->getOrigin();
         $isWildcard = $origin === '*';
         $isOriginMatch = false;
-        if (!$isWildcard && !empty($ips) && !empty($origin)) {
-            $isOriginMatch = $this->ipMatcherService->isIpAllowed($ips, $origin);
+        if (!$isWildcard && !empty($clientIp) && !empty($origin)) {
+            $isOriginMatch = $this->ipMatcherService->isIpAllowed($clientIp, $origin);
         }
         $isRemote = $isWildcard || $isOriginMatch;
         if (!$isLocal && !$isRemote && !$isWebPage) {
@@ -86,7 +86,7 @@ class ApiTokenAuthenticator extends AbstractAuthenticator
                 'isLocal' => $isLocal,
                 'isRemote' => $isRemote,
                 'isWebPage' => $isWebPage,
-                'ips' => $ips,
+                'ips' => $clientIp,
                 'url' => $request->getPathInfo(),
                 'headers' => $request->headers->all(),
                 'servers' => $request->server->all(),

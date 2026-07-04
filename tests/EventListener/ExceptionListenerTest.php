@@ -58,9 +58,11 @@ class ExceptionListenerTest extends TestCase
         ($this->listener)($event);
 
         $body = json_decode($event->getResponse()->getContent(), true);
-        // El mensaje de la excepción llega al cliente (comportamiento actual)
-        // Este test documenta ese comportamiento para detectar cambios accidentales
+        // El mensaje interno NO debe llegar al cliente: se devuelve un mensaje
+        // genérico y el detalle queda solo en logs.
         $this->assertArrayHasKey('error', $body);
+        $this->assertStringNotContainsString('secret123', $body['error']['message']);
+        $this->assertSame('Internal server error', $body['error']['message']);
     }
 
     private function makeEvent(\Throwable $exception): ExceptionEvent

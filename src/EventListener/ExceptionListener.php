@@ -75,8 +75,14 @@ class ExceptionListener
             $response->setStatusCode($exception->getStatusCode());
             $response->headers->replace($exception->getHeaders());
         } else {
+            // No exponer el mensaje interno (fragmentos de SQL, nombres de tablas,
+            // rutas del servidor). El detalle queda solo en logs.
             $this->logger->error($exception->getMessage(), ['exception' => $exception]);
-            $response->setStatusCode(Response::HTTP_INTERNAL_SERVER_ERROR);
+            $response = new JsonResponse([
+                'error' => [
+                    'message' => 'Internal server error',
+                ]
+            ], Response::HTTP_INTERNAL_SERVER_ERROR);
         }
 
         $event->setResponse($response);

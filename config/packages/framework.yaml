@@ -1,8 +1,21 @@
 # see https://symfony.com/doc/current/reference/configuration/framework.html
+parameters:
+    # Valor por defecto de TRUSTED_PROXIES cuando la variable de entorno no está
+    # definida. 'private_ranges' confía en los rangos IP privados (red Docker /
+    # Traefik), que es donde vive el reverse proxy en despliegue.
+    env(TRUSTED_PROXIES): 'private_ranges'
+
 framework:
     secret: '%env(APP_SECRET)%'
     http_method_override: false
     handle_all_throwables: true
+
+    # Necesario para que $request->getClientIp() devuelva la IP real del cliente
+    # (y no la del reverse proxy) y para que X-Forwarded-For solo se acepte cuando
+    # proviene de un proxy de confianza. Sin esto, la cabecera es falsificable y
+    # permite eludir la allowlist de IP en ApiTokenAuthenticator.
+    trusted_proxies: '%env(TRUSTED_PROXIES)%'
+    trusted_headers: ['x-forwarded-for', 'x-forwarded-host', 'x-forwarded-proto', 'x-forwarded-port']
 
     rate_limiter:
         dashboard_login:
