@@ -8,9 +8,7 @@ services:
   # REVERSE PROXY - SSL automatico con Let's Encrypt
   # ============================================
   traefik:
-    # Fijar la versión (no 'latest') para builds reproducibles y evitar cambios
-    # inesperados de comportamiento entre despliegues.
-    image: traefik:v3.3
+    image: traefik:latest
     command:
       - --api.dashboard=true
       - --providers.docker=true
@@ -36,12 +34,8 @@ services:
       - traefik.http.routers.traefik.entrypoints=websecure
       - traefik.http.routers.traefik.tls.certresolver=letsencrypt
       - traefik.http.routers.traefik.service=api@internal
-      - traefik.http.routers.traefik.middlewares=admin-allowlist,traefik-auth
+      - traefik.http.routers.traefik.middlewares=traefik-auth
       - traefik.http.middlewares.traefik-auth.basicauth.users=${TRAEFIK_DASHBOARD_AUTH}
-      # Allowlist de IP para paneles administrativos (dashboard Traefik, RabbitMQ
-      # management). Por defecto solo loopback (bloquea todo el acceso externo);
-      # definir ADMIN_IP_ALLOWLIST con el/los CIDR de tu oficina o VPN.
-      - traefik.http.middlewares.admin-allowlist.ipallowlist.sourcerange=${ADMIN_IP_ALLOWLIST:-127.0.0.1/32}
     restart: always
     networks:
       - app
@@ -142,7 +136,6 @@ services:
       - traefik.http.routers.rabbitmq.rule=Host(`rabbitmq.${DOMAIN}`)
       - traefik.http.routers.rabbitmq.entrypoints=websecure
       - traefik.http.routers.rabbitmq.tls.certresolver=letsencrypt
-      - traefik.http.routers.rabbitmq.middlewares=admin-allowlist
       - traefik.http.services.rabbitmq.loadbalancer.server.port=15672
     restart: always
     networks:

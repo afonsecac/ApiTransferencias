@@ -38,9 +38,6 @@ services:
       - traefik.http.routers.mail.rule=Host(`mail.${DOMAIN}`)
       - traefik.http.routers.mail.entrypoints=websecure
       - traefik.http.routers.mail.tls.certresolver=letsencrypt
-      # Restringir el visor de correos a la allowlist administrativa (definida en
-      # docker-compose.vps.yaml). Por defecto solo loopback si no se configura.
-      - traefik.http.routers.mail.middlewares=admin-allowlist
       - traefik.http.services.mail.loadbalancer.server.port=1080
     restart: always
     networks:
