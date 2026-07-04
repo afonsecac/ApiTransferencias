@@ -25,6 +25,9 @@ jobs:
           username: ${{ secrets.STAGING_USER }}
           key: ${{ secrets.STAGING_SSH_KEY }}
           port: ${{ secrets.STAGING_SSH_PORT || 22 }}
+          # El default de appleboy/ssh-action es 10m; el build en frío compila
+          # extensiones PHP core (sockets) desde fuente y lo supera. Igual que prod.
+          command_timeout: 30m
           script: |
             set -e
             cd ${{ secrets.STAGING_APP_PATH || '/opt/api-transferencias' }}
