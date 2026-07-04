@@ -3,7 +3,6 @@
 namespace App\Service\Etecsa;
 
 use App\DTO\Etecsa\EtecsaBalanceDto;
-use App\DTO\Out\InfoResult;
 use App\Entity\Environment;
 use App\Exception\MyCurrentException;
 use App\Repository\EnvironmentRepository;
@@ -106,22 +105,6 @@ class EtecsaGatewayClient extends CommonService
         ];
 
         return $this->post($env, '/sale/sale-info', $body);
-    }
-
-    /**
-     * POST /information/status — estado detallado de una venta.
-     * Llamar solo si existe registro local previo de la venta.
-     */
-    public function getStatus(Environment $env, string $transactionId): InfoResult
-    {
-        $body = [
-            'environment' => $env->getType(),
-            'transactionId' => $transactionId,
-        ];
-
-        $raw = $this->rawPost($env, '/information/status', $body);
-
-        return $this->serializer->deserialize($raw, InfoResult::class, 'json');
     }
 
     /**

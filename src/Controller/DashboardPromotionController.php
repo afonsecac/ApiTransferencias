@@ -80,16 +80,28 @@ class DashboardPromotionController extends AbstractController
         $promotion = new CommunicationPromotions();
         $this->hydratePromotion($promotion, $dto);
 
-        $this->em->persist($promotion);
-        $this->em->flush();
+        $conn = $this->em->getConnection();
+        $conn->beginTransaction();
+        try {
+            $this->em->persist($promotion);
+            $this->em->flush();
 
-        $packagesCreated = $this->promotionService->createPackagesForPromotion($promotion, [
-            'currency'   => $dto->getCurrency(),
-            'amountFrom' => $dto->getAmountFrom(),
-            'amountTo'   => $dto->getAmountTo(),
-            'amountStep' => $dto->getAmountStep(),
-            'clients'    => $dto->getClients() ?? [],
-        ]);
+            $packagesCreated = $this->promotionService->createPackagesForPromotion($promotion, [
+                'currency'   => $dto->getCurrency(),
+                'amountFrom' => $dto->getAmountFrom(),
+                'amountTo'   => $dto->getAmountTo(),
+                'amountStep' => $dto->getAmountStep(),
+                'clients'    => $dto->getClients() ?? [],
+            ]);
+
+            $conn->commit();
+        } catch (\Throwable $e) {
+            $conn->rollBack();
+            return $this->json(
+                ['error' => ['message' => 'No se pudo crear la promoción y sus paquetes: ' . $e->getMessage()]],
+                Response::HTTP_UNPROCESSABLE_ENTITY
+            );
+        }
 
         $result = $this->normalizeDetail($promotion);
         $result['packagesCreated'] = $packagesCreated;

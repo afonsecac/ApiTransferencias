@@ -71,16 +71,19 @@ class CommunicationPromotionService extends CommonService
             return 0;
         }
 
-        // 1. Buscar precios existentes en el rango
+        // 1. Buscar precios existentes en el rango (activos y con vigencia no expirada)
+        $now = new \DateTimeImmutable();
         $existingPrices = $this->em->getRepository(CommunicationPrice::class)->createQueryBuilder('p')
             ->where('p.currencyPrice = :currency')
             ->andWhere('p.startPrice >= :from')
             ->andWhere('p.startPrice <= :to')
             ->andWhere('p.isActive = :active')
+            ->andWhere('p.validEndAt IS NULL OR p.validEndAt >= :now')
             ->setParameter('currency', $currency)
             ->setParameter('from', $amountFrom)
             ->setParameter('to', $amountTo)
             ->setParameter('active', true)
+            ->setParameter('now', $now)
             ->orderBy('p.startPrice', 'ASC')
             ->getQuery()
             ->getResult();
