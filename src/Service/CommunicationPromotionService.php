@@ -197,6 +197,19 @@ class CommunicationPromotionService extends CommonService
                 }
                 // Si ya existía: se reutiliza sin duplicar
 
+                // Un paquete pertenece a una sola promoción: solo se omite la creación si
+                // ESTA promoción ya tiene un paquete para este tenant y precio (re-ejecución
+                // sobre la misma promoción). Promociones distintas crean sus propios paquetes.
+                $alreadyInPromotion = $promotion->getProducts()->exists(
+                    fn ($key, CommunicationClientPackage $existing) =>
+                        $existing->getTenant() === $account
+                        && $existing->getPriceClientPackage() === $pricePackage
+                );
+
+                if ($alreadyInPromotion) {
+                    continue;
+                }
+
                 // Crear CommunicationClientPackage
                 $clientPackage = new CommunicationClientPackage();
                 $clientPackage->setTenant($account);
