@@ -298,6 +298,50 @@ class CommunicationPromotions
         return $result;
     }
 
+    /**
+     * Rango de montos realmente generado para esta promoción. Igual que
+     * `currency`/`amountFrom`/`amountTo`/`amountStep`, no son columnas de la
+     * promoción (solo se usan de forma transitoria al crear, para generar
+     * los paquetes) — se derivan del `price`/`priceCurrency` de cada
+     * CommunicationPricePackage asociado a los CommunicationClientPackage en
+     * `products` (ese `price` es el monto de la tarifa, ej. 10/15/20 CUP; no
+     * confundir con `amount`, que es el equivalente en USD).
+     *
+     * No se expone un "salto de monto": reconstruirlo a partir de los montos
+     * generados asumiría que no falta ningún tramo intermedio, lo cual no
+     * está garantizado.
+     *
+     * @return array{currency: string|null, amountFrom: float|null, amountTo: float|null}|null
+     */
+    #[Groups(['promotion:detail'])]
+    public function getAmountRange(): ?array
+    {
+        $currency = null;
+        $min = null;
+        $max = null;
+
+        foreach ($this->products as $package) {
+            $pricePackage = $package->getPriceClientPackage();
+            $amount = $pricePackage?->getPrice();
+            if ($amount === null) {
+                continue;
+            }
+            $currency ??= $pricePackage->getPriceCurrency();
+            $min = $min === null ? $amount : min($min, $amount);
+            $max = $max === null ? $amount : max($max, $amount);
+        }
+
+        if ($min === null) {
+            return null;
+        }
+
+        return [
+            'currency' => $currency,
+            'amountFrom' => $min,
+            'amountTo' => $max,
+        ];
+    }
+
     public function addProduct(CommunicationClientPackage $product): static
     {
         if (!$this->products->contains($product)) {
