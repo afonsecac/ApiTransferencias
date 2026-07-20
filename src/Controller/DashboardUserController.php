@@ -325,6 +325,7 @@ class DashboardUserController extends AbstractController
                 'area' => $jp->getArea()?->value,
             ] : null,
             'phoneNumber' => $user->getPhoneNumber(),
+            'langPreference' => $user->getLangPreference(),
             'isActive' => $user->isActive(),
             'isCheckValidation' => $user->isCheckValidation(),
             'twoFactorEnabled' => $user->isTwoFactorEnabled(),
