@@ -156,6 +156,10 @@ class DashboardPromotionController extends AbstractController
         $promotion->setStartAt(new \DateTimeImmutable($dto->getStartAt()));
         $promotion->setEndAt(new \DateTimeImmutable($dto->getEndAt()));
 
+        if ($dto->getPriority() !== null) {
+            $promotion->setPriority($dto->getPriority());
+        }
+
         if ($dto->getInfoDescription() !== null) {
             $promotion->setInfoDescription($dto->getInfoDescription());
         }

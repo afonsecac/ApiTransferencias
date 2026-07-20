@@ -46,6 +46,7 @@ class UpsertPromotionDto implements IInput
     protected ?string $knowMore;
     protected ?array  $validityInfo;
     protected ?array  $clients;
+    protected ?string $priority;
 
     public function __construct(
         ?string $name = null,
@@ -63,6 +64,7 @@ class UpsertPromotionDto implements IInput
         ?string $knowMore = null,
         ?array  $validityInfo = null,
         ?array  $clients = null,
+        ?string $priority = null,
     ) {
         $this->name            = $name;
         $this->description     = $description;
@@ -79,6 +81,7 @@ class UpsertPromotionDto implements IInput
         $this->knowMore        = $knowMore;
         $this->validityInfo    = $validityInfo;
         $this->clients         = $clients;
+        $this->priority        = $priority;
     }
 
     public function getName(): ?string { return $this->name; }
@@ -125,4 +128,7 @@ class UpsertPromotionDto implements IInput
 
     public function getClients(): ?array { return $this->clients; }
     public function setClients(?array $v): void { $this->clients = $v; }
+
+    public function getPriority(): ?string { return $this->priority; }
+    public function setPriority(?string $v): void { $this->priority = $v; }
 }
