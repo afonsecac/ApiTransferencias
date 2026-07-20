@@ -238,6 +238,29 @@ class CommunicationPromotions
     }
 
     /**
+     * Producto de origen (CommunicationProduct) con el que se creó la promoción.
+     * No confundir con `products` (los CommunicationClientPackage generados a
+     * partir de este producto): son entidades distintas con espacios de id
+     * distintos. Se expone como array plano para no depender de los grupos
+     * de serialización de CommunicationProduct (product:read).
+     *
+     * @return array{id: int, packageId: int, description: string|null}|null
+     */
+    #[Groups(['promotion:detail'])]
+    public function getSourceProduct(): ?array
+    {
+        if ($this->product === null) {
+            return null;
+        }
+
+        return [
+            'id' => $this->product->getId(),
+            'packageId' => $this->product->getPackageId(),
+            'description' => $this->product->getDescription(),
+        ];
+    }
+
+    /**
      * @return Collection<int, CommunicationClientPackage>
      */
     public function getProducts(): Collection
