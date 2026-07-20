@@ -138,7 +138,7 @@ class DashboardUserController extends AbstractController
         return $this->json($this->serializeUser($user), Response::HTTP_CREATED);
     }
 
-    #[Route('/{id}', name: 'dashboard_users_update', methods: ['PATCH'], requirements: ['id' => '\d+'])]
+    #[Route('/{id}', name: 'dashboard_users_update', methods: ['PATCH', 'PUT'], requirements: ['id' => '\d+'])]
     #[DashboardEndpoint(summary: 'Actualizar usuario', tag: 'Users', requestDto: UpdateUserDto::class, responseDto: UserOutDto::class)]
     public function update(int $id, UpdateUserDto $dto): JsonResponse
     {
