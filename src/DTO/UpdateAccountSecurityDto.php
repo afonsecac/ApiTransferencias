@@ -22,6 +22,9 @@ class UpdateAccountSecurityDto implements IInput
     #[Assert\PositiveOrZero]
     protected ?float $commission;
 
+    #[Assert\Length(exactly: 3)]
+    protected ?string $contractCurrency;
+
     public function __construct(
         ?string $origin = null,
         ?float  $minBalance = null,
@@ -29,13 +32,15 @@ class UpdateAccountSecurityDto implements IInput
         ?bool   $isActive = null,
         ?float  $discount = null,
         ?float  $commission = null,
+        ?string $contractCurrency = null,
     ) {
-        $this->origin          = $origin;
-        $this->minBalance      = $minBalance;
-        $this->criticalBalance = $criticalBalance;
-        $this->isActive        = $isActive;
-        $this->discount        = $discount;
-        $this->commission      = $commission;
+        $this->origin           = $origin;
+        $this->minBalance       = $minBalance;
+        $this->criticalBalance  = $criticalBalance;
+        $this->isActive         = $isActive;
+        $this->discount         = $discount;
+        $this->commission       = $commission;
+        $this->contractCurrency = $contractCurrency;
     }
 
     public function getOrigin(): ?string { return $this->origin; }
@@ -55,4 +60,7 @@ class UpdateAccountSecurityDto implements IInput
 
     public function getCommission(): ?float { return $this->commission; }
     public function setCommission(?float $v): void { $this->commission = $v; }
+
+    public function getContractCurrency(): ?string { return $this->contractCurrency; }
+    public function setContractCurrency(?string $v): void { $this->contractCurrency = $v; }
 }
