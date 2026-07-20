@@ -81,6 +81,7 @@ class ClientService extends CommonService
         if ($dto->getCurrency() !== null)          $client->setCurrency($dto->getCurrency());
         if ($dto->getIsAlert() !== null)           $client->setAlert($dto->getIsAlert());
         if ($dto->getContractWith() !== null)      $client->setContractWith($dto->getContractWith());
+        if ($dto->getIsActive() !== null)          $client->setActive($dto->getIsActive());
 
         $account = new Account();
         $account->setEnvironment($environment);
@@ -132,6 +133,7 @@ class ClientService extends CommonService
         if ($dto->getCurrency() !== null)                  $client->setCurrency($dto->getCurrency());
         if ($dto->getIsAlert() !== null)                   $client->setAlert($dto->getIsAlert());
         if ($dto->getContractWith() !== null)              $client->setContractWith($dto->getContractWith());
+        if ($dto->getIsActive() !== null)                  $client->setActive($dto->getIsActive());
 
         try {
             $this->em->flush();

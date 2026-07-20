@@ -36,6 +36,8 @@ class CreateUserDto implements IInput
 
     protected ?int $jobPositionId;
 
+    protected ?string $langPreference;
+
     public function __construct(
         ?string $email = null,
         ?string $firstName = null,
@@ -47,6 +49,7 @@ class CreateUserDto implements IInput
         ?string $jobTitle = null,
         ?string $phoneNumber = null,
         ?int $jobPositionId = null,
+        ?string $langPreference = null,
     ) {
         $this->email          = $email;
         $this->firstName      = $firstName;
@@ -58,6 +61,7 @@ class CreateUserDto implements IInput
         $this->jobTitle       = $jobTitle;
         $this->phoneNumber    = $phoneNumber;
         $this->jobPositionId  = $jobPositionId;
+        $this->langPreference = $langPreference;
     }
 
     public function getEmail(): ?string { return $this->email; }
@@ -89,4 +93,7 @@ class CreateUserDto implements IInput
 
     public function getJobPositionId(): ?int { return $this->jobPositionId; }
     public function setJobPositionId(?int $v): void { $this->jobPositionId = $v; }
+
+    public function getLangPreference(): ?string { return $this->langPreference; }
+    public function setLangPreference(?string $v): void { $this->langPreference = $v; }
 }

@@ -46,6 +46,8 @@ class UpdateClientDto implements IInput
     #[Assert\Length(max: 255)]
     protected ?string $contractWith = null;
 
+    protected ?bool $isActive = null;
+
     public function __construct(
         ?string $companyName = null,
         ?string $companyAddress = null,
@@ -61,6 +63,7 @@ class UpdateClientDto implements IInput
         ?string $currency = null,
         ?bool   $isAlert = null,
         ?string $contractWith = null,
+        ?bool   $isActive = null,
     ) {
         $this->companyName               = $companyName;
         $this->companyAddress            = $companyAddress;
@@ -76,6 +79,7 @@ class UpdateClientDto implements IInput
         $this->currency                  = $currency;
         $this->isAlert                   = $isAlert;
         $this->contractWith              = $contractWith;
+        $this->isActive                  = $isActive;
     }
 
     public function getCompanyName(): ?string { return $this->companyName; }
@@ -119,4 +123,7 @@ class UpdateClientDto implements IInput
 
     public function getContractWith(): ?string { return $this->contractWith; }
     public function setContractWith(?string $v): void { $this->contractWith = $v; }
+
+    public function getIsActive(): ?bool { return $this->isActive; }
+    public function setIsActive(?bool $v): void { $this->isActive = $v; }
 }

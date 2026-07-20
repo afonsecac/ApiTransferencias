@@ -35,6 +35,9 @@ class AccountSecurityService
             if ($dto->getCommission() !== null) {
                 $account->setCommission($dto->getCommission());
             }
+            if ($dto->getContractCurrency() !== null) {
+                $account->setContractCurrency($dto->getContractCurrency());
+            }
         }
 
         $this->em->flush();

@@ -49,6 +49,7 @@ class UserManagementService
         $user->setIsCheckValidation(false);
         $user->setPermission([]);
         $user->setPassword($this->passwordHasher->hashPassword($user, $rawPassword));
+        $user->setLangPreference($dto->getLangPreference() ?? 'es');
 
         if ($dto->getMiddleName() !== null) {
             $user->setMiddleName(mb_substr($dto->getMiddleName(), 0, 60));
@@ -98,6 +99,9 @@ class UserManagementService
         }
         if ($dto->getPhoneNumber() !== null) {
             $user->setPhoneNumber(mb_substr($dto->getPhoneNumber(), 0, 20));
+        }
+        if ($dto->getLangPreference() !== null) {
+            $user->setLangPreference($dto->getLangPreference());
         }
         if ($dto->getEmail() !== null && $dto->getEmail() !== $user->getEmail()) {
             $existing = $this->em->getRepository(User::class)->findOneBy(['email' => $dto->getEmail()]);

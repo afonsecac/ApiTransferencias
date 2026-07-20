@@ -173,9 +173,15 @@ class DashboardClientSecurityController extends AbstractController
         return [
             'id' => $client->getId(),
             'companyName' => $client->getCompanyName(),
+            'companyAddress' => $client->getCompanyAddress(),
             'companyCountry' => $client->getCompanyCountry(),
+            'companyZipCode' => $client->getCompanyZipCode(),
             'companyIdentification' => $client->getCompanyIdentification(),
+            'companyIdentificationType' => $client->getCompanyIdentificationType(),
             'companyEmail' => $client->getCompanyEmail(),
+            'companyPhoneNumber' => $client->getCompanyPhoneNumber(),
+            'discountOfClient' => $client->getDiscountOfClient(),
+            'currency' => $client->getCurrency(),
             'isActive' => $client->isActive(),
             'accounts' => array_map(fn(Account $a) => $this->serializeAccount($a), $accounts),
         ];
