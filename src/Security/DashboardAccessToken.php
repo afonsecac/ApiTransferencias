@@ -38,7 +38,15 @@ class DashboardAccessToken extends AbstractAuthenticator
             throw new CustomUserMessageAuthenticationException('Empty authorization token.');
         }
 
-        $user = $this->userService->parser($token);
+        // Un token inválido, caducado o malformado es un fallo de autenticación, no un
+        // error del servidor: sin este catch la excepción del parser escapaba del
+        // firewall y cualquier Bearer basura respondía 500 en lugar de 401. El mensaje se
+        // mantiene genérico a propósito, para no filtrar por qué falló la validación.
+        try {
+            $user = $this->userService->parser($token);
+        } catch (\Throwable) {
+            throw new CustomUserMessageAuthenticationException('Invalid or expired token.');
+        }
 
         return new SelfValidatingPassport(new UserBadge($user->getUserIdentifier()));
     }

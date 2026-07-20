@@ -26,6 +26,13 @@ framework:
             policy: 'sliding_window'
             limit: 20
             interval: '5 minutes'
+        # Intentos de código 2FA (verificación, enrolamiento y confirmación desde el perfil).
+        # El intervalo va alineado con la vida del pendingToken: sin esto, un código de 6
+        # dígitos es forzable por fuerza bruta durante los 10 minutos que dura el token.
+        two_factor_code:
+            policy: 'sliding_window'
+            limit: 10
+            interval: '10 minutes'
         forgot_password:
             policy: 'fixed_window'
             limit: 3
