@@ -238,11 +238,108 @@ class CommunicationPromotions
     }
 
     /**
+     * Producto de origen (CommunicationProduct) con el que se creó la promoción.
+     * No confundir con `products` (los CommunicationClientPackage generados a
+     * partir de este producto): son entidades distintas con espacios de id
+     * distintos. Se expone como array plano para no depender de los grupos
+     * de serialización de CommunicationProduct (product:read).
+     *
+     * @return array{id: int, packageId: int, description: string|null}|null
+     */
+    #[Groups(['promotion:detail'])]
+    public function getSourceProduct(): ?array
+    {
+        if ($this->product === null) {
+            return null;
+        }
+
+        return [
+            'id' => $this->product->getId(),
+            'packageId' => $this->product->getPackageId(),
+            'description' => $this->product->getDescription(),
+        ];
+    }
+
+    /**
      * @return Collection<int, CommunicationClientPackage>
      */
     public function getProducts(): Collection
     {
         return $this->products;
+    }
+
+    /**
+     * Clientes a los que efectivamente se les generó un paquete a partir de
+     * esta promoción. No existe una relación "clients" persistida en la
+     * promoción en sí (el array `clients` del DTO de creación solo se usa de
+     * forma transitoria para filtrar cuentas al generar los paquetes) — esta
+     * es la única fuente real de "a qué clientes se le creó esta promoción",
+     * derivada de `products` (CommunicationClientPackage) vía su cuenta.
+     *
+     * @return array{id: int, companyName: string|null}[]
+     */
+    #[Groups(['promotion:detail'])]
+    public function getRecipientClients(): array
+    {
+        $seen = [];
+        $result = [];
+        foreach ($this->products as $package) {
+            $client = $package->getTenant()?->getClient();
+            if ($client === null || isset($seen[$client->getId()])) {
+                continue;
+            }
+            $seen[$client->getId()] = true;
+            $result[] = [
+                'id' => $client->getId(),
+                'companyName' => $client->getCompanyName(),
+            ];
+        }
+
+        return $result;
+    }
+
+    /**
+     * Rango de montos realmente generado para esta promoción. Igual que
+     * `currency`/`amountFrom`/`amountTo`/`amountStep`, no son columnas de la
+     * promoción (solo se usan de forma transitoria al crear, para generar
+     * los paquetes) — se derivan del `price`/`priceCurrency` de cada
+     * CommunicationPricePackage asociado a los CommunicationClientPackage en
+     * `products` (ese `price` es el monto de la tarifa, ej. 10/15/20 CUP; no
+     * confundir con `amount`, que es el equivalente en USD).
+     *
+     * No se expone un "salto de monto": reconstruirlo a partir de los montos
+     * generados asumiría que no falta ningún tramo intermedio, lo cual no
+     * está garantizado.
+     *
+     * @return array{currency: string|null, amountFrom: float|null, amountTo: float|null}|null
+     */
+    #[Groups(['promotion:detail'])]
+    public function getAmountRange(): ?array
+    {
+        $currency = null;
+        $min = null;
+        $max = null;
+
+        foreach ($this->products as $package) {
+            $pricePackage = $package->getPriceClientPackage();
+            $amount = $pricePackage?->getPrice();
+            if ($amount === null) {
+                continue;
+            }
+            $currency ??= $pricePackage->getPriceCurrency();
+            $min = $min === null ? $amount : min($min, $amount);
+            $max = $max === null ? $amount : max($max, $amount);
+        }
+
+        if ($min === null) {
+            return null;
+        }
+
+        return [
+            'currency' => $currency,
+            'amountFrom' => $min,
+            'amountTo' => $max,
+        ];
     }
 
     public function addProduct(CommunicationClientPackage $product): static
