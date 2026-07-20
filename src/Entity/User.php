@@ -123,6 +123,23 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface, IInput
     #[ORM\Column(nullable: true)]
     private ?DateTimeImmutable $twoFactorEmailCodeExpiresAt = null;
 
+    /**
+     * Último time step TOTP consumido. Impide reutilizar un código dentro de su ventana
+     * de validez (±30 s): solo se acepta un time step estrictamente mayor a este.
+     */
+    #[ORM\Column(type: 'bigint', nullable: true)]
+    private ?string $twoFactorLastTimeStep = null;
+
+    /**
+     * Hashes SHA-256 de los códigos de respaldo aún sin usar. Se guardan hasheados porque
+     * son credenciales de acceso completo; en claro solo existen en el momento de
+     * generarlos, cuando se muestran al usuario una única vez.
+     *
+     * @var string[]|null
+     */
+    #[ORM\Column(type: 'json', nullable: true)]
+    private ?array $twoFactorBackupCodes = null;
+
     public function __construct()
     {
         $this->historicPasswords = new ArrayCollection();
@@ -495,4 +512,12 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface, IInput
 
     public function getTwoFactorEmailCodeExpiresAt(): ?DateTimeImmutable { return $this->twoFactorEmailCodeExpiresAt; }
     public function setTwoFactorEmailCodeExpiresAt(?DateTimeImmutable $v): void { $this->twoFactorEmailCodeExpiresAt = $v; }
+
+    public function getTwoFactorLastTimeStep(): ?int { return $this->twoFactorLastTimeStep === null ? null : (int) $this->twoFactorLastTimeStep; }
+    public function setTwoFactorLastTimeStep(?int $v): void { $this->twoFactorLastTimeStep = $v === null ? null : (string) $v; }
+
+    /** @return string[]|null */
+    public function getTwoFactorBackupCodes(): ?array { return $this->twoFactorBackupCodes; }
+    /** @param string[]|null $v */
+    public function setTwoFactorBackupCodes(?array $v): void { $this->twoFactorBackupCodes = $v; }
 }

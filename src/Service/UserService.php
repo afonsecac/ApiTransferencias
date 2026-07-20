@@ -386,13 +386,18 @@ class UserService extends CommonService
 
             return $this->createUserFromPayload($objectParser->data);
         } catch (\Exception $e) {
+            // Un token malformado (sin las tres partes del JWT) no tiene payload que
+            // inspeccionar: antes se accedía a $tokenSplit[1] a ciegas y cualquier cadena
+            // sin puntos hacía fallar este catch, convirtiendo un 401 en un 500.
             $tokenSplit = explode('.', $token);
-            $dataCode = base64_decode($tokenSplit[1]);
-            $objectDecode = json_decode($dataCode, true);
-            if (is_array($objectDecode) && array_key_exists('jti', $objectDecode) && is_numeric($objectDecode['jti'])) {
-                $session = $this->em->getRepository(UserSession::class)->find($objectDecode['jti']);
-                if (!is_null($session)) {
-                    $this->closeAllSessions([$session]);
+            if (isset($tokenSplit[1])) {
+                $dataCode = base64_decode($tokenSplit[1]);
+                $objectDecode = json_decode($dataCode, true);
+                if (is_array($objectDecode) && array_key_exists('jti', $objectDecode) && is_numeric($objectDecode['jti'])) {
+                    $session = $this->em->getRepository(UserSession::class)->find($objectDecode['jti']);
+                    if (!is_null($session)) {
+                        $this->closeAllSessions([$session]);
+                    }
                 }
             }
             throw $e;

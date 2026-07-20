@@ -48,6 +48,13 @@ services:
         arguments:
             $appEnv: '%kernel.environment%'
 
+    # La clave de cifrado del secreto TOTP se deriva del secreto de la aplicación.
+    # Cambiar APP_SECRET invalida los secretos ya cifrados: los usuarios afectados
+    # tendrían que volver a enrolar su 2FA.
+    App\Security\SecretCipher:
+        arguments:
+            $appSecret: '%env(APP_SECRET)%'
+
     # add more service definitions when explicit configuration is needed
     # please note that last definitions always *replace* previous ones
 

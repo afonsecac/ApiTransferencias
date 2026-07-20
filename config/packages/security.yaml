@@ -57,6 +57,12 @@ security:
         - { path: '^/dashboard/api/activate', roles: PUBLIC_ACCESS }
         - { path: '^/dashboard/api/refresh', roles: PUBLIC_ACCESS }
         - { path: '^/dashboard/api/2fa/verify', roles: PUBLIC_ACCESS }
+        # Enrolamiento durante el login: el usuario aún no tiene JWT (no lo tendrá hasta
+        # activar el 2FA). Se autentica con el pendingToken, validado en el servicio.
+        - { path: '^/dashboard/api/2fa/enroll', roles: PUBLIC_ACCESS }
+        # Recuperación (código de respaldo o reinicio por correo): mismo caso, el usuario
+        # está a medias del login y solo dispone del pendingToken.
+        - { path: '^/dashboard/api/2fa/recover', roles: PUBLIC_ACCESS }
         - { path: '^/api', roles: ROLE_API_USER }
         - { path: '^/dashboard/api', roles: ROLE_SYSTEM_USER }
         # - { path: ^/profile, roles: ROLE_USER }

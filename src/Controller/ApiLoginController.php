@@ -72,13 +72,16 @@ class ApiLoginController extends AbstractController
             ], Response::HTTP_TOO_MANY_REQUESTS);
         }
 
-        // Si el usuario requiere 2FA, devolver pending token en lugar del JWT
+        // Si el usuario requiere 2FA, devolver pending token en lugar del JWT.
+        // `requiresEnrollment` indica que aún no lo ha configurado: el cliente debe
+        // llevarlo a /2fa/enroll/* en vez de pedirle un código que no puede generar.
         if ($this->twoFactorService->requiresTwoFactor($user)) {
             $verification = $this->twoFactorService->startLoginVerification($user);
             return $this->json([
-                'requires2fa'  => true,
-                'pendingToken' => $verification['pendingToken'],
-                'method'       => $verification['method'],
+                'requires2fa'        => true,
+                'requiresEnrollment' => $this->twoFactorService->requiresEnrollment($user),
+                'pendingToken'       => $verification['pendingToken'],
+                'method'             => $verification['method'],
             ]);
         }
 
