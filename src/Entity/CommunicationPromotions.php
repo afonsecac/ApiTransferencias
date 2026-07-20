@@ -268,6 +268,36 @@ class CommunicationPromotions
         return $this->products;
     }
 
+    /**
+     * Clientes a los que efectivamente se les generó un paquete a partir de
+     * esta promoción. No existe una relación "clients" persistida en la
+     * promoción en sí (el array `clients` del DTO de creación solo se usa de
+     * forma transitoria para filtrar cuentas al generar los paquetes) — esta
+     * es la única fuente real de "a qué clientes se le creó esta promoción",
+     * derivada de `products` (CommunicationClientPackage) vía su cuenta.
+     *
+     * @return array{id: int, companyName: string|null}[]
+     */
+    #[Groups(['promotion:detail'])]
+    public function getRecipientClients(): array
+    {
+        $seen = [];
+        $result = [];
+        foreach ($this->products as $package) {
+            $client = $package->getTenant()?->getClient();
+            if ($client === null || isset($seen[$client->getId()])) {
+                continue;
+            }
+            $seen[$client->getId()] = true;
+            $result[] = [
+                'id' => $client->getId(),
+                'companyName' => $client->getCompanyName(),
+            ];
+        }
+
+        return $result;
+    }
+
     public function addProduct(CommunicationClientPackage $product): static
     {
         if (!$this->products->contains($product)) {
