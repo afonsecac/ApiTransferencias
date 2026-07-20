@@ -37,6 +37,7 @@ class DashboardClientPackagesController extends AbstractController
         'amount' => 'pp.amount',
         'name' => 'pp.name',
         'isActive' => 'pp.isActive',
+        'createdAt' => 'pp.createdAt',
     ];
 
     private const PACKAGE_SORTABLE = [
@@ -45,6 +46,7 @@ class DashboardClientPackagesController extends AbstractController
         'amount' => 'cp.amount',
         'activeStartAt' => 'cp.activeStartAt',
         'activeEndAt' => 'cp.activeEndAt',
+        'createdAt' => 'cp.createdAt',
     ];
 
     public function __construct(
@@ -370,6 +372,13 @@ class DashboardClientPackagesController extends AbstractController
                 'id' => $pp->getProduct()->getId(),
                 'description' => $pp->getProduct()->getDescription(),
             ] : null,
+            'priceUsed' => $pp->getPriceUsed() ? [
+                'id' => $pp->getPriceUsed()->getId(),
+                'startPrice' => $pp->getPriceUsed()->getStartPrice(),
+                'currencyPrice' => $pp->getPriceUsed()->getCurrencyPrice(),
+                'amount' => $pp->getPriceUsed()->getAmount(),
+                'currency' => $pp->getPriceUsed()->getCurrency(),
+            ] : null,
         ];
     }
 
@@ -383,6 +392,8 @@ class DashboardClientPackagesController extends AbstractController
             'currency' => $cp->getCurrency(),
             'activeStartAt' => $cp->getActiveStartAt()?->format('c'),
             'activeEndAt' => $cp->getActiveEndAt()?->format('c'),
+            'destination' => $cp->getDestination(),
+            'validity' => $cp->getValidity(),
             'tenant' => [
                 'id' => $cp->getTenant()?->getId(),
                 'clientName' => $cp->getTenant()?->getClient()?->getCompanyName(),

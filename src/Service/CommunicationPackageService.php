@@ -180,6 +180,13 @@ class CommunicationPackageService extends CommonService
         if ($dto->getActiveEndAt() !== null) {
             $pp->setActiveEndAt(new \DateTimeImmutable($dto->getActiveEndAt()));
         }
+        if ($dto->getPriceUsedId() !== null) {
+            $priceUsed = $this->em->getRepository(CommunicationPrice::class)->find($dto->getPriceUsedId());
+            if ($priceUsed === null) {
+                throw new MyCurrentException('PRICE_NOT_FOUND', 'Communication price not found', 404);
+            }
+            $pp->setPriceUsed($priceUsed);
+        }
 
         $this->em->flush();
 

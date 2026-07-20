@@ -30,6 +30,9 @@ class UpdatePricePackageDto implements IInput
 
     protected ?string $activeEndAt;
 
+    #[Assert\Positive]
+    protected ?int $priceUsedId;
+
     public function __construct(
         ?float $price = null,
         ?string $priceCurrency = null,
@@ -40,6 +43,7 @@ class UpdatePricePackageDto implements IInput
         ?bool $isActive = null,
         ?string $activeStartAt = null,
         ?string $activeEndAt = null,
+        ?int $priceUsedId = null,
     ) {
         $this->price         = $price;
         $this->priceCurrency = $priceCurrency;
@@ -50,6 +54,7 @@ class UpdatePricePackageDto implements IInput
         $this->isActive      = $isActive;
         $this->activeStartAt = $activeStartAt;
         $this->activeEndAt   = $activeEndAt;
+        $this->priceUsedId   = $priceUsedId;
     }
 
     public function getPrice(): ?float { return $this->price; }
@@ -78,4 +83,7 @@ class UpdatePricePackageDto implements IInput
 
     public function getActiveEndAt(): ?string { return $this->activeEndAt; }
     public function setActiveEndAt(?string $v): void { $this->activeEndAt = $v; }
+
+    public function getPriceUsedId(): ?int { return $this->priceUsedId; }
+    public function setPriceUsedId(?int $v): void { $this->priceUsedId = $v; }
 }
