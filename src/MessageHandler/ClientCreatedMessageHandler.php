@@ -2,7 +2,11 @@
 
 namespace App\MessageHandler;
 
+use App\DTO\NotificationDraft;
+use App\Enums\NotificationLevelEnum;
+use App\Enums\NotificationTypeEnum;
 use App\Message\ClientCreatedMessage;
+use App\Service\NotificationCenterService;
 use Symfony\Bridge\Twig\Mime\TemplatedEmail;
 use Symfony\Component\DependencyInjection\ParameterBag\ParameterBagInterface;
 use Symfony\Component\Mailer\MailerInterface;
@@ -16,6 +20,7 @@ class ClientCreatedMessageHandler
     public function __construct(
         private readonly MailerInterface       $mailer,
         private readonly ParameterBagInterface $parameterBag,
+        private readonly NotificationCenterService $notificationCenter,
     ) {}
 
     /**
@@ -28,6 +33,14 @@ class ClientCreatedMessageHandler
         $senderName   = $contractWith === 'comremit'
             ? 'No Reply (Comremit Solutions SL)'
             : 'No Reply - (SendMundo SL)';
+
+        $this->notificationCenter->notifyRole('ROLE_ADMIN', new NotificationDraft(
+            type: NotificationTypeEnum::CLIENT_CREATED,
+            title: sprintf('Nuevo cliente: %s', $message->getCompanyName()),
+            level: NotificationLevelEnum::SUCCESS,
+            link: '/apps/clients',
+            data: ['companyName' => $message->getCompanyName(), 'environmentType' => $message->getEnvironmentType()],
+        ));
 
         $mail = (new TemplatedEmail())
             ->from(new Address($this->parameterBag->get('app.email.from'), $senderName))

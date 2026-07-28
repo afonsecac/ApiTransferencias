@@ -64,6 +64,15 @@ class DashboardCommunicationsDispatchController extends AbstractController
     #[Route('/communications/dispatch-config/pending-stream', name: 'dashboard_communications_dispatch_pending_stream', methods: ['GET'])]
     public function pendingStream(): StreamedResponse
     {
+        // Este endpoint mantiene la sesión del usuario abierta (autenticación
+        // por firewall con estado) durante todo el stream: sin cerrarla, el
+        // resto de peticiones del mismo usuario quedan bloqueadas detrás del
+        // lock de sesión de PHP hasta que el stream corte (hasta 270s). Cerrarla
+        // aquí no afecta a la autenticación ya resuelta para esta petición.
+        if (session_status() === \PHP_SESSION_ACTIVE) {
+            session_write_close();
+        }
+
         $response = new StreamedResponse(function () {
             set_time_limit(0);
 

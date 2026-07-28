@@ -26,10 +26,11 @@ RUN install-php-extensions \
 
 COPY docker/php-fpm/php.ini $PHP_INI_DIR/conf.d/app.ini
 COPY docker/php-fpm/www.conf /usr/local/etc/php-fpm.d/www.conf
+COPY docker/php-fpm/stream.conf /usr/local/etc/php-fpm.d/stream.conf
 
 WORKDIR /var/www
 
-EXPOSE 9000
+EXPOSE 9000 9001
 
 CMD ["php-fpm"]
 
@@ -67,6 +68,6 @@ RUN composer dump-autoload --optimize \
 
 USER www-data
 
-EXPOSE 9000
+EXPOSE 9000 9001
 
 CMD ["php-fpm"]

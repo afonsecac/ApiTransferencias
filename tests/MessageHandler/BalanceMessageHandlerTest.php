@@ -9,6 +9,7 @@ use App\Enums\JobPositionAreaEnum;
 use App\Message\BalanceMessage;
 use App\MessageHandler\BalanceMessageHandler;
 use App\Repository\JobPositionRepository;
+use App\Service\NotificationCenterService;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\EntityRepository;
 use PHPUnit\Framework\MockObject\MockObject;
@@ -28,6 +29,7 @@ class BalanceMessageHandlerTest extends TestCase
     private LoggerInterface&MockObject $logger;
     private ParameterBagInterface&MockObject $parameterBag;
     private JobPositionRepository&MockObject $jobPositionRepository;
+    private NotificationCenterService&MockObject $notificationCenter;
     private BalanceMessageHandler $handler;
 
     protected function setUp(): void
@@ -40,6 +42,7 @@ class BalanceMessageHandlerTest extends TestCase
         $this->jobPositionRepository->method('findByArea')
             ->with(JobPositionAreaEnum::FINANCE)
             ->willReturn([]);
+        $this->notificationCenter = $this->createMock(NotificationCenterService::class);
 
         $this->handler = new BalanceMessageHandler(
             $this->em,
@@ -47,6 +50,7 @@ class BalanceMessageHandlerTest extends TestCase
             $this->logger,
             $this->parameterBag,
             $this->jobPositionRepository,
+            $this->notificationCenter,
         );
     }
 
@@ -110,6 +114,11 @@ class BalanceMessageHandlerTest extends TestCase
                 return true;
             }));
 
+        // Saldo crítico: notifica in-app a finanzas y además a ROLE_ADMIN.
+        $this->notificationCenter->expects($this->once())->method('notifyUsers');
+        $this->notificationCenter->expects($this->once())->method('notifyRole')
+            ->with('ROLE_ADMIN');
+
         $message = new BalanceMessage('CRITICAL', 5.0, 'USD', 10);
         ($this->handler)($message);
     }
@@ -142,6 +151,10 @@ class BalanceMessageHandlerTest extends TestCase
                 $this->assertStringContainsString('[RISK]', $email->getSubject());
                 return true;
             }));
+
+        // Saldo de riesgo (no crítico): notifica in-app a finanzas, pero NO a ROLE_ADMIN.
+        $this->notificationCenter->expects($this->once())->method('notifyUsers');
+        $this->notificationCenter->expects($this->never())->method('notifyRole');
 
         $message = new BalanceMessage('RISK', 200.0, 'EUR', 20);
         ($this->handler)($message);

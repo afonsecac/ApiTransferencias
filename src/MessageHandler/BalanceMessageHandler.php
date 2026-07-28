@@ -2,11 +2,15 @@
 
 namespace App\MessageHandler;
 
+use App\DTO\NotificationDraft;
 use App\Entity\Account;
 use App\Entity\User;
 use App\Enums\JobPositionAreaEnum;
+use App\Enums\NotificationLevelEnum;
+use App\Enums\NotificationTypeEnum;
 use App\Message\BalanceMessage;
 use App\Repository\JobPositionRepository;
+use App\Service\NotificationCenterService;
 use Doctrine\ORM\EntityManagerInterface;
 use Psr\Log\LoggerInterface;
 use Symfony\Bridge\Twig\Mime\TemplatedEmail;
@@ -25,6 +29,7 @@ class BalanceMessageHandler
         private readonly LoggerInterface        $logger,
         private readonly ParameterBagInterface  $parameterBag,
         private readonly JobPositionRepository  $jobPositionRepository,
+        private readonly NotificationCenterService $notificationCenter,
     ) {
     }
 
@@ -52,6 +57,29 @@ class BalanceMessageHandler
                     $fullName = trim($user->getFirstName() . ' ' . $user->getLastName());
                     $recipients[] = new Address($user->getEmail(), $fullName);
                 }
+            }
+
+            // Notificación in-app: independiente del correo, así que se emite
+            // aunque no haya destinatarios de email (p. ej. cliente sin
+            // usuarios de finanzas todavía).
+            $isCritical = $message->getMessageType() === 'CRITICAL';
+            $draft = new NotificationDraft(
+                type: $isCritical ? NotificationTypeEnum::BALANCE_CRITICAL : NotificationTypeEnum::BALANCE_LOW,
+                title: sprintf('Saldo %s en %s', $isCritical ? 'crítico' : 'bajo', $client->getCompanyName()),
+                level: $isCritical ? NotificationLevelEnum::CRITICAL : NotificationLevelEnum::WARNING,
+                body: sprintf('El saldo disponible es %s %s.', $message->getCurrentBalance(), $message->getCurrency()),
+                link: '/dashboards/finance',
+                data: [
+                    'accountId' => $account->getId(),
+                    'clientId' => $client->getId(),
+                    'balance' => $message->getCurrentBalance(),
+                    'currency' => $message->getCurrency(),
+                ],
+                environmentId: $account->getEnvironment()?->getId(),
+            );
+            $this->notificationCenter->notifyUsers($financeUsers, $draft);
+            if ($isCritical) {
+                $this->notificationCenter->notifyRole('ROLE_ADMIN', $draft);
             }
 
             if (empty($recipients)) {

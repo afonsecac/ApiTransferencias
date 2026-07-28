@@ -63,6 +63,11 @@ security:
         # Recuperación (código de respaldo o reinicio por correo): mismo caso, el usuario
         # está a medias del login y solo dispone del pendingToken.
         - { path: '^/dashboard/api/2fa/recover', roles: PUBLIC_ACCESS }
+        # EventSource no puede enviar el header Authorization: este stream se autentica
+        # con un ticket de un solo uso (POST /notifications/stream-ticket, sí autenticado)
+        # consumido dentro del propio controlador, no con el Bearer del resto del dashboard.
+        # Debe ir ANTES de la regla genérica de /dashboard/api (gana la primera que matchea).
+        - { path: '^/dashboard/api/notifications/stream$', roles: PUBLIC_ACCESS }
         - { path: '^/api', roles: ROLE_API_USER }
         - { path: '^/dashboard/api', roles: ROLE_SYSTEM_USER }
         # - { path: ^/profile, roles: ROLE_USER }
