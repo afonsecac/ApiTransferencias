@@ -3,6 +3,7 @@
 namespace App\Service;
 
 use ApiPlatform\Symfony\Security\Exception\AccessDeniedException;
+use App\DTO\NotificationDraft;
 use App\DTO\ReserveRecharge;
 use App\Entity\Account;
 use App\Entity\BalanceOperation;
@@ -16,6 +17,8 @@ use App\Entity\CommunicationSalePackage;
 use App\Entity\CommunicationSaleRecharge;
 use App\Entity\Environment;
 use App\Enums\CommunicationStateEnum;
+use App\Enums\NotificationLevelEnum;
+use App\Enums\NotificationTypeEnum;
 use App\Exception\MyCurrentException;
 use App\Message\CheckSaleMessage;
 use App\Message\SalePackageMessage;
@@ -126,6 +129,7 @@ class CommunicationSaleService extends CommonService
         private readonly MessageBusInterface $messageBus,
         private readonly HistoricalSaleService $historicalSaleService,
         private readonly BalanceService $balanceService,
+        private readonly NotificationCenterService $notificationCenter,
     ) {
         parent::__construct(
             $em,
@@ -854,6 +858,22 @@ class CommunicationSaleService extends CommonService
         $sale->setTransactionStatus(['result' => ['message' => $reason]]);
         $this->em->flush();
         $this->logger->error("Sale {$sale->getId()} failed: {$reason}");
+
+        // Punto único por el que pasa toda transición a FAILED: aquí se
+        // engancha la notificación in-app, independiente del email.
+        $client = $sale->getTenant()?->getClient();
+        if ($client !== null) {
+            $isRecharge = $sale instanceof CommunicationSaleRecharge;
+            $this->notificationCenter->notifyClient($client, new NotificationDraft(
+                type: $isRecharge ? NotificationTypeEnum::RECHARGE_FAILED : NotificationTypeEnum::SALE_FAILED,
+                title: sprintf('%s fallida (#%d)', $isRecharge ? 'Recarga' : 'Venta', $sale->getId()),
+                level: NotificationLevelEnum::ERROR,
+                body: $reason,
+                link: '/apps/sales/' . $sale->getId(),
+                data: ['saleId' => $sale->getId(), 'transactionId' => $sale->getTransactionId(), 'reason' => $reason],
+                environmentId: $sale->getTenant()?->getEnvironment()?->getId(),
+            ));
+        }
     }
 
     /**

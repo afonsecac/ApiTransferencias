@@ -18,6 +18,17 @@ parameters:
     jwt_aud_default: 'https://dashboard.comremit.com'
     phrase_key: '%env(JWT_PHRASE_KEY)%'
 
+    # Centro de notificaciones in-app. Configurables por entorno para poder
+    # acortarlos en staging (ver e2e) sin tocar el valor de producción.
+    notifications_stream_ticket_ttl_default: 30
+    notifications_stream_ttl_default: 270
+    notifications_stream_interval_default: 5
+    notifications_max_streams_default: 20
+    app.notifications.stream_ticket_ttl: '%env(int:default:notifications_stream_ticket_ttl_default:NOTIFICATIONS_STREAM_TICKET_TTL)%'
+    app.notifications.stream_ttl: '%env(int:default:notifications_stream_ttl_default:NOTIFICATIONS_STREAM_TTL)%'
+    app.notifications.stream_interval: '%env(int:default:notifications_stream_interval_default:NOTIFICATIONS_STREAM_INTERVAL)%'
+    app.notifications.max_streams: '%env(int:default:notifications_max_streams_default:NOTIFICATIONS_MAX_STREAMS)%'
+
 
 services:
 #    App\State\CreateBeneficiaryCardProcessor:
@@ -54,6 +65,16 @@ services:
     App\Security\SecretCipher:
         arguments:
             $appSecret: '%env(APP_SECRET)%'
+
+    App\Service\NotificationCenterService:
+        arguments:
+            $streamTicketTtl: '%app.notifications.stream_ticket_ttl%'
+            $streamTtl: '%app.notifications.stream_ttl%'
+            $maxStreams: '%app.notifications.max_streams%'
+
+    App\Controller\DashboardNotificationsController:
+        arguments:
+            $streamInterval: '%app.notifications.stream_interval%'
 
     # add more service definitions when explicit configuration is needed
     # please note that last definitions always *replace* previous ones

@@ -2,7 +2,11 @@
 
 namespace App\MessageHandler;
 
+use App\DTO\NotificationDraft;
+use App\Enums\NotificationLevelEnum;
+use App\Enums\NotificationTypeEnum;
 use App\Message\AccountActivationMessage;
+use App\Service\NotificationCenterService;
 use Symfony\Bridge\Twig\Mime\TemplatedEmail;
 use Symfony\Component\DependencyInjection\ParameterBag\ParameterBagInterface;
 use Symfony\Component\Mailer\MailerInterface;
@@ -16,6 +20,7 @@ class AccountActivationMessageHandler
     public function __construct(
         private readonly MailerInterface $mailer,
         private readonly ParameterBagInterface $parameterBag,
+        private readonly NotificationCenterService $notificationCenter,
     ) {
     }
 
@@ -30,6 +35,16 @@ class AccountActivationMessageHandler
 
         $baseUrl = $this->parameterBag->get('app.dashboard.url.' . $contractWith);
         $activationUrl = $baseUrl . '/reset-password?email=' . urlencode($message->getEmail());
+
+        // Este handler dispara la INVITACIÓN a activar, no la confirmación de
+        // que ya se activó — por eso el aviso es solo para ROLE_ADMIN (visibilidad
+        // operativa) y no al propio usuario, que todavía no puede iniciar sesión.
+        $this->notificationCenter->notifyRole('ROLE_ADMIN', new NotificationDraft(
+            type: NotificationTypeEnum::ACCOUNT_ACTIVATED,
+            title: sprintf('Invitación de activación enviada a %s', $message->getEmail()),
+            level: NotificationLevelEnum::INFO,
+            link: '/apps/clients',
+        ));
 
         $mail = (new TemplatedEmail())
             ->from(new Address($this->parameterBag->get('app.email.from'), $senderName))

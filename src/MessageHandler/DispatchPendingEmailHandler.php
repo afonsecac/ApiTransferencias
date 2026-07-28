@@ -2,7 +2,12 @@
 
 namespace App\MessageHandler;
 
+use App\DTO\NotificationDraft;
+use App\Enums\NotificationAudienceEnum;
+use App\Enums\NotificationLevelEnum;
+use App\Enums\NotificationTypeEnum;
 use App\Message\DispatchPendingEmailMessage;
+use App\Service\NotificationCenterService;
 use Psr\Log\LoggerInterface;
 use Symfony\Bridge\Twig\Mime\TemplatedEmail;
 use Symfony\Component\DependencyInjection\ParameterBag\ParameterBagInterface;
@@ -18,10 +23,27 @@ class DispatchPendingEmailHandler
         private readonly MailerInterface $mailer,
         private readonly ParameterBagInterface $parameterBag,
         private readonly LoggerInterface $logger,
+        private readonly NotificationCenterService $notificationCenter,
     ) {}
 
     public function __invoke(DispatchPendingEmailMessage $message): void
     {
+        // Una sola entrada por día que se va actualizando (bumpGroup), en vez
+        // de una notificación por cada despacho.
+        $this->notificationCenter->bumpGroup(
+            'dispatch_pending:' . (new \DateTimeImmutable())->format('Y-m-d'),
+            NotificationAudienceEnum::ROLE,
+            new NotificationDraft(
+                type: NotificationTypeEnum::DISPATCH_PENDING,
+                title: sprintf('%d mensaje(s) despachados al API de comunicaciones hoy', $message->getTotal()),
+                level: NotificationLevelEnum::INFO,
+                link: '/security/communications-dispatch',
+                data: ['total' => $message->getTotal(), 'triggeredBy' => $message->getTriggeredBy()],
+                expiresAt: new \DateTimeImmutable('+2 days'),
+            ),
+            targetRole: 'ROLE_ADMIN',
+        );
+
         try {
             $from = $this->parameterBag->get('app.email.from');
 
