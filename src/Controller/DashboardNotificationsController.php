@@ -238,8 +238,10 @@ class DashboardNotificationsController extends AbstractController
 
                 if ($isAdmin) {
                     $live = $service->countRecentRecharges($environmentId, $streamStart);
-                    echo "event: live\n";
-                    echo 'data: ' . json_encode(['recharges' => $live]) . "\n\n";
+                    if ($live['count'] > 0) {
+                        echo "event: live\n";
+                        echo 'data: ' . json_encode(['recharges' => $live]) . "\n\n";
+                    }
                 }
 
                 echo ": ping\n\n";
