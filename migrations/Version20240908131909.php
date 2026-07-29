@@ -27,6 +27,12 @@ final class Version20240908131909 extends AbstractMigration
         $this->addSql('ALTER TABLE client ADD currency VARCHAR(3) DEFAULT NULL');
         $this->addSql('ALTER TABLE client ADD is_alert BOOLEAN DEFAULT NULL');
         $this->addSql("INSERT INTO sys_config(id, property_name, property_value, created_at, updated_at, is_active) VALUES (2, 'client.min.balance.operation', '300', '2024-09-08 11:25:12', '2024-09-08 11:25:12', true),(3, 'client.critical.balance.operation', '100', '2024-09-08 11:25:12', '2024-09-08 11:25:12', true); ");
+
+        // Los IDs de arriba son explícitos, no vía la secuencia: en una base
+        // nueva sys_config_id_seq se queda en 1 y el próximo nextval() (ej.
+        // Version20260720000000 sembrando 2fa.*) choca con el id=2 insertado
+        // aquí. Se realinea la secuencia al mayor id realmente presente.
+        $this->addSql("SELECT setval('sys_config_id_seq', (SELECT MAX(id) FROM sys_config))");
     }
 
     public function down(Schema $schema): void
