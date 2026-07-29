@@ -6,6 +6,7 @@ use App\DTO\NotificationDraft;
 use App\Entity\Account;
 use App\Entity\User;
 use App\Enums\JobPositionAreaEnum;
+use App\Enums\NotificationAudienceEnum;
 use App\Enums\NotificationLevelEnum;
 use App\Enums\NotificationTypeEnum;
 use App\Message\BalanceMessage;
@@ -78,9 +79,23 @@ class BalanceMessageHandler
                 environmentId: $account->getEnvironment()?->getId(),
             );
             $this->notificationCenter->notifyUsers($financeUsers, $draft);
-            if ($isCritical) {
-                $this->notificationCenter->notifyRole('ROLE_ADMIN', $draft);
-            }
+
+            // El admin ve todos los clientes: sin agrupar, un cliente rozando el
+            // umbral llenaría la bandeja. La clave incluye el nivel porque
+            // bumpGroup no actualiza `level` en el DO UPDATE — así una escalada
+            // LOW → CRITICAL del mismo día crea su propia fila en vez de
+            // quedarse con el nivel antiguo.
+            $this->notificationCenter->bumpGroup(
+                sprintf(
+                    'balance_alert:%d:%s:%s',
+                    $client->getId(),
+                    $draft->level->value,
+                    (new \DateTimeImmutable())->format('Y-m-d'),
+                ),
+                NotificationAudienceEnum::ROLE,
+                $draft,
+                targetRole: 'ROLE_ADMIN',
+            );
 
             if (empty($recipients)) {
                 return;

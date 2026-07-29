@@ -6,6 +6,7 @@ use App\Entity\Account;
 use App\Entity\Client;
 use App\Entity\Environment;
 use App\Enums\JobPositionAreaEnum;
+use App\Enums\NotificationAudienceEnum;
 use App\Message\BalanceMessage;
 use App\MessageHandler\BalanceMessageHandler;
 use App\Repository\JobPositionRepository;
@@ -87,6 +88,7 @@ class BalanceMessageHandlerTest extends TestCase
     public function testInvokeSendsEmailForCriticalBalance(): void
     {
         $client = $this->createMock(Client::class);
+        $client->method('getId')->willReturn(10);
         $client->method('getCompanyEmail')->willReturn('company@example.com');
         $client->method('getCompanyName')->willReturn('ACME Corp');
         $client->method('getContractWith')->willReturn('comremit');
@@ -114,10 +116,16 @@ class BalanceMessageHandlerTest extends TestCase
                 return true;
             }));
 
-        // Saldo crítico: notifica in-app a finanzas y además a ROLE_ADMIN.
+        // Saldo crítico: notifica in-app a finanzas y, agrupado, a ROLE_ADMIN.
         $this->notificationCenter->expects($this->once())->method('notifyUsers');
-        $this->notificationCenter->expects($this->once())->method('notifyRole')
-            ->with('ROLE_ADMIN');
+        $this->notificationCenter->expects($this->once())->method('bumpGroup')
+            ->with(
+                $this->stringContains('balance_alert:10:CRITICAL:'),
+                NotificationAudienceEnum::ROLE,
+                $this->anything(),
+                null,
+                'ROLE_ADMIN',
+            );
 
         $message = new BalanceMessage('CRITICAL', 5.0, 'USD', 10);
         ($this->handler)($message);
@@ -126,6 +134,7 @@ class BalanceMessageHandlerTest extends TestCase
     public function testInvokeSendsEmailForRiskBalance(): void
     {
         $client = $this->createMock(Client::class);
+        $client->method('getId')->willReturn(20);
         $client->method('getCompanyEmail')->willReturn('client@example.com');
         $client->method('getCompanyName')->willReturn('Risk Corp');
         $client->method('getContractWith')->willReturn('sendmundo');
@@ -152,12 +161,54 @@ class BalanceMessageHandlerTest extends TestCase
                 return true;
             }));
 
-        // Saldo de riesgo (no crítico): notifica in-app a finanzas, pero NO a ROLE_ADMIN.
+        // Saldo de riesgo (no crítico): también llega agrupado a ROLE_ADMIN,
+        // no solo a finanzas — es la regresión que este cambio corrige.
         $this->notificationCenter->expects($this->once())->method('notifyUsers');
-        $this->notificationCenter->expects($this->never())->method('notifyRole');
+        $this->notificationCenter->expects($this->once())->method('bumpGroup')
+            ->with(
+                $this->stringContains('balance_alert:20:WARNING:'),
+                NotificationAudienceEnum::ROLE,
+                $this->anything(),
+                null,
+                'ROLE_ADMIN',
+            );
 
         $message = new BalanceMessage('RISK', 200.0, 'EUR', 20);
         ($this->handler)($message);
+    }
+
+    public function testInvokeUsesDifferentGroupKeyForCriticalAndRiskSameClient(): void
+    {
+        $client = $this->createMock(Client::class);
+        $client->method('getId')->willReturn(30);
+        $client->method('getCompanyEmail')->willReturn(null);
+        $client->method('getCompanyName')->willReturn('Escalation Corp');
+        $client->method('getContractWith')->willReturn('comremit');
+
+        $account = $this->createMock(Account::class);
+        $account->method('getClient')->willReturn($client);
+        $account->method('getEnvironment')->willReturn(null);
+
+        $repo = $this->createMock(EntityRepository::class);
+        $repo->method('find')->with(30)->willReturn($account);
+        $this->em->method('getRepository')->with(Account::class)->willReturn($repo);
+
+        // Sin destinatarios de email: el handler retorna antes de mandar el correo,
+        // pero la notificación in-app debe emitirse igual.
+        $this->mailer->expects($this->never())->method('send');
+
+        $capturedKeys = [];
+        $this->notificationCenter->expects($this->exactly(2))->method('bumpGroup')
+            ->willReturnCallback(function (string $groupKey) use (&$capturedKeys) {
+                $capturedKeys[] = $groupKey;
+            });
+
+        ($this->handler)(new BalanceMessage('RISK', 200.0, 'EUR', 30));
+        ($this->handler)(new BalanceMessage('CRITICAL', 5.0, 'USD', 30));
+
+        $this->assertNotSame($capturedKeys[0], $capturedKeys[1]);
+        $this->assertStringContainsString(':WARNING:', $capturedKeys[0]);
+        $this->assertStringContainsString(':CRITICAL:', $capturedKeys[1]);
     }
 
     public function testInvokeUsesComremitEmailContactWhenContractWithIsComremit(): void
