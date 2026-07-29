@@ -14,65 +14,64 @@ permissions:
 jobs:
   deploy:
     name: Deploy to Staging VPS
-    runs-on: ubuntu-24.04
+    # Runner self-hosted en el propio VPS de staging: Hostinger bloquea a nivel
+    # de red las conexiones entrantes desde los runners de GitHub-hosted
+    # (rangos de IP de Azure), así que appleboy/ssh-action nunca podía
+    # conectar (i/o timeout, ni siquiera llegaba a sshd). El runner corre
+    # localmente y hace la conexión saliente hacia GitHub, que sí funciona.
+    runs-on: [self-hosted, staging]
     environment: staging
 
     steps:
-      - name: Deploy via SSH
-        uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ secrets.STAGING_HOST }}
-          username: ${{ secrets.STAGING_USER }}
-          key: ${{ secrets.STAGING_SSH_KEY }}
-          port: ${{ secrets.STAGING_SSH_PORT || 22 }}
-          # El default de appleboy/ssh-action es 10m; el build en frío compila
-          # extensiones PHP core (sockets) desde fuente y lo supera. Igual que prod.
-          command_timeout: 30m
-          script: |
-            set -e
-            cd ${{ secrets.STAGING_APP_PATH || '/opt/api-transferencias' }}
+      - name: Deploy
+        run: |
+          set -e
+          cd /opt/api-transferencias
 
-            echo "=== Creating pre-deploy backup ==="
-            TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-            mkdir -p backups/staging
-            docker compose -f docker-compose.vps.yaml -f docker-compose.vps.staging.yaml \
-              --env-file .env.vps exec -T database \
-              pg_dump -U $(grep ^POSTGRES_USER .env.vps | cut -d= -f2) \
-              $(grep ^POSTGRES_DB .env.vps | cut -d= -f2) \
-              | gzip > "backups/staging/db_${TIMESTAMP}.sql.gz"
-            echo "Backup: backups/staging/db_${TIMESTAMP}.sql.gz"
-            # Retain last 7 backups
-            ls -t backups/staging/db_*.sql.gz 2>/dev/null | tail -n +8 | xargs -r rm
+          echo "=== Creating pre-deploy backup ==="
+          TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+          mkdir -p backups/staging
+          docker compose -f docker-compose.vps.yaml -f docker-compose.vps.staging.yaml \
+            --env-file .env.vps exec -T database \
+            pg_dump -U $(grep ^POSTGRES_USER .env.vps | cut -d= -f2) \
+            $(grep ^POSTGRES_DB .env.vps | cut -d= -f2) \
+            | gzip > "backups/staging/db_${TIMESTAMP}.sql.gz"
+          echo "Backup: backups/staging/db_${TIMESTAMP}.sql.gz"
+          # Retain last 7 backups
+          ls -t backups/staging/db_*.sql.gz 2>/dev/null | tail -n +8 | xargs -r rm
 
-            echo "=== Pulling latest changes ==="
-            git fetch origin develop
-            git checkout develop
-            git pull origin develop
+          echo "=== Pulling latest changes ==="
+          git fetch origin develop
+          git checkout develop
+          git pull origin develop
 
-            echo "=== Building images ==="
-            docker compose -f docker-compose.vps.yaml -f docker-compose.vps.staging.yaml \
-              --env-file .env.vps build
+          echo "=== Building images ==="
+          docker compose -f docker-compose.vps.yaml -f docker-compose.vps.staging.yaml \
+            --env-file .env.vps build
 
-            echo "=== Deploying ==="
-            docker compose -f docker-compose.vps.yaml -f docker-compose.vps.staging.yaml \
-              --env-file .env.vps up -d --remove-orphans --force-recreate
+          echo "=== Deploying ==="
+          docker compose -f docker-compose.vps.yaml -f docker-compose.vps.staging.yaml \
+            --env-file .env.vps up -d --remove-orphans --force-recreate
 
-            echo "=== Running migrations ==="
-            docker compose -f docker-compose.vps.yaml -f docker-compose.vps.staging.yaml \
-              --env-file .env.vps exec -T php-fpm php bin/console doctrine:migrations:migrate --no-interaction --allow-no-migration
+          echo "=== Running migrations ==="
+          docker compose -f docker-compose.vps.yaml -f docker-compose.vps.staging.yaml \
+            --env-file .env.vps exec -T php-fpm php bin/console doctrine:migrations:migrate --no-interaction --allow-no-migration
 
-            echo "=== Clearing cache ==="
-            docker compose -f docker-compose.vps.yaml -f docker-compose.vps.staging.yaml \
-              --env-file .env.vps exec -T php-fpm php bin/console cache:clear
+          echo "=== Clearing cache ==="
+          docker compose -f docker-compose.vps.yaml -f docker-compose.vps.staging.yaml \
+            --env-file .env.vps exec -T php-fpm php bin/console cache:clear
 
-            echo "=== Cleanup ==="
-            docker image prune -f
+          echo "=== Cleanup ==="
+          docker image prune -f
 
-            echo "=== Health check ==="
-            sleep 5
-            curl -sf http://localhost/health/ready || exit 1
+          echo "=== Health check ==="
+          sleep 5
+          # nginx no publica el puerto 80 al host: solo Traefik lo hace, y
+          # enruta por Host header. Sin el dominio real, esto pega contra
+          # Traefik sin matchear ninguna regla (404), nunca contra la app.
+          curl -sf https://staging-api.comremit.com/health/ready || exit 1
 
-            echo "=== Deploy complete ==="
+          echo "=== Deploy complete ==="
 
       - name: Notify deployment
         if: always()
