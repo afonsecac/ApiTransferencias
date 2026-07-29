@@ -301,10 +301,16 @@ class DashboardNotificationsController extends AbstractController
 
     private function resolveEnvironmentId(Request $request): ?int
     {
-        if ($request->headers->has('X-Environment-Id')) {
-            return (int) $request->headers->get('X-Environment-Id');
+        // El dashboard envía siempre X-Environment-Id; ?environment=all es la
+        // única forma de pedir la bandeja sin filtrar por entorno.
+        if ($request->query->get('environment') === 'all') {
+            return null;
         }
 
-        return null;
+        $raw = $request->headers->get('X-Environment-Id');
+        // Una cabecera no numérica castea a 0 y filtraría por un entorno
+        // inexistente, ocultando todo salvo las notificaciones sin entorno:
+        // mejor tratarla como ausente.
+        return ctype_digit((string) $raw) && (int) $raw > 0 ? (int) $raw : null;
     }
 }
