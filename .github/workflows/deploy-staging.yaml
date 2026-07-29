@@ -23,6 +23,13 @@ jobs:
     environment: staging
 
     steps:
+      # /opt/api-transferencias no es un checkout git (se provisionó por rsync
+      # para no arrastrar el historial completo al VPS) y el runner self-hosted
+      # no tiene credenciales propias hacia GitHub. actions/checkout resuelve
+      # esto con el token efímero del job, sin necesitar una deploy key nueva.
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Deploy
         run: |
           set -e
@@ -40,10 +47,15 @@ jobs:
           # Retain last 7 backups
           ls -t backups/staging/db_*.sql.gz 2>/dev/null | tail -n +8 | xargs -r rm
 
-          echo "=== Pulling latest changes ==="
-          git fetch origin develop
-          git checkout develop
-          git pull origin develop
+          echo "=== Syncing latest changes ==="
+          # Sincroniza el checkout (hecho por actions/checkout en el workspace
+          # del job) hacia el directorio real de deploy, preservando lo que no
+          # viene del repo: el .env.vps con los secretos y los backups locales.
+          rsync -a --delete \
+            --exclude='.git' \
+            --exclude='.env.vps' \
+            --exclude='backups' \
+            "${{ github.workspace }}/" ./
 
           echo "=== Building images ==="
           docker compose -f docker-compose.vps.yaml -f docker-compose.vps.staging.yaml \
