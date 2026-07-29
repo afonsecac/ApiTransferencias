@@ -24,13 +24,34 @@ case "${SSH_ORIGINAL_COMMAND:-}" in
             exit 1
         fi
 
-        ./deploy.sh staging --restore "$LATEST"
-
+        COMPOSE=(docker compose -f docker-compose.vps.yaml -f docker-compose.vps.staging.yaml --env-file .env.vps)
         PG_USER=$(grep ^POSTGRES_USER= .env.vps | cut -d= -f2)
         PG_DB=$(grep ^POSTGRES_DB= .env.vps | cut -d= -f2)
 
-        docker compose -f docker-compose.vps.yaml -f docker-compose.vps.staging.yaml \
-            --env-file .env.vps exec -T database psql -U "$PG_USER" -d "$PG_DB" -c "
+        # deploy.sh --restore hace "psql < dump" a secas, sin vaciar antes: si
+        # staging ya tiene su propio esquema (siempre lo tiene, salvo la primera
+        # vez), cientos de "already exists"/FK/PK duplicados hacen que tablas
+        # completas (account, notification, communication_sale_info...) queden
+        # vacías en silencio. Se vacia el schema primero para que sea idempotente
+        # mes a mes.
+        echo "Deteniendo app para el restore..."
+        "${COMPOSE[@]}" stop php-fpm worker nginx
+
+        echo "Vaciando schema public..."
+        "${COMPOSE[@]}" exec -T database psql -U "$PG_USER" -d "$PG_DB" -c "
+            DROP SCHEMA public CASCADE;
+            CREATE SCHEMA public;
+            GRANT ALL ON SCHEMA public TO $PG_USER;
+        "
+
+        ./deploy.sh staging --restore "$LATEST"
+
+        echo "Reiniciando app y aplicando migraciones pendientes de develop..."
+        "${COMPOSE[@]}" start php-fpm worker nginx
+        "${COMPOSE[@]}" exec -T php-fpm php bin/console doctrine:migrations:migrate --no-interaction --allow-no-migration
+
+        echo "Saneando environment (PROD -> TEST, credenciales anuladas)..."
+        "${COMPOSE[@]}" exec -T database psql -U "$PG_USER" -d "$PG_DB" -c "
                 UPDATE environment
                 SET type = 'TEST',
                     client_secret = 'DISABLED_BY_STAGING_SYNC',
@@ -38,6 +59,8 @@ case "${SSH_ORIGINAL_COMMAND:-}" in
                     base_path = 'https://staging-sync-disabled.invalid'
                 WHERE type = 'PROD';
             "
+
+        "${COMPOSE[@]}" exec -T php-fpm php bin/console cache:clear
 
         rm -f "$LATEST"
         echo "RESTORE_AND_SANITIZE_OK"
