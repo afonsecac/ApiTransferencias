@@ -220,10 +220,6 @@ class CommunicationSaleService extends CommonService
         if (is_null($package)) {
             throw new MyCurrentException('COM003', 'The package don\'t exist');
         }
-        $balance = $this->balanceService->balance($user->getId());
-        if ($balance->amount < $package->getAmount()) {
-            throw new MyCurrentException('COM001', 'Insufficient balance');
-        }
         /** @var \App\Repository\CommunicationPromotionsRepository $promotionRepo */
         $promotionRepo = $this->em->getRepository(CommunicationPromotions::class);
         $promotion = $promotionRepo->getFuturePromotionById(
@@ -256,14 +252,27 @@ class CommunicationSaleService extends CommonService
         $recharge->setAmount($package->getAmount());
         $recharge->setCurrency($package->getCurrency());
         $recharge->getCalculatePrice();
+
+        $this->em->beginTransaction();
         try {
+            // Lock pesimista por cuenta + saldo-menos-reservado: cierra la
+            // condición de carrera entre ventas concurrentes de la misma
+            // cuenta. Ver docs/balance-check-architecture.md (Fase 1).
+            if (!$this->balanceService->hasAvailableBalance($user, $package->getAmount())) {
+                throw new MyCurrentException('COM001', 'Insufficient balance');
+            }
             $this->em->persist($recharge);
             $comHistoric = new CommunicationSaleHistory();
             $comHistoric->setState(CommunicationStateEnum::RESERVED);
             $comHistoric->setSale($recharge);
             $this->em->persist($comHistoric);
             $this->em->flush();
+            $this->em->commit();
         } catch (\Exception $e) {
+            $this->em->rollback();
+            if ($e instanceof MyCurrentException) {
+                throw $e;
+            }
             if (str_contains($e->getMessage(), "unique_identification_client")) {
                 throw new MyCurrentException('COM005', 'Duplicate transaction by customer');
             }
@@ -297,10 +306,6 @@ class CommunicationSaleService extends CommonService
         if (is_null($package)) {
             throw new MyCurrentException('COM003', 'The package don\'t exist');
         }
-        $balance = $this->balanceService->balance($user->getId());
-        if ($balance->amount < $package->getAmount()) {
-            throw new MyCurrentException('COM001', 'Insufficient balance');
-        }
 
         $lastSequence = $this->configureSequence->getLastSequence(CommunicationSaleRecharge::class);
         $transactionId = (new \DateTime('now'))->format('ymd').'01'.str_pad(
@@ -318,20 +323,26 @@ class CommunicationSaleService extends CommonService
         $recharge->setState(CommunicationStateEnum::PENDING);
         $recharge->setStateProcess(CommunicationStateEnum::CREATED->value);
 
+        $this->em->beginTransaction();
         try {
+            // Lock pesimista por cuenta + saldo-menos-reservado: cierra la
+            // condición de carrera entre ventas concurrentes de la misma
+            // cuenta. Ver docs/balance-check-architecture.md (Fase 1).
+            if (!$this->balanceService->hasAvailableBalance($user, $package->getAmount())) {
+                throw new MyCurrentException('COM001', 'Insufficient balance');
+            }
             $this->em->persist($recharge);
             $comHistoric = new CommunicationSaleHistory();
             $comHistoric->setState(CommunicationStateEnum::PENDING);
             $comHistoric->setSale($recharge);
             $this->em->persist($comHistoric);
             $this->em->flush();
-
-            if ($this->isDispatchEnabled()) {
-                $this->messageBus->dispatch(new SaleRechargeMessage($recharge->getId()));
-            } else {
-                $this->logger->info("Communications dispatch disabled: recharge {$recharge->getId()} saved, pending dispatch.");
-            }
+            $this->em->commit();
         } catch (\Exception $ex) {
+            $this->em->rollback();
+            if ($ex instanceof MyCurrentException) {
+                throw $ex;
+            }
             if (str_contains($ex->getMessage(), "unique_identification_client")) {
                 throw new MyCurrentException(
                     "103",
@@ -346,6 +357,12 @@ class CommunicationSaleService extends CommonService
             }
             $this->logger->error("Recharge persist failed: " . $ex->getMessage());
             throw $ex;
+        }
+
+        if ($this->isDispatchEnabled()) {
+            $this->messageBus->dispatch(new SaleRechargeMessage($recharge->getId()));
+        } else {
+            $this->logger->info("Communications dispatch disabled: recharge {$recharge->getId()} saved, pending dispatch.");
         }
 
         return $recharge;
@@ -634,7 +651,6 @@ class CommunicationSaleService extends CommonService
         if (!$user instanceof Account) {
             throw new AccessDeniedException();
         }
-        $balance = $this->balanceService->balance($user->getId());
         /** @var \App\Repository\CommunicationClientPackageRepository $clientPackageRepo */
         $clientPackageRepo = $this->em->getRepository(CommunicationClientPackage::class);
         $package = $clientPackageRepo->getPackageById(
@@ -643,9 +659,6 @@ class CommunicationSaleService extends CommonService
         );
         if (is_null($package)) {
             throw new MyCurrentException('COM003', 'The package don\'t exist');
-        }
-        if ($balance->amount < $package->getPriceClientPackage()?->getAmount()) {
-            throw new MyCurrentException('COM001', 'Insufficient balance');
         }
         $lastSequence = $this->configureSequence->getLastSequence(CommunicationSalePackage::class);
         $transactionId = (new \DateTime('now'))->format('ymd').'02'.str_pad(
@@ -680,26 +693,39 @@ class CommunicationSaleService extends CommonService
         $sale->setCommercialOffice($commercialOffice);
         $sale->setNationality($nationality);
 
+        $this->em->beginTransaction();
         try {
+            // Lock pesimista por cuenta + saldo-menos-reservado: cierra la
+            // condición de carrera entre ventas concurrentes de la misma
+            // cuenta. Ver docs/balance-check-architecture.md (Fase 1).
+            if (!$this->balanceService->hasAvailableBalance($user, $package->getPriceClientPackage()?->getAmount())) {
+                throw new MyCurrentException('COM001', 'Insufficient balance');
+            }
             $this->em->persist($sale);
             $comHistoric = new CommunicationSaleHistory();
             $comHistoric->setState(CommunicationStateEnum::PENDING);
             $comHistoric->setSale($sale);
             $this->em->persist($comHistoric);
             $this->em->flush();
-
-            if ($this->isDispatchEnabled()) {
-                $this->messageBus->dispatch(new SalePackageMessage($sale->getId()));
-            } else {
-                $this->logger->info("Communications dispatch disabled: sale package {$sale->getId()} saved, pending dispatch.");
-            }
+            $this->em->commit();
         } catch (\Exception $ex) {
+            $this->em->rollback();
+            if ($ex instanceof MyCurrentException) {
+                throw $ex;
+            }
             if (str_contains($ex->getMessage(), "unique_identification_client")) {
                 throw new MyCurrentException(
                     "102",
                     mb_convert_encoding(self::ETECSA_INFO_ERROR['102'], 'ISO-8859-1', 'UTF-8')
                 );
             }
+            throw $ex;
+        }
+
+        if ($this->isDispatchEnabled()) {
+            $this->messageBus->dispatch(new SalePackageMessage($sale->getId()));
+        } else {
+            $this->logger->info("Communications dispatch disabled: sale package {$sale->getId()} saved, pending dispatch.");
         }
 
         return $sale;

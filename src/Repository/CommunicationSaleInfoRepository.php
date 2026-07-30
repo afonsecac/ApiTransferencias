@@ -40,6 +40,29 @@ class CommunicationSaleInfoRepository extends ServiceEntityRepository
             ->getResult();
     }
 
+    /**
+     * Suma de total_price de ventas en curso (PENDING/RESERVED) de una cuenta:
+     * dinero ya comprometido que todavía no generó su BalanceOperation de
+     * débito (eso solo ocurre al completarse la venta, ver
+     * CommunicationSaleService::checkStatusOrder), así que hay que restarlo
+     * del saldo del ledger para saber cuánto queda realmente disponible.
+     * Ver docs/balance-check-architecture.md (Fase 1).
+     */
+    public function getReservedAmount(int $tenantId): float
+    {
+        $result = $this->createQueryBuilder('s')
+            ->select('COALESCE(SUM(s.totalPrice), 0) as reserved')
+            ->leftJoin('s.tenant', 't')
+            ->where('t.id = :tenantId')
+            ->andWhere('s.state IN (:states)')
+            ->setParameter('tenantId', $tenantId)
+            ->setParameter('states', [CommunicationStateEnum::PENDING, CommunicationStateEnum::RESERVED])
+            ->getQuery()
+            ->getSingleScalarResult();
+
+        return (float) $result;
+    }
+
     public function countPendingUndispatched(): int
     {
         return (int) $this->createQueryBuilder('s')
