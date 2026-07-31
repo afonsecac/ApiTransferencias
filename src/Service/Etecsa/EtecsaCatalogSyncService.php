@@ -30,6 +30,12 @@ class EtecsaCatalogSyncService extends CommonService
         EnvironmentRepository $environmentRepository,
         SysConfigRepository $sysConfigRepo,
         SerializerInterface $serializer,
+        // Se mantiene la dependencia directa del cliente ETECSA (en vez de pasar
+        // por ProviderRegistry) porque este servicio sincroniza catálogos
+        // GEOGRÁFICOS (nacionalidades/provincias/oficinas), que son exclusivos
+        // de ETECSA y no forman parte de la abstracción común de proveedor
+        // (ver GeoCatalogProviderInterface). El sync de productos (catálogo sí
+        // común entre proveedores) vive en syncProducts() más abajo.
         private readonly EtecsaGatewayClient $client,
     ) {
         parent::__construct($em, $security, $parameters, $mailer, $logger, $passwordHasher, $environmentRepository, $sysConfigRepo, $serializer);

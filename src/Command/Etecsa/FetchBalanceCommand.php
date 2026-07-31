@@ -3,8 +3,11 @@
 namespace App\Command\Etecsa;
 
 use App\Entity\Environment;
+use App\Enums\CommunicationProviderEnum;
+use App\Provider\Contract\ProviderBalanceInterface;
+use App\Provider\ProviderContextFactory;
+use App\Provider\ProviderRegistry;
 use App\Repository\EnvironmentRepository;
-use App\Service\Etecsa\EtecsaGatewayClient;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
@@ -19,7 +22,8 @@ use Symfony\Component\Console\Style\SymfonyStyle;
 class FetchBalanceCommand extends Command
 {
     public function __construct(
-        private readonly EtecsaGatewayClient $client,
+        private readonly ProviderRegistry $providerRegistry,
+        private readonly ProviderContextFactory $providerContextFactory,
         private readonly EnvironmentRepository $environmentRepository,
     ) {
         parent::__construct();
@@ -42,12 +46,18 @@ class FetchBalanceCommand extends Command
             return Command::FAILURE;
         }
 
-        $balance = $this->client->getBalance($env);
+        $context = $this->providerContextFactory->forEnvironmentType(
+            CommunicationProviderEnum::ETECSA,
+            $env->getType(),
+            $env->getId(),
+        );
+        $adapter = $this->providerRegistry->getFor(CommunicationProviderEnum::ETECSA, ProviderBalanceInterface::class);
+        $balance = $adapter->getPlatformBalance($context);
 
         $io->success("Saldo para entorno [{$env->getType()}] (ID {$env->getId()})");
         $io->table(['Campo', 'Valor'], [
-            ['CUP', number_format($balance->cupAmount, 2)],
-            ['USD', number_format($balance->usdAmount, 2)],
+            ['CUP', number_format($balance->amounts['CUP'] ?? 0.0, 2)],
+            ['USD', number_format($balance->amounts['USD'] ?? 0.0, 2)],
             ['Consultado', $balance->fetchedAt->format('Y-m-d H:i:s')],
         ]);
 

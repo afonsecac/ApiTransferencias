@@ -19,3 +19,7 @@ framework:
                 adapter: cache.app
                 default_lifetime: 3600
                 tags: true
+            cache.provider_routing:
+                adapter: cache.app
+                default_lifetime: 3600
+                tags: true

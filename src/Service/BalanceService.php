@@ -20,9 +20,12 @@ use App\Entity\User;
 use App\Enums\BalanceOperationEnum;
 use App\Enums\BalanceStateEnum;
 use App\DTO\Etecsa\EtecsaBalanceDto;
+use App\Enums\CommunicationProviderEnum;
 use App\Exception\MyCurrentException;
 use App\Message\BalanceMessage;
-use App\Service\Etecsa\EtecsaGatewayClient;
+use App\Provider\Contract\ProviderBalanceInterface;
+use App\Provider\ProviderContextFactory;
+use App\Provider\ProviderRegistry;
 use App\Repository\EnvironmentRepository;
 use App\Repository\SysConfigRepository;
 use Doctrine\DBAL\LockMode;
@@ -49,7 +52,8 @@ class BalanceService extends CommonService
         SysConfigRepository $sysConfigRepo,
         SerializerInterface $serializer,
         private readonly MessageBusInterface $messageBus,
-        private readonly EtecsaGatewayClient $etecsaClient,
+        private readonly ProviderRegistry $providerRegistry,
+        private readonly ProviderContextFactory $providerContextFactory,
     ) {
         parent::__construct(
             $em,
@@ -184,7 +188,22 @@ class BalanceService extends CommonService
             return null;
         }
 
-        return $this->etecsaClient->getBalance($environment);
+        // Este endpoint es histórico y específico de ETECSA (scope 'ET' arriba).
+        // Un endpoint de saldo multi-proveedor real (GET /admin/providers/{code}/balance)
+        // queda para la Fase 2/3 del enrutado por cliente.
+        $context = $this->providerContextFactory->forEnvironmentType(
+            CommunicationProviderEnum::ETECSA,
+            $environment->getType(),
+            $environment->getId(),
+        );
+        $adapter = $this->providerRegistry->getFor(CommunicationProviderEnum::ETECSA, ProviderBalanceInterface::class);
+        $result = $adapter->getPlatformBalance($context);
+
+        return new EtecsaBalanceDto(
+            cupAmount: $result->amounts['CUP'] ?? 0.0,
+            usdAmount: $result->amounts['USD'] ?? 0.0,
+            fetchedAt: $result->fetchedAt,
+        );
     }
 
     /**

@@ -34,6 +34,9 @@ services:
 #    App\State\CreateBeneficiaryCardProcessor:
 #         bind:
 #             $persistProcessor: '@api_platform.doctrine.orm.state.persist_processor'
+    _instanceof:
+        App\Provider\Contract\CommunicationProviderInterface:
+            tags: ['app.communication_provider']
     'App\Doctrine\CurrentUserExtension':
         tags:
             - { name: 'api_platform.doctrine.orm.query_extension.collection' }
