@@ -50,6 +50,7 @@ final class CsqCommunicationProvider implements CommunicationProviderInterface
             new ProviderConfigField('base_url', 'URL base', required: true, secret: false),
             new ProviderConfigField('username', 'Usuario (U)', required: true, secret: true),
             new ProviderConfigField('password', 'Password', required: true, secret: true),
+            new ProviderConfigField('terminal', 'Terminal ID', required: true, secret: false),
         ];
     }
 

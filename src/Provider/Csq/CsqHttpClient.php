@@ -16,20 +16,23 @@ use Symfony\Contracts\HttpClient\HttpClientInterface;
 
 /**
  * Cliente HTTP de bajo nivel para la API "eVSB" de CSQ
- * (https://csq-docs.apidog.io). A fecha de esta integración, la única
- * especificación pública disponible cubre el esquema de autenticación y un
- * endpoint de health-check (`/ping/{echo}`) — los métodos de negocio reales
- * (recarga, venta de paquetes, saldo, catálogo) se entregan por contrato/NDA
- * y todavía no están documentados aquí. Ver CsqCommunicationProvider — hoy
- * expone `getCapabilities(): []` a propósito, sin implementar ninguna
- * interfaz de negocio (RechargeProviderInterface, etc.) hasta tener esa
- * especificación.
+ * (https://csq-docs.apidog.io — el índice completo con los métodos de
+ * negocio, antes no enlazado desde las páginas iniciales, está en
+ * `https://csq-docs.apidog.io/llms.txt`). Solo `ping()` está implementado
+ * aquí; los métodos de negocio reales (recarga, venta de paquetes, saldo,
+ * catálogo) ya están documentados públicamente pero pendientes de
+ * implementar. Ver CsqCommunicationProvider — hoy expone
+ * `getCapabilities(): []` a propósito, sin implementar ninguna interfaz de
+ * negocio (RechargeProviderInterface, etc.) hasta que se construyan.
  *
  * Credenciales via ProviderCredentialsResolver, mismo esquema genérico
  * `provider.csq.{type}.{campo}` que ETECSA/DTOne, pero con los nombres
  * reales de CSQ (ver CsqCommunicationProvider::getConfigSchema()):
  * `username` = usuario "U" asignado por CSQ, `password` = usado para
- * calcular la firma SH.
+ * calcular la firma SH, `terminal` = terminalId asignado por CSQ — no es un
+ * header, es parámetro de path en los métodos de negocio (p.ej.
+ * `/pre-paid/recharge/products/{terminal}/{operatorId}/{account}`); `ping()`
+ * no lo necesita, pero ya se resuelve junto al resto de credenciales.
  */
 class CsqHttpClient
 {
