@@ -6,12 +6,15 @@ use App\DTO\AccountBalanceDto;
 use App\Entity\Account;
 use App\Entity\Client;
 use App\Entity\EmailNotification;
+use App\Provider\ProviderContextFactory;
+use App\Provider\ProviderRegistry;
+use App\Provider\ProviderResolver;
 use App\Repository\BalanceOperationRepository;
+use App\Repository\ClientProviderRoutingRepository;
 use App\Repository\EmailNotificationRepository;
 use App\Repository\EnvironmentRepository;
 use App\Repository\SysConfigRepository;
 use App\Service\BalanceService;
-use App\Service\Etecsa\EtecsaGatewayClient;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\EntityRepository;
 use PHPUnit\Framework\MockObject\MockObject;
@@ -50,7 +53,10 @@ class BalanceServiceTest extends TestCase
         $passwordHasher = $this->createMock(UserPasswordHasherInterface::class);
         $environmentRepository = $this->createMock(EnvironmentRepository::class);
         $serializer = $this->createMock(SerializerInterface::class);
-        $etecsaClient = $this->createMock(EtecsaGatewayClient::class);
+        $routingRepo = $this->createMock(ClientProviderRoutingRepository::class);
+        $providerResolver = new ProviderResolver($this->sysConfigRepo, $routingRepo, $this->logger);
+        $providerRegistry = new ProviderRegistry([]);
+        $providerContextFactory = new ProviderContextFactory($providerResolver);
 
         $this->service = new BalanceService(
             $this->em,
@@ -63,7 +69,8 @@ class BalanceServiceTest extends TestCase
             $this->sysConfigRepo,
             $serializer,
             $this->messageBus,
-            $etecsaClient,
+            $providerRegistry,
+            $providerContextFactory,
         );
     }
 

@@ -6,7 +6,7 @@ use App\Entity\Environment;
 use App\Message\Etecsa\SyncCatalogsMessage;
 use App\MessageHandler\Etecsa\SyncCatalogsMessageHandler;
 use App\Repository\EnvironmentRepository;
-use App\Service\Etecsa\EtecsaCatalogSyncService;
+use App\Service\Etecsa\EtecsaGeoCatalogSyncService;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
@@ -22,7 +22,7 @@ use Symfony\Component\Messenger\MessageBusInterface;
 class SyncCatalogsCommand extends Command
 {
     public function __construct(
-        private readonly EtecsaCatalogSyncService $syncService,
+        private readonly EtecsaGeoCatalogSyncService $syncService,
         private readonly EnvironmentRepository $environmentRepository,
         private readonly MessageBusInterface $bus,
     ) {

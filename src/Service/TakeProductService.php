@@ -8,8 +8,10 @@ use App\Entity\CommunicationPriceTable;
 use App\Entity\CommunicationProduct;
 use App\Exception\MyCurrentException;
 use App\Repository\EnvironmentRepository;
+use App\Enums\CommunicationProviderEnum;
 use App\Repository\SysConfigRepository;
-use App\Service\Etecsa\EtecsaCatalogSyncService;
+use App\Service\Etecsa\EtecsaGeoCatalogSyncService;
+use App\Service\Provider\CommunicationCatalogSyncService;
 use Doctrine\ORM\EntityManagerInterface;
 use Psr\Log\LoggerInterface;
 use Symfony\Bundle\SecurityBundle\Security;
@@ -19,8 +21,8 @@ use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 use Symfony\Component\Serializer\SerializerInterface;
 
 /**
- * @deprecated Usar EtecsaCatalogSyncService directamente.
- * Los métodos takeProduct() y takeOtherData() delegan en EtecsaCatalogSyncService.
+ * @deprecated Usar CommunicationCatalogSyncService/EtecsaGeoCatalogSyncService directamente.
+ * Los métodos takeProduct() y takeOtherData() delegan en ellos.
  * Este servicio se mantiene para compatibilidad con app:takeOther:command y app:takeProduct.
  */
 class TakeProductService extends CommonService
@@ -35,14 +37,15 @@ class TakeProductService extends CommonService
         EnvironmentRepository $environmentRepository,
         SysConfigRepository $sysConfigRepo,
         SerializerInterface $serializer,
-        private readonly EtecsaCatalogSyncService $catalogSyncService,
+        private readonly EtecsaGeoCatalogSyncService $geoCatalogSyncService,
+        private readonly CommunicationCatalogSyncService $catalogSyncService,
     ) {
         parent::__construct($em, $security, $parameters, $mailer, $logger, $passwordHasher, $environmentRepository, $sysConfigRepo, $serializer);
     }
 
 
     /**
-     * @deprecated Usar EtecsaCatalogSyncService::syncProducts()
+     * @deprecated Usar CommunicationCatalogSyncService::syncProducts()
      */
     public function takeProduct(string $env): array
     {
@@ -55,7 +58,7 @@ class TakeProductService extends CommonService
 
             $items = 0;
             foreach ($environments as $item) {
-                $result = $this->catalogSyncService->syncProducts($item);
+                $result = $this->catalogSyncService->syncProducts(CommunicationProviderEnum::ETECSA, $item);
                 $items += $result->created;
             }
 
@@ -68,7 +71,7 @@ class TakeProductService extends CommonService
     }
 
     /**
-     * @deprecated Usar EtecsaCatalogSyncService::syncNationalities() / syncProvinces() / syncOffices()
+     * @deprecated Usar EtecsaGeoCatalogSyncService::syncNationalities() / syncProvinces() / syncOffices()
      */
     public function takeOtherData(): void
     {
@@ -78,9 +81,9 @@ class TakeProductService extends CommonService
         ]);
 
         foreach ($environments as $item) {
-            $this->catalogSyncService->syncNationalities($item);
-            $this->catalogSyncService->syncProvinces($item);
-            $this->catalogSyncService->syncOffices($item);
+            $this->geoCatalogSyncService->syncNationalities($item);
+            $this->geoCatalogSyncService->syncProvinces($item);
+            $this->geoCatalogSyncService->syncOffices($item);
         }
     }
 

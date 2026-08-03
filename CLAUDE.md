@@ -275,6 +275,15 @@ public function create(CreateClientPackageDto $dto): JsonResponse
 
 ---
 
+### 11. Toda funcionalidad nueva requiere pantalla de configuración + tests
+
+Ninguna funcionalidad backend administrable (credenciales, parámetros, catálogos, reglas de enrutado, etc.) se considera terminada sin:
+
+1. **Tests unitarios y/o funcionales** del servicio/controlador nuevo (estilo `tests/Service/*Test.php` / `tests/Controller/*ControllerTest.php`), corriendo en verde con `php bin/phpunit --no-coverage` y `vendor/bin/phpstan analyse` limpio.
+2. **Una pantalla propia en el dashboard** (`dashboard-cm`, repo hermano) si la funcionalidad expone algo administrable — nunca dejar un endpoint nuevo sin forma de usarlo desde la UI salvo que sea explícitamente interno/CLI. Ver la convención de esa pantalla (ruta + item de menú vía migración de `navigation_item` + tests Vitest + e2e Playwright) en `CLAUDE.md` de `dashboard-cm`.
+
+---
+
 ## Archivos de referencia
 
 | Propósito | Archivo |

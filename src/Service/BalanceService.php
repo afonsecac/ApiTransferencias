@@ -20,11 +20,15 @@ use App\Entity\User;
 use App\Enums\BalanceOperationEnum;
 use App\Enums\BalanceStateEnum;
 use App\DTO\Etecsa\EtecsaBalanceDto;
+use App\Enums\CommunicationProviderEnum;
 use App\Exception\MyCurrentException;
 use App\Message\BalanceMessage;
-use App\Service\Etecsa\EtecsaGatewayClient;
+use App\Provider\Contract\ProviderBalanceInterface;
+use App\Provider\ProviderContextFactory;
+use App\Provider\ProviderRegistry;
 use App\Repository\EnvironmentRepository;
 use App\Repository\SysConfigRepository;
+use Doctrine\DBAL\LockMode;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\EntityNotFoundException;
 use Psr\Log\LoggerInterface;
@@ -48,7 +52,8 @@ class BalanceService extends CommonService
         SysConfigRepository $sysConfigRepo,
         SerializerInterface $serializer,
         private readonly MessageBusInterface $messageBus,
-        private readonly EtecsaGatewayClient $etecsaClient,
+        private readonly ProviderRegistry $providerRegistry,
+        private readonly ProviderContextFactory $providerContextFactory,
     ) {
         parent::__construct(
             $em,
@@ -183,7 +188,22 @@ class BalanceService extends CommonService
             return null;
         }
 
-        return $this->etecsaClient->getBalance($environment);
+        // Este endpoint es histórico y específico de ETECSA (scope 'ET' arriba).
+        // Un endpoint de saldo multi-proveedor real (GET /admin/providers/{code}/balance)
+        // queda para la Fase 2/3 del enrutado por cliente.
+        $context = $this->providerContextFactory->forEnvironmentType(
+            CommunicationProviderEnum::ETECSA,
+            $environment->getType(),
+            $environment->getId(),
+        );
+        $adapter = $this->providerRegistry->getFor(CommunicationProviderEnum::ETECSA, ProviderBalanceInterface::class);
+        $result = $adapter->getPlatformBalance($context);
+
+        return new EtecsaBalanceDto(
+            cupAmount: $result->amounts['CUP'] ?? 0.0,
+            usdAmount: $result->amounts['USD'] ?? 0.0,
+            fetchedAt: $result->fetchedAt,
+        );
     }
 
     /**
@@ -237,6 +257,35 @@ class BalanceService extends CommonService
             $limit,
             $this->security->isGranted('ROLE_ADMIN') ? null : $companyId
         );
+    }
+
+    /**
+     * Chequeo+reserva atómico de saldo, para cerrar la condición de carrera
+     * entre dos ventas concurrentes de la misma cuenta (ver
+     * docs/balance-check-architecture.md, Fase 1). El lock pesimista sobre
+     * Account sirve de mutex por cuenta; el saldo disponible resta las
+     * ventas ya en curso (PENDING/RESERVED) porque el débito real
+     * (BalanceOperation) solo se crea al completarse la venta —
+     * potencialmente mucho después de este chequeo, ver
+     * CommunicationSaleService::checkStatusOrder.
+     *
+     * Debe llamarse dentro de una transacción abierta por el caller, que
+     * debe permanecer abierta hasta persistir la venta: liberar el lock
+     * antes (con un commit intermedio) reabre la misma condición de carrera
+     * que este método existe para cerrar.
+     */
+    public function hasAvailableBalance(Account $account, float $amount): bool
+    {
+        $this->em->lock($account, LockMode::PESSIMISTIC_WRITE);
+
+        /** @var \App\Repository\BalanceOperationRepository $balanceRepo */
+        $balanceRepo = $this->em->getRepository(BalanceOperation::class);
+        $ledgerBalance = $balanceRepo->getBalanceOutput($account->getId());
+        /** @var \App\Repository\CommunicationSaleInfoRepository $saleInfoRepo */
+        $saleInfoRepo = $this->em->getRepository(CommunicationSaleInfo::class);
+        $reserved = $saleInfoRepo->getReservedAmount($account->getId());
+
+        return ($ledgerBalance - $reserved) >= $amount;
     }
 
     public function createSaleBalance(Account $tenant, CommunicationSaleInfo $sale): void

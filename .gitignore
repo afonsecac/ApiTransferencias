@@ -38,3 +38,11 @@ composer.lock
 .mcp.json
 ###< mcp ###
 Cubacel Ventas Online. Modelo de Conexión para Distribuidores del Servic_V4.1.pdf
+
+###> ops: scripts con credenciales embebidas ###
+/scripts/phase*.py
+###< ops: scripts con credenciales embebidas ###
+
+###> symfony secrets (vault dev sin usar) ###
+/config/secrets/dev/
+###< symfony secrets (vault dev sin usar) ###

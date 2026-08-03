@@ -54,6 +54,29 @@ class CommunicationPricePackage
     #[ORM\Column(length: 500, nullable: true)]
     private ?string $knowMore = null;
 
+    /**
+     * Tasa aplicada al convertir el costo mayorista del proveedor a la
+     * moneda del cliente (snapshot, no FK — ver ClientCatalogImportService).
+     * Nulo si no hizo falta convertir o si la conversión falló.
+     */
+    #[ORM\Column(nullable: true)]
+    private ?float $conversionRate = null;
+
+    /**
+     * Fecha de referencia (rate_date de Frankfurter) de la tasa aplicada.
+     */
+    #[ORM\Column(type: 'date_immutable', nullable: true)]
+    private ?\DateTimeImmutable $conversionRateDate = null;
+
+    /**
+     * true solo si esta fila la creó ClientCatalogImportService. El
+     * refresco periódico (ProviderCatalogRefreshService) solo actualiza
+     * filas con este flag — nunca toca una creada/editada a mano por un
+     * admin desde el dashboard.
+     */
+    #[ORM\Column]
+    private bool $autoManaged = false;
+
     #[ORM\Column]
     private array $dataInfo = [];
 
@@ -246,6 +269,42 @@ class CommunicationPricePackage
     public function setKnowMore(?string $knowMore): static
     {
         $this->knowMore = $knowMore;
+
+        return $this;
+    }
+
+    public function getConversionRate(): ?float
+    {
+        return $this->conversionRate;
+    }
+
+    public function setConversionRate(?float $conversionRate): static
+    {
+        $this->conversionRate = $conversionRate;
+
+        return $this;
+    }
+
+    public function getConversionRateDate(): ?\DateTimeImmutable
+    {
+        return $this->conversionRateDate;
+    }
+
+    public function setConversionRateDate(?\DateTimeImmutable $conversionRateDate): static
+    {
+        $this->conversionRateDate = $conversionRateDate;
+
+        return $this;
+    }
+
+    public function isAutoManaged(): bool
+    {
+        return $this->autoManaged;
+    }
+
+    public function markAutoManaged(): static
+    {
+        $this->autoManaged = true;
 
         return $this;
     }
