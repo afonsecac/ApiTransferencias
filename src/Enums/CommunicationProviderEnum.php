@@ -11,6 +11,7 @@ enum CommunicationProviderEnum: string
 {
     case ETECSA = 'ETECSA';
     case DTONE = 'DTONE';
+    case CSQ = 'CSQ';
 
     /**
      * @return list<string>
