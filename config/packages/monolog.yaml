@@ -2,6 +2,9 @@ monolog:
     channels:
         - deprecation # Deprecations are logged in the dedicated "deprecation" channel when it exists
         - etecsa
+        - dtone
+        - csq
+        - provider
 
 when@dev:
     monolog:
@@ -33,6 +36,21 @@ when@dev:
                 path: '%kernel.logs_dir%/etecsa.log'
                 level: debug
                 channels: [ etecsa ]
+            dtone_log:
+                type: stream
+                path: '%kernel.logs_dir%/dtone.log'
+                level: debug
+                channels: [ dtone ]
+            csq_log:
+                type: stream
+                path: '%kernel.logs_dir%/csq.log'
+                level: debug
+                channels: [ csq ]
+            provider_log:
+                type: stream
+                path: '%kernel.logs_dir%/provider.log'
+                level: debug
+                channels: [ provider ]
 
 
 when@test:
@@ -74,6 +92,21 @@ when@prod:
                 path: '%kernel.logs_dir%/etecsa.log'
                 level: info
                 channels: [ etecsa ]
+            dtone_log:
+                type: stream
+                path: '%kernel.logs_dir%/dtone.log'
+                level: info
+                channels: [ dtone ]
+            csq_log:
+                type: stream
+                path: '%kernel.logs_dir%/csq.log'
+                level: info
+                channels: [ csq ]
+            provider_log:
+                type: stream
+                path: '%kernel.logs_dir%/provider.log'
+                level: info
+                channels: [ provider ]
             nested:
                 type: stream
                 path: php://stderr

@@ -16,13 +16,25 @@ use App\Entity\CommunicationSaleInfo;
 use App\Entity\CommunicationSalePackage;
 use App\Entity\CommunicationSaleRecharge;
 use App\Entity\Environment;
+use App\Enums\CommunicationProviderEnum;
 use App\Enums\CommunicationStateEnum;
 use App\Enums\NotificationLevelEnum;
 use App\Enums\NotificationTypeEnum;
+use App\Enums\ProviderOutcomeEnum;
 use App\Exception\MyCurrentException;
 use App\Message\CheckSaleMessage;
 use App\Message\SalePackageMessage;
 use App\Message\SaleRechargeMessage;
+use App\Provider\Contract\PackageCustomer;
+use App\Provider\Contract\PackageSaleProviderInterface;
+use App\Provider\Contract\PackageSalePoint;
+use App\Provider\Contract\PackageSaleRequest;
+use App\Provider\Contract\ProviderStatusQuery;
+use App\Provider\Contract\RechargeProviderInterface;
+use App\Provider\Contract\RechargeRequest;
+use App\Provider\ProviderContextFactory;
+use App\Provider\ProviderRegistry;
+use App\Provider\ProviderResolver;
 use App\Repository\BalanceOperationRepository;
 use App\Repository\EnvironmentRepository;
 use App\Repository\SysConfigRepository;
@@ -31,73 +43,16 @@ use Doctrine\ORM\EntityManagerInterface;
 use Psr\Log\LoggerInterface;
 use Symfony\Bundle\SecurityBundle\Security;
 use Symfony\Component\DependencyInjection\ParameterBag\ParameterBagInterface;
-use Symfony\Component\HttpClient\Exception\ClientException;
-use Symfony\Component\HttpClient\Exception\TimeoutException;
 use Symfony\Component\Mailer\MailerInterface;
 use Symfony\Component\Messenger\MessageBusInterface;
 use Symfony\Component\Messenger\Stamp\DelayStamp;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 use Symfony\Component\Serializer\SerializerInterface;
-use App\Service\Etecsa\EtecsaGatewayClient;
-use Symfony\Contracts\HttpClient\Exception\ClientExceptionInterface;
-use Symfony\Contracts\HttpClient\Exception\RedirectionExceptionInterface;
-use Symfony\Contracts\HttpClient\Exception\ServerExceptionInterface;
 use Symfony\Component\HttpFoundation\Response;
-use Symfony\Contracts\HttpClient\Exception\TransportExceptionInterface;
 use App\Entity\User;
 
 class CommunicationSaleService extends CommonService
 {
-    const ETECSA_INFO_ERROR = [
-
-        '100' => 'No se especificaron productos para la venta',
-        '101' => 'Se enviÃ³ una Recarga junto a compra de artÃ­culos solamente.',
-        '102' => 'Se enviÃ³ mÃ¡s de una ActivaciÃ³n en la misma transacciÃ³n.',
-        '103' => 'Se enviÃ³ mÃ¡s de una Recarga en la misma transacciÃ³n.',
-        '104' => 'Los datos del cliente no son correctos.',
-        '105' => 'Monto de la recarga asociada a una ActivaciÃ³n no permitido',
-        '107' => 'El identificador de la transacciÃ³n no es vÃ¡lido',
-        '108' => 'Monto de la recarga no permitido',
-        '109' => 'El paquete especificado no estÃ¡ habilitado',
-        '110' => 'El paquete especificado no existe',
-        '111' => 'No fue especificado un paquete para la venta',
-        '112' => 'Los datos para la modificacion de la venta no son vÃ¡lidos',
-        '151' => 'El numero de telefono no existe',
-        '152' => 'Servicio celular del cliente en estado no vÃ¡lido para ser recargado',
-        '153' => 'Tipo de servicio celular del cliente no vÃ¡lido para ser recargado',
-        '198' => 'CombinaciÃ³n de productos no vÃ¡lida',
-        '199' => 'Datos de la venta incorrectos',
-        '200' => 'La venta de productos no pudo ejecutarse satisfactoriamente',
-        '201' => 'La ActivaciÃ³n no pudo ejecutarse satisfactoriamente',
-        '202' => 'La Recarga no pudo ejecutarse satisfactoriamente.',
-        '203' => 'La venta de Terminales no pudo ejecutarse satisfactoriamente',
-        '204' => 'La venta de Accesorios no pudo ejecutarse satisfactoriamente',
-        '205' => 'No se pudo cambiar la contraseÃ±a de usuario',
-        '206' => 'La venta del paquete no pudo ejecutarse satisfactoriamente',
-        '207' => 'No se pudieron modificar los datos de venta',
-        '208' => 'No se pudo cancelar la venta',
-        '209' => 'No se pudo realizar el chequeo de los datos de la activaciÃ³n de lÃ­nea celular',
-        '300' => 'No se pudo obtener el estado de la venta',
-        '301' => 'No se pudieron obtener los datos de la venta',
-        '302' => 'No se pudieron obtener los datos de las ventas',
-        '303' => 'No se pudieron obtener los datos de las oficinas comerciales',
-        '304' => 'No se pudieron obtener los privilegios del usuario',
-        '305' => 'No se pudieron obtener los datos de las provincias',
-        '306' => 'No se pudieron obtener los datos del distribuidor',
-        '307' => 'No se pudieron obtener los paquetes para la venta',
-        '308' => 'No se pudieron obtener los elementos de paquetes',
-        '309' => 'No se pudieron obtener los datos de los tipos de identificaciÃ³n',
-        '310' => 'No se pudieron obtener los datos de los Municipios',
-        '311' => 'No se pudieron obtener los datos de las Nacionalidades',
-        '901' => 'El distribuidor no tiene permitida la venta de Activaciones',
-        '902' => 'El distribuidor no tiene permitida la venta de Recargas',
-        '903' => 'El distribuidor no tiene permitida la venta de Terminales y Accesorios',
-        '904' => 'El distribuidor no tiene permitida la venta de Activaciones Temportales TURISTA',
-        '905' => 'El distribuidor no tiene permitida la venta de Recursos TURISTA',
-        '-1' => 'Su transaccion se esta procesando',
-        '-2' => 'Su orden aun se esta procesando',
-        '-3' => 'Ha ocurrido una falla durante el proceso de procesamiento de la recarga. Pronto nos pondremos en contacto.',
-    ];
 
     /**
      * @param \Doctrine\ORM\EntityManagerInterface $em
@@ -124,7 +79,9 @@ class CommunicationSaleService extends CommonService
         EnvironmentRepository $environmentRepository,
         SysConfigRepository $sysConfigRepo,
         SerializerInterface $serializer,
-        private readonly EtecsaGatewayClient $etecsaClient,
+        private readonly ProviderRegistry $providerRegistry,
+        private readonly ProviderResolver $providerResolver,
+        private readonly ProviderContextFactory $providerContextFactory,
         private readonly ConfigureSequenceService $configureSequence,
         private readonly MessageBusInterface $messageBus,
         private readonly HistoricalSaleService $historicalSaleService,
@@ -230,11 +187,18 @@ class CommunicationSaleService extends CommonService
             throw new MyCurrentException('COM007', 'The promotion is not active to reserves');
         }
 
+        $this->assertRechargeableProduct($package);
+
+        // El proveedor es propiedad del producto, no de la cuenta — se
+        // valida y se congela ANTES de construir la venta (ver
+        // resolveAndGuardProvider()).
+        $productProvider = $this->resolveAndGuardProvider($user, $package);
 
         $recharge = new CommunicationSaleRecharge();
         $recharge->setTenant($user);
         $recharge->setState(CommunicationStateEnum::RESERVED);
         $recharge->setStateProcess(CommunicationStateEnum::CREATED->value);
+        $recharge->setProvider($productProvider);
         $recharge->setPromotionId($reserveDto->getPromotionId());
         $recharge->setPackageId($reserveDto->getPackageId());
         $recharge->setPhoneNumber($reserveDto->getPhoneNumber());
@@ -307,6 +271,8 @@ class CommunicationSaleService extends CommonService
             throw new MyCurrentException('COM003', 'The package don\'t exist');
         }
 
+        $this->assertRechargeableProduct($package);
+
         $lastSequence = $this->configureSequence->getLastSequence(CommunicationSaleRecharge::class);
         $transactionId = (new \DateTime('now'))->format('ymd').'01'.str_pad(
                 (string) $lastSequence,
@@ -314,6 +280,11 @@ class CommunicationSaleService extends CommonService
                 '0',
                 STR_PAD_LEFT
             );
+        // El proveedor es propiedad del producto, no de la cuenta — se
+        // valida y se congela ANTES de construir la venta (ver
+        // resolveAndGuardProvider()).
+        $productProvider = $this->resolveAndGuardProvider($user, $package);
+
         $recharge->setTransactionId($transactionId);
         $recharge->setPackage($package);
         $recharge->setTenant($user);
@@ -322,6 +293,7 @@ class CommunicationSaleService extends CommonService
         $recharge->getCalculatePrice();
         $recharge->setState(CommunicationStateEnum::PENDING);
         $recharge->setStateProcess(CommunicationStateEnum::CREATED->value);
+        $recharge->setProvider($productProvider);
 
         $this->em->beginTransaction();
         try {
@@ -344,16 +316,10 @@ class CommunicationSaleService extends CommonService
                 throw $ex;
             }
             if (str_contains($ex->getMessage(), "unique_identification_client")) {
-                throw new MyCurrentException(
-                    "103",
-                    mb_convert_encoding(self::ETECSA_INFO_ERROR['103'], 'ISO-8859-1', 'UTF-8')
-                );
+                throw new MyCurrentException("103", 'Se envió más de una Recarga en la misma transacción.');
             }
             if (str_contains($ex->getMessage(), "unique_transaction_id")) {
-                throw new MyCurrentException(
-                    "103",
-                    mb_convert_encoding(self::ETECSA_INFO_ERROR['103'], 'ISO-8859-1', 'UTF-8')
-                );
+                throw new MyCurrentException("103", 'Se envió más de una Recarga en la misma transacción.');
             }
             $this->logger->error("Recharge persist failed: " . $ex->getMessage());
             throw $ex;
@@ -463,7 +429,6 @@ class CommunicationSaleService extends CommonService
 
                     return;
                 }
-                $urlRecharge = $environment->getBasePath().'/sale/recharge';
                 $productCode = $package?->getPriceClientPackage()?->getProduct()?->getPackageId();
                 if (!is_null($saleRecharge->getPromotionId())) {
                     /** @var \App\Repository\CommunicationPromotionsRepository $promotionRepo */
@@ -485,10 +450,21 @@ class CommunicationSaleService extends CommonService
 
                 $destination = (object)$package?->getDestination();
 
+                // El proveedor se resuelve ANTES de aplicar cualquier
+                // sustitución de sandbox: el bloque de abajo es una
+                // convención de prueba propia de ETECSA (código de producto
+                // fijo "100" + número de teléfono de prueba), no una regla
+                // general de "entorno TEST" — aplicarla a otro proveedor
+                // (p.ej. DTOne) le envía un product_id inventado y DTOne lo
+                // rechaza como "Product is not available in your account"
+                // (confirmado en vivo el 2026-08-03: nunca era un problema de
+                // permisos de la cuenta de DTOne).
+                $provider = $this->providerResolver->resolveForSale($saleRecharge);
+
                 $phoneLength = strlen($saleRecharge->getPhoneNumber());
                 $checkPhone = substr($saleRecharge->getPhoneNumber(), $phoneLength - 2, $phoneLength);
                 $phoneNumber = $saleRecharge->getPhoneNumber();
-                if ($environment->getType() === 'TEST') {
+                if ($environment->getType() === 'TEST' && $provider === CommunicationProviderEnum::ETECSA) {
                     $phoneNumber = $checkPhone === "60" ? $this->parameters->get(
                         'app.phoneNumber'
                     ) : $saleRecharge->getPhoneNumber();
@@ -503,42 +479,37 @@ class CommunicationSaleService extends CommonService
                     'environment' => $environment->getType(),
                 ];
 
-                $rechargeInfo = $this->etecsaClient->recharge(
-                    $environment,
-                    $phoneNumber,
-                    (int) $productCode,
-                    (float) $destination->amount,
-                    $saleRecharge->getTransactionId(),
+                $adapter = $this->providerRegistry->getFor($provider, RechargeProviderInterface::class);
+                $context = $this->providerContextFactory->forSale($saleRecharge);
+                $request = new RechargeRequest(
+                    transactionId: $saleRecharge->getTransactionId(),
+                    phoneNumber: $phoneNumber,
+                    productExternalId: (string) $productCode,
+                    destinationAmount: (float) $destination->amount,
+                    destinationUnit: $saleRecharge->getCurrency() ?? 'CUP',
                 );
-                $saleRecharge->setTransactionStatus($rechargeInfo);
+
+                $dispatchResult = $adapter->recharge($context, $request);
+                $saleRecharge->setTransactionStatus($dispatchResult->raw);
                 $saleRecharge->setStateProcess(CommunicationStateEnum::PENDING->value);
-                $rechargeResult = (object)((object)$rechargeInfo)->result;
-                if ((int)$rechargeResult->code !== -1) {
-                    $code = $rechargeResult->code;
-                    $errMsg = null;
-                    if (is_numeric($code)) {
-                        $errMsg = self::ETECSA_INFO_ERROR[$code];
-                    }
+
+                if ($dispatchResult->outcome === ProviderOutcomeEnum::REJECTED) {
                     $saleRecharge->setState(CommunicationStateEnum::REJECTED);
                     $this->historicalSaleService->createHistoricalCommunication(
                         $saleRecharge->getId(),
                         CommunicationStateEnum::REJECTED
                     );
 
-
-                    if ($errMsg) {
-                        $errMsg = mb_convert_encoding($errMsg, 'ISO-8859-1', 'UTF-8');
-                    }
                     $comInfo = [
                         'error' => [
                             'message' => sprintf(
                                 "action=Recharge, Message=%s",
-                                $errMsg ?? 'Unexpected message during the sale'
+                                $dispatchResult->message ?? 'Unexpected message during the sale'
                             ),
                             'orderID' => $orderId,
                             'code' => sprintf(
                                 "COM%s",
-                                $code
+                                $dispatchResult->providerCode
                             ),
                             'transactionID' => $saleRecharge->getTransactionId(),
                             'body' => $body,
@@ -548,56 +519,21 @@ class CommunicationSaleService extends CommonService
                     $saleRecharge->setTransactionStatus($comInfo);
                 }
                 $this->em->flush();
-                // Solo despachar check si la venta sigue pendiente (no si fue rechazada)
-                if ($saleRecharge->getState() === CommunicationStateEnum::PENDING) {
+                // Solo despachar check si el envío fue aceptado (ACCEPTED). Si el
+                // resultado es UNKNOWN (timeout/error de transporte: no sabemos si
+                // la petición llegó al proveedor) no se reprograma nada aquí — el
+                // cron de pendientes (CheckStatusTask) la recogerá más tarde.
+                // Jamás debe reintentarse el ENVÍO mismo tras un UNKNOWN: eso
+                // podría cobrar dos veces la misma recarga.
+                if ($dispatchResult->outcome === ProviderOutcomeEnum::ACCEPTED) {
                     $this->messageBus->dispatch(new CheckSaleMessage($saleId), [new DelayStamp(2000)]);
                 }
-            } catch (ClientExceptionInterface|TimeoutException $exc) {
-                // Timeout/error de cliente: la petición pudo haber llegado a ETECSA.
-                // NO resetear stateProcess a CREATED para evitar reenvío.
-                $saleRecharge->setState(CommunicationStateEnum::PENDING);
-                $saleRecharge->setStateProcess(CommunicationStateEnum::PENDING->value);
-                $comInfo = [
-                    'error' => [
-                        'message' => sprintf(
-                            "action=Recharge, Message=%s",
-                            'The provider server no response'
-                        ),
-                        'orderID' => $orderId,
-                        'code' => 'COM004',
-                        'transactionID' => $saleRecharge->getTransactionId(),
-                        'body' => $body,
-                        'bodyCheck' => $bodyCheck,
-                    ],
-                ];
-                $this->historicalSaleService->createHistoricalCommunication(
-                    $saleId,
-                    CommunicationStateEnum::PENDING,
-                    $comInfo
-                );
-                $saleRecharge->setTransactionStatus($comInfo);
-            } catch (RedirectionExceptionInterface|ServerExceptionInterface|TransportExceptionInterface $exc) {
-                // Error de red/servidor: la petición pudo haber llegado a ETECSA.
-                // NO resetear stateProcess a CREATED para evitar reenvío.
-                $saleRecharge->setState(CommunicationStateEnum::PENDING);
-                $saleRecharge->setStateProcess(CommunicationStateEnum::PENDING->value);
-                $comInfo = [
-                    'error' => [
-                        'message' => sprintf(
-                            "action=Recharge, Message=%s",
-                            'Unexpected error during sale'
-                        ),
-                        'code' => 'COM000',
-                        'transactionID' => $saleRecharge->getTransactionId(),
-                    ],
-                ];
-                $this->historicalSaleService->createHistoricalCommunication(
-                    $saleId,
-                    CommunicationStateEnum::PENDING,
-                    $comInfo
-                );
-                $saleRecharge->setTransactionStatus($comInfo);
             } catch (\Exception $ex) {
+                // Los errores de transporte del proveedor ya vienen absorbidos como
+                // ProviderOutcomeEnum::UNKNOWN por el adaptador (ver
+                // EtecsaCommunicationProvider::recharge()) y no llegan aquí. Este
+                // catch cubre errores inesperados fuera de la llamada al proveedor
+                // (persistencia, etc.), igual que el catch genérico que ya existía.
                 $saleRecharge->setState(CommunicationStateEnum::PENDING);
                 $saleRecharge->setStateProcess(CommunicationStateEnum::PENDING->value);
                 $comInfo = [
@@ -667,6 +603,11 @@ class CommunicationSaleService extends CommonService
                 '0',
                 STR_PAD_LEFT
             );
+        // El proveedor es propiedad del producto, no de la cuenta — se
+        // valida y se congela ANTES de construir la venta (ver
+        // resolveAndGuardProvider()).
+        $productProvider = $this->resolveAndGuardProvider($user, $package);
+
         $sale->setTransactionId($transactionId);
         $sale->setPackage($package);
         $sale->setTenant($user);
@@ -675,6 +616,7 @@ class CommunicationSaleService extends CommonService
         $sale->getCalculatePrice();
         $sale->setState(CommunicationStateEnum::PENDING);
         $sale->setStateProcess(CommunicationStateEnum::CREATED->value);
+        $sale->setProvider($productProvider);
 
         $commercialOffice = $this->em->getRepository(CommunicationOffice::class)->findOneBy([
             'id' => $sale->commercialOfficeId,
@@ -714,10 +656,7 @@ class CommunicationSaleService extends CommonService
                 throw $ex;
             }
             if (str_contains($ex->getMessage(), "unique_identification_client")) {
-                throw new MyCurrentException(
-                    "102",
-                    mb_convert_encoding(self::ETECSA_INFO_ERROR['102'], 'ISO-8859-1', 'UTF-8')
-                );
+                throw new MyCurrentException("102", 'Se envió más de una Activación en la misma transacción.');
             }
             throw $ex;
         }
@@ -775,48 +714,51 @@ class CommunicationSaleService extends CommonService
                 $this->failSale($sale, 'Missing package');
                 return;
             }
-            $urlSale = $user->getEnvironment()?->getBasePath().'/sale/package';
-
             $officeComId = $commercialOffice->getComId();
             $packageProductId = $package->getPriceClientPackage()?->getProduct()?->getPackageId();
 
-            $body = [
-                'client' => [
-                    'id' => $sale->getIdentificationNumber(),
-                    'name' => $sale->getName(),
-                    'identificationType' => $sale->getIdentificationType() ?? 1,
-                    'arrivalDate' => $sale->getArrivalAt() ? $sale->getArrivalAt()->format('Y-m-d') : null,
-                    'isAirport' => $commercialOffice->isIsAirport(),
-                    'commercialOfficeId' => $officeComId !== null ? (int) $officeComId : null,
-                    'provinceId' => $commercialOffice->getProvince()?->getComId(),
-                    'nationality' => $nationality->getComId(),
-                ],
-                'packageInfo' => [
-                    'id' => $packageProductId !== null ? (string) $packageProductId : null,
-                    'packageType' => $package->getPriceClientPackage()?->getProduct()?->getPackageType(),
-                ],
-                'transactionId' => $transactionId,
-                'environment' => $user->getEnvironment()?->getType(),
-            ];
-
-            $saleInfo = $this->etecsaClient->sellPackage(
-                $user->getEnvironment(),
-                $transactionId,
-                $body['packageInfo'],
-                $body['client'],
+            $provider = $this->providerResolver->resolveForSale($sale);
+            $adapter = $this->providerRegistry->getFor($provider, PackageSaleProviderInterface::class);
+            $context = $this->providerContextFactory->forSale($sale);
+            $request = new PackageSaleRequest(
+                transactionId: $transactionId,
+                productExternalId: $packageProductId !== null ? (string) $packageProductId : '',
+                productKind: $package->getPriceClientPackage()?->getProduct()?->getPackageType(),
+                phoneNumber: null,
+                customer: new PackageCustomer(
+                    identificationNumber: $sale->getIdentificationNumber(),
+                    name: $sale->getName(),
+                    identificationType: $sale->getIdentificationType() ?? 1,
+                    arrivalDate: $sale->getArrivalAt(),
+                    nationalityExternalId: $nationality->getComId(),
+                ),
+                salePoint: new PackageSalePoint(
+                    commercialOfficeExternalId: $officeComId !== null ? (int) $officeComId : null,
+                    provinceExternalId: $commercialOffice->getProvince()?->getComId(),
+                    isAirport: $commercialOffice->isIsAirport(),
+                ),
             );
-            $saleResult = (object)((object)$saleInfo)->result;
-            $code = null;
-            if (property_exists($saleResult, 'code')) {
-                $code = (int) $saleResult->code;
-            }
-            if ($code === -1) {
+
+            $dispatchResult = $adapter->sellPackage($context, $request);
+
+            if ($dispatchResult->outcome === ProviderOutcomeEnum::ACCEPTED) {
                 $sale->setState(CommunicationStateEnum::PENDING);
-            } elseif (isset($code) && $code > 0) {
+            } elseif ($dispatchResult->outcome === ProviderOutcomeEnum::FAILED) {
                 $sale->setState(CommunicationStateEnum::FAILED);
             }
-            $sale->setTransactionStatus($saleInfo);
+            $sale->setTransactionStatus($dispatchResult->raw);
             $sale->setStateProcess(CommunicationStateEnum::PENDING->value);
+
+            if ($dispatchResult->outcome === ProviderOutcomeEnum::UNKNOWN) {
+                // Transporte falló: no sabemos si el proveedor recibió la venta.
+                // No se reprograma el check inmediato — el cron de pendientes la
+                // recogerá más tarde, igual que ante cualquier excepción antes.
+                $this->em->flush();
+                $this->logger->error("Sale {$saleId} execution error: " . ($dispatchResult->message ?? 'unknown transport error'));
+
+                return;
+            }
+
             $this->em->flush();
             $this->messageBus->dispatch(new CheckSaleMessage($sale->getId()), [new DelayStamp(2000)]);
         } catch (\Exception $exc) {
@@ -855,6 +797,58 @@ class CommunicationSaleService extends CommonService
         }
 
         return $affected > 0;
+    }
+
+    /**
+     * El proveedor es propiedad del producto, no de la cuenta: se lee de
+     * package.priceClientPackage.product.provider y se valida contra
+     * ProviderResolver::allowedForClient() ANTES de admitir la venta. Esto
+     * es lo que impide que el routing de un cliente (Fase 2) mande un
+     * productCode de un proveedor a otro distinto — el error se detecta en
+     * admisión, no como un fallo silencioso en el despacho.
+     */
+    private function resolveAndGuardProvider(Account $user, CommunicationClientPackage $package): string
+    {
+        $productProvider = $package->getPriceClientPackage()?->getProduct()?->getProvider()
+            ?? CommunicationProviderEnum::ETECSA->value;
+
+        $client = $user->getClient();
+        if ($client !== null) {
+            $allowed = array_map(
+                static fn (CommunicationProviderEnum $p) => $p->value,
+                $this->providerResolver->allowedForClient($client, $user->getEnvironment()?->getId()),
+            );
+
+            if (!in_array($productProvider, $allowed, true)) {
+                throw new MyCurrentException(
+                    'PROVIDER_NOT_ALLOWED_FOR_CLIENT',
+                    'El paquete pertenece a un proveedor no habilitado para este cliente',
+                    Response::HTTP_CONFLICT,
+                );
+            }
+        }
+
+        return $productProvider;
+    }
+
+    /**
+     * Un producto PIN_PURCHASE (código/voucher que el cliente debe canjear)
+     * nunca se vende como recarga: se acredita al teléfono, no entrega un
+     * código. Decisión de negocio: todo lo que sea PIN_PURCHASE se considera
+     * un paquete, vendible solo por executeSale(), nunca por
+     * processReserve()/processRecharge().
+     */
+    private function assertRechargeableProduct(CommunicationClientPackage $package): void
+    {
+        $packageType = $package->getPriceClientPackage()?->getProduct()?->getPackageType();
+
+        if ($packageType !== null && str_contains($packageType, 'PIN_PURCHASE')) {
+            throw new MyCurrentException(
+                'PRODUCT_REQUIRES_PACKAGE_SALE',
+                'Este producto se canjea por código y solo puede venderse como paquete, no como recarga',
+                Response::HTTP_CONFLICT,
+            );
+        }
     }
 
     private function claimForSending(CommunicationSaleInfo $sale): bool
@@ -973,38 +967,32 @@ class CommunicationSaleService extends CommonService
             return;
         }
 
-        try {
-            $response = $this->etecsaClient->getSaleInfo(
-                $tenant->getEnvironment(),
-                $sale->getTransactionId(),
-            );
-            $responseInfo = (object)$response;
-            $statusResponse = strtoupper($responseInfo->status);
-            $result = isset($responseInfo->result) ? (object)$responseInfo->result : null;
-            $fullResponse = isset($responseInfo->fullResponse) ? (object) $responseInfo->fullResponse : null;
-            $rechargeStateCode = '';
-            $rechargeState     = '';
-            $isTrue = false;
-            if ($fullResponse !== null) {
-                $fullResponseObj = isset($fullResponse->saleRecharge) ? (object) $fullResponse->saleRecharge : null;
-                if ($fullResponseObj !== null) {
-                    $rechargeStateCode = ($fullResponseObj->rechargeStateCode ?? '');
-                    $rechargeState     = ($fullResponseObj->rechargeState ?? '');
-                    $isTrue = $statusResponse === "COMPLETED"
-                        && ($rechargeStateCode === "OK" || $rechargeState === "Realizada");
-                }
-            }
-            $sale->setTransactionStatus($response);
-            if ($isTrue || isset($responseInfo->orderId)) {
-                $canComplete = ($sale instanceof CommunicationSaleRecharge)
-                    || (isset($responseInfo->fullResponse['Sale']) && $sale instanceof CommunicationSalePackage);
-                if (!$canComplete) {
-                    return;
-                }
+        $isRecharge = $sale instanceof CommunicationSaleRecharge;
 
-                $sale->setTransactionStatus($response);
-                if (isset($responseInfo->orderId)) {
-                    $sale->setTransactionOrder($responseInfo->orderId);
+        try {
+            $provider = $this->providerResolver->resolveForSale($sale);
+            $context = $this->providerContextFactory->forSale($sale);
+            $query = new ProviderStatusQuery(transactionId: $sale->getTransactionId());
+
+            if ($isRecharge) {
+                $adapter = $this->providerRegistry->getFor($provider, RechargeProviderInterface::class);
+                $statusResult = $adapter->fetchRechargeStatus($context, $query);
+            } else {
+                $adapter = $this->providerRegistry->getFor($provider, PackageSaleProviderInterface::class);
+                $statusResult = $adapter->fetchPackageSaleStatus($context, $query);
+            }
+
+            if ($statusResult->abortWithoutPersisting) {
+                // El proveedor reporta la venta completada pero este tipo de venta
+                // no puede confirmarse desde esta respuesta: no se toca la entidad.
+                return;
+            }
+
+            $sale->setTransactionStatus($statusResult->raw);
+
+            if ($statusResult->outcome === ProviderOutcomeEnum::COMPLETED) {
+                if ($statusResult->providerReference !== null) {
+                    $sale->setTransactionOrder($statusResult->providerReference);
                 }
 
                 // Atomic claim: only one concurrent worker proceeds to create the balance.
@@ -1021,63 +1009,26 @@ class CommunicationSaleService extends CommonService
                 $this->historicalSaleService->createHistoricalCommunication(
                     $sale->getId(),
                     CommunicationStateEnum::COMPLETED,
-                    $response
+                    $statusResult->raw
                 );
-            } elseif (in_array($rechargeStateCode, ['PE', 'PR'], true)) {
-                // ETECSA aún procesando la recarga — registrar en historial y mantener PENDING
-                $this->historicalSaleService->createHistoricalCommunication(
-                    $sale->getId(),
-                    CommunicationStateEnum::PENDING,
-                    $response
-                );
-            } elseif (!is_null($result) && isset($responseInfo->status) && $result->valueOk && $responseInfo->status === CommunicationStateEnum::REJECTED->value) {
+            } elseif ($statusResult->outcome === ProviderOutcomeEnum::REJECTED) {
                 $sale->setState(CommunicationStateEnum::REJECTED);
                 $sale->setStateProcess(CommunicationStateEnum::REJECTED->value);
-                $this->historicalSaleService->createHistoricalCommunication(
-                    $sale->getId(),
-                    CommunicationStateEnum::REJECTED,
-                    $response
-                );
-            } elseif (!is_null($result) && !$result->valueOk) {
-                if (!is_null($result->code)) {
-                    $message = self::ETECSA_INFO_ERROR[$result->code];
-                    $response['result']['message'] = mb_convert_encoding($message, 'UTF-8', 'ISO-8859-1');
-                    $sale->setTransactionStatus($response);
-                    if (in_array($result->code, ['151', '152', '153', '198', '199', '200'], true)) {
-                        $sale->setState(CommunicationStateEnum::REJECTED);
-                        $sale->setStateProcess(CommunicationStateEnum::REJECTED->value);
-                        $this->historicalSaleService->createHistoricalCommunication(
-                            $sale->getId(),
-                            CommunicationStateEnum::REJECTED,
-                            $response
-                        );
-                    } elseif ((int)$result->code !== -1) {
-                        $sale->setState(CommunicationStateEnum::PENDING);
-                        $sale->setStateProcess(CommunicationStateEnum::PENDING->value);
-                        $this->historicalSaleService->createHistoricalCommunication(
-                            $sale->getId(),
-                            CommunicationStateEnum::PENDING,
-                            $response
-                        );
-                    }
-                } else {
-                    $sale->setState(CommunicationStateEnum::REJECTED);
-                    $sale->setStateProcess(CommunicationStateEnum::REJECTED->value);
+                if ($statusResult->recordHistory) {
                     $this->historicalSaleService->createHistoricalCommunication(
                         $sale->getId(),
                         CommunicationStateEnum::REJECTED,
-                        $response
+                        $statusResult->raw
                     );
                 }
-            } else {
-                if (is_null($result)) {
-                    $sale->setState(CommunicationStateEnum::PENDING);
-                    $sale->setStateProcess(CommunicationStateEnum::PENDING->value);
-                    $this->historicalSaleService->createHistoricalCommunication(
-                        $sale->getId(),
-                        CommunicationStateEnum::PENDING
-                    );
-                }
+            } elseif ($statusResult->recordHistory) {
+                // ACCEPTED/PENDING/RETRYABLE/UNKNOWN se mapean todos aquí: la venta
+                // sigue PENDING (ya lo estaba), solo se registra el histórico.
+                $this->historicalSaleService->createHistoricalCommunication(
+                    $sale->getId(),
+                    CommunicationStateEnum::PENDING,
+                    $statusResult->recordHistoryWithoutData ? [] : $statusResult->raw
+                );
             }
             $this->em->flush();
         } catch (\Exception $e) {

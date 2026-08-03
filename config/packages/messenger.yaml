@@ -96,14 +96,21 @@ framework:
              'App\Message\AccountActivationMessage': async_notifications_high
              'App\Message\PromotionCreatedMessage': async_notifications_high
              'App\Message\Etecsa\SyncCatalogsMessage': async_clients_high
-             'App\Message\Etecsa\SyncProductsMessage': async_clients_high
+             'App\Message\Provider\SyncProviderProductsMessage': async_clients_high
              'App\Message\DispatchPendingEmailMessage': async_notifications_high
              'App\Message\ClientCreatedMessage': async_notifications_high
 
-# when@test:
-#    framework:
-#        messenger:
-#            transports:
-#                # replace with your transport name here (e.g., my_transport: 'in-memory://')
-#                # For more Messenger testing tools, see https://github.com/zenstruck/messenger-test
-#                async: 'in-memory://'
+when@test:
+    framework:
+        messenger:
+            # Los tests funcionales (KernelTestCase contra Postgres real) no
+            # deben depender de un broker RabbitMQ real — ni CI lo levanta.
+            # in-memory:// encola en memoria del proceso: dispatch() sigue
+            # siendo real (sirve para verificar qué se despachó), pero nada
+            # sale del proceso de test.
+            transports:
+                async_notifications_high: 'in-memory://'
+                async_clients_high: 'in-memory://'
+                async_send_sale_package: 'in-memory://'
+                async_check_status: 'in-memory://'
+                async_send_notification: 'in-memory://'

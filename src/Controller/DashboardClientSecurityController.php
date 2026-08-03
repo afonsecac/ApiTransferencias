@@ -39,8 +39,12 @@ class DashboardClientSecurityController extends AbstractController
         }
 
         if ($this->isGranted('ROLE_ADMIN')) {
+            // Sin filtrar por isActive: el admin necesita ver también los clientes
+            // desactivados para poder gestionarlos/reactivarlos (mismo criterio que
+            // AdminClientController::index). El estado se expone en la respuesta
+            // (serializeClient() incluye isActive) para que el frontend lo distinga.
             $clients = $this->em->getRepository(Client::class)->findBy(
-                ['isActive' => true],
+                [],
                 ['companyName' => 'ASC']
             );
         } else {

@@ -209,6 +209,22 @@ class CommunicationSaleInfo
     #[ORM\Column(length: 20, nullable: true)]
     private ?string $stateProcess = null;
 
+    /**
+     * Snapshot inmutable del proveedor que procesó (o procesará) esta venta —
+     * ver App\Enums\CommunicationProviderEnum. NOT NULL en BD desde
+     * Version20260801150000 (backfill a ETECSA de filas históricas en
+     * Version20260801100000; el único punto de creación de ventas,
+     * CommunicationSaleService, siempre lo asigna antes de persistir).
+     * El tipo PHP se mantiene nullable porque ProviderResolver::resolveForSale()
+     * conserva su rama defensiva para filas que pudieran llegar sin valor.
+     * Nunca se re-resuelve tras crearse: resolveForSale() lee este campo para
+     * que el chequeo de estado y la conciliación sigan consultando al
+     * proveedor correcto aunque cambie el routing del cliente.
+     */
+    #[ORM\Column(length: 20)]
+    #[Groups(['comSales:read', 'sale:list', 'sale:detail'])]
+    private ?string $provider = null;
+
     public function __construct() {
         $this->discount = 0;
         $this->amountTax = 0;
@@ -487,6 +503,18 @@ class CommunicationSaleInfo
     public function setStateProcess(?string $stateProcess): static
     {
         $this->stateProcess = $stateProcess;
+
+        return $this;
+    }
+
+    public function getProvider(): ?string
+    {
+        return $this->provider;
+    }
+
+    public function setProvider(?string $provider): static
+    {
+        $this->provider = $provider;
 
         return $this;
     }
