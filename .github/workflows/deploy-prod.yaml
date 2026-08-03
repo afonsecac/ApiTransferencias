@@ -56,6 +56,13 @@ jobs:
               --env-file .env.vps run --rm -T php-fpm php bin/console doctrine:migrations:migrate --no-interaction --allow-no-migration
 
             echo "=== Deploying ==="
+            # Sin lista de servicios: aplica a TODOS los definidos en la
+            # config combinada, incluidos los 6 worker-* de
+            # docker-compose.vps.prod.yaml. --force-recreate garantiza que
+            # cada worker se reinicie con la imagen recién construida en el
+            # paso anterior, aunque su definición de compose no haya
+            # cambiado. Si algún día se scopea este comando a servicios
+            # específicos, hay que seguir incluyendo todos los worker-*.
             docker compose -f docker-compose.vps.yaml -f docker-compose.vps.prod.yaml \
               --env-file .env.vps up -d --remove-orphans --force-recreate
 
