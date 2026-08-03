@@ -4,7 +4,9 @@ namespace App\Service\Etecsa;
 
 use App\DTO\Etecsa\EtecsaBalanceDto;
 use App\Entity\Environment;
+use App\Enums\CommunicationProviderEnum;
 use App\Exception\MyCurrentException;
+use App\Provider\ProviderCredentialsResolver;
 use App\Repository\EnvironmentRepository;
 use App\Repository\SysConfigRepository;
 use Doctrine\ORM\EntityManagerInterface;
@@ -35,6 +37,7 @@ class EtecsaGatewayClient extends CommonService
         SysConfigRepository $sysConfigRepo,
         SerializerInterface $serializer,
         private readonly HttpClientInterface $httpClient,
+        private readonly ProviderCredentialsResolver $credentialsResolver,
         #[Autowire('@monolog.logger.etecsa')] private readonly LoggerInterface $etecsaLogger,
         #[Autowire('%env(APP_TEST_PHONE)%')] private readonly string $testPhone,
     ) {
@@ -260,10 +263,17 @@ class EtecsaGatewayClient extends CommonService
 
     private function rawPost(Environment $env, string $path, array $body): string
     {
-        $url = $env->getBasePath() . $path;
+        // Fase 3: las credenciales pasan al esquema genérico provider.etecsa.{type}.*
+        // (sys_config, ver EtecsaCommunicationProvider::getConfigSchema()), con
+        // fallback a las claves legacy mientras esas filas no existan — así este
+        // cambio no requiere ninguna acción en producción.
+        $credentials = $this->credentialsResolver->get(CommunicationProviderEnum::ETECSA, $env->getType());
+        $baseUrl = $credentials['base_url'] ?? $env->getBasePath();
+        $url = $baseUrl . $path;
         $start = microtime(true);
 
-        $apiKey = $this->sysConfigRepo->findCachedValue('api.' . strtolower($env->getType()) . '.communications.key', mustBeActive: true);
+        $apiKey = $credentials['api_key']
+            ?? $this->sysConfigRepo->findCachedValue('api.' . strtolower($env->getType()) . '.communications.key', mustBeActive: true);
         $headers = [
             'Content-Type' => 'application/json',
             'Accept'       => 'application/json',
