@@ -187,14 +187,18 @@ class CommunicationSaleService extends CommonService
             throw new MyCurrentException('COM007', 'The promotion is not active to reserves');
         }
 
+        $this->assertRechargeableProduct($package);
+
+        // El proveedor es propiedad del producto, no de la cuenta — se
+        // valida y se congela ANTES de construir la venta (ver
+        // resolveAndGuardProvider()).
+        $productProvider = $this->resolveAndGuardProvider($user, $package);
 
         $recharge = new CommunicationSaleRecharge();
         $recharge->setTenant($user);
         $recharge->setState(CommunicationStateEnum::RESERVED);
         $recharge->setStateProcess(CommunicationStateEnum::CREATED->value);
-        // Snapshot inmutable del proveedor resuelto en admisión — ver
-        // App\Provider\ProviderResolver. No se re-resuelve al despachar.
-        $recharge->setProvider($this->providerResolver->resolveForAccount($user)->value);
+        $recharge->setProvider($productProvider);
         $recharge->setPromotionId($reserveDto->getPromotionId());
         $recharge->setPackageId($reserveDto->getPackageId());
         $recharge->setPhoneNumber($reserveDto->getPhoneNumber());
@@ -267,6 +271,8 @@ class CommunicationSaleService extends CommonService
             throw new MyCurrentException('COM003', 'The package don\'t exist');
         }
 
+        $this->assertRechargeableProduct($package);
+
         $lastSequence = $this->configureSequence->getLastSequence(CommunicationSaleRecharge::class);
         $transactionId = (new \DateTime('now'))->format('ymd').'01'.str_pad(
                 (string) $lastSequence,
@@ -274,6 +280,11 @@ class CommunicationSaleService extends CommonService
                 '0',
                 STR_PAD_LEFT
             );
+        // El proveedor es propiedad del producto, no de la cuenta — se
+        // valida y se congela ANTES de construir la venta (ver
+        // resolveAndGuardProvider()).
+        $productProvider = $this->resolveAndGuardProvider($user, $package);
+
         $recharge->setTransactionId($transactionId);
         $recharge->setPackage($package);
         $recharge->setTenant($user);
@@ -282,9 +293,7 @@ class CommunicationSaleService extends CommonService
         $recharge->getCalculatePrice();
         $recharge->setState(CommunicationStateEnum::PENDING);
         $recharge->setStateProcess(CommunicationStateEnum::CREATED->value);
-        // Snapshot inmutable del proveedor resuelto en admisión — ver
-        // App\Provider\ProviderResolver. No se re-resuelve al despachar.
-        $recharge->setProvider($this->providerResolver->resolveForAccount($user)->value);
+        $recharge->setProvider($productProvider);
 
         $this->em->beginTransaction();
         try {
@@ -441,10 +450,21 @@ class CommunicationSaleService extends CommonService
 
                 $destination = (object)$package?->getDestination();
 
+                // El proveedor se resuelve ANTES de aplicar cualquier
+                // sustitución de sandbox: el bloque de abajo es una
+                // convención de prueba propia de ETECSA (código de producto
+                // fijo "100" + número de teléfono de prueba), no una regla
+                // general de "entorno TEST" — aplicarla a otro proveedor
+                // (p.ej. DTOne) le envía un product_id inventado y DTOne lo
+                // rechaza como "Product is not available in your account"
+                // (confirmado en vivo el 2026-08-03: nunca era un problema de
+                // permisos de la cuenta de DTOne).
+                $provider = $this->providerResolver->resolveForSale($saleRecharge);
+
                 $phoneLength = strlen($saleRecharge->getPhoneNumber());
                 $checkPhone = substr($saleRecharge->getPhoneNumber(), $phoneLength - 2, $phoneLength);
                 $phoneNumber = $saleRecharge->getPhoneNumber();
-                if ($environment->getType() === 'TEST') {
+                if ($environment->getType() === 'TEST' && $provider === CommunicationProviderEnum::ETECSA) {
                     $phoneNumber = $checkPhone === "60" ? $this->parameters->get(
                         'app.phoneNumber'
                     ) : $saleRecharge->getPhoneNumber();
@@ -459,7 +479,6 @@ class CommunicationSaleService extends CommonService
                     'environment' => $environment->getType(),
                 ];
 
-                $provider = $this->providerResolver->resolveForSale($saleRecharge);
                 $adapter = $this->providerRegistry->getFor($provider, RechargeProviderInterface::class);
                 $context = $this->providerContextFactory->forSale($saleRecharge);
                 $request = new RechargeRequest(
@@ -584,6 +603,11 @@ class CommunicationSaleService extends CommonService
                 '0',
                 STR_PAD_LEFT
             );
+        // El proveedor es propiedad del producto, no de la cuenta — se
+        // valida y se congela ANTES de construir la venta (ver
+        // resolveAndGuardProvider()).
+        $productProvider = $this->resolveAndGuardProvider($user, $package);
+
         $sale->setTransactionId($transactionId);
         $sale->setPackage($package);
         $sale->setTenant($user);
@@ -592,9 +616,7 @@ class CommunicationSaleService extends CommonService
         $sale->getCalculatePrice();
         $sale->setState(CommunicationStateEnum::PENDING);
         $sale->setStateProcess(CommunicationStateEnum::CREATED->value);
-        // Snapshot inmutable del proveedor resuelto en admisión — ver
-        // App\Provider\ProviderResolver. No se re-resuelve al despachar.
-        $sale->setProvider($this->providerResolver->resolveForAccount($user)->value);
+        $sale->setProvider($productProvider);
 
         $commercialOffice = $this->em->getRepository(CommunicationOffice::class)->findOneBy([
             'id' => $sale->commercialOfficeId,
@@ -775,6 +797,58 @@ class CommunicationSaleService extends CommonService
         }
 
         return $affected > 0;
+    }
+
+    /**
+     * El proveedor es propiedad del producto, no de la cuenta: se lee de
+     * package.priceClientPackage.product.provider y se valida contra
+     * ProviderResolver::allowedForClient() ANTES de admitir la venta. Esto
+     * es lo que impide que el routing de un cliente (Fase 2) mande un
+     * productCode de un proveedor a otro distinto — el error se detecta en
+     * admisión, no como un fallo silencioso en el despacho.
+     */
+    private function resolveAndGuardProvider(Account $user, CommunicationClientPackage $package): string
+    {
+        $productProvider = $package->getPriceClientPackage()?->getProduct()?->getProvider()
+            ?? CommunicationProviderEnum::ETECSA->value;
+
+        $client = $user->getClient();
+        if ($client !== null) {
+            $allowed = array_map(
+                static fn (CommunicationProviderEnum $p) => $p->value,
+                $this->providerResolver->allowedForClient($client, $user->getEnvironment()?->getId()),
+            );
+
+            if (!in_array($productProvider, $allowed, true)) {
+                throw new MyCurrentException(
+                    'PROVIDER_NOT_ALLOWED_FOR_CLIENT',
+                    'El paquete pertenece a un proveedor no habilitado para este cliente',
+                    Response::HTTP_CONFLICT,
+                );
+            }
+        }
+
+        return $productProvider;
+    }
+
+    /**
+     * Un producto PIN_PURCHASE (código/voucher que el cliente debe canjear)
+     * nunca se vende como recarga: se acredita al teléfono, no entrega un
+     * código. Decisión de negocio: todo lo que sea PIN_PURCHASE se considera
+     * un paquete, vendible solo por executeSale(), nunca por
+     * processReserve()/processRecharge().
+     */
+    private function assertRechargeableProduct(CommunicationClientPackage $package): void
+    {
+        $packageType = $package->getPriceClientPackage()?->getProduct()?->getPackageType();
+
+        if ($packageType !== null && str_contains($packageType, 'PIN_PURCHASE')) {
+            throw new MyCurrentException(
+                'PRODUCT_REQUIRES_PACKAGE_SALE',
+                'Este producto se canjea por código y solo puede venderse como paquete, no como recarga',
+                Response::HTTP_CONFLICT,
+            );
+        }
     }
 
     private function claimForSending(CommunicationSaleInfo $sale): bool

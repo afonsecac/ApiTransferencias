@@ -13,6 +13,7 @@ use App\Provider\Contract\PackageSaleRequest;
 use App\Provider\Contract\ProviderBalanceInterface;
 use App\Provider\Contract\ProviderBalanceResult;
 use App\Provider\Contract\ProviderCatalogInterface;
+use App\Provider\Contract\ProviderConfigField;
 use App\Provider\Contract\ProviderContext;
 use App\Provider\Contract\ProviderDispatchResult;
 use App\Provider\Contract\ProviderProductDto;
@@ -82,6 +83,17 @@ final class EtecsaCommunicationProvider implements
             ProviderCapabilityEnum::CATALOG,
             ProviderCapabilityEnum::TOURIST_SIM,
             ProviderCapabilityEnum::GEO_CATALOG,
+        ];
+    }
+
+    /**
+     * @return list<ProviderConfigField>
+     */
+    public function getConfigSchema(): array
+    {
+        return [
+            new ProviderConfigField('base_url', 'URL base', required: true, secret: false),
+            new ProviderConfigField('api_key', 'API key', required: true, secret: true),
         ];
     }
 
@@ -188,6 +200,10 @@ final class EtecsaCommunicationProvider implements
                 validFrom: !empty($item->InitialDate) ? new \DateTimeImmutable($item->InitialDate) : null,
                 validTo: !empty($item->FinalDate) ? new \DateTimeImmutable($item->FinalDate) : null,
                 raw: (array) $raw,
+                // ETECSA solo vende telefonía móvil (Cubacel) — no hay otra
+                // categoría de producto que distinguir.
+                isMobileOrInternetService: true,
+                service: ['name' => 'MOBILE', 'subservice' => ['name' => 'AIRTIME']],
             );
         }
     }

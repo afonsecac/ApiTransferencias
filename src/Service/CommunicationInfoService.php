@@ -7,9 +7,13 @@ use App\DTO\RequestInfo;
 use App\Entity\CommunicationSalePackage;
 use App\Entity\CommunicationSaleRecharge;
 use App\Entity\User;
+use App\Provider\Contract\PackageSaleProviderInterface;
+use App\Provider\Contract\ProviderStatusQuery;
+use App\Provider\Contract\RechargeProviderInterface;
+use App\Provider\ProviderContextFactory;
+use App\Provider\ProviderRegistry;
 use App\Repository\EnvironmentRepository;
 use App\Repository\SysConfigRepository;
-use App\Service\Etecsa\EtecsaGatewayClient;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\EntityNotFoundException;
 use Psr\Log\LoggerInterface;
@@ -31,7 +35,8 @@ class CommunicationInfoService extends CommonService
         EnvironmentRepository $environmentRepository,
         SysConfigRepository $sysConfigRepo,
         SerializerInterface $serializer,
-        private readonly EtecsaGatewayClient $etecsaClient,
+        private readonly ProviderRegistry $providerRegistry,
+        private readonly ProviderContextFactory $providerContextFactory,
         private readonly HistoricalSaleService $historicalSaleService,
     ) {
         parent::__construct(
@@ -86,9 +91,20 @@ class CommunicationInfoService extends CommonService
             return;
         }
 
-        $env = $tenant->getEnvironment();
+        // Fase 3: consultar el estado a través del proveedor real de la venta
+        // (snapshot en communication_sale_info.provider), no siempre ETECSA.
+        $context = $this->providerContextFactory->forSale($operationSale);
+        $query = new ProviderStatusQuery(transactionId: $operationSale->getTransactionId());
 
-        $result = $this->etecsaClient->getSaleInfo($env, $operationSale->getTransactionId());
+        if ($operationSale instanceof CommunicationSalePackage) {
+            $adapter = $this->providerRegistry->getFor($context->provider, PackageSaleProviderInterface::class);
+            $statusResult = $adapter->fetchPackageSaleStatus($context, $query);
+        } else {
+            $adapter = $this->providerRegistry->getFor($context->provider, RechargeProviderInterface::class);
+            $statusResult = $adapter->fetchRechargeStatus($context, $query);
+        }
+
+        $result = $statusResult->raw;
 
         $state = $operationSale->getState();
         if ($state !== null) {

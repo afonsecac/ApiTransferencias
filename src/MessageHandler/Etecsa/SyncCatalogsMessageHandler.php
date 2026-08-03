@@ -5,7 +5,7 @@ namespace App\MessageHandler\Etecsa;
 use App\Entity\Environment;
 use App\Message\Etecsa\SyncCatalogsMessage;
 use App\Repository\EnvironmentRepository;
-use App\Service\Etecsa\EtecsaCatalogSyncService;
+use App\Service\Etecsa\EtecsaGeoCatalogSyncService;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\Messenger\Attribute\AsMessageHandler;
@@ -14,7 +14,7 @@ use Symfony\Component\Messenger\Attribute\AsMessageHandler;
 final class SyncCatalogsMessageHandler
 {
     public function __construct(
-        private readonly EtecsaCatalogSyncService $syncService,
+        private readonly EtecsaGeoCatalogSyncService $syncService,
         private readonly EnvironmentRepository $environmentRepository,
         #[Autowire('@monolog.logger.etecsa')] private readonly LoggerInterface $logger,
     ) {

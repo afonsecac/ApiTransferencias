@@ -12,37 +12,61 @@ use Symfony\Component\DependencyInjection\Attribute\AutowireIterator;
  * 'app.communication_provider', ver _instanceof en config/services.yaml) y
  * los indexa por su código. Un proveedor mal etiquetado o con getCode()
  * duplicado falla en el primer arranque del contenedor, no en producción.
+ *
+ * El indexado es perezoso a propósito (se construye en el primer get()/
+ * has()/registered(), no en el constructor): ProviderCredentialsResolver
+ * depende de este registro para resolver getConfigSchema(), y los clientes
+ * HTTP de los propios proveedores (EtecsaGatewayClient, DTOneHttpClient,
+ * CsqHttpClient) dependen de ese resolver — indexar en el constructor
+ * forzaría instanciar los 3 proveedores ANTES de que este registro termine
+ * de construirse, formando un ciclo real que agota memoria (ver
+ * RewindableGenerator). Al diferir la iteración, el registro ya existe
+ * (aunque vacío) cuando el resolver lo recibe, y el índice solo se arma la
+ * primera vez que alguien pide un proveedor en tiempo de ejecución — para
+ * entonces todo el grafo de servicios ya terminó de construirse.
  */
 final class ProviderRegistry
 {
-    /** @var array<string, CommunicationProviderInterface> */
-    private array $providers = [];
+    /** @var array<string, CommunicationProviderInterface>|null caché perezosa del índice — null hasta el primer index() */
+    private ?array $indexedProviders = null;
 
     /**
-     * @param iterable<CommunicationProviderInterface> $providers
+     * @param iterable<CommunicationProviderInterface> $providerIterator
      */
     public function __construct(
         #[AutowireIterator('app.communication_provider')]
-        iterable $providers,
+        private readonly iterable $providerIterator,
     ) {
-        foreach ($providers as $provider) {
-            $this->providers[$provider->getCode()->value] = $provider;
-        }
     }
 
     public function has(CommunicationProviderEnum $code): bool
     {
-        return isset($this->providers[$code->value]);
+        return isset($this->index()[$code->value]);
     }
 
     public function get(CommunicationProviderEnum $code): CommunicationProviderInterface
     {
-        return $this->providers[$code->value]
+        return $this->index()[$code->value]
             ?? throw new MyCurrentException(
                 'PROVIDER_NOT_REGISTERED',
                 "El proveedor {$code->value} no está registrado",
                 500,
             );
+    }
+
+    /**
+     * @return array<string, CommunicationProviderInterface>
+     */
+    private function index(): array
+    {
+        if ($this->indexedProviders === null) {
+            $this->indexedProviders = [];
+            foreach ($this->providerIterator as $provider) {
+                $this->indexedProviders[$provider->getCode()->value] = $provider;
+            }
+        }
+
+        return $this->indexedProviders;
     }
 
     /**
@@ -72,7 +96,7 @@ final class ProviderRegistry
     {
         return array_map(
             static fn (string $code) => CommunicationProviderEnum::from($code),
-            array_keys($this->providers),
+            array_keys($this->index()),
         );
     }
 }

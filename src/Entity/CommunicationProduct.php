@@ -56,6 +56,83 @@ class CommunicationProduct
     #[Groups(['product:read'])]
     private ?string $description = null;
 
+    /**
+     * Proveedor dueño de este producto (App\Enums\CommunicationProviderEnum).
+     * Es la fuente de verdad del despacho: una venta hereda este valor al
+     * crearse (ver CommunicationSaleService), no el routing del cliente.
+     */
+    #[ORM\Column(length: 20)]
+    #[Groups(['product:read'])]
+    private string $provider = 'ETECSA';
+
+    /**
+     * ID del producto en el sistema del proveedor. Reemplaza a packageId
+     * como clave canónica del upsert de catálogo — packageId (int) se
+     * conserva por compatibilidad con el código que ya lo lee, pero
+     * externalRef (string) admite IDs no numéricos de futuros proveedores.
+     */
+    #[ORM\Column(length: 64)]
+    #[Groups(['product:read'])]
+    private string $externalRef = '';
+
+    /**
+     * Monto que se acredita al beneficiario (no el costo mayorista — ese es
+     * `price`). Viene de ProviderProductDto::$destinationAmount.
+     */
+    #[ORM\Column(nullable: true)]
+    #[Groups(['product:read'])]
+    private ?float $destinationAmount = null;
+
+    /**
+     * Moneda/unidad de destinationAmount (puede no ser una moneda: CUP,
+     * USD, MINUTES, GB, ILIM...). Viene de ProviderProductDto::$destinationUnit.
+     */
+    #[ORM\Column(length: 10, nullable: true)]
+    #[Groups(['product:read'])]
+    private ?string $destinationUnit = null;
+
+    /**
+     * Moneda del costo mayorista (`price`). Viene de
+     * ProviderProductDto::$priceCurrency.
+     */
+    #[ORM\Column(length: 3, nullable: true)]
+    #[Groups(['product:read'])]
+    private ?string $priceCurrency = null;
+
+    /**
+     * true si es servicio de telefonía móvil o Internet — lo único que
+     * aplica a un enrutado con `saleType='recharge'` (ver
+     * ClientCatalogImportService::matchesSaleType()). Viene de
+     * ProviderProductDto::$isMobileOrInternetService. Default true: ETECSA
+     * (todas las filas históricas) es exclusivamente telefonía móvil.
+     */
+    #[ORM\Column]
+    #[Groups(['product:read'])]
+    private bool $isMobileOrInternetService = true;
+
+    /**
+     * Viene de ProviderProductDto::$benefits — se conserva tal cual para que
+     * ClientCatalogImportService pueda construir el CommunicationClientPackage
+     * automáticamente (ver matchesSaleType() y createClientPackageIfMissing())
+     * sin tener que re-derivar la estructura de beneficios.
+     *
+     * @var array<int, array<string, mixed>>
+     */
+    #[ORM\Column(type: Types::JSON)]
+    #[Groups(['product:read'])]
+    private array $benefits = [];
+
+    /**
+     * Forma `{name, subservice: {name}}` — mismo shape que
+     * CommunicationClientPackage::$service. Viene de
+     * ProviderProductDto::$service.
+     *
+     * @var array{name?: string, subservice?: array{name?: string}}
+     */
+    #[ORM\Column(type: Types::JSON)]
+    #[Groups(['product:read'])]
+    private array $service = [];
+
     public function __construct()
     {
         $this->createdAt = new \DateTimeImmutable('now');
@@ -152,6 +229,54 @@ class CommunicationProduct
         return $this;
     }
 
+    public function isMobileOrInternetService(): bool
+    {
+        return $this->isMobileOrInternetService;
+    }
+
+    public function setIsMobileOrInternetService(bool $isMobileOrInternetService): static
+    {
+        $this->isMobileOrInternetService = $isMobileOrInternetService;
+
+        return $this;
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    public function getBenefits(): array
+    {
+        return $this->benefits;
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $benefits
+     */
+    public function setBenefits(array $benefits): static
+    {
+        $this->benefits = $benefits;
+
+        return $this;
+    }
+
+    /**
+     * @return array{name?: string, subservice?: array{name?: string}}
+     */
+    public function getService(): array
+    {
+        return $this->service;
+    }
+
+    /**
+     * @param array{name?: string, subservice?: array{name?: string}} $service
+     */
+    public function setService(array $service): static
+    {
+        $this->service = $service;
+
+        return $this;
+    }
+
     public function getCreatedAt(): ?\DateTimeImmutable
     {
         return $this->createdAt;
@@ -184,6 +309,66 @@ class CommunicationProduct
     public function setDescription(string $description): static
     {
         $this->description = $description;
+
+        return $this;
+    }
+
+    public function getProvider(): string
+    {
+        return $this->provider;
+    }
+
+    public function setProvider(string $provider): static
+    {
+        $this->provider = $provider;
+
+        return $this;
+    }
+
+    public function getExternalRef(): string
+    {
+        return $this->externalRef;
+    }
+
+    public function setExternalRef(string $externalRef): static
+    {
+        $this->externalRef = $externalRef;
+
+        return $this;
+    }
+
+    public function getDestinationAmount(): ?float
+    {
+        return $this->destinationAmount;
+    }
+
+    public function setDestinationAmount(?float $destinationAmount): static
+    {
+        $this->destinationAmount = $destinationAmount;
+
+        return $this;
+    }
+
+    public function getDestinationUnit(): ?string
+    {
+        return $this->destinationUnit;
+    }
+
+    public function setDestinationUnit(?string $destinationUnit): static
+    {
+        $this->destinationUnit = $destinationUnit;
+
+        return $this;
+    }
+
+    public function getPriceCurrency(): ?string
+    {
+        return $this->priceCurrency;
+    }
+
+    public function setPriceCurrency(?string $priceCurrency): static
+    {
+        $this->priceCurrency = $priceCurrency;
 
         return $this;
     }

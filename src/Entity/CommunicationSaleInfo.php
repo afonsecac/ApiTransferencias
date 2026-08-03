@@ -211,14 +211,17 @@ class CommunicationSaleInfo
 
     /**
      * Snapshot inmutable del proveedor que procesó (o procesará) esta venta —
-     * ver App\Enums\CommunicationProviderEnum. Nullable por compatibilidad
-     * con filas históricas anteriores a la Fase 1 del enrutado multi-proveedor
-     * (todas ellas son ETECSA; ver migración Version20260801100000). Nunca se
-     * re-resuelve tras crearse: App\Provider\ProviderResolver::resolveForSale()
-     * lee este campo para que el chequeo de estado y la conciliación sigan
-     * consultando al proveedor correcto aunque cambie el routing del cliente.
+     * ver App\Enums\CommunicationProviderEnum. NOT NULL en BD desde
+     * Version20260801150000 (backfill a ETECSA de filas históricas en
+     * Version20260801100000; el único punto de creación de ventas,
+     * CommunicationSaleService, siempre lo asigna antes de persistir).
+     * El tipo PHP se mantiene nullable porque ProviderResolver::resolveForSale()
+     * conserva su rama defensiva para filas que pudieran llegar sin valor.
+     * Nunca se re-resuelve tras crearse: resolveForSale() lee este campo para
+     * que el chequeo de estado y la conciliación sigan consultando al
+     * proveedor correcto aunque cambie el routing del cliente.
      */
-    #[ORM\Column(length: 20, nullable: true)]
+    #[ORM\Column(length: 20)]
     #[Groups(['comSales:read', 'sale:list', 'sale:detail'])]
     private ?string $provider = null;
 

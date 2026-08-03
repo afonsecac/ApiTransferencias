@@ -23,6 +23,16 @@ class CommunicationSaleInfoRepository extends ServiceEntityRepository
     }
 
     /**
+     * Busca una venta por su transactionId (índice único unique_transaction_id).
+     * Usado por el callback de proveedor (p.ej. DTOneWebhookController) para
+     * localizar la venta a partir del external_id que devuelve el proveedor.
+     */
+    public function findOneByTransactionId(string $transactionId): ?CommunicationSaleInfo
+    {
+        return $this->findOneBy(['transactionId' => $transactionId]);
+    }
+
+    /**
      * Ventas en estado PENDING con stateProcess=CREATED: fueron persistidas pero nunca encoladas
      * (porque el dispatch estaba deshabilitado cuando se crearon).
      *

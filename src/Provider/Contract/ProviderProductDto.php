@@ -30,6 +30,27 @@ final readonly class ProviderProductDto
         public ?\DateTimeImmutable $validFrom,
         public ?\DateTimeImmutable $validTo,
         public array $raw,
+        /**
+         * true si el producto es servicio de telefonía móvil o Internet
+         * (lo único que aplica a un enrutado con `saleType='recharge'` — ver
+         * ClientCatalogImportService::matchesSaleType()); false para
+         * cualquier otra cosa (gift cards, comida, SIM/equipos físicos...).
+         * Cada adaptador de proveedor decide esto con su propio vocabulario
+         * (para DTOne: campos `service`/`subservice` — ver
+         * DTOneCommunicationProvider::fetchProducts()). ETECSA es
+         * exclusivamente telefonía móvil, así que siempre es true ahí.
+         */
+        public bool $isMobileOrInternetService,
+        /**
+         * Forma `{name, subservice: {name}}` — mismo shape que
+         * CommunicationClientPackage::$service, para que
+         * ClientCatalogImportService pueda crear el CommunicationClientPackage
+         * automáticamente sin tener que re-derivar nada. ETECSA (solo
+         * telefonía móvil) siempre usa el mismo valor fijo.
+         *
+         * @var array{name?: string, subservice?: array{name?: string}}
+         */
+        public array $service,
     ) {
     }
 }

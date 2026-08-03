@@ -4,7 +4,6 @@ namespace App\Service\Etecsa;
 
 use App\Entity\CommunicationNationality;
 use App\Entity\CommunicationOffice;
-use App\Entity\CommunicationProduct;
 use App\Entity\CommunicationProvinces;
 use App\Entity\Environment;
 use App\Repository\EnvironmentRepository;
@@ -18,7 +17,14 @@ use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 use Symfony\Component\Serializer\SerializerInterface;
 use App\Service\CommonService;
 
-class EtecsaCatalogSyncService extends CommonService
+/**
+ * Sincroniza los catálogos GEOGRÁFICOS (nacionalidades, provincias, oficinas
+ * comerciales) — exclusivos de ETECSA, no forman parte de la abstracción
+ * común de proveedor (ver GeoCatalogProviderInterface). El sync de
+ * productos (catálogo sí común entre proveedores) vive en
+ * App\Service\Provider\CommunicationCatalogSyncService desde la Fase 3.
+ */
+class EtecsaGeoCatalogSyncService extends CommonService
 {
     public function __construct(
         EntityManagerInterface $em,
@@ -30,12 +36,6 @@ class EtecsaCatalogSyncService extends CommonService
         EnvironmentRepository $environmentRepository,
         SysConfigRepository $sysConfigRepo,
         SerializerInterface $serializer,
-        // Se mantiene la dependencia directa del cliente ETECSA (en vez de pasar
-        // por ProviderRegistry) porque este servicio sincroniza catálogos
-        // GEOGRÁFICOS (nacionalidades/provincias/oficinas), que son exclusivos
-        // de ETECSA y no forman parte de la abstracción común de proveedor
-        // (ver GeoCatalogProviderInterface). El sync de productos (catálogo sí
-        // común entre proveedores) vive en syncProducts() más abajo.
         private readonly EtecsaGatewayClient $client,
     ) {
         parent::__construct($em, $security, $parameters, $mailer, $logger, $passwordHasher, $environmentRepository, $sysConfigRepo, $serializer);
@@ -157,56 +157,6 @@ class EtecsaCatalogSyncService extends CommonService
                 $entity->setIsActive(true);
                 $entity->setIsAirport((bool) ($item->IsAirport ?? false));
             }
-        }
-
-        $this->em->flush();
-
-        return new SyncResult($created, $updated, $skipped);
-    }
-
-    /**
-     * Sincroniza el catálogo de productos (paquetes ETECSA) usando upsert por (environment, packageId).
-     * Solo inserta/actualiza productos activos y vigentes; no elimina los ya expirados de la BD.
-     */
-    public function syncProducts(Environment $env): SyncResult
-    {
-        $items = $this->client->listPackages($env);
-        $created = $updated = $skipped = 0;
-        $repo = $this->em->getRepository(CommunicationProduct::class);
-        $now = new \DateTimeImmutable();
-
-        foreach ($items as $raw) {
-            $item = (object) $raw;
-
-            if (!isset($item->Id)) {
-                ++$skipped;
-                continue;
-            }
-
-            $entity = $repo->findOneBy(['environment' => $env, 'packageId' => (int) $item->Id]);
-
-            if ($entity === null) {
-                $entity = new CommunicationProduct();
-                $entity->setEnvironment($env);
-                $entity->setPackageId((int) $item->Id);
-                $this->em->persist($entity);
-                ++$created;
-            } else {
-                ++$updated;
-            }
-
-            $entity->setPackageType((string) ($item->PackageType ?? ''));
-            $entity->setProductType((string) ($item->PackageType ?? ''));
-            $entity->setPrice((float) ($item->Price ?? 0.0));
-            $entity->setEnabled((bool) ($item->Enabled ?? false));
-            $entity->setDescription((string) ($item->Description ?? ''));
-
-            if (!empty($item->InitialDate)) {
-                $entity->setInitialDate(new \DateTimeImmutable($item->InitialDate));
-            }
-
-            $endDate = !empty($item->FinalDate) ? new \DateTimeImmutable($item->FinalDate) : null;
-            $entity->setEndDateAt($endDate);
         }
 
         $this->em->flush();
