@@ -33,6 +33,24 @@ class CsqCommunicationProviderTest extends TestCase
         $this->assertSame([], $this->provider->getCapabilities());
     }
 
+    public function testGetConfigSchemaIncludesTerminal(): void
+    {
+        $keys = array_map(static fn ($field) => $field->key, $this->provider->getConfigSchema());
+
+        $this->assertContains('terminal', $keys);
+    }
+
+    public function testTerminalIsRequiredAndNotSecret(): void
+    {
+        $terminal = array_values(array_filter(
+            $this->provider->getConfigSchema(),
+            static fn ($field) => $field->key === 'terminal',
+        ))[0];
+
+        $this->assertTrue($terminal->required);
+        $this->assertFalse($terminal->secret);
+    }
+
     public function testPingDelegatesToHttpClient(): void
     {
         $context = new ProviderContext(provider: CommunicationProviderEnum::CSQ, environmentType: 'TEST');
