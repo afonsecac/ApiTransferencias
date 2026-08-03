@@ -68,6 +68,11 @@ security:
         # consumido dentro del propio controlador, no con el Bearer del resto del dashboard.
         # Debe ir ANTES de la regla genérica de /dashboard/api (gana la primera que matchea).
         - { path: '^/dashboard/api/notifications/stream$', roles: PUBLIC_ACCESS }
+        # Callback de DTOne: no puede enviar nuestro Bearer/API-Key. Se
+        # autentica por el token no adivinable en la propia ruta (ver
+        # DTOneWebhookController), no por el firewall. Debe ir ANTES de la
+        # regla genérica de /api (gana la primera que matchea).
+        - { path: '^/api/webhooks/dtone', roles: PUBLIC_ACCESS }
         - { path: '^/api', roles: ROLE_API_USER }
         - { path: '^/dashboard/api', roles: ROLE_SYSTEM_USER }
         # - { path: ^/profile, roles: ROLE_USER }
