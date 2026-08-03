@@ -92,6 +92,9 @@ jobs:
         run: php vendor/bin/simple-phpunit
         env:
           APP_ENV: test
+          # .env.test (KERNEL_CLASS) está en .gitignore y no existe en el
+          # checkout de CI; KernelTestCase::createKernel() lo necesita.
+          KERNEL_CLASS: App\Kernel
           DATABASE_URL: postgresql://app:app@localhost:5432/app?serverVersion=18&charset=utf8
 
   static-analysis:
