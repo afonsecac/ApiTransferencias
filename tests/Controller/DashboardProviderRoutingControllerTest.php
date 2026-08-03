@@ -5,6 +5,8 @@ namespace App\Tests\Controller;
 use App\Controller\DashboardProviderRoutingController;
 use App\DTO\CreateProviderRoutingDto;
 use App\DTO\Out\ProviderRoutingPreviewOutDto;
+use App\DTO\SetProviderActiveDto;
+use App\DTO\UpdateProviderCredentialsDto;
 use App\DTO\UpdateProviderRoutingDto;
 use App\Entity\Client;
 use App\Entity\ClientProviderRouting;
@@ -14,8 +16,13 @@ use App\Enums\ProviderCapabilityEnum;
 use App\Exception\MyCurrentException;
 use App\Provider\Contract\CommunicationProviderInterface;
 use App\Provider\ProviderRegistry;
+use App\Entity\CurrencyExchangeRate;
 use App\Repository\ClientProviderRoutingRepository;
+use App\Repository\CurrencyExchangeRateRepository;
 use App\Repository\SysConfigRepository;
+use App\Service\Provider\CurrencyExchangeRateSyncService;
+use App\Service\Provider\ProviderConnectionTestService;
+use App\Service\Provider\ProviderCredentialsAdminService;
 use App\Service\ProviderRoutingAdminService;
 use Doctrine\ORM\Query;
 use Doctrine\ORM\QueryBuilder;
@@ -33,6 +40,10 @@ class DashboardProviderRoutingControllerTest extends TestCase
     private ClientProviderRoutingRepository&MockObject $routingRepo;
     private ProviderRoutingAdminService&MockObject $adminService;
     private SysConfigRepository&MockObject $sysConfigRepo;
+    private CurrencyExchangeRateSyncService&MockObject $exchangeRateSyncService;
+    private CurrencyExchangeRateRepository&MockObject $exchangeRateRepo;
+    private ProviderCredentialsAdminService&MockObject $credentialsAdminService;
+    private ProviderConnectionTestService&MockObject $connectionTestService;
     private DashboardProviderRoutingController $controller;
 
     protected function setUp(): void
@@ -40,6 +51,10 @@ class DashboardProviderRoutingControllerTest extends TestCase
         $this->routingRepo = $this->createMock(ClientProviderRoutingRepository::class);
         $this->adminService = $this->createMock(ProviderRoutingAdminService::class);
         $this->sysConfigRepo = $this->createMock(SysConfigRepository::class);
+        $this->exchangeRateSyncService = $this->createMock(CurrencyExchangeRateSyncService::class);
+        $this->exchangeRateRepo = $this->createMock(CurrencyExchangeRateRepository::class);
+        $this->credentialsAdminService = $this->createMock(ProviderCredentialsAdminService::class);
+        $this->connectionTestService = $this->createMock(ProviderConnectionTestService::class);
 
         $etecsa = $this->createMock(CommunicationProviderInterface::class);
         $etecsa->method('getCode')->willReturn(CommunicationProviderEnum::ETECSA);
@@ -53,6 +68,10 @@ class DashboardProviderRoutingControllerTest extends TestCase
             $this->adminService,
             $registry,
             $this->sysConfigRepo,
+            $this->exchangeRateSyncService,
+            $this->exchangeRateRepo,
+            $this->credentialsAdminService,
+            $this->connectionTestService,
         );
 
         $container = $this->createMock(ContainerInterface::class);
@@ -327,5 +346,205 @@ class DashboardProviderRoutingControllerTest extends TestCase
         $response = $this->controller->preview($request);
 
         $this->assertSame(Response::HTTP_NOT_FOUND, $response->getStatusCode());
+    }
+
+    public function testSyncExchangeRatesReturnsResult(): void
+    {
+        $this->exchangeRateSyncService->method('sync')
+            ->willReturn(new \App\Service\Provider\ExchangeRateSyncResult(29, '2026-07-31', 'EUR'));
+
+        $response = $this->controller->syncExchangeRates();
+        $data = json_decode($response->getContent(), true);
+
+        $this->assertSame(200, $response->getStatusCode());
+        $this->assertSame(29, $data['created']);
+        $this->assertSame('2026-07-31', $data['rateDate']);
+        $this->assertSame('EUR', $data['baseCurrency']);
+    }
+
+    public function testSyncExchangeRatesReturnsBadGatewayOnFailure(): void
+    {
+        $this->exchangeRateSyncService->method('sync')
+            ->willThrowException(new \RuntimeException('Frankfurter inalcanzable'));
+
+        $response = $this->controller->syncExchangeRates();
+
+        $this->assertSame(Response::HTTP_BAD_GATEWAY, $response->getStatusCode());
+    }
+
+    private function exchangeRate(string $base, string $target, float $rate, string $rateDate): CurrencyExchangeRate
+    {
+        return (new CurrencyExchangeRate())
+            ->setBaseCurrency($base)
+            ->setTargetCurrency($target)
+            ->setRate($rate)
+            ->setRateDate(new \DateTimeImmutable($rateDate))
+            ->setFetchedAt(new \DateTimeImmutable($rateDate . ' 00:05:00'));
+    }
+
+    public function testExchangeRatesHistoryReturnsPaginatedResults(): void
+    {
+        $rows = [
+            $this->exchangeRate('EUR', 'USD', 1.1, '2026-07-31'),
+            $this->exchangeRate('EUR', 'GBP', 0.88, '2026-07-31'),
+        ];
+
+        $this->exchangeRateRepo->method('countHistory')->with(null)->willReturn(58);
+        $this->exchangeRateRepo->method('findHistory')->with(null, 21, 0)->willReturn($rows);
+
+        $response = $this->controller->exchangeRatesHistory(new Request());
+        $data = json_decode($response->getContent(), true);
+
+        $this->assertSame(58, $data['total']);
+        $this->assertFalse($data['hasNext']);
+        $this->assertCount(2, $data['results']);
+        $this->assertSame('USD', $data['results'][0]['targetCurrency']);
+        $this->assertSame(1.1, $data['results'][0]['rate']);
+        $this->assertSame('2026-07-31', $data['results'][0]['rateDate']);
+    }
+
+    public function testExchangeRatesHistoryFiltersByTargetCurrencyUppercased(): void
+    {
+        $this->exchangeRateRepo->expects($this->once())
+            ->method('findHistory')
+            ->with('GBP', $this->anything(), $this->anything())
+            ->willReturn([]);
+        $this->exchangeRateRepo->method('countHistory')->with('GBP')->willReturn(0);
+
+        $this->controller->exchangeRatesHistory(new Request(['targetCurrency' => 'gbp']));
+    }
+
+    // ---- credentialsStatus ----
+
+    public function testCredentialsStatusReturns404ForUnknownProvider(): void
+    {
+        $response = $this->controller->credentialsStatus('UNKNOWN');
+
+        $this->assertSame(Response::HTTP_NOT_FOUND, $response->getStatusCode());
+    }
+
+    public function testCredentialsStatusDelegatesToService(): void
+    {
+        $status = [
+            'test' => ['baseUrl' => 'https://preprod.example', 'hasApiKey' => true, 'hasApiSecret' => false],
+            'prod' => ['baseUrl' => null, 'hasApiKey' => false, 'hasApiSecret' => false],
+        ];
+        $this->credentialsAdminService->expects($this->once())
+            ->method('getStatus')
+            ->with(CommunicationProviderEnum::DTONE)
+            ->willReturn($status);
+
+        $response = $this->controller->credentialsStatus('DTONE');
+        $data = json_decode($response->getContent(), true);
+
+        $this->assertSame($status, $data);
+    }
+
+    // ---- updateCredentials ----
+
+    public function testUpdateCredentialsReturns404ForUnknownProvider(): void
+    {
+        $response = $this->controller->updateCredentials('UNKNOWN', 'TEST', new UpdateProviderCredentialsDto());
+
+        $this->assertSame(Response::HTTP_NOT_FOUND, $response->getStatusCode());
+    }
+
+    public function testUpdateCredentialsReturnsErrorFromService(): void
+    {
+        $this->credentialsAdminService->method('upsert')
+            ->willThrowException(new MyCurrentException('SYS_CONFIG_ENCRYPTION_KEY_MISSING', 'falta la clave', 500));
+
+        $response = $this->controller->updateCredentials('DTONE', 'TEST', new UpdateProviderCredentialsDto(['api_key' => 'abc']));
+
+        $this->assertSame(500, $response->getStatusCode());
+    }
+
+    public function testUpdateCredentialsReturnsUpdatedStatusOnSuccess(): void
+    {
+        $dto = new UpdateProviderCredentialsDto(['base_url' => 'https://x.example']);
+        $this->credentialsAdminService->expects($this->once())
+            ->method('upsert')
+            ->with(CommunicationProviderEnum::DTONE, 'TEST', $dto);
+        $this->credentialsAdminService->method('getStatus')->willReturn([
+            'test' => ['base_url' => ['key' => 'base_url', 'label' => 'URL base', 'required' => true, 'secret' => false, 'value' => 'https://x.example', 'configured' => true]],
+            'prod' => [],
+            'isFullyConfiguredTest' => false,
+            'isFullyConfiguredProd' => false,
+        ]);
+
+        $response = $this->controller->updateCredentials('DTONE', 'TEST', $dto);
+        $data = json_decode($response->getContent(), true);
+
+        $this->assertSame('https://x.example', $data['base_url']['value']);
+    }
+
+    // ---- setActive ----
+
+    public function testSetActiveReturns404ForUnknownProvider(): void
+    {
+        $response = $this->controller->setActive('UNKNOWN', 'TEST', new SetProviderActiveDto(false));
+
+        $this->assertSame(Response::HTTP_NOT_FOUND, $response->getStatusCode());
+    }
+
+    public function testSetActiveDelegatesToServiceAndReturnsUpdatedStatus(): void
+    {
+        $this->credentialsAdminService->expects($this->once())
+            ->method('setActive')
+            ->with(CommunicationProviderEnum::DTONE, 'PROD', false);
+        $this->credentialsAdminService->method('getStatus')->willReturn([
+            'test' => [],
+            'prod' => [],
+            'isFullyConfiguredTest' => false,
+            'isFullyConfiguredProd' => true,
+            'activeTest' => true,
+            'activeProd' => false,
+        ]);
+
+        $response = $this->controller->setActive('DTONE', 'PROD', new SetProviderActiveDto(false));
+        $data = json_decode($response->getContent(), true);
+
+        $this->assertFalse($data['activeProd']);
+    }
+
+    // ---- testConnection ----
+
+    public function testTestConnectionReturns404ForUnknownProvider(): void
+    {
+        $response = $this->controller->testConnection('UNKNOWN', new Request());
+
+        $this->assertSame(Response::HTTP_NOT_FOUND, $response->getStatusCode());
+    }
+
+    public function testTestConnectionRejectsInvalidEnvironmentType(): void
+    {
+        $response = $this->controller->testConnection('DTONE', new Request(['environmentType' => 'STAGING']));
+
+        $this->assertSame(Response::HTTP_BAD_REQUEST, $response->getStatusCode());
+    }
+
+    public function testTestConnectionDefaultsToProd(): void
+    {
+        $this->connectionTestService->expects($this->once())
+            ->method('test')
+            ->with(CommunicationProviderEnum::DTONE, 'PROD')
+            ->willReturn(['success' => true, 'amounts' => ['USD' => 100.0], 'fetchedAt' => '2026-08-01T00:00:00+00:00']);
+
+        $response = $this->controller->testConnection('DTONE', new Request());
+        $data = json_decode($response->getContent(), true);
+
+        $this->assertTrue($data['success']);
+        $this->assertEquals(100.0, $data['amounts']['USD']);
+    }
+
+    public function testTestConnectionReturnsFailureResultAsIs(): void
+    {
+        $this->connectionTestService->method('test')->willReturn(['success' => false, 'message' => 'boom']);
+
+        $response = $this->controller->testConnection('ETECSA', new Request(['environmentType' => 'test']));
+        $data = json_decode($response->getContent(), true);
+
+        $this->assertFalse($data['success']);
+        $this->assertSame('boom', $data['message']);
     }
 }

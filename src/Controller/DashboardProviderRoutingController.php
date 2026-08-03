@@ -3,11 +3,15 @@
 namespace App\Controller;
 
 use App\DTO\CreateProviderRoutingDto;
+use App\DTO\Out\CurrencyExchangeRateOutDto;
 use App\DTO\Out\DeletedOutDto;
+use App\DTO\Out\ExchangeRateSyncOutDto;
 use App\DTO\Out\PaginatedListOutDto;
 use App\DTO\Out\ProviderRoutingOutDto;
 use App\DTO\Out\ProviderRoutingPreviewOutDto;
 use App\DTO\Out\ToggleOutDto;
+use App\DTO\SetProviderActiveDto;
+use App\DTO\UpdateProviderCredentialsDto;
 use App\DTO\UpdateProviderRoutingDto;
 use App\Entity\ClientProviderRouting;
 use App\Enums\CommunicationProviderEnum;
@@ -16,7 +20,11 @@ use App\OpenApi\Attribute\DashboardEndpoint;
 use App\Provider\ProviderRegistry;
 use App\Provider\ProviderResolver;
 use App\Repository\ClientProviderRoutingRepository;
+use App\Repository\CurrencyExchangeRateRepository;
 use App\Repository\SysConfigRepository;
+use App\Service\Provider\CurrencyExchangeRateSyncService;
+use App\Service\Provider\ProviderConnectionTestService;
+use App\Service\Provider\ProviderCredentialsAdminService;
 use App\Service\ProviderRoutingAdminService;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -51,6 +59,10 @@ class DashboardProviderRoutingController extends AbstractController
         private readonly ProviderRoutingAdminService $adminService,
         private readonly ProviderRegistry $providerRegistry,
         private readonly SysConfigRepository $sysConfigRepo,
+        private readonly CurrencyExchangeRateSyncService $exchangeRateSyncService,
+        private readonly CurrencyExchangeRateRepository $exchangeRateRepo,
+        private readonly ProviderCredentialsAdminService $credentialsAdminService,
+        private readonly ProviderConnectionTestService $connectionTestService,
     ) {
     }
 
@@ -67,9 +79,146 @@ class DashboardProviderRoutingController extends AbstractController
                     fn ($c) => $c->value,
                     $this->providerRegistry->get($code)->getCapabilities(),
                 ),
+                // Nunca incluye valores, solo la forma del esquema (nombre,
+                // obligatoriedad, si se cifra) — la UI la usa para renderizar
+                // los campos correctos por proveedor.
+                'configSchema' => array_map(fn ($field) => [
+                    'key' => $field->key,
+                    'label' => $field->label,
+                    'required' => $field->required,
+                    'secret' => $field->secret,
+                ], $this->providerRegistry->get($code)->getConfigSchema()),
             ], $registered),
             'routingEnabled' => $this->sysConfigRepo->findCachedValue(ProviderResolver::ROUTING_ENABLED_KEY) !== '0',
             'defaultProvider' => $this->sysConfigRepo->findCachedValue(ProviderResolver::DEFAULT_PROVIDER_KEY) ?? CommunicationProviderEnum::ETECSA->value,
+        ]);
+    }
+
+    #[Route('/{code}/credentials', name: 'dashboard_provider_credentials_show', methods: ['GET'], requirements: ['code' => 'ETECSA|DTONE|CSQ'])]
+    #[DashboardEndpoint(summary: 'Estado de las credenciales configuradas para un proveedor (TEST/PROD)', tag: 'Provider Routing')]
+    public function credentialsStatus(string $code): JsonResponse
+    {
+        $provider = CommunicationProviderEnum::tryFrom($code);
+        if ($provider === null) {
+            return $this->json(['error' => ['message' => 'Proveedor no encontrado']], Response::HTTP_NOT_FOUND);
+        }
+
+        return $this->json($this->credentialsAdminService->getStatus($provider));
+    }
+
+    #[Route('/{code}/credentials/{environmentType}', name: 'dashboard_provider_credentials_update', methods: ['PATCH'], requirements: ['code' => 'ETECSA|DTONE|CSQ', 'environmentType' => 'TEST|PROD'])]
+    #[IsGranted('ROLE_SUPER_ADMIN')]
+    #[DashboardEndpoint(summary: 'Actualizar las credenciales de un proveedor para un entorno', tag: 'Provider Routing')]
+    public function updateCredentials(string $code, string $environmentType, UpdateProviderCredentialsDto $dto): JsonResponse
+    {
+        $provider = CommunicationProviderEnum::tryFrom($code);
+        if ($provider === null) {
+            return $this->json(['error' => ['message' => 'Proveedor no encontrado']], Response::HTTP_NOT_FOUND);
+        }
+
+        try {
+            $this->credentialsAdminService->upsert($provider, $environmentType, $dto);
+        } catch (MyCurrentException $e) {
+            return $this->json(['error' => ['message' => $e->getMessage()]], $e->getCode());
+        }
+
+        return $this->json($this->credentialsAdminService->getStatus($provider)[strtolower($environmentType)]);
+    }
+
+    #[Route('/{code}/active/{environmentType}', name: 'dashboard_provider_active_set', methods: ['PATCH'], requirements: ['code' => 'ETECSA|DTONE|CSQ', 'environmentType' => 'TEST|PROD'])]
+    #[IsGranted('ROLE_SUPER_ADMIN')]
+    #[DashboardEndpoint(summary: 'Activar o desactivar manualmente un proveedor para un entorno', tag: 'Provider Routing')]
+    public function setActive(string $code, string $environmentType, SetProviderActiveDto $dto): JsonResponse
+    {
+        $provider = CommunicationProviderEnum::tryFrom($code);
+        if ($provider === null) {
+            return $this->json(['error' => ['message' => 'Proveedor no encontrado']], Response::HTTP_NOT_FOUND);
+        }
+
+        $this->credentialsAdminService->setActive($provider, $environmentType, $dto->getActive() ?? true);
+
+        return $this->json($this->credentialsAdminService->getStatus($provider));
+    }
+
+    #[Route('/{code}/test-connection', name: 'dashboard_provider_test_connection', methods: ['GET'], requirements: ['code' => 'ETECSA|DTONE|CSQ'])]
+    #[DashboardEndpoint(summary: 'Probar en vivo si las credenciales configuradas funcionan (consulta de saldo)', tag: 'Provider Routing')]
+    public function testConnection(string $code, Request $request): JsonResponse
+    {
+        $provider = CommunicationProviderEnum::tryFrom($code);
+        if ($provider === null) {
+            return $this->json(['error' => ['message' => 'Proveedor no encontrado']], Response::HTTP_NOT_FOUND);
+        }
+
+        $environmentType = strtoupper((string) $request->query->get('environmentType', 'PROD'));
+        if (!in_array($environmentType, ['TEST', 'PROD'], true)) {
+            return $this->json(['error' => ['message' => 'environmentType debe ser TEST o PROD']], Response::HTTP_BAD_REQUEST);
+        }
+
+        return $this->json($this->connectionTestService->test($provider, $environmentType));
+    }
+
+    /**
+     * Sincronización manual del histórico de tasas de cambio (Frankfurter),
+     * para cuando un admin necesita refrescarlo antes de que corra el cron
+     * programado (ver app:provider:sync-exchange-rates). ROLE_ADMIN basta:
+     * no mueve dinero ni cambia routing, solo refresca datos de referencia.
+     */
+    #[Route('/exchange-rates/sync', name: 'dashboard_provider_exchange_rates_sync', methods: ['POST'])]
+    #[DashboardEndpoint(summary: 'Sincronizar el histórico de tasas de cambio (Frankfurter)', tag: 'Provider Routing', responseDto: ExchangeRateSyncOutDto::class)]
+    public function syncExchangeRates(): JsonResponse
+    {
+        try {
+            $result = $this->exchangeRateSyncService->sync();
+        } catch (\Throwable $e) {
+            return $this->json(
+                ['error' => ['message' => 'No se pudo sincronizar el tipo de cambio: ' . $e->getMessage()]],
+                Response::HTTP_BAD_GATEWAY,
+            );
+        }
+
+        return $this->json([
+            'created' => $result->created,
+            'rateDate' => $result->rateDate,
+            'baseCurrency' => $result->baseCurrency,
+        ]);
+    }
+
+    /**
+     * Histórico de tasas ya guardadas — para auditar qué tasa se usó en un
+     * momento dado (ver conversionRate/conversionRateDate en
+     * CommunicationPricePackage, poblados por ClientCatalogImportService).
+     */
+    #[Route('/exchange-rates', name: 'dashboard_provider_exchange_rates_history', methods: ['GET'])]
+    #[DashboardEndpoint(summary: 'Histórico de tasas de cambio guardadas', tag: 'Provider Routing', responseDto: PaginatedListOutDto::class, itemDto: CurrencyExchangeRateOutDto::class)]
+    public function exchangeRatesHistory(Request $request): JsonResponse
+    {
+        $page = max(0, (int) $request->query->get('page', 0));
+        $limit = min(100, max(1, (int) $request->query->get('limit', 20)));
+        $targetCurrency = $request->query->get('targetCurrency');
+        $targetCurrency = $targetCurrency !== null ? strtoupper((string) $targetCurrency) : null;
+
+        $total = $this->exchangeRateRepo->countHistory($targetCurrency);
+        $results = $this->exchangeRateRepo->findHistory($targetCurrency, $limit + 1, $page * $limit);
+
+        $hasNext = count($results) > $limit;
+        if ($hasNext) {
+            array_pop($results);
+        }
+
+        return $this->json([
+            'limit' => $limit,
+            'currentPage' => $page,
+            'hasNext' => $hasNext,
+            'hasPrevious' => $page > 0,
+            'total' => $total,
+            'results' => array_map(static fn ($rate) => [
+                'id' => $rate->getId(),
+                'baseCurrency' => $rate->getBaseCurrency(),
+                'targetCurrency' => $rate->getTargetCurrency(),
+                'rate' => $rate->getRate(),
+                'rateDate' => $rate->getRateDate()?->format('Y-m-d'),
+                'fetchedAt' => $rate->getFetchedAt()?->format(\DateTimeInterface::ATOM),
+            ], $results),
         ]);
     }
 

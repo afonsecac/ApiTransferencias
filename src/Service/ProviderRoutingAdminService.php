@@ -10,10 +10,13 @@ use App\Entity\ClientProviderRouting;
 use App\Entity\CommunicationSaleInfo;
 use App\Entity\Environment;
 use App\Entity\User;
+use App\Enums\CommunicationProviderEnum;
 use App\Enums\CommunicationStateEnum;
 use App\Exception\MyCurrentException;
+use App\Provider\ProviderCredentialsResolver;
 use App\Provider\ProviderResolver;
 use App\Repository\ClientProviderRoutingRepository;
+use App\Service\Provider\ClientCatalogImportService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\SecurityBundle\Security;
 use Symfony\Component\HttpFoundation\Response;
@@ -30,6 +33,8 @@ class ProviderRoutingAdminService
         private readonly ClientProviderRoutingRepository $routingRepo,
         private readonly ProviderResolver $providerResolver,
         private readonly Security $security,
+        private readonly ClientCatalogImportService $catalogImportService,
+        private readonly ProviderCredentialsResolver $credentialsResolver,
     ) {
     }
 
@@ -43,6 +48,7 @@ class ProviderRoutingAdminService
         $environment = $this->resolveEnvironmentOrFail($dto->getEnvironmentId());
 
         $this->assertScopeIsFree($client->getId(), $dto->getEnvironmentId(), $dto->getSaleType());
+        $this->assertProviderIsEnabled($dto->getProvider(), $environment?->getType());
 
         $routing = new ClientProviderRouting();
         $routing->setClient($client);
@@ -61,12 +67,19 @@ class ProviderRoutingAdminService
         $this->em->flush();
         $this->routingRepo->invalidateCache();
 
+        // Asistido, best-effort: un fallo aquí no debe impedir que el
+        // routing quede creado (ver ClientCatalogImportService).
+        $this->catalogImportService->importForRouting($routing);
+
         return $routing;
     }
 
     public function update(ClientProviderRouting $routing, UpdateProviderRoutingDto $dto): ClientProviderRouting
     {
+        $providerChanged = $dto->getProvider() !== null && $dto->getProvider() !== $routing->getProvider();
         $scopeTouched = $dto->getEnvironmentId() !== null || $dto->getSaleType() !== null;
+
+        $effectiveEnvironment = $routing->getEnvironment();
 
         if ($scopeTouched) {
             $environment = $dto->getEnvironmentId() !== null
@@ -83,6 +96,11 @@ class ProviderRoutingAdminService
 
             $routing->setEnvironment($environment);
             $routing->setSaleType($saleType);
+            $effectiveEnvironment = $environment;
+        }
+
+        if ($providerChanged) {
+            $this->assertProviderIsEnabled($dto->getProvider(), $effectiveEnvironment?->getType());
         }
 
         if ($dto->getProvider() !== null) {
@@ -101,6 +119,10 @@ class ProviderRoutingAdminService
         $routing->touch();
         $this->em->flush();
         $this->routingRepo->invalidateCache();
+
+        if ($providerChanged) {
+            $this->catalogImportService->importForRouting($routing);
+        }
 
         return $routing;
     }
@@ -194,6 +216,51 @@ class ProviderRoutingAdminService
                 'Ya existe un enrutado activo para este cliente/entorno/tipo de venta.',
                 Response::HTTP_CONFLICT,
             );
+        }
+    }
+
+    /**
+     * Gate de habilitación: un proveedor solo se puede asignar explícitamente
+     * a un cliente/entorno si (a) tiene configuradas todas sus claves
+     * obligatorias (ProviderCredentialsResolver::isFullyConfigured(), según
+     * el esquema de CommunicationProviderInterface::getConfigSchema()) y
+     * (b) no está apagado manualmente para ese entorno
+     * (ProviderCredentialsResolver::isActive() — interruptor administrativo
+     * independiente de si las claves están cargadas).
+     *
+     * Con $environmentType null (el enrutado aplica a ambos entornos del
+     * cliente) se exigen ambas condiciones en TEST y en PROD — esa fila
+     * decidirá el proveedor para ventas en cualquiera de los dos.
+     */
+    private function assertProviderIsEnabled(?string $providerCode, ?string $environmentType): void
+    {
+        if ($providerCode === null) {
+            return;
+        }
+
+        $provider = CommunicationProviderEnum::tryFrom($providerCode);
+        if ($provider === null) {
+            return;
+        }
+
+        $environmentTypesToCheck = $environmentType !== null ? [$environmentType] : ['TEST', 'PROD'];
+
+        foreach ($environmentTypesToCheck as $envType) {
+            if (!$this->credentialsResolver->isActive($provider, $envType)) {
+                throw new MyCurrentException(
+                    'PROVIDER_INACTIVE',
+                    "El proveedor {$provider->value} está desactivado manualmente para el entorno {$envType}",
+                    Response::HTTP_CONFLICT,
+                );
+            }
+
+            if (!$this->credentialsResolver->isFullyConfigured($provider, $envType)) {
+                throw new MyCurrentException(
+                    'PROVIDER_NOT_CONFIGURED',
+                    "El proveedor {$provider->value} no tiene configuradas sus claves obligatorias para el entorno {$envType}",
+                    Response::HTTP_CONFLICT,
+                );
+            }
         }
     }
 
