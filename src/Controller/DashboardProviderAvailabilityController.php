@@ -9,9 +9,11 @@ use App\OpenApi\Attribute\DashboardEndpoint;
 use App\Service\CommunicationsDispatchService;
 use App\Service\Provider\ProviderAvailabilityService;
 use App\Service\Provider\ProviderPingService;
+use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Http\Attribute\IsGranted;
 
@@ -33,6 +35,7 @@ class DashboardProviderAvailabilityController extends AbstractController
         private readonly ProviderAvailabilityService $availabilityService,
         private readonly ProviderPingService $pingService,
         private readonly CommunicationsDispatchService $dispatchService,
+        private readonly EntityManagerInterface $em,
     ) {
     }
 
@@ -79,5 +82,64 @@ class DashboardProviderAvailabilityController extends AbstractController
         }
 
         return $this->json($this->availabilityService->statusMatrix());
+    }
+
+    #[Route('/stream', name: 'dashboard_provider_availability_stream', methods: ['GET'])]
+    public function availabilityStream(): StreamedResponse
+    {
+        // Mismo patrón que DashboardCommunicationsDispatchController::pendingStream():
+        // cierra la sesión para no bloquear otras peticiones del mismo usuario
+        // mientras el stream está abierto (autenticación por firewall con
+        // estado ya resuelta para esta petición).
+        if (session_status() === \PHP_SESSION_ACTIVE) {
+            session_write_close();
+        }
+
+        $response = new StreamedResponse(function () {
+            set_time_limit(0);
+
+            $lastPayload = null;
+            $deadline = time() + 270; // cierra antes de que el proxy corte (< 5 min)
+
+            while (time() < $deadline && !connection_aborted()) {
+                // Limpia la identity map para forzar lectura fresca de BD —
+                // sin esto, un ProviderAvailability ya cargado en este
+                // proceso nunca vería los cambios que hace el ping periódico
+                // (u otro admin) en otro worker.
+                $this->em->clear();
+
+                $payload = json_encode($this->availabilityService->statusMatrix());
+
+                if ($payload !== $lastPayload) {
+                    $lastPayload = $payload;
+                    echo 'data: ' . $payload . "\n\n";
+                    if (ob_get_level() > 0) {
+                        ob_flush();
+                    }
+                    flush();
+                }
+
+                echo ": ping\n\n";
+                if (ob_get_level() > 0) {
+                    ob_flush();
+                }
+                flush();
+
+                sleep(3);
+            }
+
+            echo "event: close\ndata: {}\n\n";
+            if (ob_get_level() > 0) {
+                ob_flush();
+            }
+            flush();
+        });
+
+        $response->headers->set('Content-Type', 'text/event-stream');
+        $response->headers->set('Cache-Control', 'no-cache');
+        $response->headers->set('X-Accel-Buffering', 'no');
+        $response->headers->set('Connection', 'keep-alive');
+
+        return $response;
     }
 }
