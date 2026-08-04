@@ -56,15 +56,20 @@ jobs:
               --env-file .env.vps run --rm -T php-fpm php bin/console doctrine:migrations:migrate --no-interaction --allow-no-migration
 
             echo "=== Deploying ==="
-            # Sin lista de servicios: aplica a TODOS los definidos en la
-            # config combinada, incluidos los 6 worker-* de
-            # docker-compose.vps.prod.yaml. --force-recreate garantiza que
-            # cada worker se reinicie con la imagen recién construida en el
-            # paso anterior, aunque su definición de compose no haya
-            # cambiado. Si algún día se scopea este comando a servicios
-            # específicos, hay que seguir incluyendo todos los worker-*.
+            # Limitado a los servicios que corren la imagen recién construida
+            # (php-fpm, nginx y los 6 worker-*) — NO a database/rabbitmq/traefik,
+            # que no cambian de imagen en cada deploy. --force-recreate en el
+            # comando sin acotar los recreaba a todos, matando las conexiones
+            # activas a Postgres (incl. streams SSE de larga duración como
+            # /dashboard/api/notifications/stream) en cada deploy sin necesidad
+            # — visto en prod el 2026-08-03 (ConnectionLost a mitad de deploy).
+            # --remove-orphans se mantiene: solo afecta a contenedores de
+            # servicios que ya no existen en la config, no a los excluidos aquí.
+            # Si se añade un worker-* nuevo, hay que incluirlo en esta lista.
             docker compose -f docker-compose.vps.yaml -f docker-compose.vps.prod.yaml \
-              --env-file .env.vps up -d --remove-orphans --force-recreate
+              --env-file .env.vps up -d --remove-orphans --force-recreate \
+              php-fpm nginx worker-notifications worker-clients worker-packages \
+              worker-check-status worker-balance worker-scheduler
 
             echo "=== Clearing cache ==="
             docker compose -f docker-compose.vps.yaml -f docker-compose.vps.prod.yaml \

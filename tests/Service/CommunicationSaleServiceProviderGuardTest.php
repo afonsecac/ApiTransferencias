@@ -23,6 +23,7 @@ use App\Service\CommunicationSaleService;
 use App\Service\ConfigureSequenceService;
 use App\Service\HistoricalSaleService;
 use App\Service\NotificationCenterService;
+use App\Service\Provider\ProviderAvailabilityService;
 use App\Provider\ProviderContextFactory;
 use App\Provider\ProviderRegistry;
 use App\Provider\ProviderResolver;
@@ -54,6 +55,7 @@ class CommunicationSaleServiceProviderGuardTest extends TestCase
     private ClientProviderRoutingRepository&MockObject $routingRepo;
     private SysConfigRepository&MockObject $sysConfigRepo;
     private BalanceService&MockObject $balanceService;
+    private ProviderAvailabilityService&MockObject $availabilityService;
     private CommunicationSaleService $service;
 
     protected function setUp(): void
@@ -63,6 +65,7 @@ class CommunicationSaleServiceProviderGuardTest extends TestCase
         $this->routingRepo = $this->createMock(ClientProviderRoutingRepository::class);
         $this->sysConfigRepo = $this->createMock(SysConfigRepository::class);
         $this->balanceService = $this->createMock(BalanceService::class);
+        $this->availabilityService = $this->createMock(ProviderAvailabilityService::class);
 
         $parameters = $this->createMock(ParameterBagInterface::class);
         $mailer = $this->createMock(MailerInterface::class);
@@ -101,19 +104,19 @@ class CommunicationSaleServiceProviderGuardTest extends TestCase
             $historicalSaleService,
             $this->balanceService,
             $notificationCenter,
+            $this->availabilityService,
         );
     }
 
     /**
-     * Deshabilita el dispatch de mensajes (communications.dispatch.enabled='0')
-     * para evitar construir SaleRechargeMessage con un id nulo — en este test
-     * las entidades nunca pasan por un EntityManager real, así que su id
-     * autogenerado nunca se asigna. No es lo que se está probando aquí.
+     * Hace que canDispatchTo() devuelva false, para evitar construir
+     * SaleRechargeMessage con un id nulo — en este test las entidades nunca
+     * pasan por un EntityManager real, así que su id autogenerado nunca se
+     * asigna. No es lo que se está probando aquí (ver dispatchOrDefer()).
      */
     private function stubDispatchDisabled(): void
     {
-        $this->sysConfigRepo->method('findCachedValue')
-            ->willReturnCallback(fn (string $key) => $key === 'communications.dispatch.enabled' ? '0' : null);
+        $this->availabilityService->method('canDispatchTo')->willReturn(false);
     }
 
     private function accountWithClient(int $clientId): Account&MockObject

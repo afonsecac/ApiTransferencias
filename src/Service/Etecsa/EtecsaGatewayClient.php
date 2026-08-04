@@ -18,6 +18,7 @@ use Symfony\Component\Mailer\MailerInterface;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 use Symfony\Component\Serializer\SerializerInterface;
 use Symfony\Contracts\HttpClient\Exception\ClientExceptionInterface;
+use Symfony\Contracts\HttpClient\Exception\DecodingExceptionInterface;
 use Symfony\Contracts\HttpClient\Exception\RedirectionExceptionInterface;
 use Symfony\Contracts\HttpClient\Exception\ServerExceptionInterface;
 use Symfony\Contracts\HttpClient\Exception\TransportExceptionInterface;
@@ -254,11 +255,71 @@ class EtecsaGatewayClient extends CommonService
         return $this->post($env, '/tur/batch-info', $body);
     }
 
+    /**
+     * GET /ping — health-check documentado en
+     * https://communications.comremit.com/api/doc#tag/ping. Sin body ni
+     * query, solo X-Api-Key. A diferencia de post()/rawPost(), un 503 es una
+     * respuesta VÁLIDA que hay que leer (misma forma que el 200: environment,
+     * available, ticketId, latencyMs, error, breakerOpen, breakerFailures,
+     * checkedAt), no una excepción — por eso no reutiliza rawPost(), que
+     * lanza en 5xx. Ver App\Provider\Etecsa\EtecsaCommunicationProvider::checkHealth()
+     * para el mapeo de status a ProviderPingResult.
+     *
+     * @return array{status: int, body: array<string, mixed>}
+     */
+    public function ping(Environment $env): array
+    {
+        return $this->rawGet($env, '/ping');
+    }
+
     // -------------------------------------------------------------------------
 
     private function post(Environment $env, string $path, array $body): array
     {
         return (array) json_decode($this->rawPost($env, $path, $body), true);
+    }
+
+    /**
+     * @return array{status: int, body: array<string, mixed>}
+     */
+    private function rawGet(Environment $env, string $path): array
+    {
+        $credentials = $this->credentialsResolver->get(CommunicationProviderEnum::ETECSA, $env->getType());
+        $baseUrl = $credentials['base_url'] ?? $env->getBasePath();
+        $url = $baseUrl . $path;
+        $start = microtime(true);
+
+        $apiKey = $credentials['api_key']
+            ?? $this->sysConfigRepo->findCachedValue('api.' . strtolower($env->getType()) . '.communications.key', mustBeActive: true);
+        $headers = ['Accept' => 'application/json'];
+        if ($apiKey !== null && $apiKey !== '') {
+            $headers['X-Api-Key'] = $apiKey;
+        }
+
+        try {
+            $response = $this->httpClient->request('GET', $url, [
+                'headers' => $headers,
+                'timeout' => 5,
+            ]);
+
+            // toArray(false): no lanza por el status HTTP (queremos leer el
+            // cuerpo también en 401/403/409/503), solo por fallos de
+            // transporte/decodificación reales.
+            $status = $response->getStatusCode();
+            $body = $response->toArray(false);
+
+            $this->etecsaLogger->info('ETECSA gateway ping', [
+                'path' => $path,
+                'env' => $env->getType(),
+                'ms' => round((microtime(true) - $start) * 1000),
+                'status' => $status,
+            ]);
+
+            return ['status' => $status, 'body' => $body];
+        } catch (TransportExceptionInterface | DecodingExceptionInterface $e) {
+            $this->etecsaLogger->error('ETECSA ping transport error', ['path' => $path, 'error' => $e->getMessage()]);
+            throw new MyCurrentException('ETECSA_GATEWAY_TIMEOUT', $e->getMessage(), 503);
+        }
     }
 
     private function rawPost(Environment $env, string $path, array $body): string

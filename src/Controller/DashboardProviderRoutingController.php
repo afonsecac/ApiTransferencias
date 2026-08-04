@@ -23,6 +23,7 @@ use App\Repository\ClientProviderRoutingRepository;
 use App\Repository\CurrencyExchangeRateRepository;
 use App\Repository\SysConfigRepository;
 use App\Service\Provider\CurrencyExchangeRateSyncService;
+use App\Service\Provider\ProviderAvailabilityService;
 use App\Service\Provider\ProviderConnectionTestService;
 use App\Service\Provider\ProviderCredentialsAdminService;
 use App\Service\ProviderRoutingAdminService;
@@ -63,6 +64,7 @@ class DashboardProviderRoutingController extends AbstractController
         private readonly CurrencyExchangeRateRepository $exchangeRateRepo,
         private readonly ProviderCredentialsAdminService $credentialsAdminService,
         private readonly ProviderConnectionTestService $connectionTestService,
+        private readonly ProviderAvailabilityService $availabilityService,
     ) {
     }
 
@@ -135,7 +137,15 @@ class DashboardProviderRoutingController extends AbstractController
             return $this->json(['error' => ['message' => 'Proveedor no encontrado']], Response::HTTP_NOT_FOUND);
         }
 
-        $this->credentialsAdminService->setActive($provider, $environmentType, $dto->getActive() ?? true);
+        try {
+            // Pasa por ProviderAvailabilityService (no directo a
+            // ProviderCredentialsAdminService) para que audite el usuario y
+            // aplique el requisito "no se puede activar el despacho si el
+            // proveedor no está bien configurado" (409 PROVIDER_NOT_CONFIGURED).
+            $this->availabilityService->setManual($provider, $environmentType, $dto->getActive() ?? true);
+        } catch (MyCurrentException $e) {
+            return $this->json(['error' => ['message' => $e->getMessage()]], $e->getCode());
+        }
 
         return $this->json($this->credentialsAdminService->getStatus($provider));
     }
