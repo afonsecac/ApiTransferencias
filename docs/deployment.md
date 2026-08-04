@@ -288,17 +288,30 @@ staging vacía el schema, restaura, migra y **sanea** los `environment` que
 eran PROD (pasan a TEST, credenciales anuladas) para que staging con datos
 reales nunca pueda pegarle a las APIs de pago/comunicaciones reales.
 
+Las credenciales de proveedor (`sys_config` bajo `provider.%`) no viven en
+`environment`, así que el saneo de arriba no las toca: llegan cifradas con
+la `SYS_CONFIG_ENCRYPTION_KEY` de prod, que staging no puede descifrar con
+la suya. Decisión explícita (2026-08-04, no la de borrarlas): la clave de
+prod se envía por **stdin** de la misma conexión SSH restringida (nunca
+como argumento ni a disco), staging la usa una sola vez para descifrar y
+re-cifrar con su propia clave (`bin/console
+app:staging-sync:reencrypt-provider-secrets`) y la descarta — quedan
+funcionales en staging por ahora. Pendiente pensar un mecanismo mejor.
+
 Corre por dos vías, ninguna versionada en git (crontab de `deploy@` en el
-host de prod, igual que cualquier otro cron de sistema):
+host de prod, igual que cualquier otro cron de sistema). El log debe
+apuntar a una ruta que `deploy` pueda escribir — `/var/log` es de
+`root:syslog`, no de `deploy`, así que un cron que loguee ahí falla en seco
+(el redirect no se puede abrir y el comando ni siquiera llega a correr):
 
 ```cron
-# Mensual, el día 1 a las 03:00
-0 3 1 * * cd /opt/api-transferencias && ./scripts/sync-prod-to-staging.sh >> /var/log/sync-prod-to-staging.log 2>&1
+# Mensual, el día 2 a las 03:30
+30 3 2 * * cd /opt/api-transferencias && ./scripts/sync-prod-to-staging.sh >> /home/deploy/logs/sync-prod-to-staging.log 2>&1
 
 # Cada 2 minutos: recoge el disparo bajo demanda desde el dashboard
 # (App\Service\StagingSyncService::trigger()) — no hace nada si no hay
 # ninguna solicitud pendiente.
-*/2 * * * * cd /opt/api-transferencias && ./scripts/staging-sync-watcher.sh >> /var/log/staging-sync-watcher.log 2>&1
+*/2 * * * * cd /opt/api-transferencias && ./scripts/staging-sync-watcher.sh >> /home/deploy/logs/staging-sync-watcher.log 2>&1
 ```
 
 El script reporta su propio estado (`RUNNING`/`SUCCESS`/`FAILED`) a la app
