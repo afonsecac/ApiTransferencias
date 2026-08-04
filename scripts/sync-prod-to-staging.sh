@@ -2,8 +2,11 @@
 set -euo pipefail
 
 # ===========================================
-# Sincroniza un backup de prod hacia staging, una vez al mes.
-# Corre EN EL HOST DE PROD (via cron, ver crontab de deploy@).
+# Sincroniza un backup de prod hacia staging.
+# Corre EN EL HOST DE PROD, disparado por dos vias:
+#   - cron mensual (ver crontab de deploy@).
+#   - scripts/staging-sync-watcher.sh, que recoge el disparo bajo demanda
+#     desde el dashboard (App\Service\StagingSyncService::trigger()).
 # ===========================================
 #
 # 1. Genera un backup fresco de la BD de prod (reutiliza deploy.sh --backup).
@@ -15,17 +18,56 @@ set -euo pipefail
 #    environment que eran PROD (type, client_secret, client_id, base_path):
 #    sin esto, staging con datos reales podria terminar llamando a las APIs
 #    reales de pago/comunicaciones con las credenciales reales.
+#
+# Reporta su propio estado (RUNNING/SUCCESS/FAILED) hacia la app en cada
+# checkpoint via `bin/console app:staging-sync:report` — es lo unico que le
+# permite al dashboard (que no tiene acceso al host) enterarse en vivo.
 
 PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$PROJECT_DIR"
+
+# Evita que el cron mensual y un disparo bajo demanda (u otro disparo
+# manual) corran a la vez: ambos invocan este mismo script. Si el lock ya
+# esta tomado, esta es una invocacion duplicada de verdad — la que sigue
+# corriendo ya esta reportando su propio estado, asi que esta simplemente
+# se retira sin tocar el reporte.
+LOCK_FILE="/tmp/sync-prod-to-staging.lock"
+exec 9>"$LOCK_FILE"
+if ! flock -n 9; then
+    echo "[sync-prod-to-staging] Ya hay una sincronizacion en curso, saliendo." >&2
+    exit 1
+fi
 
 STAGING_HOST="${STAGING_SYNC_HOST:-69.62.70.58}"
 STAGING_USER="${STAGING_SYNC_USER:-deploy}"
 STAGING_KEY="${STAGING_SYNC_KEY:-$HOME/.ssh/prod_to_staging_sync_ed25519}"
 SSH_OPTS=(-o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=30 -i "$STAGING_KEY")
+COMPOSE=(docker compose -f docker-compose.vps.yaml -f docker-compose.vps.prod.yaml --env-file .env.vps)
+
+TRIGGERED_BY="cron"
+for arg in "$@"; do
+    case "$arg" in
+        --triggered-by=*) TRIGGERED_BY="${arg#*=}" ;;
+    esac
+done
 
 log()  { echo "[sync-prod-to-staging] $1"; }
 error(){ echo "[sync-prod-to-staging][ERROR] $1" >&2; exit 1; }
+
+# No debe hacer abortar el script si el propio reporte falla (p.ej. la app
+# esta caida) — la sincronizacion en si es lo que importa, el reporte es
+# solo para que el dashboard se entere.
+report() {
+    local status="$1"
+    local error_msg="${2:-}"
+    local args=(app:staging-sync:report "$status" "--triggered-by=$TRIGGERED_BY")
+    [ -n "$error_msg" ] && args+=("--error=$error_msg")
+    "${COMPOSE[@]}" exec -T php-fpm php bin/console "${args[@]}" || true
+}
+
+trap 'report FAILED "Fallo en la linea $LINENO: $BASH_COMMAND"' ERR
+
+report RUNNING
 
 log "Generando backup de prod..."
 ./deploy.sh prod --backup
@@ -42,3 +84,4 @@ log "Disparando restore + saneo de environment en staging..."
 ssh "${SSH_OPTS[@]}" "$STAGING_USER@$STAGING_HOST" RESTORE_AND_SANITIZE
 
 log "Sincronizacion completa."
+report SUCCESS
