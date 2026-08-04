@@ -42,6 +42,13 @@ services:
   php-fpm:
     build:
       target: app
+    # Único bind mount de php-fpm en prod: la app nunca tiene socket de
+    # Docker, CLI de Docker ni la llave SSH del sync prod->staging — solo
+    # puede ESCRIBIR una bandera aquí (App\Service\StagingSyncService); un
+    # cron en el host (scripts/staging-sync-watcher.sh) la recoge y ejecuta
+    # el script real, fuera del contenedor.
+    volumes:
+      - ./var/staging-sync-trigger:/var/www/var/staging-sync-trigger
     deploy:
       resources:
         limits:

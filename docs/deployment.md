@@ -277,3 +277,32 @@ las líneas que señala: solo `CORS_ALLOW_ORIGIN`, `CORS_DASHBOARD_ORIGIN` y
 (regex y hash de contraseña respectivamente); cualquier otra variable con
 comillas envolventes o `@`/`:` sin codificar en una URL de conexión romperá
 esa credencial en tiempo de ejecución.
+
+## 9. Sync de producción hacia staging
+
+`scripts/sync-prod-to-staging.sh` copia la BD de prod hacia staging: backup
+fresco (`deploy.sh prod --backup`), `rsync` a staging por una clave SSH
+dedicada restringida por forced-command (`scripts/staging-sync-dispatch.sh`,
+solo permite recibir el rsync o disparar `RESTORE_AND_SANITIZE`), y en
+staging vacía el schema, restaura, migra y **sanea** los `environment` que
+eran PROD (pasan a TEST, credenciales anuladas) para que staging con datos
+reales nunca pueda pegarle a las APIs de pago/comunicaciones reales.
+
+Corre por dos vías, ninguna versionada en git (crontab de `deploy@` en el
+host de prod, igual que cualquier otro cron de sistema):
+
+```cron
+# Mensual, el día 1 a las 03:00
+0 3 1 * * cd /opt/api-transferencias && ./scripts/sync-prod-to-staging.sh >> /var/log/sync-prod-to-staging.log 2>&1
+
+# Cada 2 minutos: recoge el disparo bajo demanda desde el dashboard
+# (App\Service\StagingSyncService::trigger()) — no hace nada si no hay
+# ninguna solicitud pendiente.
+*/2 * * * * cd /opt/api-transferencias && ./scripts/staging-sync-watcher.sh >> /var/log/staging-sync-watcher.log 2>&1
+```
+
+El script reporta su propio estado (`RUNNING`/`SUCCESS`/`FAILED`) a la app
+en cada checkpoint vía `bin/console app:staging-sync:report` — es lo único
+que le permite al dashboard (`GET /admin/staging-sync/stream`, solo
+disponible cuando `DEPLOYMENT_STAGE=production`) enterarse en vivo, tanto si
+lo disparó el cron mensual como un admin desde la pantalla.
