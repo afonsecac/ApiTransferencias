@@ -3,22 +3,19 @@
 namespace App\Service\Provider;
 
 use App\Enums\CommunicationProviderEnum;
-use App\Provider\Contract\ProviderBalanceInterface;
-use App\Provider\ProviderContextFactory;
-use App\Provider\ProviderRegistry;
 
 /**
  * Prueba en vivo, bajo demanda, si las credenciales configuradas para un
- * proveedor/entorno funcionan — consultando el saldo de plataforma, la
- * operación de solo-lectura más barata disponible en todos los proveedores.
+ * proveedor/entorno funcionan. Delega el sondeo en ProviderPingService (la
+ * misma ruta que usa el ping periódico — un solo comportamiento) y adapta su
+ * ProviderPingResult a la forma de retorno histórica de este servicio.
  * No hay circuit breaker ni estado persistido: es una señal honesta del
  * instante en que se pulsa el botón, no un histórico de fiabilidad.
  */
 class ProviderConnectionTestService
 {
     public function __construct(
-        private readonly ProviderRegistry $providerRegistry,
-        private readonly ProviderContextFactory $contextFactory,
+        private readonly ProviderPingService $pingService,
     ) {
     }
 
@@ -27,20 +24,19 @@ class ProviderConnectionTestService
      */
     public function test(CommunicationProviderEnum $provider, string $environmentType): array
     {
-        try {
-            $adapter = $this->providerRegistry->getFor($provider, ProviderBalanceInterface::class);
-            $result = $adapter->getPlatformBalance($this->contextFactory->forEnvironmentType($provider, $environmentType));
+        $result = $this->pingService->ping($provider, $environmentType);
 
+        if ($result->available) {
             return [
                 'success' => true,
-                'amounts' => $result->amounts,
-                'fetchedAt' => $result->fetchedAt->format(DATE_ATOM),
-            ];
-        } catch (\Throwable $e) {
-            return [
-                'success' => false,
-                'message' => $e->getMessage(),
+                'amounts' => $result->details['amounts'] ?? [],
+                'fetchedAt' => $result->details['fetchedAt'] ?? $result->checkedAt->format(DATE_ATOM),
             ];
         }
+
+        return [
+            'success' => false,
+            'message' => $result->error ?? 'El proveedor no respondió',
+        ];
     }
 }

@@ -16,6 +16,8 @@ use App\Provider\Contract\ProviderCatalogInterface;
 use App\Provider\Contract\ProviderConfigField;
 use App\Provider\Contract\ProviderContext;
 use App\Provider\Contract\ProviderDispatchResult;
+use App\Provider\Contract\ProviderHealthCheckInterface;
+use App\Provider\Contract\ProviderPingResult;
 use App\Provider\Contract\ProviderProductDto;
 use App\Provider\Contract\ProviderStatusQuery;
 use App\Provider\Contract\ProviderStatusResult;
@@ -57,7 +59,8 @@ final class EtecsaCommunicationProvider implements
     ProviderBalanceInterface,
     ProviderCatalogInterface,
     TouristSimProviderInterface,
-    GeoCatalogProviderInterface
+    GeoCatalogProviderInterface,
+    ProviderHealthCheckInterface
 {
     public function __construct(
         private readonly EtecsaGatewayClient $client,
@@ -172,6 +175,43 @@ final class EtecsaCommunicationProvider implements
             amounts: ['CUP' => $balance->cupAmount, 'USD' => $balance->usdAmount],
             fetchedAt: $balance->fetchedAt,
         );
+    }
+
+    /**
+     * GET /ping. 200 y 503 comparten forma de respuesta — el status HTTP y
+     * `available` en el body son la misma señal, redundante. 401/403/409
+     * significan credencial/permiso mal configurado, no un ETECSA caído:
+     * se reportan como inconclusive para que
+     * App\Service\Provider\ProviderAvailabilityService no apague el
+     * proveedor por un falso positivo nuestro.
+     */
+    public function checkHealth(ProviderContext $context): ProviderPingResult
+    {
+        $env = $this->resolveEnvironment($context);
+
+        try {
+            $result = $this->client->ping($env);
+        } catch (MyCurrentException $e) {
+            return ProviderPingResult::unavailable($e->getMessage());
+        }
+
+        $status = $result['status'];
+        $body = $result['body'];
+        $latencyMs = isset($body['latencyMs']) && is_numeric($body['latencyMs']) ? (int) $body['latencyMs'] : null;
+
+        return match (true) {
+            $status === 200 => ProviderPingResult::available($latencyMs, $body),
+            $status === 503 => ProviderPingResult::unavailable(
+                is_string($body['error'] ?? null) ? $body['error'] : 'ETECSA: servicio no disponible',
+                $latencyMs,
+                $body,
+            ),
+            in_array($status, [401, 403, 409], true) => ProviderPingResult::inconclusive(
+                "ETECSA ping: respuesta HTTP {$status} — revisar credenciales/scope",
+                $body,
+            ),
+            default => ProviderPingResult::inconclusive("ETECSA ping: status HTTP inesperado {$status}", $body),
+        };
     }
 
     public function fetchProducts(ProviderContext $context): iterable

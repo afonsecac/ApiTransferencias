@@ -21,6 +21,7 @@ use App\Repository\ClientProviderRoutingRepository;
 use App\Repository\CurrencyExchangeRateRepository;
 use App\Repository\SysConfigRepository;
 use App\Service\Provider\CurrencyExchangeRateSyncService;
+use App\Service\Provider\ProviderAvailabilityService;
 use App\Service\Provider\ProviderConnectionTestService;
 use App\Service\Provider\ProviderCredentialsAdminService;
 use App\Service\ProviderRoutingAdminService;
@@ -44,6 +45,7 @@ class DashboardProviderRoutingControllerTest extends TestCase
     private CurrencyExchangeRateRepository&MockObject $exchangeRateRepo;
     private ProviderCredentialsAdminService&MockObject $credentialsAdminService;
     private ProviderConnectionTestService&MockObject $connectionTestService;
+    private ProviderAvailabilityService&MockObject $availabilityService;
     private DashboardProviderRoutingController $controller;
 
     protected function setUp(): void
@@ -55,6 +57,7 @@ class DashboardProviderRoutingControllerTest extends TestCase
         $this->exchangeRateRepo = $this->createMock(CurrencyExchangeRateRepository::class);
         $this->credentialsAdminService = $this->createMock(ProviderCredentialsAdminService::class);
         $this->connectionTestService = $this->createMock(ProviderConnectionTestService::class);
+        $this->availabilityService = $this->createMock(ProviderAvailabilityService::class);
 
         $etecsa = $this->createMock(CommunicationProviderInterface::class);
         $etecsa->method('getCode')->willReturn(CommunicationProviderEnum::ETECSA);
@@ -72,6 +75,7 @@ class DashboardProviderRoutingControllerTest extends TestCase
             $this->exchangeRateRepo,
             $this->credentialsAdminService,
             $this->connectionTestService,
+            $this->availabilityService,
         );
 
         $container = $this->createMock(ContainerInterface::class);
@@ -489,8 +493,8 @@ class DashboardProviderRoutingControllerTest extends TestCase
 
     public function testSetActiveDelegatesToServiceAndReturnsUpdatedStatus(): void
     {
-        $this->credentialsAdminService->expects($this->once())
-            ->method('setActive')
+        $this->availabilityService->expects($this->once())
+            ->method('setManual')
             ->with(CommunicationProviderEnum::DTONE, 'PROD', false);
         $this->credentialsAdminService->method('getStatus')->willReturn([
             'test' => [],

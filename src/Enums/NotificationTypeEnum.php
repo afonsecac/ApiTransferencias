@@ -14,5 +14,7 @@ enum NotificationTypeEnum: string
     case ACCOUNT_ACTIVATED               = 'ACCOUNT_ACTIVATED';
     case TWO_FACTOR_MANDATORY_PENDING    = 'TWO_FACTOR_MANDATORY_PENDING';
     case PROMOTION_CREATED               = 'PROMOTION_CREATED';
+    case PROVIDER_UNAVAILABLE            = 'PROVIDER_UNAVAILABLE';
+    case PROVIDER_RECOVERED              = 'PROVIDER_RECOVERED';
     case CUSTOM                          = 'CUSTOM';
 }

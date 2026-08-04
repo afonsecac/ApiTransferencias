@@ -34,13 +34,20 @@ class CommunicationSaleInfoRepository extends ServiceEntityRepository
 
     /**
      * Ventas en estado PENDING con stateProcess=CREATED: fueron persistidas pero nunca encoladas
-     * (porque el dispatch estaba deshabilitado cuando se crearon).
+     * (porque el dispatch estaba deshabilitado, o el proveedor no estaba despachable, cuando se crearon).
+     *
+     * Trae tenant/environment con fetch-join: CommunicationsDispatchService::dispatchPending()
+     * necesita el environmentType de cada venta para decidir si es despachable
+     * (App\Service\Provider\ProviderAvailabilityService::canDispatchTo()) — sin este join
+     * sería un N+1 por cada venta pendiente.
      *
      * @return CommunicationSaleInfo[]
      */
     public function findPendingUndispatched(): array
     {
         return $this->createQueryBuilder('s')
+            ->leftJoin('s.tenant', 't')->addSelect('t')
+            ->leftJoin('t.environment', 'e')->addSelect('e')
             ->andWhere('s.state = :state')
             ->andWhere('s.stateProcess = :stateProcess')
             ->setParameter('state', CommunicationStateEnum::PENDING)
@@ -48,6 +55,40 @@ class CommunicationSaleInfoRepository extends ServiceEntityRepository
             ->orderBy('s.createdAt', 'ASC')
             ->getQuery()
             ->getResult();
+    }
+
+    /**
+     * Igual que findPendingUndispatched() pero acotado a un proveedor y
+     * entorno concretos — usado al recuperarse un proveedor
+     * (ProviderAvailabilityService::recordPing()) para reencolar solo sus
+     * pendientes, no las de todos. `provider IS NULL` se trata como ETECSA
+     * (filas antiguas anteriores al enrutado multi-proveedor).
+     *
+     * @return CommunicationSaleInfo[]
+     */
+    public function findPendingUndispatchedByProvider(string $provider, ?string $environmentType, int $limit = 500): array
+    {
+        $qb = $this->createQueryBuilder('s')
+            ->leftJoin('s.tenant', 't')->addSelect('t')
+            ->leftJoin('t.environment', 'e')->addSelect('e')
+            ->andWhere('s.state = :state')
+            ->andWhere('s.stateProcess = :stateProcess')
+            ->setParameter('state', CommunicationStateEnum::PENDING)
+            ->setParameter('stateProcess', CommunicationStateEnum::CREATED->value)
+            ->orderBy('s.createdAt', 'ASC')
+            ->setMaxResults($limit);
+
+        if ($provider === 'ETECSA') {
+            $qb->andWhere('s.provider = :provider OR s.provider IS NULL')->setParameter('provider', $provider);
+        } else {
+            $qb->andWhere('s.provider = :provider')->setParameter('provider', $provider);
+        }
+
+        if ($environmentType !== null) {
+            $qb->andWhere('e.type = :environmentType')->setParameter('environmentType', $environmentType);
+        }
+
+        return $qb->getQuery()->getResult();
     }
 
     /**
