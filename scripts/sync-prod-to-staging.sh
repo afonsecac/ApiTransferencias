@@ -18,6 +18,13 @@ set -euo pipefail
 #    environment que eran PROD (type, client_secret, client_id, base_path):
 #    sin esto, staging con datos reales podria terminar llamando a las APIs
 #    reales de pago/comunicaciones con las credenciales reales.
+# 4. Las credenciales de proveedor (sys_config bajo provider.%) llegan en el
+#    dump cifradas con la SYS_CONFIG_ENCRYPTION_KEY de prod, que staging no
+#    puede descifrar con la suya. Decision explicita (2026-08-04, no la de
+#    borrarlas): se envia la clave de prod SOLO por stdin de esta misma
+#    conexion SSH restringida, staging la usa una vez para descifrar y
+#    re-cifrar con su propia clave, y la descarta — quedan funcionales en
+#    staging por ahora. Pendiente un mecanismo mejor mas adelante.
 #
 # Reporta su propio estado (RUNNING/SUCCESS/FAILED) hacia la app en cada
 # checkpoint via `bin/console app:staging-sync:report` — es lo unico que le
@@ -80,8 +87,12 @@ log "Transfiriendo a staging ($STAGING_HOST)..."
 rsync -az -e "ssh ${SSH_OPTS[*]}" \
   "$DUMP_FILE" "$STAGING_USER@$STAGING_HOST:backups/incoming/$(basename "$DUMP_FILE")"
 
+PROD_SYS_CONFIG_KEY=$(grep '^SYS_CONFIG_ENCRYPTION_KEY=' .env.vps | cut -d= -f2-)
+[ -z "$PROD_SYS_CONFIG_KEY" ] && error "SYS_CONFIG_ENCRYPTION_KEY no esta definida en .env.vps"
+
 log "Disparando restore + saneo de environment en staging..."
-ssh "${SSH_OPTS[@]}" "$STAGING_USER@$STAGING_HOST" RESTORE_AND_SANITIZE
+echo "$PROD_SYS_CONFIG_KEY" | ssh "${SSH_OPTS[@]}" "$STAGING_USER@$STAGING_HOST" RESTORE_AND_SANITIZE
+unset PROD_SYS_CONFIG_KEY
 
 log "Sincronizacion completa."
 report SUCCESS

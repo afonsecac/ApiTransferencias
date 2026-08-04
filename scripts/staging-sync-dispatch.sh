@@ -5,9 +5,12 @@ set -euo pipefail
 # de deploy@staging): esa clave vive en el host de prod para el sync mensual y
 # NUNCA debe poder ejecutar un comando arbitrario. Solo permite dos cosas:
 #   1. Recibir el dump vía rsync hacia backups/incoming/
-#   2. Disparar RESTORE_AND_SANITIZE, que restaura el dump más reciente y
+#   2. Disparar RESTORE_AND_SANITIZE, que restaura el dump más reciente,
 #      neutraliza los environment que eran PROD (type, client_secret,
-#      client_id, base_path) para que staging no pueda golpear APIs reales.
+#      client_id, base_path) y re-cifra las credenciales de proveedor
+#      (sys_config bajo provider.%) con la clave local — la clave de prod
+#      necesaria para descifrarlas llega por stdin de esta misma conexión,
+#      nunca como argumento ni a disco (ver sync-prod-to-staging.sh).
 
 cd /opt/api-transferencias
 
@@ -16,6 +19,11 @@ case "${SSH_ORIGINAL_COMMAND:-}" in
         exec $SSH_ORIGINAL_COMMAND
         ;;
     RESTORE_AND_SANITIZE)
+        # Primero que nada: la clave de cifrado de prod viaja por stdin de
+        # esta misma conexion (nunca en SSH_ORIGINAL_COMMAND, nunca a disco).
+        # Se lee ya, antes de que cualquier otro paso pueda tocar stdin.
+        PROD_SYS_CONFIG_KEY=$(cat)
+
         # || true: con set -e + pipefail, el glob sin coincidencias hace que
         # "ls" falle y aborte el script ANTES de llegar al mensaje de abajo.
         LATEST=$(ls -t backups/incoming/*.sql.gz 2>/dev/null | head -1) || true
@@ -59,6 +67,10 @@ case "${SSH_ORIGINAL_COMMAND:-}" in
                     base_path = 'https://staging-sync-disabled.invalid'
                 WHERE type = 'PROD';
             "
+
+        echo "Re-encriptando credenciales de proveedor con la clave local..."
+        "${COMPOSE[@]}" exec -T -e PROD_SYS_CONFIG_KEY="$PROD_SYS_CONFIG_KEY" php-fpm php bin/console app:staging-sync:reencrypt-provider-secrets
+        unset PROD_SYS_CONFIG_KEY
 
         "${COMPOSE[@]}" exec -T php-fpm php bin/console cache:clear
 
