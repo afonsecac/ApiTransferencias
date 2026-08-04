@@ -14,4 +14,8 @@ final class DispatchPendingOutDto
 
     #[OAProperty(description: 'Total de mensajes encolados')]
     public int $total;
+
+    /** @var array<string, int> */
+    #[OAProperty(description: 'Ventas saltadas por proveedor no despachable, agrupadas por "PROVIDER|ENVIRONMENT_TYPE"')]
+    public array $skipped;
 }

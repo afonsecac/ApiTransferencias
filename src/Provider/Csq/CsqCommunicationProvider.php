@@ -4,9 +4,12 @@ namespace App\Provider\Csq;
 
 use App\Enums\CommunicationProviderEnum;
 use App\Enums\ProviderCapabilityEnum;
+use App\Exception\MyCurrentException;
 use App\Provider\Contract\CommunicationProviderInterface;
 use App\Provider\Contract\ProviderConfigField;
 use App\Provider\Contract\ProviderContext;
+use App\Provider\Contract\ProviderHealthCheckInterface;
+use App\Provider\Contract\ProviderPingResult;
 
 /**
  * Adaptador de CSQ ("eVSB") a la abstracción de proveedor. Implementa
@@ -21,7 +24,7 @@ use App\Provider\Contract\ProviderContext;
  * del dashboard — así se pueden cargar y probar sus credenciales desde ya,
  * aunque todavía no participe en el enrutado real de ventas.
  */
-final class CsqCommunicationProvider implements CommunicationProviderInterface
+final class CsqCommunicationProvider implements CommunicationProviderInterface, ProviderHealthCheckInterface
 {
     public function __construct(
         private readonly CsqHttpClient $client,
@@ -60,5 +63,25 @@ final class CsqCommunicationProvider implements CommunicationProviderInterface
     public function ping(ProviderContext $context, string $echo = 'pong'): array
     {
         return $this->client->ping($context, $echo);
+    }
+
+    /**
+     * Delega en el ping propio de CSQ (GET /ping/{echo}), midiendo latencia
+     * localmente porque la API no la devuelve. Un ping fallido de CSQ
+     * significa transporte/servidor caído (CsqHttpClient::ping() ya traduce
+     * cualquier fallo HTTP a MyCurrentException('CSQ_REQUEST_FAILED')), no
+     * un problema de credenciales — no hay clasificación inconclusive aquí.
+     */
+    public function checkHealth(ProviderContext $context): ProviderPingResult
+    {
+        $start = microtime(true);
+
+        try {
+            $this->client->ping($context);
+        } catch (MyCurrentException $e) {
+            return ProviderPingResult::unavailable($e->getMessage());
+        }
+
+        return ProviderPingResult::available((int) round((microtime(true) - $start) * 1000));
     }
 }

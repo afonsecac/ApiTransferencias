@@ -38,6 +38,7 @@ use App\Provider\ProviderResolver;
 use App\Repository\BalanceOperationRepository;
 use App\Repository\EnvironmentRepository;
 use App\Repository\SysConfigRepository;
+use App\Service\Provider\ProviderAvailabilityService;
 use Doctrine\DBAL\Exception;
 use Doctrine\ORM\EntityManagerInterface;
 use Psr\Log\LoggerInterface;
@@ -87,6 +88,7 @@ class CommunicationSaleService extends CommonService
         private readonly HistoricalSaleService $historicalSaleService,
         private readonly BalanceService $balanceService,
         private readonly NotificationCenterService $notificationCenter,
+        private readonly ProviderAvailabilityService $availabilityService,
     ) {
         parent::__construct(
             $em,
@@ -101,11 +103,27 @@ class CommunicationSaleService extends CommonService
         );
     }
 
-    private const DISPATCH_ENABLED_KEY = 'communications.dispatch.enabled';
-
-    private function isDispatchEnabled(): bool
+    /**
+     * Único punto de despacho/diferido: encola el mensaje si el proveedor de
+     * la venta está despachable (App\Service\Provider\ProviderAvailabilityService::canDispatchTo() —
+     * switch global, credenciales+manual, y AUTO del ping), o la deja
+     * PENDING para que la recuperación del proveedor (o dispatchPending())
+     * la reencole más tarde.
+     *
+     * $messageFactory es un closure, no el mensaje ya construido: construirlo
+     * de forma perezosa evita evaluar getId() cuando todavía puede ser null
+     * (justo antes de un flush) en la rama que ni siquiera va a despachar.
+     */
+    private function dispatchOrDefer(CommunicationSaleInfo $sale, \Closure $messageFactory): void
     {
-        return $this->sysConfigRepo->findCachedValue(self::DISPATCH_ENABLED_KEY) !== '0';
+        $provider = $sale->getProvider() ?? CommunicationProviderEnum::ETECSA->value;
+        $environmentType = $sale->getTenant()?->getEnvironment()?->getType();
+
+        if ($this->availabilityService->canDispatchTo($provider, $environmentType)) {
+            $this->messageBus->dispatch($messageFactory());
+        } else {
+            $this->logger->info("Communications dispatch disabled or provider unavailable: sale {$sale->getId()} saved, pending dispatch.");
+        }
     }
 
     /**
@@ -145,12 +163,8 @@ class CommunicationSaleService extends CommonService
 
         $this->em->flush();
 
-        if ($this->isDispatchEnabled()) {
-            foreach ($toDispatch as $sale) {
-                $this->messageBus->dispatch(new SaleRechargeMessage($sale->getId()));
-            }
-        } else {
-            $this->logger->info('Communications dispatch disabled: ' . count($toDispatch) . ' activated sale(s) queued in DB, pending dispatch.');
+        foreach ($toDispatch as $sale) {
+            $this->dispatchOrDefer($sale, fn () => new SaleRechargeMessage($sale->getId()));
         }
 
         return $activated;
@@ -325,11 +339,7 @@ class CommunicationSaleService extends CommonService
             throw $ex;
         }
 
-        if ($this->isDispatchEnabled()) {
-            $this->messageBus->dispatch(new SaleRechargeMessage($recharge->getId()));
-        } else {
-            $this->logger->info("Communications dispatch disabled: recharge {$recharge->getId()} saved, pending dispatch.");
-        }
+        $this->dispatchOrDefer($recharge, fn () => new SaleRechargeMessage($recharge->getId()));
 
         return $recharge;
     }
@@ -383,6 +393,15 @@ class CommunicationSaleService extends CommonService
                 ];
                 $saleRecharge->setTransactionStatus($rechargeInfo);
                 $this->em->flush();
+
+                return;
+            }
+            // Chequeo ANTES de claimForSending(): un mensaje que ya estaba en
+            // RabbitMQ cuando el proveedor cayó no debe consumir la venta —
+            // se deja en CREATED (sin reclamar) para que dispatchOrDefer()/
+            // dispatchPending() la reencolen cuando el proveedor se recupere.
+            if (!$this->availabilityService->canDispatchTo($saleRecharge->getProvider(), $user->getEnvironment()?->getType())) {
+                $this->logger->info("Skipping recharge {$saleId}: provider not dispatchable right now, left pending for recovery.");
 
                 return;
             }
@@ -661,11 +680,7 @@ class CommunicationSaleService extends CommonService
             throw $ex;
         }
 
-        if ($this->isDispatchEnabled()) {
-            $this->messageBus->dispatch(new SalePackageMessage($sale->getId()));
-        } else {
-            $this->logger->info("Communications dispatch disabled: sale package {$sale->getId()} saved, pending dispatch.");
-        }
+        $this->dispatchOrDefer($sale, fn () => new SalePackageMessage($sale->getId()));
 
         return $sale;
     }
@@ -685,6 +700,14 @@ class CommunicationSaleService extends CommonService
             'id' => $saleId
         ]);
         if (is_null($sale) || $sale->getState() !== CommunicationStateEnum::PENDING) {
+            return;
+        }
+        // Chequeo ANTES de claimForSending(): ver invokeRechargeCommunication()
+        // para la misma justificación (no consumir un mensaje ya encolado si
+        // el proveedor no es despachable ahora mismo).
+        if (!$this->availabilityService->canDispatchTo($sale->getProvider(), $sale->getTenant()?->getEnvironment()?->getType())) {
+            $this->logger->info("Skipping sale {$saleId}: provider not dispatchable right now, left pending for recovery.");
+
             return;
         }
         if (!$this->claimForSending($sale)) {

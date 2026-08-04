@@ -9,11 +9,13 @@ use App\Provider\Contract\ProviderBalanceInterface;
 use App\Provider\Contract\ProviderBalanceResult;
 use App\Provider\Contract\ProviderContext;
 use App\Provider\ProviderContextFactory;
+use App\Provider\ProviderCredentialsResolver;
 use App\Provider\ProviderRegistry;
 use App\Provider\ProviderResolver;
 use App\Repository\ClientProviderRoutingRepository;
 use App\Repository\SysConfigRepository;
 use App\Service\Provider\ProviderConnectionTestService;
+use App\Service\Provider\ProviderPingService;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
 
@@ -34,6 +36,18 @@ class ProviderConnectionTestServiceTest extends TestCase
         );
 
         return new ProviderContextFactory($resolver);
+    }
+
+    private function service(ProviderRegistry $registry): ProviderConnectionTestService
+    {
+        // getConfigSchema() de los adaptadores de este test siempre es []:
+        // ProviderCredentialsResolver::isFullyConfigured() no itera ningún
+        // campo requerido y por tanto no llega a tocar SysConfigRepository.
+        $credentialsResolver = new ProviderCredentialsResolver($this->createMock(SysConfigRepository::class), $registry);
+
+        return new ProviderConnectionTestService(
+            new ProviderPingService($registry, $credentialsResolver, $this->contextFactory()),
+        );
     }
 
     public function testReturnsSuccessWithAmountsOnHappyPath(): void
@@ -61,7 +75,7 @@ class ProviderConnectionTestServiceTest extends TestCase
             }
         };
 
-        $service = new ProviderConnectionTestService(new ProviderRegistry([$adapter]), $this->contextFactory());
+        $service = $this->service(new ProviderRegistry([$adapter]));
 
         $result = $service->test(CommunicationProviderEnum::DTONE, 'TEST');
 
@@ -95,7 +109,7 @@ class ProviderConnectionTestServiceTest extends TestCase
             }
         };
 
-        $service = new ProviderConnectionTestService(new ProviderRegistry([$adapter]), $this->contextFactory());
+        $service = $this->service(new ProviderRegistry([$adapter]));
 
         $result = $service->test(CommunicationProviderEnum::DTONE, 'TEST');
 
@@ -105,7 +119,7 @@ class ProviderConnectionTestServiceTest extends TestCase
 
     public function testReturnsFailureWhenProviderNotRegistered(): void
     {
-        $service = new ProviderConnectionTestService(new ProviderRegistry([]), $this->contextFactory());
+        $service = $this->service(new ProviderRegistry([]));
 
         $result = $service->test(CommunicationProviderEnum::ETECSA, 'PROD');
 

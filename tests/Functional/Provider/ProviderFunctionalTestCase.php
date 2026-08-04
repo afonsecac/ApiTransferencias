@@ -9,6 +9,7 @@ use App\Entity\CommunicationClientPackage;
 use App\Entity\CommunicationPricePackage;
 use App\Entity\CommunicationProduct;
 use App\Entity\Environment;
+use App\Entity\User;
 use App\Tests\Functional\FunctionalTestCase;
 use Symfony\Component\Security\Core\Authentication\Token\UsernamePasswordToken;
 use Symfony\Component\Security\Core\Authentication\Token\Storage\TokenStorageInterface;
@@ -24,6 +25,37 @@ abstract class ProviderFunctionalTestCase extends FunctionalTestCase
     {
         $tokenStorage = self::getContainer()->get(TokenStorageInterface::class);
         $tokenStorage->setToken(new UsernamePasswordToken($account, 'main', $account->getRoles()));
+    }
+
+    /**
+     * Usuario admin del dashboard (distinto de Account, que autentica a
+     * clientes de la API móvil) — necesario para probar auditoría de
+     * acciones MANUAL (ProviderAvailabilityService::setManual()).
+     */
+    protected function createAdminUser(): User
+    {
+        static $counter = 0;
+        $counter++;
+
+        $user = (new User())
+            ->setEmail("admin-func-{$counter}@example.test")
+            ->setPassword('irrelevant-hash')
+            ->setFirstName('Admin')
+            ->setLastName("Funcional {$counter}")
+            ->setRoles(['ROLE_SUPER_ADMIN'])
+            ->setIsActive(true)
+            ->setIsCheckValidation(true);
+
+        $this->em->persist($user);
+        $this->em->flush();
+
+        return $user;
+    }
+
+    protected function authenticateAsAdmin(User $user): void
+    {
+        $tokenStorage = self::getContainer()->get(TokenStorageInterface::class);
+        $tokenStorage->setToken(new UsernamePasswordToken($user, 'main', $user->getRoles()));
     }
 
     protected function createClient(bool $isActive = true): Client
