@@ -103,6 +103,35 @@ class ClientProviderRoutingRepository extends ServiceEntityRepository
         });
     }
 
+    /**
+     * Lista PLANA (sin distinguir environment/saleType) de las filas activas
+     * de un cliente, en orden de prioridad — lo que consultará
+     * ProviderDispatchResolver (V2 Fase 2) para probar proveedores en orden
+     * hasta que uno acepte la venta. Desempate por id ASC cuando dos filas
+     * comparten priority (p. ej. ambas en el valor DEFAULT tras el backfill
+     * de Version20260810120200), para que el orden sea determinista.
+     *
+     * @return list<ClientProviderRouting>
+     */
+    public function findActiveProvidersOrderedForClient(int $clientId): array
+    {
+        $key = sprintf('cpr_priority_%d', $clientId);
+
+        return $this->cache->get($key, function (ItemInterface $item) use ($clientId) {
+            $item->tag([self::CACHE_TAG]);
+
+            return $this->createQueryBuilder('cpr')
+                ->andWhere('cpr.client = :clientId')
+                ->andWhere('cpr.isActive = :active')
+                ->setParameter('clientId', $clientId)
+                ->setParameter('active', true)
+                ->orderBy('cpr.priority', 'ASC')
+                ->addOrderBy('cpr.id', 'ASC')
+                ->getQuery()
+                ->getResult();
+        });
+    }
+
     public function invalidateCache(): void
     {
         $this->cache->invalidateTags([self::CACHE_TAG]);

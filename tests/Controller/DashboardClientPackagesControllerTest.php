@@ -10,6 +10,7 @@ use App\Entity\CommunicationPricePackage;
 use App\Entity\User;
 use App\Exception\MyCurrentException;
 use App\Service\CommunicationPackageService;
+use App\Service\Pricing\PackageSalePriceResolver;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\EntityRepository;
 use Doctrine\ORM\QueryBuilder;
@@ -28,18 +29,21 @@ class DashboardClientPackagesControllerTest extends TestCase
     private EntityManagerInterface&MockObject $em;
     private Security&MockObject $security;
     private CommunicationPackageService&MockObject $packageService;
+    private PackageSalePriceResolver&MockObject $salePriceResolver;
     private DashboardClientPackagesController $controller;
 
     protected function setUp(): void
     {
-        $this->em             = $this->createMock(EntityManagerInterface::class);
-        $this->security       = $this->createMock(Security::class);
-        $this->packageService = $this->createMock(CommunicationPackageService::class);
+        $this->em                = $this->createMock(EntityManagerInterface::class);
+        $this->security          = $this->createMock(Security::class);
+        $this->packageService    = $this->createMock(CommunicationPackageService::class);
+        $this->salePriceResolver = $this->createMock(PackageSalePriceResolver::class);
 
         $this->controller = new DashboardClientPackagesController(
             $this->em,
             $this->security,
             $this->packageService,
+            $this->salePriceResolver,
         );
 
         $container = $this->createMock(ContainerInterface::class);

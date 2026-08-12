@@ -16,8 +16,10 @@ use App\Entity\Environment;
 use App\Entity\User;
 use App\Exception\MyCurrentException;
 use App\OpenApi\Attribute\DashboardEndpoint;
+use App\Provider\Contract\ProviderCatalogInterface;
+use App\Provider\ProviderRegistry;
 use App\Service\CommunicationProductService;
-use App\Service\TakeProductService;
+use App\Service\Provider\CommunicationCatalogSyncService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -32,7 +34,8 @@ class DashboardCatalogController extends AbstractController
     public function __construct(
         private readonly EntityManagerInterface $em,
         private readonly NormalizerInterface $serializer,
-        private readonly TakeProductService $takeProductService,
+        private readonly ProviderRegistry $providerRegistry,
+        private readonly CommunicationCatalogSyncService $catalogSyncService,
         private readonly CommunicationProductService $productService,
     ) {
     }
@@ -99,6 +102,7 @@ class DashboardCatalogController extends AbstractController
         'initialDate' => 'p.initialDate',
         'endDateAt' => 'p.endDateAt',
         'environment' => 'e.type',
+        'provider' => 'p.provider',
     ];
 
     #[Route('/products', name: 'dashboard_products_list', methods: ['GET'])]
@@ -109,21 +113,32 @@ class DashboardCatalogController extends AbstractController
         $page = max(0, (int) $request->query->get('page', 0));
         $limit = min(100, max(1, (int) $request->query->get('limit', 20)));
         $envType = $request->query->get('environmentType');
+        $environmentId = $request->query->get('environmentId');
         $search = $request->query->get('search');
+        $provider = $request->query->get('provider');
         $orderBy = $request->query->get('orderBy', 'packageId DESC');
+        $now = new \DateTimeImmutable();
 
         $qb = $this->em->getRepository(CommunicationProduct::class)
             ->createQueryBuilder('p')
             ->leftJoin('p.environment', 'e')
             ->where('p.enabled = :enabled')
-            ->setParameter('enabled', true);
+            ->andWhere('p.initialDate <= :now')
+            ->andWhere('p.endDateAt IS NULL OR p.endDateAt > :now')
+            ->setParameter('enabled', true)
+            ->setParameter('now', $now);
 
-        if ($envType !== null) {
+        if ($environmentId !== null) {
+            $qb->andWhere('e.id = :environmentId')->setParameter('environmentId', $environmentId);
+        } elseif ($envType !== null) {
             $qb->andWhere('e.type = :type')->setParameter('type', $envType);
         }
         if (!empty($search)) {
             $qb->andWhere('p.description LIKE :search')
                 ->setParameter('search', '%' . $search . '%');
+        }
+        if (!empty($provider)) {
+            $qb->andWhere('p.provider = :provider')->setParameter('provider', $provider);
         }
 
         $orderParts = explode(' ', $orderBy);
@@ -217,25 +232,64 @@ class DashboardCatalogController extends AbstractController
         ]);
     }
 
+    /**
+     * Sincroniza TODOS los proveedores con catálogo (ProviderCatalogInterface
+     * — hoy ETECSA, DTOne y CSQ) para cada Environment activo del
+     * environmentType dado. Antes (hasta 2026-08-10) delegaba en
+     * TakeProductService::takeProduct(), que solo sincronizaba ETECSA
+     * hardcodeado y filtraba por `scope='ET'` — un artefacto legacy que
+     * habría excluido cualquier Environment de DTOne/CSQ (que nunca setean
+     * scope). Un proveedor que falle (p.ej. credenciales no configuradas
+     * para ese entorno) no aborta a los demás — se reporta su error en
+     * `providers[].error` y se sigue con el resto.
+     */
     #[Route('/products/sync', name: 'dashboard_products_sync', methods: ['POST'])]
-    #[DashboardEndpoint(summary: 'Sincronizar productos con proveedor', tag: 'Catalog', requestDto: SyncProductsDto::class, responseDto: SyncProductsOutDto::class)]
+    #[DashboardEndpoint(summary: 'Sincronizar productos de todos los proveedores', tag: 'Catalog', requestDto: SyncProductsDto::class, responseDto: SyncProductsOutDto::class)]
     #[IsGranted('ROLE_ADMIN')]
     public function syncProducts(SyncProductsDto $dto): JsonResponse
     {
-        try {
-            $result = $this->takeProductService->takeProduct($dto->getEnvironmentType());
+        $environments = $this->em->getRepository(Environment::class)->findBy([
+            'type' => $dto->getEnvironmentType(),
+            'isActive' => true,
+        ]);
 
-            return $this->json([
-                'synced' => true,
-                'items' => $result['items'],
-                'environmentType' => $dto->getEnvironmentType(),
-            ]);
-        } catch (\Exception $e) {
-            return $this->json(
-                ['error' => ['message' => $e->getMessage()]],
-                Response::HTTP_INTERNAL_SERVER_ERROR
-            );
+        $providers = $this->providerRegistry->allImplementing(ProviderCatalogInterface::class);
+        $totalCreated = 0;
+        $report = [];
+
+        foreach ($providers as $provider) {
+            $created = 0;
+            $updated = 0;
+            $skipped = 0;
+            $error = null;
+
+            try {
+                foreach ($environments as $environment) {
+                    $result = $this->catalogSyncService->syncProducts($provider->getCode(), $environment);
+                    $created += $result->created;
+                    $updated += $result->updated;
+                    $skipped += $result->skipped;
+                }
+            } catch (\Exception $e) {
+                $error = $e->getMessage();
+            }
+
+            $totalCreated += $created;
+            $report[] = [
+                'provider' => $provider->getCode()->value,
+                'created' => $created,
+                'updated' => $updated,
+                'skipped' => $skipped,
+                'error' => $error,
+            ];
         }
+
+        return $this->json([
+            'synced' => true,
+            'items' => $totalCreated,
+            'environmentType' => $dto->getEnvironmentType(),
+            'providers' => $report,
+        ]);
     }
 
     private function getClientsByEnvironmentType(?string $envType): array

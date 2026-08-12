@@ -6,10 +6,10 @@ use App\Entity\Account;
 use App\Entity\Client;
 use App\Entity\ClientProviderRouting;
 use App\Entity\CommunicationClientPackage;
-use App\Entity\CommunicationPricePackage;
 use App\Entity\CommunicationProduct;
 use App\Entity\Environment;
 use App\Enums\CommunicationProviderEnum;
+use App\Service\Pricing\PackageMaterializationService;
 use Doctrine\ORM\EntityManagerInterface;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
@@ -18,24 +18,26 @@ use Symfony\Component\DependencyInjection\Attribute\Autowire;
  * Al routear un cliente a un proveedor nuevo (≠ ETECSA), este servicio
  * importa su catálogo automáticamente hasta dejarlo comprable de punta a
  * punta: sincroniza CommunicationProduct (ver CommunicationCatalogSyncService),
- * crea un CommunicationPricePackage por cada (producto × cuenta activa del
- * cliente en ese entorno) que todavía no exista, y a partir de esa fila crea
- * también el CommunicationClientPackage correspondiente — la asignación que
- * de verdad habilita la compra vía la API de ventas (ver
- * CommunicationClientPackageRepository::getPackageById(), que es lo que
- * consulta CommunicationSaleService::processRecharge()/executeSale()).
+ * asegura un paquete REFERENCIA (CommunicationClientPackage con tenant
+ * NULL) por cada producto habilitado, y materializa una copia por cada
+ * cuenta activa del cliente en ese entorno (PackageMaterializationService)
+ * — la asignación que de verdad habilita la compra vía la API de ventas
+ * (ver CommunicationClientPackageRepository::getPackageById(), que es lo
+ * que consulta CommunicationSaleService::processRecharge()/executeSale()).
  * Decisión explícita del usuario (2026-08-03): antes esto se dejaba como
  * paso manual del dashboard, pero para un proveedor ≠ ETECSA no tiene
  * sentido — routear y no poder vender nada hasta un segundo paso manual.
  * ETECSA sigue con su flujo propio (ya establecido, anterior a este
  * servicio) — no se toca.
  *
- * Precio y conversión: ver ProductPriceResolver (compartido con el refresco
- * periódico, ProviderCatalogRefreshService). Cada CommunicationPricePackage
- * creado aquí queda marcado autoManaged=true y con conversionRate/
- * conversionRateDate cuando hubo conversión — trazabilidad de qué tasa se
- * usó, y señal para que el refresco periódico sepa que puede tocarla (nunca
- * toca una fila creada o editada a mano por un admin).
+ * Precio: desde el rediseño de precios/paquetes, este servicio YA NO crea
+ * ningún CommunicationPricePackage (contrato) — sin contrato,
+ * PackageSalePriceResolver resuelve el precio contra el CommunicationProduct
+ * vivo en el momento de listar/vender. Esto elimina de raíz el bug de
+ * precio rancio que tenía la versión anterior (el refresco periódico de
+ * catálogo solo actualizaba el CommunicationPricePackage, nunca el
+ * ClientPackage materializado): ahora no hay nada que propagar, el
+ * resolver siempre lee el costo vigente.
  *
  * Best-effort: un fallo al sincronizar (p.ej. proveedor inalcanzable) se
  * loguea y no impide que ProviderRoutingAdminService::create()/update()
@@ -53,7 +55,8 @@ class ClientCatalogImportService
     public function __construct(
         private readonly EntityManagerInterface $em,
         private readonly CommunicationCatalogSyncService $catalogSyncService,
-        private readonly ProductPriceResolver $priceResolver,
+        private readonly PackageMaterializationService $materializationService,
+        private readonly ProductSaleTypeMatcher $saleTypeMatcher,
         #[Autowire('@monolog.logger.provider')]
         private readonly LoggerInterface $providerLogger,
     ) {
@@ -105,14 +108,17 @@ class ClientCatalogImportService
             ]);
 
             foreach ($products as $product) {
-                if (!$this->matchesSaleType($product, $routing->getSaleType())) {
+                if (!$this->saleTypeMatcher->matches($product, $routing->getSaleType())) {
                     continue;
                 }
 
+                [$reference, $referenceCreated] = $this->findOrCreateReferencePackage($product, $environment);
+                if ($referenceCreated) {
+                    $touched = true;
+                }
+
                 foreach ($accounts as $account) {
-                    [$pricePackage, $pricePackageCreated] = $this->findOrCreatePricePackage($product, $account, $client);
-                    $clientPackageCreated = $this->createClientPackageIfMissing($pricePackage, $account);
-                    if ($pricePackageCreated || $clientPackageCreated) {
+                    if ($this->createClientPackageIfMissing($reference, $account)) {
                         $touched = true;
                     }
                 }
@@ -125,122 +131,70 @@ class ClientCatalogImportService
     }
 
     /**
-     * Un enrutado con `saleType` fijo ('recharge' o 'sale') solo debe traer
-     * los paquetes de precio que de verdad se pueden vender bajo ese modo.
-     * `saleType === null` significa que el enrutado aplica a ambos modos,
-     * así que no se filtra nada.
-     *
-     * "Elegible para recarga" exige DOS condiciones a la vez:
-     *  - mismo criterio que CommunicationSaleService::assertRechargeableProduct():
-     *    todo lo que sea PIN_PURCHASE se vende siempre como paquete, nunca
-     *    como recarga.
-     *  - CommunicationProduct::isMobileOrInternetService(): "recharge" es
-     *    solo telefonía móvil o Internet (decisión de negocio) — todo lo
-     *    demás (gift cards, comida, SIM/equipos físicos...) es 'sale' aunque
-     *    el proveedor lo entregue como si fuera una recarga directa.
+     * @return array{0: CommunicationClientPackage, 1: bool} la referencia
+     *   (existente o recién creada) y si se acaba de crear — un solo
+     *   paquete referencia por producto (índice único parcial
+     *   uniq_ccp_reference_product), del que se materializa una copia por
+     *   cuenta más abajo.
      */
-    private function matchesSaleType(CommunicationProduct $product, ?string $saleType): bool
+    private function findOrCreateReferencePackage(CommunicationProduct $product, Environment $environment): array
     {
-        if ($saleType === null) {
-            return true;
-        }
-
-        $isPinPurchase = str_contains($product->getPackageType() ?? '', 'PIN_PURCHASE');
-        $rechargeEligible = !$isPinPurchase && $product->isMobileOrInternetService();
-
-        return $saleType === 'sale' ? !$rechargeEligible : $rechargeEligible;
-    }
-
-    /**
-     * @return array{0: CommunicationPricePackage, 1: bool} la fila (existente
-     *   o recién creada) y si se acaba de crear — el paso siguiente
-     *   (createClientPackageIfMissing) necesita la fila en ambos casos, para
-     *   poder rellenar el hueco de asignación aunque el precio ya existiera
-     *   de antes (p.ej. de una importación previa a este cambio).
-     */
-    private function findOrCreatePricePackage(CommunicationProduct $product, Account $account, Client $client): array
-    {
-        $existing = $this->em->getRepository(CommunicationPricePackage::class)->findOneBy([
+        $existing = $this->em->getRepository(CommunicationClientPackage::class)->findOneBy([
             'product' => $product,
-            'tenant' => $account,
+            'tenant' => null,
         ]);
         if ($existing !== null) {
             return [$existing, false];
         }
 
-        $pricePackage = new CommunicationPricePackage();
-        $pricePackage->setProduct($product);
-        $pricePackage->setTenant($account);
-        $pricePackage->setEnvironment($account->getEnvironment());
         $name = $product->getDescription() ?: ('Producto ' . $product->getExternalRef());
-        $pricePackage->setName($name);
-        $pricePackage->setDescription($product->getDescription());
-        $pricePackage->setPrice($product->getPrice() ?? 0.0);
-        if ($product->getPriceCurrency() !== null) {
-            $pricePackage->setPriceCurrency($product->getPriceCurrency());
-        }
-        $pricePackage->markAutoManaged();
 
-        $resolved = $this->priceResolver->resolve($product, $client->getCurrency(), $account->getId());
-        $pricePackage->setAmount($resolved->amount);
-        if ($resolved->currency !== null) {
-            $pricePackage->setCurrency($resolved->currency);
-        }
-        $pricePackage->setConversionRate($resolved->conversionRate);
-        $pricePackage->setConversionRateDate($resolved->conversionRateDate);
-        if ($resolved->pendingNote !== null) {
-            $pricePackage->setKnowMore($resolved->pendingNote);
-        }
+        $reference = new CommunicationClientPackage();
+        $reference->setProduct($product);
+        $reference->setEnvironment($environment);
+        $reference->setName($name);
+        $reference->setDescription($name);
+        $reference->setActiveStartAt(new \DateTimeImmutable('now'));
+        // Sin esto queda null y getPackageById() (que exige activeEndAt >
+        // ahora) nunca encuentra los paquetes materializados de esta
+        // referencia — mismo error que ya cometí a mano el 2026-08-02 al
+        // crear uno de prueba sin este campo.
+        $reference->setActiveEndAt(new \DateTimeImmutable(self::INDEFINITE_VALIDITY_END));
+        $reference->setBenefits($product->getBenefits());
+        $reference->setTags($this->deriveTags($product));
+        $reference->setService($product->getService());
+        $reference->setDestination([
+            'amount' => $product->getDestinationAmount(),
+            'unit' => $product->getDestinationUnit(),
+            'unit_type' => 'CURRENCY',
+        ]);
+        $reference->setValidity(['quantity' => null, 'unit' => null]);
 
-        $this->em->persist($pricePackage);
+        $this->em->persist($reference);
 
-        return [$pricePackage, true];
+        return [$reference, true];
     }
 
     /**
      * La asignación que de verdad habilita la compra: sin esta fila,
      * CommunicationClientPackageRepository::getPackageById() nunca encuentra
      * el paquete y la API de ventas responde COM003 "The package don't
-     * exist" aunque el CommunicationPricePackage sí exista (confirmado en
-     * vivo el 2026-08-02 contra el sandbox de DTOne).
+     * exist" aunque el producto/referencia sí existan (confirmado en vivo
+     * el 2026-08-02 contra el sandbox de DTOne). Delegado en
+     * PackageMaterializationService — mismo clonado que usa la auto-copia
+     * perezosa de CommunicationClientPackageProvider.
      */
-    private function createClientPackageIfMissing(CommunicationPricePackage $pricePackage, Account $account): bool
+    private function createClientPackageIfMissing(CommunicationClientPackage $reference, Account $account): bool
     {
         $existing = $this->em->getRepository(CommunicationClientPackage::class)->findOneBy([
             'tenant' => $account,
-            'priceClientPackage' => $pricePackage,
+            'referencePackage' => $reference,
         ]);
         if ($existing !== null) {
             return false;
         }
 
-        $product = $pricePackage->getProduct();
-        $name = $product?->getDescription() ?: $pricePackage->getName();
-
-        $clientPackage = new CommunicationClientPackage();
-        $clientPackage->setTenant($account);
-        $clientPackage->setPriceClientPackage($pricePackage);
-        $clientPackage->setEnvironment($pricePackage->getEnvironment());
-        $clientPackage->setName($name ?? '');
-        $clientPackage->setDescription($name ?? '');
-        $clientPackage->setAmount($pricePackage->getAmount() ?? 0.0);
-        $clientPackage->setCurrency($pricePackage->getCurrency() ?? '');
-        $clientPackage->setActiveStartAt(new \DateTimeImmutable('now'));
-        // Sin esto queda null y getPackageById() (que exige activeEndAt >
-        // ahora) nunca lo encuentra — mismo error que ya cometí a mano el
-        // 2026-08-02 al crear uno de prueba sin este campo.
-        $clientPackage->setActiveEndAt(new \DateTimeImmutable(self::INDEFINITE_VALIDITY_END));
-        $clientPackage->setBenefits($product?->getBenefits() ?? []);
-        $clientPackage->setTags($this->deriveTags($product));
-        $clientPackage->setService($product?->getService() ?? []);
-        $clientPackage->setDestination([
-            'amount' => $product?->getDestinationAmount(),
-            'unit' => $product?->getDestinationUnit(),
-            'unit_type' => 'CURRENCY',
-        ]);
-        $clientPackage->setValidity(['quantity' => null, 'unit' => null]);
-
-        $this->em->persist($clientPackage);
+        $this->materializationService->materializeForTenant($reference, $account);
 
         return true;
     }

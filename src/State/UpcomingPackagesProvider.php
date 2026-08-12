@@ -7,6 +7,7 @@ use ApiPlatform\State\ProviderInterface;
 use App\Entity\Account;
 use App\Entity\CommunicationClientPackage;
 use App\Entity\CommunicationPromotions;
+use App\Service\Pricing\PackageSalePriceResolver;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\SecurityBundle\Security;
 
@@ -15,6 +16,7 @@ class UpcomingPackagesProvider implements ProviderInterface
     public function __construct(
         private readonly EntityManagerInterface $em,
         private readonly Security $security,
+        private readonly PackageSalePriceResolver $salePriceResolver,
     ) {}
 
     public function provide(Operation $operation, array $uriVariables = [], array $context = []): object|array|null
@@ -73,6 +75,8 @@ class UpcomingPackagesProvider implements ProviderInterface
         foreach ($packages as $pkg) {
             $pkg->setUpcomingPromotions($promosByPackage[$pkg->getId()] ?? []);
         }
+
+        $this->salePriceResolver->resolveMany($packages, $user);
 
         return $packages;
     }

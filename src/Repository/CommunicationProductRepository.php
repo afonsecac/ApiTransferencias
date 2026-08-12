@@ -4,7 +4,9 @@ namespace App\Repository;
 
 
 use App\Entity\CommunicationProduct;
+use App\Entity\Environment;
 use App\EntityPaginator\PaginatorResponse;
+use App\Service\Pricing\DestinationKey;
 use App\Util\IPaginationResponse;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Common\Collections\ArrayCollection;
@@ -87,5 +89,67 @@ class CommunicationProductRepository extends ServiceEntityRepository
             ]));
 
         return $sql->getQuery()->getResult();
+    }
+
+    /**
+     * Productos habilitados cuya tupla de destino coincide con
+     * (destinationAmount, destinationCurrency) dentro de la tolerancia de
+     * DestinationKey::EPSILON — el match agnóstico de proveedor entre
+     * CommunicationPackage y CommunicationProduct (V2 Fase 2), usado tanto
+     * por PackageCatalogResolver (MAX de precio, cualquier proveedor) como
+     * por ProviderDispatchResolver (¿este proveedor concreto puede
+     * despachar esta tupla?, vía $provider).
+     *
+     * @return list<CommunicationProduct>
+     */
+    public function findMatchingDestination(
+        float $destinationAmount,
+        string $destinationCurrency,
+        ?Environment $environment = null,
+        ?string $provider = null,
+    ): array {
+        $qb = $this->createQueryBuilder('p')
+            ->andWhere('p.enabled = :enabled')
+            ->andWhere('UPPER(p.destinationUnit) = :currency')
+            ->andWhere('p.destinationAmount BETWEEN :min AND :max')
+            ->setParameter('enabled', true)
+            ->setParameter('currency', strtoupper(trim($destinationCurrency)))
+            ->setParameter('min', $destinationAmount - DestinationKey::EPSILON)
+            ->setParameter('max', $destinationAmount + DestinationKey::EPSILON);
+
+        if ($environment !== null) {
+            $qb->andWhere('p.environment = :environment')->setParameter('environment', $environment);
+        }
+        if ($provider !== null) {
+            $qb->andWhere('p.provider = :provider')->setParameter('provider', $provider);
+        }
+
+        return $qb->getQuery()->getResult();
+    }
+
+    /**
+     * Todos los productos HABILITADOS de un proveedor — fallback de
+     * CommunicationPackageBindingService cuando findMatchingDestination()
+     * no encuentra candidatos (ej. ETECSA: sus productos no traen
+     * destinationAmount/destinationUnit poblados, así que el matching por
+     * tupla nunca los encuentra) y el admin necesita elegir a mano de todo
+     * el catálogo del proveedor.
+     *
+     * @return list<CommunicationProduct>
+     */
+    public function findAllByProvider(string $provider, ?Environment $environment = null): array
+    {
+        $qb = $this->createQueryBuilder('p')
+            ->andWhere('p.enabled = :enabled')
+            ->andWhere('p.provider = :provider')
+            ->setParameter('enabled', true)
+            ->setParameter('provider', $provider)
+            ->orderBy('p.description', 'ASC');
+
+        if ($environment !== null) {
+            $qb->andWhere('p.environment = :environment')->setParameter('environment', $environment);
+        }
+
+        return $qb->getQuery()->getResult();
     }
 }

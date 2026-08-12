@@ -13,10 +13,35 @@ use App\Entity\CommunicationPricePackage;
 use App\Entity\CommunicationProduct;
 use App\Entity\Environment;
 use App\Exception\MyCurrentException;
+use App\Repository\EnvironmentRepository;
+use App\Repository\SysConfigRepository;
 use App\Service\CommonService;
+use App\Service\Pricing\PackageMaterializationService;
+use Doctrine\ORM\EntityManagerInterface;
+use Psr\Log\LoggerInterface;
+use Symfony\Bundle\SecurityBundle\Security;
+use Symfony\Component\DependencyInjection\ParameterBag\ParameterBagInterface;
+use Symfony\Component\Mailer\MailerInterface;
+use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
+use Symfony\Component\Serializer\SerializerInterface;
 
 class CommunicationPackageService extends CommonService
 {
+    public function __construct(
+        EntityManagerInterface $em,
+        Security $security,
+        ParameterBagInterface $parameters,
+        MailerInterface $mailer,
+        LoggerInterface $logger,
+        UserPasswordHasherInterface $passwordHasher,
+        EnvironmentRepository $environmentRepository,
+        SysConfigRepository $sysConfigRepo,
+        SerializerInterface $serializer,
+        private readonly PackageMaterializationService $materializationService,
+    ) {
+        parent::__construct($em, $security, $parameters, $mailer, $logger, $passwordHasher, $environmentRepository, $sysConfigRepo, $serializer);
+    }
+
     /**
      * @param int $productId
      * @param int|null $tenant
@@ -41,6 +66,16 @@ class CommunicationPackageService extends CommonService
      */
     public function create(CreateClientPackageDto $dto): CommunicationClientPackage
     {
+        // Sin tenantId: alta de paquete REFERENCIA (tenant null), con
+        // materialización opcional a $clients — misma bifurcación que
+        // promociones/contratos ("lista de clientes vacía = referencia").
+        // La rama de abajo (tenantId presente) es el comportamiento
+        // histórico, sin cambios: un único cliente, sin pasar por
+        // referencia.
+        if ($dto->getTenantId() === null) {
+            return $this->createReferenceAndMaterialize($dto);
+        }
+
         $tenant = $this->em->getRepository(Account::class)->find($dto->getTenantId());
         if ($tenant === null) {
             throw new MyCurrentException('TENANT_NOT_FOUND', 'Tenant not found', 404);
@@ -95,6 +130,119 @@ class CommunicationPackageService extends CommonService
         $this->em->flush();
 
         return $cp;
+    }
+
+    /**
+     * Alta de paquete REFERENCIA (tenant null) — la estructura administrable
+     * (benefits/tags/service/destination/validity) de la que se copian los
+     * paquetes por cliente. Si $dto->getClients() trae ids, además
+     * materializa una copia para cada uno (PackageMaterializationService,
+     * idempotente). El precio NO se fija aquí — sale del contrato del
+     * cliente si existe o, si no, del producto (PackageSalePriceResolver).
+     *
+     * @throws MyCurrentException
+     */
+    private function createReferenceAndMaterialize(CreateClientPackageDto $dto): CommunicationClientPackage
+    {
+        $pricePackage = null;
+        if ($dto->getPriceClientPackageId() !== null) {
+            $pricePackage = $this->em->getRepository(CommunicationPricePackage::class)->find($dto->getPriceClientPackageId());
+            if ($pricePackage === null) {
+                throw new MyCurrentException('PRICE_PACKAGE_NOT_FOUND', 'Price package not found', 404);
+            }
+        }
+
+        $product = null;
+        if ($dto->getProductId() !== null) {
+            $product = $this->em->getRepository(CommunicationProduct::class)->find($dto->getProductId());
+            if ($product === null) {
+                throw new MyCurrentException('PRODUCT_NOT_FOUND', 'Product not found', 404);
+            }
+        }
+        $product ??= $pricePackage?->getProduct();
+
+        if ($pricePackage === null && $product === null) {
+            throw new MyCurrentException(
+                'PACKAGE_SOURCE_REQUIRED',
+                'Se requiere productId o priceClientPackageId para crear un paquete referencia',
+                422,
+            );
+        }
+
+        // Un solo paquete referencia por producto (índice único parcial
+        // uniq_ccp_reference_product on (environment_id, product_id) WHERE
+        // tenant_id IS NULL — un producto pertenece a un único entorno, así
+        // que basta con chequear por producto, igual que
+        // ClientCatalogImportService::findOrCreateReferencePackage()). A
+        // diferencia de ese servicio (import automático, idempotente por
+        // diseño), esta alta es explícita de un admin: si ya existe una
+        // referencia para este producto se rechaza con un error de dominio
+        // claro en vez de dejar que la violación de constraint llegue cruda
+        // como 500 (bug real detectado vía e2e: POST /client/packages
+        // reventaba con SQLSTATE 23505 en uniq_ccp_reference_product).
+        if ($product !== null) {
+            $existingReference = $this->em->getRepository(CommunicationClientPackage::class)->findOneBy([
+                'product' => $product,
+                'tenant' => null,
+            ]);
+            if ($existingReference !== null) {
+                throw new MyCurrentException(
+                    'REFERENCE_PACKAGE_ALREADY_EXISTS',
+                    'Ya existe un paquete referencia para este producto',
+                    409,
+                );
+            }
+        }
+
+        $dataInfo = $pricePackage?->getDataInfo() ?? [];
+
+        $reference = new CommunicationClientPackage();
+        $reference->setProduct($product);
+        $reference->setPriceClientPackage($pricePackage);
+        $reference->setName($dto->getName() ?? $pricePackage?->getName() ?? $product?->getDescription() ?? '');
+        $reference->setDescription($dto->getDescription() ?? $pricePackage?->getDescription() ?? $product?->getDescription() ?? '');
+        $reference->setAmount($dto->getAmount() ?? $pricePackage?->getAmount() ?? 0.0);
+        $reference->setCurrency($dto->getCurrency() ?? $pricePackage?->getCurrency() ?? 'USD');
+        $reference->setActiveStartAt(new \DateTimeImmutable($dto->getActiveStartAt() ?? 'now'));
+        if ($dto->getActiveEndAt() !== null) {
+            $reference->setActiveEndAt(new \DateTimeImmutable($dto->getActiveEndAt()));
+        }
+        if ($dto->getKnowMore() !== null || $pricePackage?->getKnowMore() !== null) {
+            $reference->setKnowMore($dto->getKnowMore() ?? $pricePackage?->getKnowMore());
+        }
+        $reference->setBenefits($dto->getBenefits() ?? $dataInfo['benefits'] ?? []);
+        $reference->setTags($dto->getTags() ?? $dataInfo['tags'] ?? []);
+        $reference->setService($dto->getService() ?? $dataInfo['service'] ?? []);
+        $reference->setDestination($dto->getDestination() ?? $dataInfo['destination'] ?? []);
+        $reference->setValidity($dto->getValidity() ?? $dataInfo['validity'] ?? []);
+
+        if ($dto->getEnvironmentId() !== null) {
+            $env = $this->em->getRepository(Environment::class)->find($dto->getEnvironmentId());
+            if ($env === null) {
+                throw new MyCurrentException('ENVIRONMENT_NOT_FOUND', 'Environment not found', 404);
+            }
+            $reference->setEnvironment($env);
+        } elseif ($product?->getEnvironment() !== null) {
+            $reference->setEnvironment($product->getEnvironment());
+        } elseif ($pricePackage?->getEnvironment() !== null) {
+            $reference->setEnvironment($pricePackage->getEnvironment());
+        }
+
+        $this->em->persist($reference);
+
+        $clientIds = $dto->getClients() ?? [];
+        $result = $reference;
+        foreach ($clientIds as $clientId) {
+            $tenant = $this->em->getRepository(Account::class)->find($clientId);
+            if ($tenant === null) {
+                throw new MyCurrentException('TENANT_NOT_FOUND', 'Tenant not found', 404);
+            }
+            $result = $this->materializationService->materializeForTenant($reference, $tenant);
+        }
+
+        $this->em->flush();
+
+        return $result;
     }
 
     /** @throws MyCurrentException */
