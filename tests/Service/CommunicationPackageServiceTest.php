@@ -12,6 +12,7 @@ use App\Repository\CommunicationPricePackageRepository;
 use App\Repository\EnvironmentRepository;
 use App\Repository\SysConfigRepository;
 use App\Service\CommunicationPackageService;
+use App\Service\Pricing\PackageMaterializationService;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\EntityRepository;
 use PHPUnit\Framework\MockObject\MockObject;
@@ -45,6 +46,7 @@ class CommunicationPackageServiceTest extends TestCase
             $this->createMock(EnvironmentRepository::class),
             $this->createMock(SysConfigRepository::class),
             $this->createMock(SerializerInterface::class),
+            $this->createMock(PackageMaterializationService::class),
         );
     }
 

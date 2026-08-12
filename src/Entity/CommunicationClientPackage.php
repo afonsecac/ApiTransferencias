@@ -10,6 +10,8 @@ use ApiPlatform\Metadata\ApiResource;
 use ApiPlatform\Metadata\Get;
 use ApiPlatform\Metadata\GetCollection;
 use App\Repository\CommunicationClientPackageRepository;
+use App\Service\Pricing\ResolvedSalePrice;
+use App\State\CommunicationClientPackageItemProvider;
 use App\State\CommunicationClientPackageProvider;
 use App\State\UpcomingPackagesProvider;
 use Doctrine\Common\Collections\ArrayCollection;
@@ -27,6 +29,7 @@ use Symfony\Component\Validator\Constraints as Assert;
             uriTemplate: '/communication/packages/{id}',
             defaults: ['color' => 'brown'],
             requirements: ['id' => '\d+'],
+            provider: CommunicationClientPackageItemProvider::class,
         ),
         new GetCollection(
             uriTemplate: '/communication/packages',
@@ -60,8 +63,14 @@ class CommunicationClientPackage
     #[ApiProperty(identifier: true)]
     private ?int $id = null;
 
+    /**
+     * Cuenta dueña de esta fila. `null` = paquete REFERENCIA: no pertenece a
+     * ningún cliente, es la plantilla administrable de la que se copian los
+     * paquetes materializados por cuenta (ver PackageMaterializationService
+     * y CommunicationClientPackageProvider). Antes de este rediseño era
+     * obligatorio; se relaja a nullable para permitir la referencia.
+     */
     #[ORM\ManyToOne]
-    #[ORM\JoinColumn(nullable: false)]
     private ?Account $tenant = null;
 
     #[ORM\Column]
@@ -250,9 +259,41 @@ class CommunicationClientPackage
 
     private ?array $upcomingPromotions = null;
 
+    /**
+     * Contrato de precio CONGELADO (típicamente de una promoción). Cuando
+     * está seteado y es un contrato vigente, PackageSalePriceResolver lo usa
+     * con máxima prioridad. Nullable desde este rediseño: un paquete sin
+     * contrato resuelve su precio vía `product` en su lugar (ver
+     * resolveProduct()/PackageSalePriceResolver).
+     */
     #[ORM\ManyToOne]
-    #[ORM\JoinColumn(nullable: false)]
     private ?CommunicationPricePackage $priceClientPackage = null;
+
+    /**
+     * Producto/proveedor del que sale este paquete cuando no hay contrato
+     * (`priceClientPackage === null`). En paquetes de contrato congelado
+     * queda como referencia informativa; resolveProduct() prioriza
+     * `priceClientPackage->getProduct()` en ese caso.
+     */
+    #[ORM\ManyToOne]
+    private ?CommunicationProduct $product = null;
+
+    /**
+     * De qué paquete referencia (tenant IS NULL) se materializó esta fila.
+     * Null en la propia referencia y en filas legacy pre-backfill. Sustituye
+     * en la práctica a CommunicationPricePackage::$pricePackage, que nunca
+     * se llegó a escribir en código real.
+     */
+    #[ORM\ManyToOne(targetEntity: self::class)]
+    private ?self $referencePackage = null;
+
+    /**
+     * Solo relevante en el paquete referencia (tenant IS NULL): permite
+     * desactivarlo sin borrarlo, deteniendo nuevas materializaciones sin
+     * afectar los paquetes ya copiados a clientes.
+     */
+    #[ORM\Column]
+    private bool $isActive = true;
 
     #[ORM\Column(nullable: true)]
     #[Groups(['comPackage:read'])]
@@ -264,6 +305,15 @@ class CommunicationClientPackage
 
     #[ORM\ManyToOne]
     private ?Environment $environment = null;
+
+    /**
+     * Precio resuelto en el momento (PackageSalePriceResolver), NO
+     * persistido (transient). getAmount()/getCurrency() lo consultan antes
+     * que los campos ORM crudos, así que el JSON de comPackage:read no
+     * cambia de forma para consumidores existentes (app móvil,
+     * integraciones) aunque el precio ya no salga de $amount/$currency.
+     */
+    private ?ResolvedSalePrice $resolvedSalePrice = null;
 
     public function __construct()
     {
@@ -572,9 +622,15 @@ class CommunicationClientPackage
         return $this;
     }
 
+    /**
+     * Devuelve el precio RESUELTO (PackageSalePriceResolver) si ya se
+     * inyectó en este request; si no, cae al snapshot crudo persistido. Así
+     * el serializer (comPackage:read) y el dashboard ven siempre el precio
+     * efectivo sin que cambie la forma del JSON.
+     */
     public function getAmount(): ?float
     {
-        return $this->amount;
+        return $this->resolvedSalePrice->amount ?? $this->amount;
     }
 
     public function setAmount(float $amount): static
@@ -586,7 +642,7 @@ class CommunicationClientPackage
 
     public function getCurrency(): ?string
     {
-        return $this->currency;
+        return $this->resolvedSalePrice->currency ?? $this->currency;
     }
 
     public function setCurrency(string $currency): static
@@ -606,6 +662,78 @@ class CommunicationClientPackage
         $this->environment = $environment;
 
         return $this;
+    }
+
+    public function getProduct(): ?CommunicationProduct
+    {
+        return $this->product;
+    }
+
+    public function setProduct(?CommunicationProduct $product): static
+    {
+        $this->product = $product;
+
+        return $this;
+    }
+
+    public function getReferencePackage(): ?self
+    {
+        return $this->referencePackage;
+    }
+
+    public function setReferencePackage(?self $referencePackage): static
+    {
+        $this->referencePackage = $referencePackage;
+
+        return $this;
+    }
+
+    public function isActive(): bool
+    {
+        return $this->isActive;
+    }
+
+    public function setIsActive(bool $isActive): static
+    {
+        $this->isActive = $isActive;
+
+        return $this;
+    }
+
+    public function getResolvedSalePrice(): ?ResolvedSalePrice
+    {
+        return $this->resolvedSalePrice;
+    }
+
+    public function setResolvedSalePrice(ResolvedSalePrice $resolvedSalePrice): static
+    {
+        $this->resolvedSalePrice = $resolvedSalePrice;
+
+        return $this;
+    }
+
+    /**
+     * De qué producto/proveedor sale este paquete: prioriza el contrato
+     * congelado (priceClientPackage), que es lo que se venía usando; si no
+     * hay, cae al $product directo. Único punto de la entidad que debe
+     * consultar CommunicationSaleService::resolveAndGuardProvider() /
+     * assertRechargeableProduct() para no ambigüedad de proveedor.
+     */
+    public function resolveProduct(): ?CommunicationProduct
+    {
+        return $this->priceClientPackage?->getProduct() ?? $this->product;
+    }
+
+    /**
+     * Id del paquete referencia que identifica a este paquete para buscar
+     * contrato: el propio id si esta fila YA es la referencia (tenant
+     * null), o el de `referencePackage` si es una materialización. Usado
+     * por PackageSalePriceResolver/CommunicationPricePackageRepository para
+     * localizar contratos por (tenant, referencePackage).
+     */
+    public function resolveContractKey(): ?int
+    {
+        return $this->tenant === null ? $this->id : $this->referencePackage?->getId();
     }
 
     public function setUpcomingPromotions(array $promotions): void

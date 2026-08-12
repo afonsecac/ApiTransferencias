@@ -190,12 +190,56 @@ class CommunicationSaleInfo
     #[Groups(['comSales:read', 'balance:reading', 'sale:list', 'sale:detail'])]
     public string $type;
 
+    /**
+     * NULL en una venta V2 (ver $catalogPackage) — nullable desde
+     * Version20260810130000. Nunca se borra en filas legacy reales, ver
+     * plan "Fase 6: communication_sale_info.package_id nunca se borra".
+     */
     #[ORM\ManyToOne]
-    #[ORM\JoinColumn(nullable: false)]
+    #[ORM\JoinColumn(nullable: true)]
     private ?CommunicationClientPackage $package = null;
 
     #[ORM\ManyToOne]
     private ?CommunicationPromotions $promotion = null;
+
+    /**
+     * Snapshot de venta V2 (CommunicationSaleService::admit(), rama V2) —
+     * qué CommunicationPackage se vendió. NULL en toda venta legacy (ver
+     * $package) y en cualquier venta V2 anterior a este campo.
+     */
+    #[ORM\ManyToOne(targetEntity: CommunicationPackage::class)]
+    #[ORM\JoinColumn(nullable: true)]
+    private ?CommunicationPackage $catalogPackage = null;
+
+    /**
+     * Producto/proveedor concreto elegido por ProviderDispatchResolver::select()
+     * en el momento de ADMITIR la venta V2 — el despacho asíncrono lo usa
+     * como fuente preferente en vez de re-derivarlo, para que una
+     * recatalogación entre admisión y despacho no cambie qué se envía al
+     * proveedor (ver invokeRechargeCommunication()/executeNewSaleInfo()).
+     */
+    #[ORM\ManyToOne(targetEntity: CommunicationProduct::class)]
+    #[ORM\JoinColumn(nullable: true)]
+    private ?CommunicationProduct $dispatchProduct = null;
+
+    /**
+     * externalRef de $dispatchProduct ya resuelto en admisión (ver
+     * CommunicationSaleService::resolveProductExternalId()) — snapshot, no
+     * se re-deriva del producto en el despacho.
+     */
+    #[ORM\Column(length: 64, nullable: true)]
+    private ?string $dispatchExternalRef = null;
+
+    /**
+     * Snapshot de CommunicationPackage::destinationAmount/destinationCurrency
+     * en el momento de la venta V2 — mismo criterio que
+     * CommunicationContract::destinationAmount/destinationCurrency.
+     */
+    #[ORM\Column(nullable: true)]
+    private ?float $destinationAmount = null;
+
+    #[ORM\Column(length: 10, nullable: true)]
+    private ?string $destinationCurrency = null;
 
     /**
      * @var Collection<int, CommunicationSaleHistory>
@@ -515,6 +559,66 @@ class CommunicationSaleInfo
     public function setProvider(?string $provider): static
     {
         $this->provider = $provider;
+
+        return $this;
+    }
+
+    public function getCatalogPackage(): ?CommunicationPackage
+    {
+        return $this->catalogPackage;
+    }
+
+    public function setCatalogPackage(?CommunicationPackage $catalogPackage): static
+    {
+        $this->catalogPackage = $catalogPackage;
+
+        return $this;
+    }
+
+    public function getDispatchProduct(): ?CommunicationProduct
+    {
+        return $this->dispatchProduct;
+    }
+
+    public function setDispatchProduct(?CommunicationProduct $dispatchProduct): static
+    {
+        $this->dispatchProduct = $dispatchProduct;
+
+        return $this;
+    }
+
+    public function getDispatchExternalRef(): ?string
+    {
+        return $this->dispatchExternalRef;
+    }
+
+    public function setDispatchExternalRef(?string $dispatchExternalRef): static
+    {
+        $this->dispatchExternalRef = $dispatchExternalRef;
+
+        return $this;
+    }
+
+    public function getDestinationAmount(): ?float
+    {
+        return $this->destinationAmount;
+    }
+
+    public function setDestinationAmount(?float $destinationAmount): static
+    {
+        $this->destinationAmount = $destinationAmount;
+
+        return $this;
+    }
+
+    public function getDestinationCurrency(): ?string
+    {
+        return $this->destinationCurrency;
+    }
+
+    public function setDestinationCurrency(?string $destinationCurrency): static
+    {
+        $this->destinationCurrency = $destinationCurrency;
 
         return $this;
     }

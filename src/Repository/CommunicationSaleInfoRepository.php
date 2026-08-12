@@ -397,17 +397,26 @@ class CommunicationSaleInfoRepository extends ServiceEntityRepository
         ?string $type,
         int $limit = 10,
     ): array {
+        // COALESCE p/cp: una venta V2 no tiene s.package (ver
+        // CommunicationSaleService::admit()/admitV2()) — sin esto, todas
+        // las ventas V2 se agruparían bajo un único bucket "sin paquete"
+        // (packageId/packageName NULL), perdiendo el desglose por paquete.
         $qb = $this->createQueryBuilder('s')
             ->leftJoin('s.tenant', 'a')
             ->leftJoin('a.client', 'c')
             ->leftJoin('a.environment', 'e')
             ->leftJoin('s.package', 'p')
-            ->select('p.id AS packageId')
-            ->addSelect('p.name AS packageName')
+            ->leftJoin('s.catalogPackage', 'cp')
+            ->select('COALESCE(p.id, cp.id) AS packageId')
+            ->addSelect('COALESCE(p.name, cp.name) AS packageName')
             ->addSelect('COUNT(s.id) AS total')
             ->addSelect('SUM(s.totalPrice) AS totalAmount')
-            ->groupBy('p.id')
-            ->addGroupBy('p.name')
+            // DQL solo admite agrupar por identification/result variable —
+            // no por la expresión repetida (ver App\Tests\Functional\Provider\
+            // CommunicationSaleInfoRepositoryStatsTest), así que se agrupa
+            // por el alias del SELECT, no por COALESCE(...) de nuevo.
+            ->groupBy('packageId')
+            ->addGroupBy('packageName')
             ->orderBy('total', 'DESC')
             ->setMaxResults($limit);
 

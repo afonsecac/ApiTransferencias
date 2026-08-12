@@ -4,7 +4,6 @@ namespace App\Service;
 
 use App\DTO\CreateAdminPromotionDto;
 use App\DTO\UpdatePromotionDto;
-use App\Entity\Account;
 use App\Entity\CommunicationClientPackage;
 use App\Entity\CommunicationPrice;
 use App\Entity\CommunicationPricePackage;
@@ -17,6 +16,7 @@ use App\Exception\MyCurrentException;
 use App\Message\PromotionCreatedMessage;
 use App\Repository\EnvironmentRepository;
 use App\Repository\SysConfigRepository;
+use App\Service\Pricing\TargetAccountResolver;
 use Doctrine\ORM\EntityManagerInterface;
 use Psr\Log\LoggerInterface;
 use Symfony\Bundle\SecurityBundle\Security;
@@ -39,6 +39,7 @@ class CommunicationPromotionService extends CommonService
         SysConfigRepository $sysConfigRepo,
         SerializerInterface $serializer,
         private readonly MessageBusInterface $messageBus,
+        private readonly TargetAccountResolver $targetAccountResolver,
     ) {
         parent::__construct($em, $security, $parameters, $mailer, $logger, $passwordHasher, $environmentRepository, $sysConfigRepo, $serializer);
     }
@@ -142,19 +143,10 @@ class CommunicationPromotionService extends CommonService
         // Flush para asignar IDs a los precios nuevos
         $this->em->flush();
 
-        // 2. Obtener las cuentas (tenants) del environment
-        $accountCriteria = [
-            'environment' => $environment,
-            'isActive' => true,
-        ];
-        $accounts = $this->em->getRepository(Account::class)->findBy($accountCriteria);
-
-        // Si se pasan client IDs, filtrar solo esas cuentas
-        if (!empty($clientIds)) {
-            $accounts = array_filter($accounts, function (Account $account) use ($clientIds) {
-                return in_array($account->getClient()?->getId(), $clientIds, true);
-            });
-        }
+        // 2. Obtener las cuentas (tenants) del environment — clientIds vacío
+        // = todas las activas; con ids, solo esas (ver TargetAccountResolver,
+        // reutilizado también por PackageContractService en modo "rate").
+        $accounts = $this->targetAccountResolver->resolve($environment, $clientIds);
 
         if (empty($accounts)) {
             $this->logger->warning('createPackagesForPromotion: no hay cuentas activas para el environment', [

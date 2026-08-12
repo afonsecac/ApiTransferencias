@@ -17,6 +17,7 @@ use App\Entity\ClientProviderRouting;
 use App\Enums\CommunicationProviderEnum;
 use App\Exception\MyCurrentException;
 use App\OpenApi\Attribute\DashboardEndpoint;
+use App\Provider\ProviderCredentialsResolver;
 use App\Provider\ProviderRegistry;
 use App\Provider\ProviderResolver;
 use App\Repository\ClientProviderRoutingRepository;
@@ -65,6 +66,7 @@ class DashboardProviderRoutingController extends AbstractController
         private readonly ProviderCredentialsAdminService $credentialsAdminService,
         private readonly ProviderConnectionTestService $connectionTestService,
         private readonly ProviderAvailabilityService $availabilityService,
+        private readonly ProviderCredentialsResolver $credentialsResolver,
     ) {
     }
 
@@ -90,6 +92,12 @@ class DashboardProviderRoutingController extends AbstractController
                     'required' => $field->required,
                     'secret' => $field->secret,
                 ], $this->providerRegistry->get($code)->getConfigSchema()),
+                // Mismo gate que ProviderRoutingAdminService::assertProviderIsEnabled()
+                // usa al crear/actualizar un enrutado: credenciales completas
+                // y no apagado manualmente, por entorno. La UI lo usa para no
+                // ofrecer un proveedor que la validación real va a rechazar.
+                'enabledTest' => $this->credentialsResolver->isEnabled($code, 'TEST'),
+                'enabledProd' => $this->credentialsResolver->isEnabled($code, 'PROD'),
             ], $registered),
             'routingEnabled' => $this->sysConfigRepo->findCachedValue(ProviderResolver::ROUTING_ENABLED_KEY) !== '0',
             'defaultProvider' => $this->sysConfigRepo->findCachedValue(ProviderResolver::DEFAULT_PROVIDER_KEY) ?? CommunicationProviderEnum::ETECSA->value,

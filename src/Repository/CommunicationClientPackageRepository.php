@@ -4,6 +4,7 @@ namespace App\Repository;
 
 use App\Entity\Account;
 use App\Entity\CommunicationClientPackage;
+use App\Entity\Environment;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Common\Collections\ArrayCollection;
 use Doctrine\ORM\Query\Parameter;
@@ -76,12 +77,16 @@ class CommunicationClientPackageRepository extends ServiceEntityRepository
     public function getAllPackages(string $env = 'TEST', ?int $tenant = null): array
     {
         $currentDate = new \DateTimeImmutable('now');
+        // Antes del rediseño de precios, el environment se resolvía vía
+        // priceClientPackage->product->environment — pero priceClientPackage
+        // ahora es nullable (paquetes sin contrato), así que un join por ahí
+        // dejaría fuera exactamente a los paquetes que este rediseño
+        // introduce. Se usa el environment propio de la fila (ya lo
+        // rellenan ClientCatalogImportService/PackagePriceService).
         $dql = $this->createQueryBuilder('p')
             ->leftJoin('p.tenant', 't')
-            ->leftJoin('p.priceClientPackage', 'pc')
             ->leftJoin('t.client', 'c')
-            ->leftJoin('pc.product', 'pe')
-            ->leftJoin('pe.environment', 'e')
+            ->leftJoin('p.environment', 'e')
             ->select('p')
             ->addSelect('t')
             ->addSelect('c')
@@ -100,4 +105,24 @@ class CommunicationClientPackageRepository extends ServiceEntityRepository
         return $dql->orderBy('c.companyName')->addOrderBy('p.amount')->getQuery()->getResult();
     }
 
+    /**
+     * Paquetes REFERENCIA (tenant IS NULL) vigentes de un entorno — el
+     * origen de las materializaciones por cuenta. Ver
+     * CommunicationClientPackageProvider/PackageMaterializationService.
+     *
+     * @return CommunicationClientPackage[]
+     */
+    public function findReferencePackages(Environment $environment, \DateTimeImmutable $now): array
+    {
+        return $this->createQueryBuilder('p')
+            ->where('p.tenant IS NULL')
+            ->andWhere('p.environment = :environment')
+            ->andWhere('p.isActive = :isActive')
+            ->andWhere('p.activeStartAt <= :now')
+            ->andWhere('p.activeEndAt IS NULL OR p.activeEndAt > :now')
+            ->setParameter('environment', $environment)
+            ->setParameter('isActive', true)
+            ->setParameter('now', $now)
+            ->getQuery()->getResult();
+    }
 }

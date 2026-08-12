@@ -170,6 +170,7 @@ abstract class ProviderFunctionalTestCase extends FunctionalTestCase
         ?Environment $environment = null,
         ?string $saleType = null,
         bool $isActive = true,
+        ?int $priority = null,
     ): ClientProviderRouting {
         $routing = (new ClientProviderRouting())
             ->setClient($client)
@@ -177,6 +178,10 @@ abstract class ProviderFunctionalTestCase extends FunctionalTestCase
             ->setSaleType($saleType)
             ->setProvider($provider)
             ->setIsActive($isActive);
+
+        if ($priority !== null) {
+            $routing->setPriority($priority);
+        }
 
         $this->em->persist($routing);
         $this->em->flush();

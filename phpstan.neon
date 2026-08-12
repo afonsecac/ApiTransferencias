@@ -7,9 +7,6 @@ parameters:
         - src
     excludePaths:
         - src/Kernel.php
-        - src/State/CreateRechargeProcessor.php
-        - src/State/CreateSaleProcessor.php
-        - src/Service/TakeProductService.php
     ignoreErrors:
         - identifier: property.unusedType
           path: src/Entity/*

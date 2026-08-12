@@ -2,10 +2,12 @@
 
 namespace App\Repository;
 
+use App\Entity\Account;
 use App\Entity\CommunicationPricePackage;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Common\Collections\ArrayCollection;
 use Doctrine\ORM\Query\Parameter;
+use Doctrine\ORM\QueryBuilder;
 use Doctrine\Persistence\ManagerRegistry;
 
 /**
@@ -85,5 +87,76 @@ class CommunicationPricePackageRepository extends ServiceEntityRepository
         }
 
         return $dql->orderBy('pp.price', 'ASC')->getQuery()->getResult();
+    }
+
+    /**
+     * El contrato vigente de un tenant para un paquete referencia concreto
+     * (ver CommunicationClientPackage::resolveContractKey()) — usado por
+     * PackageSalePriceResolver cuando el paquete no trae ya un contrato
+     * congelado (priceClientPackage). El más reciente gana si hay más de
+     * uno vigente (no debería ocurrir por la idempotencia de
+     * PackageContractService, pero no se asume).
+     */
+    public function findActiveContract(Account $tenant, int $referencePackageId, \DateTimeImmutable $now): ?CommunicationPricePackage
+    {
+        return $this->baseActiveContractQueryBuilder($now)
+            ->andWhere('pp.tenant = :tenant')
+            ->andWhere('pp.referencePackage = :referencePackageId')
+            ->setParameter('tenant', $tenant)
+            ->setParameter('referencePackageId', $referencePackageId)
+            ->orderBy('pp.activeStartAt', 'DESC')
+            ->addOrderBy('pp.id', 'DESC')
+            ->setMaxResults(1)
+            ->getQuery()->getOneOrNullResult();
+    }
+
+    /**
+     * Variante en lote de findActiveContract(), para
+     * PackageSalePriceResolver::resolveMany() — una sola query para
+     * resolver un listado paginado entero en vez de N+1.
+     *
+     * @param int[] $referencePackageIds
+     * @return CommunicationPricePackage[] indexados por referencePackage id
+     */
+    public function findActiveContractsFor(Account $tenant, array $referencePackageIds): array
+    {
+        if ($referencePackageIds === []) {
+            return [];
+        }
+
+        $now = new \DateTimeImmutable();
+        $rows = $this->baseActiveContractQueryBuilder($now)
+            ->andWhere('pp.tenant = :tenant')
+            ->andWhere('pp.referencePackage IN (:referencePackageIds)')
+            ->setParameter('tenant', $tenant)
+            ->setParameter('referencePackageIds', $referencePackageIds)
+            ->orderBy('pp.activeStartAt', 'DESC')
+            ->addOrderBy('pp.id', 'DESC')
+            ->getQuery()->getResult();
+
+        $byReference = [];
+        foreach ($rows as $row) {
+            $key = $row->getReferencePackage()?->getId();
+            // La primera fila por referencePackage es la más reciente
+            // (orden ya aplicado arriba) — coincide con el criterio de
+            // findActiveContract().
+            if ($key !== null && !isset($byReference[$key])) {
+                $byReference[$key] = $row;
+            }
+        }
+
+        return $byReference;
+    }
+
+    private function baseActiveContractQueryBuilder(\DateTimeImmutable $now): QueryBuilder
+    {
+        return $this->createQueryBuilder('pp')
+            ->where('pp.isContract = :isContract')
+            ->andWhere('pp.isActive = :isActive')
+            ->andWhere('pp.activeStartAt <= :now')
+            ->andWhere('pp.activeEndAt IS NULL OR pp.activeEndAt > :now')
+            ->setParameter('isContract', true)
+            ->setParameter('isActive', true)
+            ->setParameter('now', $now);
     }
 }

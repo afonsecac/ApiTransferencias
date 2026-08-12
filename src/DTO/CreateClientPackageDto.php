@@ -7,13 +7,31 @@ use Symfony\Component\Validator\Constraints as Assert;
 
 class CreateClientPackageDto implements IInput
 {
-    #[Assert\NotNull]
+    /**
+     * Ausente = crea/actualiza solo el paquete REFERENCIA (tenant null).
+     * Presente = alta de un solo cliente directo (comportamiento histórico,
+     * exige priceClientPackageId — ver CommunicationPackageService::create()).
+     * Para dar de alta varios clientes a la vez usa $clients en su lugar.
+     */
     #[Assert\Positive]
     protected ?int $tenantId;
 
-    #[Assert\NotNull]
-    #[Assert\Positive]
     protected ?int $priceClientPackageId;
+
+    /**
+     * Requerido cuando no se da priceClientPackageId: producto/proveedor
+     * del que sale el precio del paquete referencia cuando no tiene
+     * contrato (ver CommunicationClientPackage::resolveProduct()).
+     */
+    #[Assert\Positive]
+    protected ?int $productId;
+
+    /**
+     * @var int[]|null ids de cliente a los que materializar el paquete
+     *  referencia recién creado/actualizado — vacío/ausente = solo la
+     *  referencia (mismo criterio que promociones/contratos).
+     */
+    protected ?array $clients;
 
     protected ?int $environmentId;
 
@@ -105,6 +123,8 @@ class CreateClientPackageDto implements IInput
     public function __construct(
         ?int $tenantId = null,
         ?int $priceClientPackageId = null,
+        ?int $productId = null,
+        ?array $clients = null,
         ?int $environmentId = null,
         ?string $name = null,
         ?string $description = null,
@@ -121,6 +141,8 @@ class CreateClientPackageDto implements IInput
     ) {
         $this->tenantId = $tenantId;
         $this->priceClientPackageId = $priceClientPackageId;
+        $this->productId = $productId;
+        $this->clients = $clients;
         $this->environmentId = $environmentId;
         $this->name = $name;
         $this->description = $description;
@@ -141,6 +163,14 @@ class CreateClientPackageDto implements IInput
 
     public function getPriceClientPackageId(): ?int { return $this->priceClientPackageId; }
     public function setPriceClientPackageId(?int $priceClientPackageId): void { $this->priceClientPackageId = $priceClientPackageId; }
+
+    public function getProductId(): ?int { return $this->productId; }
+    public function setProductId(?int $productId): void { $this->productId = $productId; }
+
+    /** @return int[]|null */
+    public function getClients(): ?array { return $this->clients; }
+    /** @param int[]|null $clients */
+    public function setClients(?array $clients): void { $this->clients = $clients; }
 
     public function getEnvironmentId(): ?int { return $this->environmentId; }
     public function setEnvironmentId(?int $environmentId): void { $this->environmentId = $environmentId; }

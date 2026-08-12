@@ -57,6 +57,7 @@ RUN printf '%s\n' \
        'JWT_PHRASE_KEY=change-me' \
        'JWT_TIMEOUT=30' \
        'APP_TEST_PHONE=0000000000' \
+       'APP_CSQ_TEST_PHONE=53500000' \
        'APP_MAILER_FROM=noreply@localhost' \
        'CORS_DASHBOARD_ORIGIN="^https?://localhost$"' \
        > .env

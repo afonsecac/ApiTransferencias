@@ -99,4 +99,23 @@ final class ProviderRegistry
             array_keys($this->index()),
         );
     }
+
+    /**
+     * Todos los proveedores registrados que implementan `$interface` — para
+     * operaciones que deben correr sobre "todos los proveedores con
+     * catálogo/recarga/lo que sea", no uno fijo (ver
+     * DashboardCatalogController::syncProducts(), que antes sincronizaba
+     * solo ETECSA hardcodeado).
+     *
+     * @template T of object
+     * @param class-string<T> $interface
+     * @return list<T>
+     */
+    public function allImplementing(string $interface): array
+    {
+        return array_values(array_filter(
+            $this->index(),
+            static fn (CommunicationProviderInterface $provider): bool => $provider instanceof $interface,
+        ));
+    }
 }
