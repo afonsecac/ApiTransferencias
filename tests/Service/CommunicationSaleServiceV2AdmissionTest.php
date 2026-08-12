@@ -68,6 +68,7 @@ class CommunicationSaleServiceV2AdmissionTest extends TestCase
     private ProviderAvailabilityService&MockObject $availabilityService;
     private PackageCatalogResolver&MockObject $packageCatalogResolver;
     private ProviderDispatchResolver&MockObject $dispatchResolver;
+    private \App\Provider\PromotionProviderDispatchResolver&MockObject $promotionDispatchResolver;
     private CommunicationSaleService $service;
 
     protected function setUp(): void
@@ -80,6 +81,7 @@ class CommunicationSaleServiceV2AdmissionTest extends TestCase
         $this->availabilityService->method('canDispatchTo')->willReturn(false);
         $this->packageCatalogResolver = $this->createMock(PackageCatalogResolver::class);
         $this->dispatchResolver = $this->createMock(ProviderDispatchResolver::class);
+        $this->promotionDispatchResolver = $this->createMock(\App\Provider\PromotionProviderDispatchResolver::class);
 
         $parameters = $this->createMock(ParameterBagInterface::class);
         $mailer = $this->createMock(MailerInterface::class);
@@ -133,6 +135,7 @@ class CommunicationSaleServiceV2AdmissionTest extends TestCase
             $catalogVersionResolver,
             $this->packageCatalogResolver,
             $this->dispatchResolver,
+            $this->promotionDispatchResolver,
         );
     }
 
@@ -391,6 +394,13 @@ class CommunicationSaleServiceV2AdmissionTest extends TestCase
         $this->packageCatalogResolver->expects($this->never())->method('offerForSale');
         $this->dispatchResolver->expects($this->never())->method('select');
 
+        // Con promoción, admitLegacy() ahora resuelve el proveedor vía
+        // PromotionProviderDispatchResolver (prioridad de cliente + vínculo
+        // promoción→producto) en vez de resolveAndGuardProvider() — ver
+        // docblock de admit()/admitLegacy().
+        $this->promotionDispatchResolver->method('select')
+            ->willReturn(new SelectedDispatch(CommunicationProviderEnum::ETECSA, $product, 'etecsa-ext-ref'));
+
         $this->balanceService->method('hasAvailableBalance')->willReturn(true);
 
         $reserve = new ReserveRecharge('5550001234', 1, 1, 'reserve-ctx-v2');
@@ -399,5 +409,6 @@ class CommunicationSaleServiceV2AdmissionTest extends TestCase
 
         $this->assertSame('ETECSA', $result->getProvider());
         $this->assertNull($result->getCatalogPackage());
+        $this->assertSame('etecsa-ext-ref', $result->getDispatchExternalRef());
     }
 }

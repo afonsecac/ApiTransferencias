@@ -4,6 +4,7 @@ namespace App\Controller;
 
 use App\DTO\Out\DeletedOutDto;
 use App\DTO\Out\PaginatedListOutDto;
+use App\DTO\SetPromotionProviderProductDto;
 use App\DTO\UpdatePromotionDto;
 use App\DTO\UpsertPromotionDto;
 use App\Exception\MyCurrentException;
@@ -13,6 +14,7 @@ use App\Entity\Environment;
 use App\OpenApi\Attribute\DashboardEndpoint;
 use App\Repository\CommunicationPromotionsRepository;
 use App\Service\CommunicationPromotionService;
+use App\Service\Pricing\CommunicationPromotionBindingService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -30,6 +32,7 @@ class DashboardPromotionController extends AbstractController
         private readonly EntityManagerInterface $em,
         private readonly NormalizerInterface $serializer,
         private readonly CommunicationPromotionService $promotionService,
+        private readonly CommunicationPromotionBindingService $bindingService,
     ) {
     }
 
@@ -146,6 +149,81 @@ class DashboardPromotionController extends AbstractController
         $this->em->flush();
 
         return $this->json(['deleted' => true]);
+    }
+
+    #[Route('/{id}/bindings', name: 'dashboard_promotions_bindings_list', methods: ['GET'])]
+    #[DashboardEndpoint(summary: 'Vínculos explícitos promoción→producto por proveedor', tag: 'Promotions')]
+    public function listBindings(int $id): JsonResponse
+    {
+        $promotion = $this->repository->find($id);
+        if ($promotion === null) {
+            return $this->json(['error' => ['message' => 'Promotion not found']], Response::HTTP_NOT_FOUND);
+        }
+
+        $rows = $this->bindingService->listBindings($promotion, $promotion->getEnvironment());
+
+        return $this->json(array_map(fn (array $row) => [
+            'provider' => $row['provider'],
+            'boundProduct' => $row['boundProduct'] !== null ? $this->serializeProduct($row['boundProduct']) : null,
+            'candidates' => array_map(fn (CommunicationProduct $p) => $this->serializeProduct($p), $row['candidates']),
+        ], $rows));
+    }
+
+    #[Route('/{id}/bindings/{provider}', name: 'dashboard_promotions_bindings_set', methods: ['PUT'])]
+    #[IsGranted('ROLE_ADMIN')]
+    #[DashboardEndpoint(summary: 'Fijar el producto vinculado a una promoción para un proveedor', tag: 'Promotions', requestDto: SetPromotionProviderProductDto::class)]
+    public function setBinding(int $id, string $provider, SetPromotionProviderProductDto $dto): JsonResponse
+    {
+        $promotion = $this->repository->find($id);
+        if ($promotion === null) {
+            return $this->json(['error' => ['message' => 'Promotion not found']], Response::HTTP_NOT_FOUND);
+        }
+
+        try {
+            $binding = $this->bindingService->setBinding($promotion, $provider, (int) $dto->getProductId());
+        } catch (MyCurrentException $e) {
+            return $this->json(['error' => ['message' => $e->getMessage()]], $e->getCode());
+        }
+
+        return $this->json([
+            'provider' => $binding->getProvider(),
+            'boundProduct' => $this->serializeProduct($binding->getProduct()),
+        ]);
+    }
+
+    #[Route('/{id}/bindings/{provider}', name: 'dashboard_promotions_bindings_delete', methods: ['DELETE'])]
+    #[IsGranted('ROLE_ADMIN')]
+    #[DashboardEndpoint(summary: 'Quitar el vínculo explícito de una promoción para un proveedor', tag: 'Promotions', responseDto: DeletedOutDto::class)]
+    public function deleteBinding(int $id, string $provider): JsonResponse
+    {
+        $promotion = $this->repository->find($id);
+        if ($promotion === null) {
+            return $this->json(['error' => ['message' => 'Promotion not found']], Response::HTTP_NOT_FOUND);
+        }
+
+        try {
+            $this->bindingService->removeBinding($promotion, $provider);
+        } catch (MyCurrentException $e) {
+            return $this->json(['error' => ['message' => $e->getMessage()]], $e->getCode());
+        }
+
+        return $this->json(['deleted' => true]);
+    }
+
+    private function serializeProduct(?CommunicationProduct $product): ?array
+    {
+        if ($product === null) {
+            return null;
+        }
+
+        return [
+            'provider' => $product->getProvider(),
+            'productId' => $product->getId(),
+            'externalRef' => $product->getExternalRef(),
+            'description' => $product->getDescription(),
+            'wholesalePrice' => $product->getPrice() ?? 0.0,
+            'priceCurrency' => $product->getPriceCurrency(),
+        ];
     }
 
     private function hydratePromotion(CommunicationPromotions $promotion, UpsertPromotionDto $dto): void

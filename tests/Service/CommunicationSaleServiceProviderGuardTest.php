@@ -121,6 +121,7 @@ class CommunicationSaleServiceProviderGuardTest extends TestCase
             new \App\Service\Catalog\CatalogVersionResolver($this->sysConfigRepo),
             $this->createMock(\App\Service\Pricing\PackageCatalogResolver::class),
             $this->createMock(\App\Provider\ProviderDispatchResolver::class),
+            $this->createMock(\App\Provider\PromotionProviderDispatchResolver::class),
         );
     }
 

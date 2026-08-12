@@ -6,10 +6,10 @@ use App\Entity\Account;
 use App\Entity\Client;
 use App\Entity\CommunicationClientPackage;
 use App\Entity\CommunicationProduct;
+use App\Entity\CommunicationPromotions;
 use App\Entity\CommunicationSaleRecharge;
 use App\Entity\Environment;
 use App\Enums\CommunicationStateEnum;
-use App\Provider\Contract\ProviderContext;
 use App\Provider\Csq\CsqCommunicationProvider;
 use App\Provider\Csq\CsqHttpClient;
 use App\Provider\Csq\CsqStatusMapper;
@@ -18,6 +18,7 @@ use App\Provider\ProviderRegistry;
 use App\Provider\ProviderResolver;
 use App\Repository\ClientProviderRoutingRepository;
 use App\Repository\CommunicationClientPackageRepository;
+use App\Repository\CommunicationPromotionsRepository;
 use App\Repository\CommunicationSaleRechargeRepository;
 use App\Repository\EnvironmentRepository;
 use App\Repository\SysConfigRepository;
@@ -48,30 +49,22 @@ use Symfony\Component\Serializer\SerializerInterface;
 /**
  * @covers \App\Service\CommunicationSaleService::invokeRechargeCommunication
  *
- * Bug potencial (2026-08-10): CSQ es el primer proveedor cuyo dispatch
- * inicial puede devolver COMPLETED directamente (Purchase es síncrono) en
- * vez de ACCEPTED (ETECSA/DTOne siempre confirman después vía poll). Sin
- * una rama dedicada en invokeRechargeCommunication(), una recarga CSQ
- * exitosa se habría quedado en PENDING para siempre: nunca se
- * finalizaba (sin CheckSaleMessage, porque solo ACCEPTED lo programa) ni
- * se le acreditaba/debitaba el balance al cliente. Este test ejercita el
- * camino real completo — CommunicationSaleService -> CsqCommunicationProvider
- * (con CsqHttpClient mockeado devolviendo la respuesta real capturada en
- * vivo el 2026-08-10) -> CsqStatusMapper — para probar que la venta termina
- * COMPLETED, con balance y con histórico, sin usar dobles falsos que
- * pudieran ocultar una desconexión de tipos/contrato real.
+ * Cubre la preferencia por dispatchExternalRef (congelado en admisión por
+ * PromotionProviderDispatchResolver, ver admitLegacy()) sobre
+ * promotion->getProduct() al resolver el productCode a despachar — el
+ * punto exacto donde antes se ignoraba el proveedor real de la venta y
+ * siempre se usaba el producto "de origen" de la promoción.
  */
-class CommunicationSaleServiceCsqCompletedDispatchTest extends TestCase
+class CommunicationSaleServicePromotionDispatchTest extends TestCase
 {
     private EntityManagerInterface&MockObject $em;
     private Connection&MockObject $connection;
     private BalanceService&MockObject $balanceService;
-    private HistoricalSaleService&MockObject $historicalSaleService;
     private ProviderAvailabilityService&MockObject $availabilityService;
     private CsqHttpClient&MockObject $csqClient;
     private CommunicationSaleService $service;
     private CommunicationSaleRecharge $saleRecharge;
-    private ParameterBagInterface&MockObject $parameters;
+    private CommunicationPromotions&MockObject $promotion;
 
     protected function setUp(): void
     {
@@ -84,11 +77,7 @@ class CommunicationSaleServiceCsqCompletedDispatchTest extends TestCase
         $this->em->method('getClassMetadata')->willReturn($classMetadata);
 
         $security = $this->createMock(Security::class);
-        $this->parameters = $this->createMock(ParameterBagInterface::class);
-        $this->parameters->method('get')->willReturnMap([
-            ['app.csqPhoneNumber', '53500000'],
-        ]);
-        $parameters = $this->parameters;
+        $parameters = $this->createMock(ParameterBagInterface::class);
         $mailer = $this->createMock(MailerInterface::class);
         $logger = $this->createMock(LoggerInterface::class);
         $passwordHasher = $this->createMock(UserPasswordHasherInterface::class);
@@ -96,7 +85,7 @@ class CommunicationSaleServiceCsqCompletedDispatchTest extends TestCase
         $sysConfigRepo = $this->createMock(SysConfigRepository::class);
         $serializer = $this->createMock(SerializerInterface::class);
         $messageBus = $this->createMock(MessageBusInterface::class);
-        $this->historicalSaleService = $this->createMock(HistoricalSaleService::class);
+        $historicalSaleService = $this->createMock(HistoricalSaleService::class);
         $this->balanceService = $this->createMock(BalanceService::class);
         $notificationCenter = $this->createMock(NotificationCenterService::class);
         $this->availabilityService = $this->createMock(ProviderAvailabilityService::class);
@@ -130,7 +119,7 @@ class CommunicationSaleServiceCsqCompletedDispatchTest extends TestCase
             $providerContextFactory,
             $configureSequence,
             $messageBus,
-            $this->historicalSaleService,
+            $historicalSaleService,
             $this->balanceService,
             $notificationCenter,
             $this->availabilityService,
@@ -141,7 +130,7 @@ class CommunicationSaleServiceCsqCompletedDispatchTest extends TestCase
             $this->createMock(\App\Provider\PromotionProviderDispatchResolver::class),
         );
 
-        $this->saleRecharge = $this->buildPendingCsqRecharge();
+        $this->saleRecharge = $this->buildPendingPromotionRecharge();
     }
 
     private function assignId(object $entity, int $id): void
@@ -151,7 +140,7 @@ class CommunicationSaleServiceCsqCompletedDispatchTest extends TestCase
         $property->setValue($entity, $id);
     }
 
-    private function buildPendingCsqRecharge(): CommunicationSaleRecharge
+    private function buildPendingPromotionRecharge(): CommunicationSaleRecharge
     {
         $client = $this->createMock(Client::class);
         $client->method('getId')->willReturn(1);
@@ -165,10 +154,22 @@ class CommunicationSaleServiceCsqCompletedDispatchTest extends TestCase
         $account->method('getEnvironment')->willReturn($environment);
         $account->method('getId')->willReturn(99);
 
+        // Producto "de origen" de la promoción — el que se usaba SIEMPRE
+        // antes de este cambio, sin importar el proveedor real de la venta.
+        $defaultProduct = $this->createMock(CommunicationProduct::class);
+        $defaultProduct->method('getProvider')->willReturn('CSQ');
+        $defaultProduct->method('getExternalRef')->willReturn('1111-2200');
+
+        $this->promotion = $this->createMock(CommunicationPromotions::class);
+        $this->promotion->method('getProduct')->willReturn($defaultProduct);
+
+        $promotionRepo = $this->createMock(CommunicationPromotionsRepository::class);
+        $promotionRepo->method('getActivePromotionById')->with(42)->willReturn($this->promotion);
+
         $product = $this->createMock(CommunicationProduct::class);
         $product->method('getProvider')->willReturn('CSQ');
         $product->method('getPackageType')->willReturn('Bundles');
-        $product->method('getExternalRef')->willReturn('7951-2200');
+        $product->method('getExternalRef')->willReturn('1111-2200');
         $product->method('getPackageId')->willReturn(0);
 
         $package = $this->createMock(CommunicationClientPackage::class);
@@ -185,8 +186,7 @@ class CommunicationSaleServiceCsqCompletedDispatchTest extends TestCase
         $recharge->setPackageId(1);
         $recharge->setTenant($account);
         $recharge->setProvider('CSQ');
-        // transactionId real: YYMMDD(6) + tipo(2) + secuencia(5) — el mismo
-        // formato que CommunicationSaleService::processRecharge() genera.
+        $recharge->setPromotionId(42);
         $recharge->setTransactionId('2608100100042');
         $recharge->setPhoneNumber('53500000');
         $recharge->setState(CommunicationStateEnum::PENDING);
@@ -196,119 +196,57 @@ class CommunicationSaleServiceCsqCompletedDispatchTest extends TestCase
         $saleRepo = $this->createMock(CommunicationSaleRechargeRepository::class);
         $saleRepo->method('find')->with(555)->willReturn($recharge);
 
-        $environmentRepo = $this->createMock(\App\Repository\EnvironmentRepository::class);
+        $environmentRepo = $this->createMock(EnvironmentRepository::class);
         $environmentRepo->method('find')->with(10)->willReturn($environment);
 
         $this->em->method('getRepository')->willReturnMap([
             [CommunicationClientPackage::class, $packageRepo],
             [CommunicationSaleRecharge::class, $saleRepo],
             [Environment::class, $environmentRepo],
+            [CommunicationPromotions::class, $promotionRepo],
         ]);
 
         return $recharge;
     }
 
-    public function testCompletesTheSaleAndCreatesBalanceWhenCsqPurchaseSucceedsSynchronously(): void
+    private function stubSuccessfulPurchase(): void
     {
         $this->availabilityService->method('canDispatchTo')->willReturn(true);
-
-        // Payload real capturado en vivo el 2026-08-10 (POST purchase de CSQ).
         $this->csqClient->method('purchase')->willReturn([
             'rc' => 0,
-            'items' => [[
-                'finalstatus' => 10,
-                'resultcode' => '10',
-                'resultmessage' => 'Operación efectuada correctamente',
-                'supplierreference' => '1786346034143',
-                'suppliertoken' => '',
-            ]],
+            'items' => [['resultcode' => '10', 'resultmessage' => 'OK', 'supplierreference' => 'X1']],
         ]);
-
-        $balance = new AccountBalanceDto('USD', 1000.0);
-        $this->balanceService->method('balance')->willReturn($balance);
-
-        // claimForSending: SENDING -> ok (ya está en SENDING en el setup,
-        // simula que ya pasó por ahí); claimForCompleting: PENDING -> COMPLETED.
-        $this->connection->method('executeStatement')->willReturn(1);
-
-        $this->balanceService->expects($this->once())
-            ->method('createSaleBalance')
-            ->with($this->saleRecharge->getTenant(), $this->saleRecharge);
-
-        $this->historicalSaleService->expects($this->once())
-            ->method('createHistoricalCommunication')
-            ->with($this->saleRecharge->getId(), CommunicationStateEnum::COMPLETED, $this->anything());
-
-        $this->service->invokeRechargeCommunication(555);
-
-        $this->assertSame('1786346034143', $this->saleRecharge->getTransactionOrder());
-    }
-
-    public function testDoesNotCreateBalanceWhenCsqRejectsTheAmount(): void
-    {
-        $this->availabilityService->method('canDispatchTo')->willReturn(true);
-
-        // Payload real capturado en vivo (rechazo de negocio).
-        $this->csqClient->method('purchase')->willReturn([
-            'rc' => -1,
-            'items' => [[
-                'finalstatus' => -1,
-                'resultcode' => '927',
-                'resultmessage' => 'Importe incorrecto para la ruta 993',
-            ]],
-        ]);
-
         $balance = new AccountBalanceDto('USD', 1000.0);
         $this->balanceService->method('balance')->willReturn($balance);
         $this->connection->method('executeStatement')->willReturn(1);
-
-        $this->balanceService->expects($this->never())->method('createSaleBalance');
-
-        $this->service->invokeRechargeCommunication(555);
-
-        $this->assertSame(CommunicationStateEnum::REJECTED, $this->saleRecharge->getState());
     }
 
-    public function testSwapsThePhoneNumberForCsqDummyAccountInTestWhenItEndsInSixty(): void
+    public function testUsesTheFrozenDispatchExternalRefInsteadOfThePromotionsDefaultProduct(): void
     {
-        // Mismo criterio ya existente para ETECSA (checkPhone === "60") —
-        // confirmado en vivo el 2026-08-11: el número dummy "53500000" es
-        // el único que CSQ acepta en su sandbox TEST, cualquier número real
-        // rechaza con resultcode 991 sin importar que el body esté correcto.
-        $this->saleRecharge->setPhoneNumber('5356085160');
-        $this->availabilityService->method('canDispatchTo')->willReturn(true);
+        // Reserva creada DESPUÉS de este cambio: admitLegacy() ya congeló
+        // el producto resuelto por PromotionProviderDispatchResolver para
+        // el proveedor real de la venta — distinto del producto "de
+        // origen" de la promoción (articleId 1111).
+        $this->saleRecharge->setDispatchExternalRef('9999-2200');
+        $this->stubSuccessfulPurchase();
 
         $this->csqClient->expects($this->once())
             ->method('purchase')
-            ->with($this->anything(), $this->anything(), $this->anything(), '53500000', $this->anything())
-            ->willReturn([
-                'rc' => 0,
-                'items' => [['resultcode' => '10', 'resultmessage' => 'OK', 'supplierreference' => 'X1']],
-            ]);
-
-        $balance = new AccountBalanceDto('USD', 1000.0);
-        $this->balanceService->method('balance')->willReturn($balance);
-        $this->connection->method('executeStatement')->willReturn(1);
+            ->with($this->anything(), 9999, $this->anything(), $this->anything(), $this->anything());
 
         $this->service->invokeRechargeCommunication(555);
     }
 
-    public function testDoesNotSwapThePhoneNumberForCsqWhenItDoesNotEndInSixty(): void
+    public function testFallsBackToThePromotionsDefaultProductWhenNoDispatchExternalRefIsFrozen(): void
     {
-        $this->saleRecharge->setPhoneNumber('5356085136');
-        $this->availabilityService->method('canDispatchTo')->willReturn(true);
+        // Reserva creada ANTES de este cambio (o cualquier fila histórica):
+        // dispatchExternalRef nunca se pobló — debe comportarse EXACTAMENTE
+        // igual que antes (regresión crítica).
+        $this->stubSuccessfulPurchase();
 
         $this->csqClient->expects($this->once())
             ->method('purchase')
-            ->with($this->anything(), $this->anything(), $this->anything(), '5356085136', $this->anything())
-            ->willReturn([
-                'rc' => 0,
-                'items' => [['resultcode' => '10', 'resultmessage' => 'OK', 'supplierreference' => 'X1']],
-            ]);
-
-        $balance = new AccountBalanceDto('USD', 1000.0);
-        $this->balanceService->method('balance')->willReturn($balance);
-        $this->connection->method('executeStatement')->willReturn(1);
+            ->with($this->anything(), 1111, $this->anything(), $this->anything(), $this->anything());
 
         $this->service->invokeRechargeCommunication(555);
     }

@@ -38,6 +38,7 @@ use App\Provider\ProviderContextFactory;
 use App\Provider\ProviderDispatchResolver;
 use App\Provider\ProviderRegistry;
 use App\Provider\ProviderResolver;
+use App\Provider\PromotionProviderDispatchResolver;
 use App\Provider\TransactionStatus;
 use App\Repository\BalanceOperationRepository;
 use App\Repository\EnvironmentRepository;
@@ -101,6 +102,7 @@ class CommunicationSaleService extends CommonService
         private readonly CatalogVersionResolver $catalogVersionResolver,
         private readonly PackageCatalogResolver $packageCatalogResolver,
         private readonly ProviderDispatchResolver $dispatchResolver,
+        private readonly PromotionProviderDispatchResolver $promotionDispatchResolver,
     ) {
         parent::__construct(
             $em,
@@ -209,12 +211,13 @@ class CommunicationSaleService extends CommonService
         }
 
         // Reserve siempre trae promoción hoy (el DTO la exige) y las
-        // promociones V2 todavía no existen (ver Fase 5 del plan) —
-        // hasPromotion=true fuerza la rama legacy en admit() sin importar
-        // CatalogVersionResolver::isV2(). El proveedor es propiedad del
-        // producto, no de la cuenta — se valida y se congela ANTES de
+        // promociones V2 todavía no existen (ver Fase 5 del plan) — pasar
+        // $promotion fuerza la rama legacy en admit() sin importar
+        // CatalogVersionResolver::isV2(). El proveedor se resuelve por
+        // prioridad de cliente + vínculo promoción→producto (ver
+        // PromotionProviderDispatchResolver) y se congela ANTES de
         // construir la venta.
-        $admission = $this->admit($user, $reserveDto->getPackageId(), 'recharge', forReserve: true, hasPromotion: true);
+        $admission = $this->admit($user, $reserveDto->getPackageId(), 'recharge', forReserve: true, promotion: $promotion);
 
         $recharge = new CommunicationSaleRecharge();
         $recharge->setTenant($user);
@@ -499,7 +502,15 @@ class CommunicationSaleService extends CommonService
                             $saleRecharge->getPromotionId()
                         );
                         if (!is_null($promotion)) {
-                            $productCode = $this->resolveProductExternalId($promotion->getProduct());
+                            // dispatchExternalRef ya viene resuelto POR PROVEEDOR
+                            // desde admitLegacy() (PromotionProviderDispatchResolver)
+                            // para reservas creadas después de este cambio — evita
+                            // usar siempre promotion->getProduct() (el producto "de
+                            // origen"), que puede no ser el del proveedor real
+                            // elegido para esta venta. Reservas anteriores (sin
+                            // dispatchExternalRef) caen al comportamiento de siempre.
+                            $productCode = $saleRecharge->getDispatchExternalRef()
+                                ?? $this->resolveProductExternalId($promotion->getProduct());
                         }
                         $saleRecharge->setPromotionId($saleRecharge->getPromotionId());
                         $saleRecharge->setPromotion($promotion);
@@ -507,7 +518,8 @@ class CommunicationSaleService extends CommonService
                         $promotion = $package->getPromotionItems()->first();
                         $saleRecharge->setPromotionId($promotion->getId());
                         $saleRecharge->setPromotion($promotion);
-                        $productCode = $this->resolveProductExternalId($promotion?->getProduct());
+                        $productCode = $saleRecharge->getDispatchExternalRef()
+                            ?? $this->resolveProductExternalId($promotion?->getProduct());
                     }
 
                     $destination = (object)$package->getDestination();
@@ -919,11 +931,11 @@ class CommunicationSaleService extends CommonService
      * ProviderDispatchResolver::select(), devolviendo el snapshot que
      * applyAdmission() persistirá en la venta.
      *
-     * $hasPromotion=true fuerza SIEMPRE la rama legacy, sin importar
+     * $promotion no nulo fuerza SIEMPRE la rama legacy, sin importar
      * isV2(): las promociones V2 no existen todavía (Fase 5) y
      * processReserve() hoy exige promoción en el 100% de los casos (el DTO
-     * la hace obligatoria) — este flag es lo que mantiene su rama V2 inerte
-     * hasta que Fase 5 dé de alta el equivalente.
+     * la hace obligatoria) — este parámetro es lo que mantiene su rama V2
+     * inerte hasta que Fase 5 dé de alta el equivalente.
      *
      * @throws MyCurrentException
      */
@@ -932,19 +944,19 @@ class CommunicationSaleService extends CommonService
         int $packageId,
         string $saleType,
         bool $forReserve = false,
-        bool $hasPromotion = false,
+        ?CommunicationPromotions $promotion = null,
     ): CommunicationSaleAdmission {
-        if (!$hasPromotion && $this->catalogVersionResolver->isV2($user)) {
+        if ($promotion === null && $this->catalogVersionResolver->isV2($user)) {
             return $this->admitV2($user, $packageId, $saleType);
         }
 
-        return $this->admitLegacy($user, $packageId, $saleType, $forReserve);
+        return $this->admitLegacy($user, $packageId, $saleType, $forReserve, $promotion);
     }
 
     /**
      * @throws MyCurrentException
      */
-    private function admitLegacy(Account $user, int $packageId, string $saleType, bool $forReserve): CommunicationSaleAdmission
+    private function admitLegacy(Account $user, int $packageId, string $saleType, bool $forReserve, ?CommunicationPromotions $promotion = null): CommunicationSaleAdmission
     {
         /** @var \App\Repository\CommunicationClientPackageRepository $clientPackageRepo */
         $clientPackageRepo = $this->em->getRepository(CommunicationClientPackage::class);
@@ -959,7 +971,21 @@ class CommunicationSaleService extends CommonService
             $this->assertRechargeableProduct($package);
         }
 
-        $productProvider = $this->resolveAndGuardProvider($user, $package);
+        $dispatchProduct = null;
+        $dispatchExternalRef = null;
+        if ($promotion !== null) {
+            // Selección de proveedor por prioridad (ClientProviderRouting),
+            // igual que ProviderDispatchResolver hace para paquetes V2 —
+            // ver PromotionProviderDispatchResolver. Reemplaza a
+            // resolveAndGuardProvider() SOLO cuando hay promoción; el
+            // proveedor ya no lo decide ciegamente el producto "de origen".
+            $dispatch = $this->promotionDispatchResolver->select($user, $promotion);
+            $productProvider = $dispatch->provider->value;
+            $dispatchProduct = $dispatch->product;
+            $dispatchExternalRef = $dispatch->externalRef;
+        } else {
+            $productProvider = $this->resolveAndGuardProvider($user, $package);
+        }
 
         // Único punto de precio: mismo resolver que usa el listado
         // (GET /communication/packages) — antes del rediseño de precios,
@@ -973,6 +999,8 @@ class CommunicationSaleService extends CommonService
             amount: $resolvedPrice->amount,
             currency: $resolvedPrice->currency,
             legacyPackage: $package,
+            dispatchProduct: $dispatchProduct,
+            dispatchExternalRef: $dispatchExternalRef,
         );
     }
 
@@ -1030,6 +1058,16 @@ class CommunicationSaleService extends CommonService
     {
         if ($admission->legacyPackage !== null) {
             $sale->setPackage($admission->legacyPackage);
+            // Promoción con vínculo por proveedor resuelto (ver admitLegacy()):
+            // congela el producto elegido para que invokeRechargeCommunication()
+            // no tenga que re-derivarlo de promotion->getProduct() a ciegas.
+            // No se toca catalogPackage/destinationAmount/destinationCurrency:
+            // eso mantendría isV2() en true, y las promociones siguen siendo
+            // legacy (Fase 5 pendiente).
+            if ($admission->dispatchProduct !== null) {
+                $sale->setDispatchProduct($admission->dispatchProduct);
+                $sale->setDispatchExternalRef($admission->dispatchExternalRef);
+            }
 
             return;
         }

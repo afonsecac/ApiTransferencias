@@ -136,6 +136,7 @@ class CommunicationSaleServiceV2AsyncDispatchTest extends TestCase
             new CatalogVersionResolver($sysConfigRepo),
             $this->packageCatalogResolver,
             $dispatchResolver,
+            $this->createMock(\App\Provider\PromotionProviderDispatchResolver::class),
         );
 
         $this->saleRecharge = $this->buildPendingV2CsqRecharge();

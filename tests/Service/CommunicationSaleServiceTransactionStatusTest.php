@@ -142,6 +142,7 @@ class CommunicationSaleServiceTransactionStatusTest extends TestCase
             new CatalogVersionResolver($sysConfigRepo),
             $this->createMock(PackageCatalogResolver::class),
             $this->createMock(\App\Provider\ProviderDispatchResolver::class),
+            $this->createMock(\App\Provider\PromotionProviderDispatchResolver::class),
         );
 
         $this->saleRecharge = $this->buildPendingCsqRecharge();
