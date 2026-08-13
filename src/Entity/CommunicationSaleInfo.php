@@ -170,8 +170,16 @@ class CommunicationSaleInfo
     #[ApiProperty]
     protected ?float $totalPrice = 0;
 
+    /**
+     * Sobre v2 crudo del proveedor (TransactionStatus::envelope()) — incluye
+     * qué proveedor (CSQ/DTOne/ETECSA) procesó la venta y su respuesta cruda.
+     * Deliberadamente FUERA de 'comSales:read': ese grupo alimenta la API
+     * pública consumida por clientes externos (app móvil), que no debe ver
+     * el proveedor interno usado para el enrutado. Sigue disponible para el
+     * dashboard vía 'sale:detail'/'balance:reading'.
+     */
     #[ORM\Column]
-    #[Groups(['comSales:read', 'balance:reading', 'sale:detail'])]
+    #[Groups(['balance:reading', 'sale:detail'])]
     #[ApiProperty]
     protected array $transactionStatus = [];
 
@@ -266,7 +274,7 @@ class CommunicationSaleInfo
      * proveedor correcto aunque cambie el routing del cliente.
      */
     #[ORM\Column(length: 20)]
-    #[Groups(['comSales:read', 'sale:list', 'sale:detail'])]
+    #[Groups(['sale:list', 'sale:detail'])]
     private ?string $provider = null;
 
     public function __construct() {
