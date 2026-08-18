@@ -5,8 +5,12 @@ namespace App\DTO\Out;
 final class CommunicationContractOutDto
 {
     public int $id;
-    public int $communicationPackageId;
-    public ?string $communicationPackageName = null;
+
+    /**
+     * @var list<CommunicationPackageRefOutDto>
+     */
+    public array $packages = [];
+
     public ?TenantRefOutDto $tenant = null;
     public float $destinationAmount;
     public string $destinationCurrency;

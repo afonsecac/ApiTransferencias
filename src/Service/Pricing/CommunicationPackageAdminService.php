@@ -5,7 +5,6 @@ namespace App\Service\Pricing;
 use App\DTO\CreateCommunicationPackageBatchDto;
 use App\DTO\CreateCommunicationPackageDto;
 use App\DTO\UpdateCommunicationPackageDto;
-use App\Entity\CommunicationContract;
 use App\Entity\CommunicationPackage;
 use App\Entity\CommunicationProduct;
 use App\Entity\Environment;
@@ -274,15 +273,15 @@ class CommunicationPackageAdminService
     }
 
     /**
-     * @throws MyCurrentException si tiene contratos asociados (la FK de
-     *   communication_contract.communication_package_id es RESTRICT — sin
-     *   esta guardia, el borrado fallaría con un error de integridad crudo).
+     * @throws MyCurrentException si tiene contratos asociados (la tabla
+     *   puente communication_contract_package tiene FK ON DELETE CASCADE
+     *   desde el lado paquete, así que SIN esta guardia el borrado
+     *   desasociaría al paquete de sus contratos en silencio en vez de
+     *   avisar — un contrato con 0 paquetes queda huérfano).
      */
     public function delete(CommunicationPackage $package): void
     {
-        $existingContract = $this->em->getRepository(CommunicationContract::class)
-            ->findOneBy(['communicationPackage' => $package]);
-        if ($existingContract !== null) {
+        if (!$package->getContracts()->isEmpty()) {
             throw new MyCurrentException(
                 'COMMUNICATION_PACKAGE_HAS_CONTRACTS',
                 'No se puede eliminar: tiene contratos asociados',

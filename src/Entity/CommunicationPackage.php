@@ -10,6 +10,8 @@ use App\Repository\CommunicationPackageRepository;
 use App\Service\Pricing\ResolvedPackageOffer;
 use App\State\CommunicationPackageCatalogItemProvider;
 use App\State\CommunicationPackageCatalogProvider;
+use Doctrine\Common\Collections\ArrayCollection;
+use Doctrine\Common\Collections\Collection;
 use Doctrine\ORM\Mapping as ORM;
 use Symfony\Component\Serializer\Attribute\Groups;
 
@@ -266,17 +268,38 @@ class CommunicationPackage
     #[ORM\JoinColumn(name: 'promotion_id', nullable: true, onDelete: 'CASCADE')]
     private ?CommunicationPromotions $promotion = null;
 
+    /**
+     * Lado inverso de CommunicationContract::$packages — solo para el guard
+     * de borrado (CommunicationPackageAdminService::delete()): un paquete
+     * con al menos un contrato no se puede borrar (FK RESTRICT en la tabla
+     * puente). No se usa para resolver catálogo/precio (eso sigue siendo
+     * responsabilidad de PackageCatalogResolver desde el lado contrato).
+     *
+     * @var Collection<int, CommunicationContract>
+     */
+    #[ORM\ManyToMany(targetEntity: CommunicationContract::class, mappedBy: 'packages')]
+    private Collection $contracts;
+
     public function __construct()
     {
         $this->benefits = [];
         $this->tags = [];
         $this->service = [];
         $this->activeStartAt = new \DateTimeImmutable();
+        $this->contracts = new ArrayCollection();
     }
 
     public function getId(): ?int
     {
         return $this->id;
+    }
+
+    /**
+     * @return Collection<int, CommunicationContract>
+     */
+    public function getContracts(): Collection
+    {
+        return $this->contracts;
     }
 
     public function getName(): ?string

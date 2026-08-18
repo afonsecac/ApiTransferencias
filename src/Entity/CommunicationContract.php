@@ -3,18 +3,24 @@
 namespace App\Entity;
 
 use App\Repository\CommunicationContractRepository;
+use Doctrine\Common\Collections\ArrayCollection;
+use Doctrine\Common\Collections\Collection;
 use Doctrine\ORM\Mapping as ORM;
 
 /**
- * Contrato de precio/visibilidad para un CommunicationPackage concreto
- * (rediseño V2). El match con el paquete es SIEMPRE por el FK
- * `communicationPackage` — nunca por la tupla (destinationAmount/
- * destinationCurrency), que aquí solo es un snapshot congelado en el
- * momento de crear el contrato (si el paquete cambia después, los
- * contratos ya emitidos no se alteran).
+ * Contrato de precio/visibilidad para un `(tenant, destinationAmount,
+ * destinationCurrency)` (rediseño V2, ManyToMany desde 2026-08-18 — ver
+ * docs de la Fase 6). `destinationAmount`/`destinationCurrency` son la
+ * IDENTIDAD del contrato (con `tenant`, definen su tupla única mientras
+ * esté abierto) — YA NO son solo snapshot: `CommunicationContractService::
+ * upsertContract()` deduplica por esta tupla, así que dos
+ * `CommunicationPackage` distintos que compartan monto y tenant terminan en
+ * el MISMO contrato (`$packages`), a propósito — es lo que permite que un
+ * paquete promocional a un monto ya cubierto por el catálogo normal
+ * aparezca junto a él sin tocar la precedencia de `PackageCatalogResolver`.
  *
  * `tenant === null` = contrato "por defecto": aplica a cualquier cuenta sin
- * contrato propio para este paquete, con el mismo efecto de
+ * contrato propio para esta tupla, con el mismo efecto de
  * visibilidad/precio que uno específico (ver PackageCatalogResolver, Fase
  * 2). Sin `isActive`: la vigencia es solo `startAt`/`endAt` — "pausar" es
  * cerrar (`endAt = now()`) y crear uno nuevo si se reactiva.
@@ -28,21 +34,29 @@ class CommunicationContract
     #[ORM\Column]
     private ?int $id = null;
 
-    #[ORM\ManyToOne(targetEntity: CommunicationPackage::class)]
-    #[ORM\JoinColumn(nullable: false)]
-    private ?CommunicationPackage $communicationPackage = null;
+    /**
+     * Todos los CommunicationPackage que este contrato cubre — cualquiera
+     * que comparta `(destinationAmount, destinationCurrency)` con el
+     * contrato en el momento en que se le asoció (ver upsertContract()).
+     * Lado propietario de la relación (la tabla puente es
+     * communication_contract_package).
+     *
+     * @var Collection<int, CommunicationPackage>
+     */
+    #[ORM\ManyToMany(targetEntity: CommunicationPackage::class)]
+    #[ORM\JoinTable(name: 'communication_contract_package')]
+    private Collection $packages;
 
     /**
      * null = contrato "por defecto" (aplica a cualquier cuenta sin contrato
-     * propio para este paquete).
+     * propio para esta tupla).
      */
     #[ORM\ManyToOne(targetEntity: Account::class)]
     #[ORM\JoinColumn(nullable: true, onDelete: 'CASCADE')]
     private ?Account $tenant = null;
 
     /**
-     * Snapshot de CommunicationPackage::$destinationAmount al crear el
-     * contrato — no se usa para buscar (eso es el FK), solo auditoría.
+     * Identidad del contrato junto con `tenant` — ver docblock de clase.
      */
     #[ORM\Column]
     private ?float $destinationAmount = null;
@@ -83,6 +97,7 @@ class CommunicationContract
     public function __construct()
     {
         $this->startAt = new \DateTimeImmutable();
+        $this->packages = new ArrayCollection();
     }
 
     public function getId(): ?int
@@ -90,14 +105,26 @@ class CommunicationContract
         return $this->id;
     }
 
-    public function getCommunicationPackage(): ?CommunicationPackage
+    /**
+     * @return Collection<int, CommunicationPackage>
+     */
+    public function getPackages(): Collection
     {
-        return $this->communicationPackage;
+        return $this->packages;
     }
 
-    public function setCommunicationPackage(CommunicationPackage $communicationPackage): static
+    public function addPackage(CommunicationPackage $package): static
     {
-        $this->communicationPackage = $communicationPackage;
+        if (!$this->packages->contains($package)) {
+            $this->packages->add($package);
+        }
+
+        return $this;
+    }
+
+    public function removePackage(CommunicationPackage $package): static
+    {
+        $this->packages->removeElement($package);
 
         return $this;
     }

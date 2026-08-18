@@ -12,6 +12,7 @@ use App\Entity\CommunicationPackage;
 use App\Entity\Environment;
 use App\Entity\User;
 use App\Exception\MyCurrentException;
+use App\Repository\CommunicationContractRepository;
 use App\Repository\CommunicationPackageRepository;
 use App\Service\Pricing\CommunicationContractService;
 use App\Service\Pricing\TargetAccountResolver;
@@ -30,6 +31,7 @@ class CommunicationContractServiceTest extends TestCase
     private TargetAccountResolver&MockObject $targetAccountResolver;
     private Security&MockObject $security;
     private CommunicationPackageRepository&MockObject $packageRepository;
+    private CommunicationContractRepository&MockObject $contractRepository;
     private CommunicationContractService $service;
 
     protected function setUp(): void
@@ -38,8 +40,15 @@ class CommunicationContractServiceTest extends TestCase
         $this->targetAccountResolver = $this->createMock(TargetAccountResolver::class);
         $this->security = $this->createMock(Security::class);
         $this->packageRepository = $this->createMock(CommunicationPackageRepository::class);
+        $this->contractRepository = $this->createMock(CommunicationContractRepository::class);
 
-        $this->service = new CommunicationContractService($this->em, $this->targetAccountResolver, $this->security, $this->packageRepository);
+        $this->service = new CommunicationContractService(
+            $this->em,
+            $this->targetAccountResolver,
+            $this->security,
+            $this->packageRepository,
+            $this->contractRepository,
+        );
     }
 
     private function assignId(object $entity, int $id): void
@@ -66,6 +75,16 @@ class CommunicationContractServiceTest extends TestCase
         $this->assignId($package, $id);
 
         return $package;
+    }
+
+    private function contract(CommunicationPackage $package): CommunicationContract
+    {
+        return (new CommunicationContract())
+            ->addPackage($package)
+            ->setDestinationAmount((float) $package->getDestinationAmount())
+            ->setDestinationCurrency((string) $package->getDestinationCurrency())
+            ->setPrice(10.0)
+            ->setCurrency('USD');
     }
 
     public function testCreateSingleThrowsWhenPackageNotFound(): void
@@ -118,13 +137,9 @@ class CommunicationContractServiceTest extends TestCase
         $dto = new CreateCommunicationContractDto(communicationPackageId: 1, price: 8.0, currency: 'USD');
         $package = $this->package(1);
 
-        $contractRepo = $this->createMock(EntityRepository::class);
-        $contractRepo->method('findOneBy')->willReturn(null);
-
-        $this->em->method('getRepository')->willReturnMap([
-            [CommunicationPackage::class, $this->repoReturning($package)],
-            [CommunicationContract::class, $contractRepo],
-        ]);
+        $this->em->method('getRepository')->with(CommunicationPackage::class)
+            ->willReturn($this->repoReturning($package));
+        $this->contractRepository->method('findOpenContract')->willReturn(null);
 
         $this->em->expects($this->once())->method('persist')->with($this->isInstanceOf(CommunicationContract::class));
         $this->em->expects($this->once())->method('flush');
@@ -132,7 +147,8 @@ class CommunicationContractServiceTest extends TestCase
         $contract = $this->service->createSingle($dto);
 
         $this->assertNull($contract->getTenant());
-        $this->assertSame($package, $contract->getCommunicationPackage());
+        $this->assertCount(1, $contract->getPackages());
+        $this->assertTrue($contract->getPackages()->contains($package));
         $this->assertSame(8.0, $contract->getPrice());
         $this->assertSame('USD', $contract->getCurrency());
         // Snapshot copiado del paquete, no pedido a mano.
@@ -147,20 +163,14 @@ class CommunicationContractServiceTest extends TestCase
         $tenant = $this->createMock(Account::class);
         $environment = $this->createMock(Environment::class);
 
-        $existing = (new CommunicationContract())
-            ->setCommunicationPackage($package)
-            ->setTenant($tenant)
-            ->setDestinationAmount(500.0)
-            ->setDestinationCurrency('CUP')
-            ->setPrice(10.0)
-            ->setCurrency('USD');
+        $existing = $this->contract($package)->setTenant($tenant)->setPrice(10.0)->setCurrency('USD');
 
         $this->em->method('getRepository')->willReturnMap([
             [CommunicationPackage::class, $this->repoReturning($package)],
             [Environment::class, $this->repoReturning($environment)],
-            [CommunicationContract::class, $this->repoReturning($existing)],
         ]);
         $this->targetAccountResolver->method('resolveOne')->with($environment, 5)->willReturn($tenant);
+        $this->contractRepository->method('findOpenContract')->willReturn($existing);
 
         $this->em->expects($this->never())->method('persist');
 
@@ -170,19 +180,62 @@ class CommunicationContractServiceTest extends TestCase
         $this->assertSame(20.0, $contract->getPrice());
     }
 
+    public function testCreateSingleMergesASecondPackageWithSameTupleIntoTheSameContract(): void
+    {
+        $packageA = $this->package(1);
+        $packageB = $this->package(2);
+
+        // Un solo repo de CommunicationPackage para todo el test — stubear
+        // getRepository()->with(...) dos veces en el mismo mock hace que
+        // gane el primer stub configurado, no el segundo (pitfall conocido
+        // de PHPUnit con dobles createMock()).
+        $packageRepo = $this->createMock(EntityRepository::class);
+        $packageRepo->method('find')->willReturnCallback(
+            static fn (int $id) => match ($id) {
+                1 => $packageA,
+                2 => $packageB,
+                default => null,
+            }
+        );
+        $this->em->method('getRepository')->with(CommunicationPackage::class)->willReturn($packageRepo);
+        $this->em->method('persist')->willReturnCallback(fn ($e) => $this->assignId($e, 1));
+
+        $dtoA = new CreateCommunicationContractDto(communicationPackageId: 1, price: 8.0, currency: 'USD');
+        $this->contractRepository->method('findOpenContract')->willReturn(null);
+
+        $contractA = $this->service->createSingle($dtoA);
+        $this->assertCount(1, $contractA->getPackages());
+
+        // Segunda llamada, mismo tenant (null) y misma tupla (monto/moneda) —
+        // findOpenContract ahora "encuentra" el contrato recién creado.
+        $this->contractRepository = $this->createMock(CommunicationContractRepository::class);
+        $this->contractRepository->method('findOpenContract')->willReturn($contractA);
+        $this->service = new CommunicationContractService(
+            $this->em,
+            $this->targetAccountResolver,
+            $this->security,
+            $this->packageRepository,
+            $this->contractRepository,
+        );
+
+        $dtoB = new CreateCommunicationContractDto(communicationPackageId: 2, price: 9.0, currency: 'USD');
+        $contractB = $this->service->createSingle($dtoB);
+
+        $this->assertSame($contractA, $contractB);
+        $this->assertCount(2, $contractB->getPackages());
+        $this->assertTrue($contractB->getPackages()->contains($packageA));
+        $this->assertTrue($contractB->getPackages()->contains($packageB));
+    }
+
     public function testCreateSingleStampsCreatedByFromSecurity(): void
     {
         $dto = new CreateCommunicationContractDto(communicationPackageId: 1, price: 8.0, currency: 'USD');
         $package = $this->package(1);
         $user = $this->createMock(User::class);
 
-        $contractRepo = $this->createMock(EntityRepository::class);
-        $contractRepo->method('findOneBy')->willReturn(null);
-
-        $this->em->method('getRepository')->willReturnMap([
-            [CommunicationPackage::class, $this->repoReturning($package)],
-            [CommunicationContract::class, $contractRepo],
-        ]);
+        $this->em->method('getRepository')->with(CommunicationPackage::class)
+            ->willReturn($this->repoReturning($package));
+        $this->contractRepository->method('findOpenContract')->willReturn(null);
         $this->security->method('getUser')->willReturn($user);
 
         $contract = $this->service->createSingle($dto);
@@ -211,14 +264,11 @@ class CommunicationContractServiceTest extends TestCase
             ->with($environment, [])
             ->willReturn([$account1, $account2]);
 
-        $contractRepo = $this->createMock(EntityRepository::class);
-        $contractRepo->method('findOneBy')->willReturn(null);
-
         $this->em->method('getRepository')->willReturnMap([
             [CommunicationPackage::class, $this->repoReturning($package)],
             [Environment::class, $this->repoReturning($environment)],
-            [CommunicationContract::class, $contractRepo],
         ]);
+        $this->contractRepository->method('findOpenContract')->willReturn(null);
 
         $persisted = [];
         $this->em->method('persist')->willReturnCallback(function ($e) use (&$persisted) { $persisted[] = $e; });
@@ -281,10 +331,7 @@ class CommunicationContractServiceTest extends TestCase
             [150.0, 'CUP', $p150],
             [200.0, 'CUP', $p200],
         ]);
-
-        $contractRepo = $this->createMock(EntityRepository::class);
-        $contractRepo->method('findOneBy')->willReturn(null);
-        $this->em->method('getRepository')->willReturnMap([[CommunicationContract::class, $contractRepo]]);
+        $this->contractRepository->method('findOpenContract')->willReturn(null);
 
         $nextId = 100;
         $persisted = [];
@@ -329,10 +376,7 @@ class CommunicationContractServiceTest extends TestCase
                 default => null,
             }
         );
-
-        $contractRepo = $this->createMock(EntityRepository::class);
-        $contractRepo->method('findOneBy')->willReturn(null);
-        $this->em->method('getRepository')->willReturnMap([[CommunicationContract::class, $contractRepo]]);
+        $this->contractRepository->method('findOpenContract')->willReturn(null);
         $this->em->method('persist')->willReturnCallback(fn ($e) => $this->assignId($e, 1));
         $this->em->expects($this->once())->method('flush');
 
@@ -421,10 +465,7 @@ class CommunicationContractServiceTest extends TestCase
 
         $package = $this->package(1);
         $this->packageRepository->method('findByDestination')->willReturn($package);
-
-        $contractRepo = $this->createMock(EntityRepository::class);
-        $contractRepo->method('findOneBy')->willReturn(null);
-        $this->em->method('getRepository')->willReturnMap([[CommunicationContract::class, $contractRepo]]);
+        $this->contractRepository->method('findOpenContract')->willReturn(null);
 
         $persisted = [];
         $this->em->method('persist')->willReturnCallback(function ($e) use (&$persisted) {
@@ -441,10 +482,7 @@ class CommunicationContractServiceTest extends TestCase
 
     public function testUpdateOnlyTouchesProvidedFields(): void
     {
-        $contract = (new CommunicationContract())
-            ->setCommunicationPackage($this->package(1))
-            ->setDestinationAmount(500.0)->setDestinationCurrency('CUP')
-            ->setPrice(10.0)->setCurrency('USD');
+        $contract = $this->contract($this->package(1));
 
         $dto = new UpdateCommunicationContractDto(price: 12.0);
 
@@ -467,10 +505,7 @@ class CommunicationContractServiceTest extends TestCase
      */
     public function testUpdateNormalizesStartAtOffsetToUtcBeforePersisting(): void
     {
-        $contract = (new CommunicationContract())
-            ->setCommunicationPackage($this->package(1))
-            ->setDestinationAmount(500.0)->setDestinationCurrency('CUP')
-            ->setPrice(10.0)->setCurrency('USD');
+        $contract = $this->contract($this->package(1));
 
         $dto = new UpdateCommunicationContractDto(startAt: '2026-08-12T20:00:00-04:00');
 
@@ -482,70 +517,40 @@ class CommunicationContractServiceTest extends TestCase
         $this->assertSame('2026-08-13T00:00:00+00:00', $updated->getStartAt()?->format('c'));
     }
 
-    public function testUpdateReassignsPackageByDestinationAmount(): void
+    public function testUpdateRelabelsTupleWhenDestinationAmountChangesWithoutTouchingPackages(): void
     {
-        $oldPackage = $this->package(1);
-        $newPackage = $this->package(2);
-        $contract = (new CommunicationContract())
-            ->setCommunicationPackage($oldPackage)
-            ->setDestinationAmount(500.0)->setDestinationCurrency('CUP')
-            ->setPrice(10.0)->setCurrency('USD');
+        $package = $this->package(1);
+        $contract = $this->contract($package);
 
         $dto = new UpdateCommunicationContractDto(destinationAmount: 750.0);
 
-        $this->packageRepository->expects($this->once())
-            ->method('findByDestination')
-            ->with(750.0, 'CUP')
-            ->willReturn($newPackage);
-
-        $contractRepo = $this->createMock(EntityRepository::class);
-        $contractRepo->method('findOneBy')->willReturn(null);
-        $this->em->method('getRepository')->willReturnMap([[CommunicationContract::class, $contractRepo]]);
+        $this->contractRepository->expects($this->once())
+            ->method('findOpenContract')
+            ->with($contract->getTenant(), 750.0, 'CUP')
+            ->willReturn(null);
 
         $this->em->expects($this->once())->method('flush');
 
         $updated = $this->service->update($contract, $dto);
 
-        $this->assertSame($newPackage, $updated->getCommunicationPackage());
+        $this->assertSame(750.0, $updated->getDestinationAmount());
+        // La colección de paquetes no se recalcula al relabelar la tupla.
+        $this->assertCount(1, $updated->getPackages());
+        $this->assertTrue($updated->getPackages()->contains($package));
     }
 
-    public function testUpdateThrowsWhenDestinationAmountHasNoMatchingPackage(): void
-    {
-        $contract = (new CommunicationContract())
-            ->setCommunicationPackage($this->package(1))
-            ->setDestinationAmount(500.0)->setDestinationCurrency('CUP')
-            ->setPrice(10.0)->setCurrency('USD');
-
-        $dto = new UpdateCommunicationContractDto(destinationAmount: 999.0);
-
-        $this->packageRepository->method('findByDestination')->willReturn(null);
-        $this->em->expects($this->never())->method('flush');
-
-        $this->expectException(MyCurrentException::class);
-        $this->expectExceptionMessage('No existe ningún paquete');
-
-        $this->service->update($contract, $dto);
-    }
-
-    public function testUpdateThrowsWhenTargetPackageAlreadyHasOpenContractForTenant(): void
+    public function testUpdateThrowsWhenAnotherOpenContractAlreadyExistsForTheNewTuple(): void
     {
         $tenant = $this->createMock(Account::class);
-        $contract = (new CommunicationContract())
-            ->setCommunicationPackage($this->package(1))
-            ->setTenant($tenant)
-            ->setDestinationAmount(500.0)->setDestinationCurrency('CUP')
-            ->setPrice(10.0)->setCurrency('USD');
+        $contract = $this->contract($this->package(1))->setTenant($tenant);
 
-        $newPackage = $this->package(2);
         $existingConflict = $this->createMock(CommunicationContract::class);
 
         $dto = new UpdateCommunicationContractDto(destinationAmount: 750.0);
 
-        $this->packageRepository->method('findByDestination')->willReturn($newPackage);
-
-        $contractRepo = $this->createMock(EntityRepository::class);
-        $contractRepo->method('findOneBy')->willReturn($existingConflict);
-        $this->em->method('getRepository')->willReturnMap([[CommunicationContract::class, $contractRepo]]);
+        $this->contractRepository->method('findOpenContract')
+            ->with($tenant, 750.0, 'CUP')
+            ->willReturn($existingConflict);
 
         $this->em->expects($this->never())->method('flush');
 
@@ -555,12 +560,27 @@ class CommunicationContractServiceTest extends TestCase
         $this->service->update($contract, $dto);
     }
 
+    public function testUpdateAllowsKeepingTheSameTupleItAlreadyHas(): void
+    {
+        $contract = $this->contract($this->package(1));
+
+        $dto = new UpdateCommunicationContractDto(destinationAmount: 500.0, destinationCurrency: 'cup');
+
+        // findOpenContract() encuentra el propio contrato (misma tupla) — no
+        // es un conflicto real, no debe lanzar.
+        $this->contractRepository->method('findOpenContract')->willReturn($contract);
+
+        $this->em->expects($this->once())->method('flush');
+
+        $updated = $this->service->update($contract, $dto);
+
+        $this->assertSame(500.0, $updated->getDestinationAmount());
+        $this->assertSame('CUP', $updated->getDestinationCurrency());
+    }
+
     public function testCloseSetsEndAtAndFlushes(): void
     {
-        $contract = (new CommunicationContract())
-            ->setCommunicationPackage($this->package(1))
-            ->setDestinationAmount(500.0)->setDestinationCurrency('CUP')
-            ->setPrice(10.0)->setCurrency('USD');
+        $contract = $this->contract($this->package(1));
         $this->assertNull($contract->getEndAt());
 
         $this->em->expects($this->once())->method('flush');
@@ -572,10 +592,7 @@ class CommunicationContractServiceTest extends TestCase
 
     public function testDeleteRemovesAndFlushes(): void
     {
-        $contract = (new CommunicationContract())
-            ->setCommunicationPackage($this->package(1))
-            ->setDestinationAmount(500.0)->setDestinationCurrency('CUP')
-            ->setPrice(10.0)->setCurrency('USD');
+        $contract = $this->contract($this->package(1));
 
         $this->em->expects($this->once())->method('remove')->with($contract);
         $this->em->expects($this->once())->method('flush');
@@ -585,8 +602,8 @@ class CommunicationContractServiceTest extends TestCase
 
     public function testDeleteAllWithoutTenantRemovesEveryContract(): void
     {
-        $c1 = (new CommunicationContract())->setCommunicationPackage($this->package(1))->setDestinationAmount(500.0)->setDestinationCurrency('CUP')->setPrice(1.0)->setCurrency('USD');
-        $c2 = (new CommunicationContract())->setCommunicationPackage($this->package(2))->setDestinationAmount(600.0)->setDestinationCurrency('CUP')->setPrice(2.0)->setCurrency('USD');
+        $c1 = $this->contract($this->package(1))->setDestinationAmount(500.0)->setDestinationCurrency('CUP')->setPrice(1.0)->setCurrency('USD');
+        $c2 = $this->contract($this->package(2))->setDestinationAmount(600.0)->setDestinationCurrency('CUP')->setPrice(2.0)->setCurrency('USD');
 
         $contractRepo = $this->createMock(EntityRepository::class);
         $contractRepo->expects($this->once())->method('findBy')->with([])->willReturn([$c1, $c2]);
@@ -606,7 +623,7 @@ class CommunicationContractServiceTest extends TestCase
     {
         $tenant = $this->createMock(Account::class);
         $environment = $this->createMock(Environment::class);
-        $contract = (new CommunicationContract())->setCommunicationPackage($this->package(1))->setDestinationAmount(500.0)->setDestinationCurrency('CUP')->setPrice(1.0)->setCurrency('USD');
+        $contract = $this->contract($this->package(1))->setPrice(1.0)->setCurrency('USD');
 
         $contractRepo = $this->createMock(EntityRepository::class);
         $contractRepo->expects($this->once())->method('findBy')->with(['tenant' => $tenant])->willReturn([$contract]);
