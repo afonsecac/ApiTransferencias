@@ -20,6 +20,7 @@ use App\Repository\EnvironmentRepository;
 use App\Repository\SysConfigRepository;
 use App\Service\Pricing\CommunicationContractService;
 use App\Service\Pricing\CommunicationPackageAdminService;
+use App\Service\Pricing\CommunicationPromotionEquivalenceService;
 use App\Service\Pricing\TargetAccountResolver;
 use Doctrine\ORM\EntityManagerInterface;
 use Psr\Log\LoggerInterface;
@@ -46,6 +47,7 @@ class CommunicationPromotionService extends CommonService
         private readonly TargetAccountResolver $targetAccountResolver,
         private readonly CommunicationPackageAdminService $packageAdminService,
         private readonly CommunicationContractService $contractService,
+        private readonly CommunicationPromotionEquivalenceService $equivalenceService,
     ) {
         parent::__construct($em, $security, $parameters, $mailer, $logger, $passwordHasher, $environmentRepository, $sysConfigRepo, $serializer);
     }
@@ -413,10 +415,14 @@ class CommunicationPromotionService extends CommonService
      * un producto de origen ni genera nada por cliente — la visibilidad la
      * decide PackageCatalogResolver como a cualquier paquete V2.
      *
-     * Las equivalencias por proveedor (quién despacha cada tramo) NO se
-     * resuelven aquí — ver Fase 5C/5D. Sin equivalencia explícita, ningún
-     * proveedor despacha ese tramo (ProviderDispatchResolver en modo
-     * estricto para paquetes de promoción).
+     * Las equivalencias por proveedor (quién despacha cada tramo) se
+     * auto-pueblan al final vía CommunicationPromotionEquivalenceService
+     * (Fase 5D) — cada proveedor con capacidad de auto-poblado
+     * (ProviderPromotionCatalogInterface) cubre los tramos que pueda; los
+     * huecos quedan reportados en el resultado para curar a mano. Sin
+     * equivalencia (ni automática ni manual), ese proveedor no despacha el
+     * tramo (ProviderDispatchResolver en modo estricto para paquetes de
+     * promoción).
      *
      * @throws MyCurrentException
      */
@@ -481,6 +487,8 @@ class CommunicationPromotionService extends CommonService
             $dto->getEndAt(),
         );
 
-        return new CreatePromotionV2Result($promotion, $packages, $contractResult);
+        $equivalences = $this->equivalenceService->populateEquivalences($promotion, $packages);
+
+        return new CreatePromotionV2Result($promotion, $packages, $contractResult, $equivalences);
     }
 }

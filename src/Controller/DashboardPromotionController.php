@@ -16,6 +16,8 @@ use App\OpenApi\Attribute\DashboardEndpoint;
 use App\Repository\CommunicationPromotionsRepository;
 use App\Service\CommunicationPromotionService;
 use App\Service\Pricing\CommunicationPromotionBindingService;
+use App\Service\Pricing\CommunicationPromotionEquivalenceService;
+use App\Service\Pricing\PromotionEquivalenceResult;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -34,6 +36,7 @@ class DashboardPromotionController extends AbstractController
         private readonly NormalizerInterface $serializer,
         private readonly CommunicationPromotionService $promotionService,
         private readonly CommunicationPromotionBindingService $bindingService,
+        private readonly CommunicationPromotionEquivalenceService $equivalenceService,
     ) {
     }
 
@@ -141,7 +144,33 @@ class DashboardPromotionController extends AbstractController
                 'created' => $result->contracts->created,
                 'updated' => $result->contracts->updated,
             ],
+            'equivalences' => $this->serializeEquivalenceResult($result->equivalences),
         ], Response::HTTP_CREATED);
+    }
+
+    #[Route('/{id}/v2/equivalences', name: 'dashboard_promotions_v2_equivalences', methods: ['GET'])]
+    #[DashboardEndpoint(summary: 'Cobertura de equivalencias por proveedor de una promoción V2', tag: 'Promotions')]
+    public function equivalences(int $id): JsonResponse
+    {
+        $promotion = $this->repository->find($id);
+        if ($promotion === null) {
+            return $this->json(['error' => ['message' => 'Promotion not found']], Response::HTTP_NOT_FOUND);
+        }
+
+        return $this->json($this->serializeEquivalenceResult($this->equivalenceService->coverage($promotion)));
+    }
+
+    #[Route('/{id}/v2/equivalences/refresh', name: 'dashboard_promotions_v2_equivalences_refresh', methods: ['POST'])]
+    #[IsGranted('ROLE_ADMIN')]
+    #[DashboardEndpoint(summary: 'Vuelve a poblar las equivalencias por proveedor de una promoción V2', tag: 'Promotions')]
+    public function refreshEquivalences(int $id): JsonResponse
+    {
+        $promotion = $this->repository->find($id);
+        if ($promotion === null) {
+            return $this->json(['error' => ['message' => 'Promotion not found']], Response::HTTP_NOT_FOUND);
+        }
+
+        return $this->json($this->serializeEquivalenceResult($this->equivalenceService->refreshForPromotion($promotion)));
     }
 
     #[Route('/{id}', name: 'dashboard_promotions_update', methods: ['PATCH', 'PUT'])]
@@ -236,6 +265,14 @@ class DashboardPromotionController extends AbstractController
         }
 
         return $this->json(['deleted' => true]);
+    }
+
+    private function serializeEquivalenceResult(PromotionEquivalenceResult $result): array
+    {
+        return [
+            'providers' => $result->providers,
+            'gaps' => $result->gaps,
+        ];
     }
 
     private function serializeProduct(?CommunicationProduct $product): ?array

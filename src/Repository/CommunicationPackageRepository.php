@@ -74,6 +74,25 @@ class CommunicationPackageRepository extends ServiceEntityRepository
     }
 
     /**
+     * Todos los tramos generados por una promoción V2, ordenados por monto
+     * — usado por CommunicationPromotionEquivalenceService (Fase 5D) para
+     * poblar/refrescar las equivalencias por proveedor sin depender de
+     * tener la lista en memoria (ej. acción manual "refrescar" sobre una
+     * promoción ya creada en una petición anterior).
+     *
+     * @return list<CommunicationPackage>
+     */
+    public function findByPromotion(CommunicationPromotions $promotion): array
+    {
+        return $this->createQueryBuilder('p')
+            ->andWhere('p.promotion = :promotion')
+            ->setParameter('promotion', $promotion)
+            ->orderBy('p.destinationAmount', 'ASC')
+            ->getQuery()
+            ->getResult();
+    }
+
+    /**
      * Variante de findByDestination() acotada a los paquetes generados por
      * UNA promoción concreta (Fase 5B) — misma tolerancia de coma flotante,
      * pero nunca puede devolver un paquete del catálogo regular ni de otra
