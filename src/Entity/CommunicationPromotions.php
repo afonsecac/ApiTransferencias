@@ -84,8 +84,16 @@ class CommunicationPromotions
     #[Groups(['comProm:read', 'comPackage:read', 'promotion:list', 'promotion:detail'])]
     private ?\DateTimeImmutable $endAt = null;
 
+    /**
+     * "Producto de origen" legacy (V1) — un único producto de un único
+     * proveedor. Nullable desde el rediseño V2 (Fase 5): una promoción V2
+     * no tiene un producto de origen global, cada proveedor resuelve su
+     * propia equivalencia por tramo (ver CommunicationPackageProviderProduct
+     * + ProviderDispatchResolver en modo estricto). Las promociones legacy
+     * existentes siguen con este campo lleno.
+     */
     #[ORM\ManyToOne]
-    #[ORM\JoinColumn(nullable: false)]
+    #[ORM\JoinColumn(nullable: true)]
     private ?CommunicationProduct $product = null;
 
     #[ORM\ManyToMany(targetEntity: CommunicationClientPackage::class, inversedBy: 'promotionItems')]

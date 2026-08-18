@@ -2,6 +2,7 @@
 
 namespace App\Controller;
 
+use App\DTO\CreatePromotionV2Dto;
 use App\DTO\Out\DeletedOutDto;
 use App\DTO\Out\PaginatedListOutDto;
 use App\DTO\SetPromotionProviderProductDto;
@@ -114,6 +115,33 @@ class DashboardPromotionController extends AbstractController
         }
 
         return $this->json($result, Response::HTTP_CREATED);
+    }
+
+    #[Route('/v2', name: 'dashboard_promotions_create_v2', methods: ['POST'])]
+    #[IsGranted('ROLE_ADMIN')]
+    #[DashboardEndpoint(summary: 'Crear promoción V2 (catálogo compartido)', tag: 'Promotions', requestDto: CreatePromotionV2Dto::class, responseStatusCode: 201)]
+    public function createV2(CreatePromotionV2Dto $dto): JsonResponse
+    {
+        try {
+            $result = $this->promotionService->createV2($dto);
+        } catch (MyCurrentException $e) {
+            return $this->json(['error' => ['message' => $e->getMessage()]], $e->getCode());
+        }
+
+        return $this->json([
+            'promotion' => $this->normalizeDetail($result->promotion),
+            'packagesCreated' => count($result->packages),
+            'packages' => array_map(fn ($p) => [
+                'id' => $p->getId(),
+                'name' => $p->getName(),
+                'destinationAmount' => $p->getDestinationAmount(),
+                'destinationCurrency' => $p->getDestinationCurrency(),
+            ], $result->packages),
+            'contracts' => [
+                'created' => $result->contracts->created,
+                'updated' => $result->contracts->updated,
+            ],
+        ], Response::HTTP_CREATED);
     }
 
     #[Route('/{id}', name: 'dashboard_promotions_update', methods: ['PATCH', 'PUT'])]

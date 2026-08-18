@@ -173,6 +173,67 @@ class CommunicationContractService
     }
 
     /**
+     * Variante de createByRange() para promociones V2 (Fase 5B): en vez de
+     * resolver cada paquete por (monto, moneda) contra el catálogo regular
+     * (findByDestination() excluye a propósito los paquetes promocionales,
+     * ver su docblock), recibe DIRECTAMENTE la lista ya generada por
+     * CommunicationPackageAdminService::createBatch() — un contrato "por
+     * defecto" (tenant=null, catálogo compartido) por cada paquete, con el
+     * precio interpolado linealmente entre priceFrom (el de menor
+     * destinationAmount) y priceTo (el de mayor).
+     *
+     * @param list<CommunicationPackage> $packages
+     */
+    public function createForPromotionPackages(
+        array $packages,
+        float $priceFrom,
+        float $priceTo,
+        string $currency,
+        ?string $startAt,
+        ?string $endAt,
+    ): ContractRangeResult {
+        if ($packages === []) {
+            return new ContractRangeResult(0, 0, 0, [], []);
+        }
+
+        $amounts = array_map(static fn (CommunicationPackage $p) => (float) $p->getDestinationAmount(), $packages);
+        $from = min($amounts);
+        $to = max($amounts);
+        $span = $to - $from;
+        $priceCurrency = strtoupper($currency);
+
+        $created = 0;
+        $updated = 0;
+        $contracts = [];
+
+        foreach ($packages as $package) {
+            $amount = (float) $package->getDestinationAmount();
+            $price = $span > 0
+                ? round($priceFrom + ($priceTo - $priceFrom) * ($amount - $from) / $span, 2)
+                : round($priceFrom, 2);
+
+            $isNew = $this->em->getRepository(CommunicationContract::class)->findOneBy([
+                'communicationPackage' => $package,
+                'tenant' => null,
+                'endAt' => null,
+            ]) === null;
+
+            $contract = $this->upsertContract($package, null);
+            $this->applyPricing($contract, $price, $priceCurrency, $startAt, $endAt);
+            $this->stampCreatedBy($contract);
+
+            $isNew ? $created++ : $updated++;
+            $contracts[] = $contract;
+        }
+
+        $this->em->flush();
+
+        $contractIds = array_map(static fn (CommunicationContract $c) => $c->getId(), $contracts);
+
+        return new ContractRangeResult($created, $updated, 0, $contractIds, []);
+    }
+
+    /**
      * Edita un contrato existente — siempre uno a uno (a diferencia de
      * createBatch()/createByRange()). El paquete al que apunta el contrato
      * puede reasignarse, pero nunca por id: se referencia por
