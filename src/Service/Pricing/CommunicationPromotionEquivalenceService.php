@@ -40,6 +40,14 @@ use Doctrine\ORM\EntityManagerInterface;
  */
 class CommunicationPromotionEquivalenceService
 {
+    /**
+     * Caché en memoria por (package, provider) — vigente solo durante UNA
+     * llamada a populateEquivalences(), ver upsertBinding().
+     *
+     * @var array<string, CommunicationPackageProviderProduct>
+     */
+    private array $bindingCache = [];
+
     public function __construct(
         private readonly EntityManagerInterface $em,
         private readonly ProviderRegistry $providerRegistry,
@@ -55,6 +63,8 @@ class CommunicationPromotionEquivalenceService
      */
     public function populateEquivalences(CommunicationPromotions $promotion, array $packages): PromotionEquivalenceResult
     {
+        $this->bindingCache = [];
+
         if ($packages === []) {
             return new PromotionEquivalenceResult([], []);
         }
@@ -213,11 +223,32 @@ class CommunicationPromotionEquivalenceService
         );
     }
 
+    /**
+     * Necesaria porque, dentro del mismo run, dos candidatos distintos del
+     * MISMO proveedor pueden cubrir el MISMO tramo (ej. CSQ con más de un
+     * producto al mismo monto nominal, ver §4 del doc de diseño) — sin la
+     * caché, la segunda llamada no vería la fila recién persist()eada por
+     * la primera (findForPackageAndProvider() consulta BD, no el unit of
+     * work) e intentaría crear OTRA fila nueva para la misma clave,
+     * violando uniq_com_package_provider al hacer flush(). Con la caché, la
+     * segunda llamada reutiliza la MISMA entidad y solo actualiza su
+     * producto — el primer candidato que cubre el tramo "gana" el binding,
+     * el resto solo lo re-apunta sin crear filas de más.
+     */
     private function upsertBinding(CommunicationPackage $package, string $provider, CommunicationProduct $product): void
     {
+        $key = $package->getId() . ':' . $provider;
+
+        if (isset($this->bindingCache[$key])) {
+            $this->bindingCache[$key]->setProduct($product);
+
+            return;
+        }
+
         $existing = $this->bindingRepo->findForPackageAndProvider($package, $provider);
         if ($existing !== null) {
             $existing->setProduct($product);
+            $this->bindingCache[$key] = $existing;
 
             return;
         }
@@ -227,5 +258,6 @@ class CommunicationPromotionEquivalenceService
             ->setProvider($provider)
             ->setProduct($product);
         $this->em->persist($binding);
+        $this->bindingCache[$key] = $binding;
     }
 }

@@ -173,6 +173,43 @@ class CommunicationPromotionEquivalenceServiceTest extends TestCase
         $this->assertSame(['DTONE'], $result->gaps[0]['missingProviders']);
     }
 
+    /**
+     * Bug real encontrado en pruebas E2E (2026-08-18): CSQ puede devolver
+     * más de un candidato para el MISMO monto nominal (ej. catálogo con
+     * duplicados). Sin esta guarda, dos upsertBinding() para la misma
+     * (package, provider) sin flush de por medio violan
+     * uniq_com_package_provider al hacer flush() al final — el primer
+     * candidato que cubre el tramo debe ganar, los siguientes se ignoran.
+     */
+    public function testASecondCandidateForTheSameTramoAndProviderDoesNotDuplicateTheBinding(): void
+    {
+        $packages = [$this->package(1, 500.0)];
+        $productA = $this->createMock(CommunicationProduct::class);
+        $productB = $this->createMock(CommunicationProduct::class);
+
+        $service = $this->makeService([
+            $this->fakeProvider(CommunicationProviderEnum::CSQ, [
+                $this->providerProduct('7854-500', 500.0),
+                $this->providerProduct('7854-500-dup', 500.0),
+            ]),
+        ]);
+        $this->productRepository->method('findOneBy')->willReturnCallback(
+            fn (array $criteria) => match ($criteria['externalRef']) {
+                '7854-500' => $productA,
+                '7854-500-dup' => $productB,
+                default => null,
+            }
+        );
+        $this->bindingRepo->method('findForPackageAndProvider')->willReturn(null);
+
+        $this->em->expects($this->once())->method('persist');
+
+        $result = $service->populateEquivalences($this->promotion(), $packages);
+
+        $this->assertSame(1, $result->providers[0]['matched']);
+        $this->assertSame([], $result->gaps);
+    }
+
     public function testAFlexibleAmountCandidateCoversEveryTramo(): void
     {
         $packages = [$this->package(1, 500.0), $this->package(2, 525.0)];
