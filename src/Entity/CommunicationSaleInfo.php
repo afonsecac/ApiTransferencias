@@ -583,6 +583,28 @@ class CommunicationSaleInfo
         return $this;
     }
 
+    /**
+     * Nombre de la promoción si el paquete vendido es un CommunicationPackage
+     * (V2) generado por una promoción — null en ventas normales y en toda
+     * venta V1 legacy ($package). Derivado de $catalogPackage->$promotion
+     * (snapshot fijo desde que se creó el paquete, ver
+     * CommunicationPackage::$promotion), no de $this->promotion —ese campo
+     * solo se usa en el flujo de recargas reservadas
+     * (CommunicationSaleService::processReserve()), nunca en venta de
+     * paquetes.
+     *
+     * Alcance V1 descartado a propósito: CommunicationClientPackage::
+     * $promotionItems se filtra por fecha ACTUAL (startAt<=now<=endAt), no
+     * es un snapshot histórico — una venta antigua de una promo ya vencida
+     * no se detectaría como promocional, así que no es un dato confiable
+     * para mostrar en el listado de ventas.
+     */
+    #[Groups(['sale:list', 'sale:detail'])]
+    public function getPromotionName(): ?string
+    {
+        return $this->catalogPackage?->getPromotion()?->getName();
+    }
+
     public function getDispatchProduct(): ?CommunicationProduct
     {
         return $this->dispatchProduct;

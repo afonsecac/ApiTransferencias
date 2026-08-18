@@ -14,4 +14,6 @@ class SaleInfoListOutDto
     public ?float $totalPrice = null;
     public ?string $state = null;
     public ?string $type = null;
+    /** Nombre de la promoción si el paquete vendido es V2 y proviene de una — null en ventas normales y en toda venta V1 legacy. */
+    public ?string $promotionName = null;
 }
