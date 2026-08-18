@@ -95,6 +95,15 @@ class CreatePromotionV2Dto implements IInput
                     'base' => ['type' => 'integer'],
                     'promotion_bonus' => ['type' => 'integer'],
                 ]],
+                // Franja horaria diaria de vigencia de este beneficio (uso
+                // pensado para DATA/ILIM — "internet ilimitado de 01:00 a
+                // 06:00"). Ambos null = vigente las 24h. Solo informativa:
+                // no se valida contra ningún otro campo ni se aplica en
+                // lógica de despacho.
+                'schedule' => ['type' => 'object', 'nullable' => true, 'default' => null, 'properties' => [
+                    'start' => ['type' => 'string', 'nullable' => true, 'example' => '01:00'],
+                    'end' => ['type' => 'string', 'nullable' => true, 'example' => '06:00'],
+                ]],
             ],
         ],
     ])]
@@ -181,6 +190,56 @@ class CreatePromotionV2Dto implements IInput
             $context->buildViolation('El monto final debe ser mayor o igual al monto inicial')
                 ->atPath('amountTo')
                 ->addViolation();
+        }
+    }
+
+    /**
+     * `schedule` es opcional y puramente informativo (ver docblock de la
+     * clase) — no se valida contra el `type`/`unit` del beneficio, solo su
+     * propia forma: ambos extremos null (24h) o ambos presentes en formato
+     * HH:mm y distintos entre sí (una franja de largo cero no tiene
+     * sentido).
+     */
+    #[Assert\Callback]
+    public function validateBenefitsSchedule(ExecutionContextInterface $context): void
+    {
+        if ($this->benefits === null) {
+            return;
+        }
+
+        foreach ($this->benefits as $index => $benefit) {
+            if (!is_array($benefit) || !array_key_exists('schedule', $benefit) || $benefit['schedule'] === null) {
+                continue;
+            }
+
+            $schedule = $benefit['schedule'];
+            $path = "benefits[{$index}].schedule";
+
+            if (!is_array($schedule) || !array_key_exists('start', $schedule) || !array_key_exists('end', $schedule)) {
+                $context->buildViolation('schedule debe tener start y end (ambos null, o ambos "HH:mm")')
+                    ->atPath($path)
+                    ->addViolation();
+                continue;
+            }
+
+            [$start, $end] = [$schedule['start'], $schedule['end']];
+            if ($start === null && $end === null) {
+                continue;
+            }
+
+            $timeFormat = '/^([01]\d|2[0-3]):[0-5]\d$/';
+            if (!is_string($start) || !is_string($end) || !preg_match($timeFormat, $start) || !preg_match($timeFormat, $end)) {
+                $context->buildViolation('schedule.start/end deben ser ambos null (24h) o ambos "HH:mm"')
+                    ->atPath($path)
+                    ->addViolation();
+                continue;
+            }
+
+            if ($start === $end) {
+                $context->buildViolation('schedule.start y schedule.end no pueden ser iguales')
+                    ->atPath($path)
+                    ->addViolation();
+            }
         }
     }
 
