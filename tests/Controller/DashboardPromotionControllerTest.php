@@ -13,6 +13,7 @@ use App\Exception\MyCurrentException;
 use App\Repository\CommunicationPromotionsRepository;
 use App\Service\CommunicationPromotionService;
 use App\Service\CreatePromotionV2Result;
+use App\Service\Pricing\CommunicationContractService;
 use App\Service\Pricing\CommunicationPromotionBindingService;
 use App\Service\Pricing\CommunicationPromotionEquivalenceService;
 use App\Service\Pricing\ContractRangeResult;
@@ -37,6 +38,7 @@ class DashboardPromotionControllerTest extends TestCase
     private CommunicationPromotionBindingService&MockObject $bindingService;
     private CommunicationPromotionService&MockObject $promotionService;
     private CommunicationPromotionEquivalenceService&MockObject $equivalenceService;
+    private CommunicationContractService&MockObject $contractService;
     private NormalizerInterface&MockObject $serializer;
     private DashboardPromotionController $controller;
 
@@ -46,6 +48,7 @@ class DashboardPromotionControllerTest extends TestCase
         $this->bindingService = $this->createMock(CommunicationPromotionBindingService::class);
         $this->promotionService = $this->createMock(CommunicationPromotionService::class);
         $this->equivalenceService = $this->createMock(CommunicationPromotionEquivalenceService::class);
+        $this->contractService = $this->createMock(CommunicationContractService::class);
         $this->serializer = $this->createMock(NormalizerInterface::class);
         $this->serializer->method('normalize')->willReturn([]);
 
@@ -56,6 +59,7 @@ class DashboardPromotionControllerTest extends TestCase
             $this->promotionService,
             $this->bindingService,
             $this->equivalenceService,
+            $this->contractService,
         );
 
         $container = $this->createMock(ContainerInterface::class);
@@ -192,7 +196,7 @@ class DashboardPromotionControllerTest extends TestCase
             [['provider' => 'DTONE', 'matched' => 2, 'error' => null]],
             [],
         );
-        $result = new CreatePromotionV2Result($promotion, $packages, new ContractRangeResult(2, 0, 0, [1, 2], []), $equivalences);
+        $result = new CreatePromotionV2Result($promotion, $packages, new ContractRangeResult(2, 0, 0, [1, 2], []), 3, $equivalences);
         $this->promotionService->expects($this->once())->method('createV2')->willReturn($result);
 
         $response = $this->controller->createV2($this->v2Dto());
@@ -203,6 +207,7 @@ class DashboardPromotionControllerTest extends TestCase
         $this->assertCount(2, $data['packages']);
         $this->assertEquals(500.0, $data['packages'][0]['destinationAmount']);
         $this->assertSame(2, $data['contracts']['created']);
+        $this->assertSame(3, $data['contracts']['tenantContractsLinked']);
         $this->assertSame('DTONE', $data['equivalences']['providers'][0]['provider']);
         $this->assertSame([], $data['equivalences']['gaps']);
     }
@@ -261,5 +266,26 @@ class DashboardPromotionControllerTest extends TestCase
 
         $data = json_decode($response->getContent(), true);
         $this->assertSame(5, $data['providers'][0]['matched']);
+    }
+
+    public function testLinkTenantContractsReturnsNotFoundWhenPromotionDoesNotExist(): void
+    {
+        $this->repository->method('find')->willReturn(null);
+
+        $response = $this->controller->linkTenantContracts(999);
+
+        $this->assertSame(Response::HTTP_NOT_FOUND, $response->getStatusCode());
+    }
+
+    public function testLinkTenantContractsDelegatesToTheContractService(): void
+    {
+        $promotion = new CommunicationPromotions();
+        $this->repository->method('find')->willReturn($promotion);
+        $this->contractService->expects($this->once())->method('linkTenantContractsForPromotion')->with($promotion)->willReturn(4);
+
+        $response = $this->controller->linkTenantContracts(1);
+
+        $data = json_decode($response->getContent(), true);
+        $this->assertSame(4, $data['tenantContractsLinked']);
     }
 }

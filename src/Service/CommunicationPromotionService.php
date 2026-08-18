@@ -487,8 +487,10 @@ class CommunicationPromotionService extends CommonService
             $dto->getEndAt(),
         );
 
+        $tenantContractsLinked = $this->contractService->linkTenantContractsToPromotionPackages($packages);
+
         $equivalences = $this->equivalenceService->populateEquivalences($promotion, $packages);
 
-        return new CreatePromotionV2Result($promotion, $packages, $contractResult, $equivalences);
+        return new CreatePromotionV2Result($promotion, $packages, $contractResult, $tenantContractsLinked, $equivalences);
     }
 }

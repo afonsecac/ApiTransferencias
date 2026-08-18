@@ -9,6 +9,7 @@ use App\DTO\UpdateCommunicationContractDto;
 use App\Entity\Account;
 use App\Entity\CommunicationContract;
 use App\Entity\CommunicationPackage;
+use App\Entity\CommunicationPromotions;
 use App\Entity\Environment;
 use App\Entity\User;
 use App\Exception\MyCurrentException;
@@ -220,6 +221,67 @@ class CommunicationContractService
         $contractIds = array_map(static fn (CommunicationContract $c) => $c->getId(), $contracts);
 
         return new ContractRangeResult($created, $updated, 0, $contractIds, []);
+    }
+
+    /**
+     * Vincula, a cada paquete de promoción recién creado, los contratos
+     * propios que un tenant YA tenga sobre su paquete regular equivalente
+     * (misma tupla monto/moneda, sin promoción) — sin esto, un cliente con
+     * contrato propio nunca ve la promoción: PackageCatalogResolver::
+     * catalogFor() solo mira los contratos propios del tenant cuando
+     * existen (precedencia #1), y los contratos "por defecto" (tenant IS
+     * NULL) que createForPromotionPackages() genera quedan fuera de esa
+     * rama por completo.
+     *
+     * No crea contratos nuevos ni toca precio/moneda/fechas: reutiliza el
+     * MISMO contrato que el tenant ya tiene para el paquete regular (misma
+     * tupla por la que upsertContract() ya impide crear uno nuevo ahí — el
+     * índice único uniq_com_contract_open_per_tenant_amount lo garantiza),
+     * solo lo asocia también al paquete de promoción. Idempotente:
+     * addPackage() ya comprueba contains() antes de agregar.
+     *
+     * @param list<CommunicationPackage> $promoPackages
+     */
+    public function linkTenantContractsToPromotionPackages(array $promoPackages): int
+    {
+        $linked = 0;
+        foreach ($promoPackages as $promoPackage) {
+            $regularPackage = $this->packageRepository->findByDestination(
+                (float) $promoPackage->getDestinationAmount(),
+                (string) $promoPackage->getDestinationCurrency(),
+            );
+            if ($regularPackage === null) {
+                continue;
+            }
+
+            foreach ($this->contractRepository->findActiveTenantContractsForPackage($regularPackage) as $contract) {
+                if ($contract->getPackages()->contains($promoPackage)) {
+                    continue;
+                }
+                $contract->addPackage($promoPackage);
+                $linked++;
+            }
+        }
+
+        if ($linked > 0) {
+            $this->em->flush();
+        }
+
+        return $linked;
+    }
+
+    /**
+     * Acción manual "vincular contratos de clientes" sobre una promoción V2
+     * ya creada — recarga sus tramos desde BD y vuelve a correr
+     * linkTenantContractsToPromotionPackages(). Mismo espíritu que
+     * CommunicationPromotionEquivalenceService::refreshForPromotion():
+     * cubre tanto el caso de un cliente que negoció su contrato propio
+     * DESPUÉS de creada la promoción, como el de promociones creadas antes
+     * de que este vínculo existiera.
+     */
+    public function linkTenantContractsForPromotion(CommunicationPromotions $promotion): int
+    {
+        return $this->linkTenantContractsToPromotionPackages($this->packageRepository->findByPromotion($promotion));
     }
 
     /**

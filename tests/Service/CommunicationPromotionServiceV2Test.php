@@ -128,6 +128,11 @@ class CommunicationPromotionServiceV2Test extends TestCase
             ->with($packages, 19.7, 49.25, 'USD', '2026-08-18T00:00:00+00:00', '2026-08-25T23:59:00+00:00')
             ->willReturn($contractResult);
 
+        $this->contractService->expects($this->once())
+            ->method('linkTenantContractsToPromotionPackages')
+            ->with($packages)
+            ->willReturn(3);
+
         $equivalencesResult = new PromotionEquivalenceResult([['provider' => 'DTONE', 'matched' => 2, 'error' => null]], []);
         $this->equivalenceService->expects($this->once())
             ->method('populateEquivalences')
@@ -138,6 +143,7 @@ class CommunicationPromotionServiceV2Test extends TestCase
 
         $this->assertSame($packages, $result->packages);
         $this->assertSame($contractResult, $result->contracts);
+        $this->assertSame(3, $result->tenantContractsLinked);
         $this->assertSame($equivalencesResult, $result->equivalences);
         foreach ($result->packages as $package) {
             $this->assertSame($result->promotion, $package->getPromotion());
@@ -157,6 +163,7 @@ class CommunicationPromotionServiceV2Test extends TestCase
 
         $this->packageAdminService->method('createBatch')->willReturn($single);
         $this->contractService->method('createForPromotionPackages')->willReturn(new ContractRangeResult(1, 0, 0, [1], []));
+        $this->contractService->method('linkTenantContractsToPromotionPackages')->willReturn(0);
         $this->equivalenceService->method('populateEquivalences')->willReturn(new PromotionEquivalenceResult([], []));
 
         $dto = new CreatePromotionV2Dto(

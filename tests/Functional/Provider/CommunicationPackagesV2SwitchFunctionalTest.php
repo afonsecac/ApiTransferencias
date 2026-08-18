@@ -11,9 +11,11 @@ use App\Entity\CommunicationPackage;
 use App\Entity\CommunicationPackageProviderProduct;
 use App\Entity\CommunicationProduct;
 use App\Entity\Environment;
+use App\DTO\CreatePromotionV2Dto;
 use App\Entity\SysConfig;
 use App\Repository\SysConfigRepository;
 use App\Service\Catalog\CatalogVersionResolver;
+use App\Service\CommunicationPromotionService;
 use App\State\CommunicationClientPackageItemProvider;
 use App\State\CommunicationClientPackageProvider;
 use App\State\UpcomingPackagesProvider;
@@ -343,6 +345,73 @@ class CommunicationPackagesV2SwitchFunctionalTest extends ProviderFunctionalTest
         $ids = array_map(static fn (CommunicationPackage $p) => $p->getId(), iterator_to_array($result));
         $this->assertContains($active->getId(), $ids);
         $this->assertNotContains($future->getId(), $ids);
+    }
+
+    // ---- 7. contrato propio del tenant no oculta promociones nuevas (bug reportado 2026-08-19) ----
+
+    /**
+     * Regresión del bug real encontrado en staging: un tenant con contrato
+     * propio sobre el catálogo regular nunca veía promociones nuevas
+     * (createV2() solo genera contratos "por defecto", tenant IS NULL, y
+     * PackageCatalogResolver::catalogFor() ignora esa rama por completo en
+     * cuanto el tenant tiene AL MENOS un contrato propio). Fix:
+     * CommunicationContractService::linkTenantContractsToPromotionPackages()
+     * vincula el paquete de promoción al MISMO contrato que el tenant ya
+     * tiene para su equivalente regular.
+     */
+    public function testTenantWithOwnContractStillSeesANewPromotionalPackage(): void
+    {
+        $this->setCatalogVersionDefault('v2');
+
+        $client = $this->createClient();
+        $environment = $this->createEnvironment();
+        $account = $this->createAccount($client, $environment);
+        $this->authenticateAs($account);
+
+        // Paquete regular ya existente, con contrato PROPIO del tenant (no
+        // "por defecto") — reproduce exactamente el caso de Comremit en
+        // staging.
+        $regularPackage = $this->v2Package(activeStartAt: new \DateTimeImmutable('-30 days'));
+        $ownContract = $this->defaultContractFor($regularPackage, 10.0, new \DateTimeImmutable('-30 days'));
+        $ownContract->setTenant($account);
+        $this->bindProvider($regularPackage, $environment);
+        $this->em->flush();
+
+        /** @var CommunicationPromotionService $promotionService */
+        $promotionService = self::getContainer()->get(CommunicationPromotionService::class);
+        $dto = new CreatePromotionV2Dto(
+            name: 'Promo regresión',
+            description: 'Promo regresión',
+            packageNameTemplate: 'Promo {monto} CUP',
+            packageDescriptionTemplate: 'Promo {monto} CUP',
+            startAt: (new \DateTimeImmutable('-1 day'))->format('c'),
+            endAt: (new \DateTimeImmutable('+5 days'))->format('c'),
+            environmentId: $environment->getId(),
+            destinationCurrency: 'CUP',
+            amountFrom: (float) $regularPackage->getDestinationAmount(),
+            amountTo: (float) $regularPackage->getDestinationAmount(),
+            amountStep: 1.0,
+            priceFrom: 25.0,
+            priceTo: 25.0,
+            priceCurrency: 'USD',
+        );
+
+        $result = $promotionService->createV2($dto);
+        $promoPackage = $result->packages[0];
+        $this->bindProvider($promoPackage, $environment);
+        $this->em->flush();
+        $this->em->clear();
+
+        $this->assertSame(1, $result->tenantContractsLinked);
+
+        $account = $this->em->getRepository(Account::class)->find($account->getId());
+        $this->authenticateAs($account);
+
+        $listed = $this->v1PackageProvider()->provide(new GetCollection(class: CommunicationClientPackage::class));
+        $ids = array_map(static fn (CommunicationPackage $p) => $p->getId(), iterator_to_array($listed));
+
+        $this->assertContains($regularPackage->getId(), $ids);
+        $this->assertContains($promoPackage->getId(), $ids, 'La promoción debe verse aunque el tenant ya tenga contrato propio.');
     }
 
     // ---- Shape autoritativo: serializer real ----

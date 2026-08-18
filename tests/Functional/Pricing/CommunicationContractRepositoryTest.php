@@ -23,14 +23,14 @@ class CommunicationContractRepositoryTest extends ProviderFunctionalTestCase
         return self::getContainer()->get(CommunicationContractRepository::class);
     }
 
-    private function communicationPackage(): CommunicationPackage
+    private function communicationPackage(float $amount = 500.0): CommunicationPackage
     {
         self::$counter++;
 
         $package = (new CommunicationPackage())
             ->setName("Paquete {$this::$counter}")
             ->setDescription("Paquete {$this::$counter}")
-            ->setDestinationAmount(500.0)
+            ->setDestinationAmount($amount)
             ->setDestinationCurrency('CUP');
 
         $this->em->persist($package);
@@ -240,5 +240,50 @@ class CommunicationContractRepositoryTest extends ProviderFunctionalTestCase
 
         $this->assertSame($default->getId(), $this->repository()->findOpenContract(null, 500.0, 'CUP')?->getId());
         $this->assertNull($this->repository()->findOpenContract($account, 500.0, 'CUP'));
+    }
+
+    public function testFindActiveTenantContractsForPackageReturnsOnlyContractsCoveringThatPackage(): void
+    {
+        $now = new \DateTimeImmutable();
+        $client = $this->createClient();
+        $environment = $this->createEnvironment();
+        $account = $this->createAccount($client, $environment);
+
+        $covered = $this->communicationPackage(500.0);
+        $notCovered = $this->communicationPackage(600.0);
+        $covering = $this->contract($covered, $account, $now->modify('-1 day'));
+        $this->contract($notCovered, $account, $now->modify('-1 day'));
+        $this->em->flush();
+
+        $result = $this->repository()->findActiveTenantContractsForPackage($covered, $now);
+
+        $this->assertCount(1, $result);
+        $this->assertSame($covering->getId(), $result[0]->getId());
+    }
+
+    public function testFindActiveTenantContractsForPackageExcludesDefaultContracts(): void
+    {
+        $now = new \DateTimeImmutable();
+        $package = $this->communicationPackage();
+        // Contrato "por defecto" (tenant NULL) cubriendo el mismo paquete —
+        // no debe aparecer, solo contratos propios de tenant.
+        $this->contract($package, null, $now->modify('-1 day'));
+        $this->em->flush();
+
+        $this->assertSame([], $this->repository()->findActiveTenantContractsForPackage($package, $now));
+    }
+
+    public function testFindActiveTenantContractsForPackageExcludesExpiredContracts(): void
+    {
+        $now = new \DateTimeImmutable();
+        $client = $this->createClient();
+        $environment = $this->createEnvironment();
+        $account = $this->createAccount($client, $environment);
+
+        $package = $this->communicationPackage();
+        $this->contract($package, $account, $now->modify('-2 days'), $now->modify('-1 day'));
+        $this->em->flush();
+
+        $this->assertSame([], $this->repository()->findActiveTenantContractsForPackage($package, $now));
     }
 }

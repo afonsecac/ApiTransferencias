@@ -9,6 +9,7 @@ use App\DTO\UpdateCommunicationContractDto;
 use App\Entity\Account;
 use App\Entity\CommunicationContract;
 use App\Entity\CommunicationPackage;
+use App\Entity\CommunicationPromotions;
 use App\Entity\Environment;
 use App\Entity\User;
 use App\Exception\MyCurrentException;
@@ -714,5 +715,89 @@ class CommunicationContractServiceTest extends TestCase
         $this->expectExceptionMessage('Tenant not found');
 
         $this->service->deleteAll(5, 9);
+    }
+
+    public function testLinkTenantContractsSkipsPromoPackagesWithoutARegularEquivalent(): void
+    {
+        $promoPackage = $this->package(1);
+        $this->packageRepository->method('findByDestination')->willReturn(null);
+
+        $this->contractRepository->expects($this->never())->method('findActiveTenantContractsForPackage');
+        $this->em->expects($this->never())->method('flush');
+
+        $linked = $this->service->linkTenantContractsToPromotionPackages([$promoPackage]);
+
+        $this->assertSame(0, $linked);
+    }
+
+    public function testLinkTenantContractsAddsThePromoPackageToEachTenantContractCoveringTheRegularEquivalent(): void
+    {
+        $promoPackage = $this->package(1);
+        $regularPackage = $this->package(2);
+        $this->packageRepository->method('findByDestination')
+            ->with(500.0, 'CUP')
+            ->willReturn($regularPackage);
+
+        $tenantA = $this->createMock(Account::class);
+        $tenantB = $this->createMock(Account::class);
+        $contractA = $this->contract($regularPackage)->setTenant($tenantA);
+        $contractB = $this->contract($regularPackage)->setTenant($tenantB);
+
+        $this->contractRepository->expects($this->once())
+            ->method('findActiveTenantContractsForPackage')
+            ->with($regularPackage)
+            ->willReturn([$contractA, $contractB]);
+
+        $this->em->expects($this->once())->method('flush');
+
+        $linked = $this->service->linkTenantContractsToPromotionPackages([$promoPackage]);
+
+        $this->assertSame(2, $linked);
+        $this->assertTrue($contractA->getPackages()->contains($promoPackage));
+        $this->assertTrue($contractB->getPackages()->contains($promoPackage));
+        // El contrato del tenant sigue cubriendo también el paquete regular — no se reemplaza, se amplía.
+        $this->assertTrue($contractA->getPackages()->contains($regularPackage));
+    }
+
+    public function testLinkTenantContractsIsIdempotentWhenTheContractAlreadyCoversThePromoPackage(): void
+    {
+        $promoPackage = $this->package(1);
+        $regularPackage = $this->package(2);
+        $this->packageRepository->method('findByDestination')->willReturn($regularPackage);
+
+        $tenant = $this->createMock(Account::class);
+        $contract = $this->contract($regularPackage)->setTenant($tenant)->addPackage($promoPackage);
+
+        $this->contractRepository->method('findActiveTenantContractsForPackage')->willReturn([$contract]);
+
+        $this->em->expects($this->never())->method('flush');
+
+        $linked = $this->service->linkTenantContractsToPromotionPackages([$promoPackage]);
+
+        $this->assertSame(0, $linked);
+        $this->assertCount(2, $contract->getPackages());
+    }
+
+    public function testLinkTenantContractsForPromotionDelegatesUsingThePromotionsOwnPackages(): void
+    {
+        $promotion = new CommunicationPromotions();
+        $promoPackage = $this->package(1);
+        $regularPackage = $this->package(2);
+
+        $this->packageRepository->expects($this->once())
+            ->method('findByPromotion')
+            ->with($promotion)
+            ->willReturn([$promoPackage]);
+        $this->packageRepository->method('findByDestination')->willReturn($regularPackage);
+
+        $tenant = $this->createMock(Account::class);
+        $contract = $this->contract($regularPackage)->setTenant($tenant);
+        $this->contractRepository->method('findActiveTenantContractsForPackage')->willReturn([$contract]);
+
+        $this->em->expects($this->once())->method('flush');
+
+        $linked = $this->service->linkTenantContractsForPromotion($promotion);
+
+        $this->assertSame(1, $linked);
     }
 }

@@ -15,6 +15,7 @@ use App\Entity\Environment;
 use App\OpenApi\Attribute\DashboardEndpoint;
 use App\Repository\CommunicationPromotionsRepository;
 use App\Service\CommunicationPromotionService;
+use App\Service\Pricing\CommunicationContractService;
 use App\Service\Pricing\CommunicationPromotionBindingService;
 use App\Service\Pricing\CommunicationPromotionEquivalenceService;
 use App\Service\Pricing\PromotionEquivalenceResult;
@@ -37,6 +38,7 @@ class DashboardPromotionController extends AbstractController
         private readonly CommunicationPromotionService $promotionService,
         private readonly CommunicationPromotionBindingService $bindingService,
         private readonly CommunicationPromotionEquivalenceService $equivalenceService,
+        private readonly CommunicationContractService $contractService,
     ) {
     }
 
@@ -143,6 +145,7 @@ class DashboardPromotionController extends AbstractController
             'contracts' => [
                 'created' => $result->contracts->created,
                 'updated' => $result->contracts->updated,
+                'tenantContractsLinked' => $result->tenantContractsLinked,
             ],
             'equivalences' => $this->serializeEquivalenceResult($result->equivalences),
         ], Response::HTTP_CREATED);
@@ -171,6 +174,21 @@ class DashboardPromotionController extends AbstractController
         }
 
         return $this->json($this->serializeEquivalenceResult($this->equivalenceService->refreshForPromotion($promotion)));
+    }
+
+    #[Route('/{id}/v2/tenant-contracts/link', name: 'dashboard_promotions_v2_tenant_contracts_link', methods: ['POST'])]
+    #[IsGranted('ROLE_ADMIN')]
+    #[DashboardEndpoint(summary: 'Vincula los contratos propios de clientes existentes a los paquetes de una promoción V2', tag: 'Promotions')]
+    public function linkTenantContracts(int $id): JsonResponse
+    {
+        $promotion = $this->repository->find($id);
+        if ($promotion === null) {
+            return $this->json(['error' => ['message' => 'Promotion not found']], Response::HTTP_NOT_FOUND);
+        }
+
+        $linked = $this->contractService->linkTenantContractsForPromotion($promotion);
+
+        return $this->json(['tenantContractsLinked' => $linked]);
     }
 
     #[Route('/{id}', name: 'dashboard_promotions_update', methods: ['PATCH', 'PUT'])]
