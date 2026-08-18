@@ -55,12 +55,17 @@ class DashboardCommunicationContractsController extends AbstractController
         $limit = min(100, max(1, (int) $request->query->get('limit', 20)));
         $orderBy = $request->query->get('orderBy', 'id DESC');
 
+        // Sin fetch-join de `packages` aquí a propósito: es una colección
+        // ManyToMany (to-many) y Doctrine no puede aplicar setMaxResults()
+        // de forma fiable sobre una fetch-join de colección — cada paquete
+        // extra de un contrato agrega una fila SQL, corriendo la paginación
+        // (un contrato con 2 paquetes consume 2 cupos de $limit+1 en vez de
+        // 1). `p` se usa solo para el filtro communicationPackageId; las
+        // colecciones de la página se recargan aparte más abajo.
         $qb = $this->em->getRepository(CommunicationContract::class)
             ->createQueryBuilder('c')
-            ->leftJoin('c.communicationPackage', 'p')
             ->leftJoin('c.tenant', 't')
             ->leftJoin('t.client', 'cl')
-            ->addSelect('p')
             ->addSelect('t')
             ->addSelect('cl');
 
@@ -78,6 +83,8 @@ class DashboardCommunicationContractsController extends AbstractController
         if ($hasNext) {
             array_pop($results);
         }
+
+        $this->eagerLoadPackages($results);
 
         return $this->json([
             'limit' => $limit,
@@ -218,10 +225,34 @@ class DashboardCommunicationContractsController extends AbstractController
         return $this->json(['deleted' => $deleted]);
     }
 
+    /**
+     * Recarga en lote las colecciones `packages` de los contratos de la
+     * página actual — a salvo del fan-out de la paginación (ver comentario
+     * en list()) porque acá no hay setMaxResults(): el IN (:ids) ya acota
+     * el resultado a exactamente los contratos de esta página.
+     *
+     * @param list<CommunicationContract> $contracts
+     */
+    private function eagerLoadPackages(array $contracts): void
+    {
+        $ids = array_map(static fn (CommunicationContract $c) => $c->getId(), $contracts);
+        if ($ids === []) {
+            return;
+        }
+
+        $this->em->getRepository(CommunicationContract::class)
+            ->createQueryBuilder('c')
+            ->leftJoin('c.packages', 'p')
+            ->addSelect('p')
+            ->where('c.id IN (:ids)')
+            ->setParameter('ids', $ids)
+            ->getQuery()->getResult();
+    }
+
     private function applyFilters(QueryBuilder $qb, Request $request): void
     {
         if ($packageId = $request->query->get('communicationPackageId')) {
-            $qb->andWhere('p.id = :packageId')->setParameter('packageId', $packageId);
+            $qb->andWhere(':packageId MEMBER OF c.packages')->setParameter('packageId', $packageId);
         }
         if ($tenantId = $request->query->get('tenantId')) {
             // tenantId es Client.id (mismo espacio que en los DTOs de alta,
@@ -243,8 +274,10 @@ class DashboardCommunicationContractsController extends AbstractController
 
         return [
             'id' => $contract->getId(),
-            'communicationPackageId' => $contract->getCommunicationPackage()?->getId(),
-            'communicationPackageName' => $contract->getCommunicationPackage()?->getName(),
+            'packages' => array_map(
+                static fn ($p) => ['id' => $p->getId(), 'name' => $p->getName()],
+                $contract->getPackages()->toArray(),
+            ),
             'tenant' => [
                 'id' => $contract->getTenant()?->getId(),
                 'clientName' => $contract->getTenant()?->getClient()?->getCompanyName(),

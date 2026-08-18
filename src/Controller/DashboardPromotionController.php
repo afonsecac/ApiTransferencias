@@ -2,6 +2,7 @@
 
 namespace App\Controller;
 
+use App\DTO\CreatePromotionV2Dto;
 use App\DTO\Out\DeletedOutDto;
 use App\DTO\Out\PaginatedListOutDto;
 use App\DTO\SetPromotionProviderProductDto;
@@ -15,6 +16,8 @@ use App\OpenApi\Attribute\DashboardEndpoint;
 use App\Repository\CommunicationPromotionsRepository;
 use App\Service\CommunicationPromotionService;
 use App\Service\Pricing\CommunicationPromotionBindingService;
+use App\Service\Pricing\CommunicationPromotionEquivalenceService;
+use App\Service\Pricing\PromotionEquivalenceResult;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -33,6 +36,7 @@ class DashboardPromotionController extends AbstractController
         private readonly NormalizerInterface $serializer,
         private readonly CommunicationPromotionService $promotionService,
         private readonly CommunicationPromotionBindingService $bindingService,
+        private readonly CommunicationPromotionEquivalenceService $equivalenceService,
     ) {
     }
 
@@ -114,6 +118,59 @@ class DashboardPromotionController extends AbstractController
         }
 
         return $this->json($result, Response::HTTP_CREATED);
+    }
+
+    #[Route('/v2', name: 'dashboard_promotions_create_v2', methods: ['POST'])]
+    #[IsGranted('ROLE_ADMIN')]
+    #[DashboardEndpoint(summary: 'Crear promoción V2 (catálogo compartido)', tag: 'Promotions', requestDto: CreatePromotionV2Dto::class, responseStatusCode: 201)]
+    public function createV2(CreatePromotionV2Dto $dto): JsonResponse
+    {
+        try {
+            $result = $this->promotionService->createV2($dto);
+        } catch (MyCurrentException $e) {
+            return $this->json(['error' => ['message' => $e->getMessage()]], $e->getCode());
+        }
+
+        return $this->json([
+            'promotion' => $this->normalizeDetail($result->promotion),
+            'packagesCreated' => count($result->packages),
+            'packages' => array_map(fn ($p) => [
+                'id' => $p->getId(),
+                'name' => $p->getName(),
+                'destinationAmount' => $p->getDestinationAmount(),
+                'destinationCurrency' => $p->getDestinationCurrency(),
+            ], $result->packages),
+            'contracts' => [
+                'created' => $result->contracts->created,
+                'updated' => $result->contracts->updated,
+            ],
+            'equivalences' => $this->serializeEquivalenceResult($result->equivalences),
+        ], Response::HTTP_CREATED);
+    }
+
+    #[Route('/{id}/v2/equivalences', name: 'dashboard_promotions_v2_equivalences', methods: ['GET'])]
+    #[DashboardEndpoint(summary: 'Cobertura de equivalencias por proveedor de una promoción V2', tag: 'Promotions')]
+    public function equivalences(int $id): JsonResponse
+    {
+        $promotion = $this->repository->find($id);
+        if ($promotion === null) {
+            return $this->json(['error' => ['message' => 'Promotion not found']], Response::HTTP_NOT_FOUND);
+        }
+
+        return $this->json($this->serializeEquivalenceResult($this->equivalenceService->coverage($promotion)));
+    }
+
+    #[Route('/{id}/v2/equivalences/refresh', name: 'dashboard_promotions_v2_equivalences_refresh', methods: ['POST'])]
+    #[IsGranted('ROLE_ADMIN')]
+    #[DashboardEndpoint(summary: 'Vuelve a poblar las equivalencias por proveedor de una promoción V2', tag: 'Promotions')]
+    public function refreshEquivalences(int $id): JsonResponse
+    {
+        $promotion = $this->repository->find($id);
+        if ($promotion === null) {
+            return $this->json(['error' => ['message' => 'Promotion not found']], Response::HTTP_NOT_FOUND);
+        }
+
+        return $this->json($this->serializeEquivalenceResult($this->equivalenceService->refreshForPromotion($promotion)));
     }
 
     #[Route('/{id}', name: 'dashboard_promotions_update', methods: ['PATCH', 'PUT'])]
@@ -208,6 +265,14 @@ class DashboardPromotionController extends AbstractController
         }
 
         return $this->json(['deleted' => true]);
+    }
+
+    private function serializeEquivalenceResult(PromotionEquivalenceResult $result): array
+    {
+        return [
+            'providers' => $result->providers,
+            'gaps' => $result->gaps,
+        ];
     }
 
     private function serializeProduct(?CommunicationProduct $product): ?array

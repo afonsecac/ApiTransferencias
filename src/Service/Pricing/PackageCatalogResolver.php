@@ -131,14 +131,28 @@ class PackageCatalogResolver
     }
 
     /**
+     * Aplana: por cada contrato, por cada CommunicationPackage de su
+     * colección (Fase 6 — un contrato puede cubrir varios), una oferta.
+     * Dedup defensivo por packageId — un paquete nunca debería aparecer dos
+     * veces (upsertContract() lo routea siempre al mismo contrato), pero se
+     * guarda como cinturón de seguridad ante contratos superpuestos creados
+     * a mano.
+     *
      * @param list<CommunicationContract> $contracts
      * @return list<ResolvedPackageOffer>
      */
     private function offersFromContracts(array $contracts, PackageOfferSourceEnum $source): array
     {
         $offers = [];
+        $seenPackageIds = [];
         foreach ($contracts as $contract) {
-            $offers[] = $this->offerFromContract($contract, $source);
+            foreach ($contract->getPackages() as $package) {
+                if (isset($seenPackageIds[$package->getId()])) {
+                    continue;
+                }
+                $seenPackageIds[$package->getId()] = true;
+                $offers[] = $this->offerFromContract($contract, $package, $source);
+            }
         }
 
         return $offers;
@@ -150,24 +164,16 @@ class PackageCatalogResolver
     private function offerFromContractsForPackage(array $contracts, CommunicationPackage $package, PackageOfferSourceEnum $source): ?ResolvedPackageOffer
     {
         foreach ($contracts as $contract) {
-            if ($contract->getCommunicationPackage()?->getId() === $package->getId()) {
-                return $this->offerFromContract($contract, $source);
+            if ($contract->getPackages()->contains($package)) {
+                return $this->offerFromContract($contract, $package, $source);
             }
         }
 
         return null;
     }
 
-    private function offerFromContract(CommunicationContract $contract, PackageOfferSourceEnum $source): ResolvedPackageOffer
+    private function offerFromContract(CommunicationContract $contract, CommunicationPackage $package, PackageOfferSourceEnum $source): ResolvedPackageOffer
     {
-        $package = $contract->getCommunicationPackage();
-        if ($package === null) {
-            // communication_package_id es NOT NULL a nivel de esquema — un
-            // contrato persistido siempre lo trae. Solo puede pasar con una
-            // entidad construida a mano sin setCommunicationPackage().
-            throw new \LogicException('CommunicationContract sin CommunicationPackage — violación de invariante de esquema.');
-        }
-
         $offer = new ResolvedPackageOffer(
             package: $package,
             price: $contract->getPrice() ?? 0.0,

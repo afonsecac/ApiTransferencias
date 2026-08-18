@@ -57,7 +57,7 @@ class DashboardCommunicationContractsControllerTest extends TestCase
             ->setDestinationAmount(500.0)->setDestinationCurrency('CUP');
 
         return (new CommunicationContract())
-            ->setCommunicationPackage($package)
+            ->addPackage($package)
             ->setDestinationAmount(500.0)->setDestinationCurrency('CUP')
             ->setPrice(10.0)->setCurrency('USD');
     }
@@ -84,6 +84,8 @@ class DashboardCommunicationContractsControllerTest extends TestCase
         $this->assertEquals(10.0, $data['price']);
         $this->assertSame('USD', $data['currency']);
         $this->assertTrue($data['isActive']);
+        $this->assertCount(1, $data['packages']);
+        $this->assertSame('P', $data['packages'][0]['name']);
     }
 
     public function testCreateReturnsCreatedWithSerializedContract(): void

@@ -3,14 +3,20 @@
 namespace App\Tests\Controller;
 
 use App\Controller\DashboardPromotionController;
+use App\DTO\CreatePromotionV2Dto;
 use App\DTO\SetPromotionProviderProductDto;
+use App\Entity\CommunicationPackage;
 use App\Entity\CommunicationProduct;
 use App\Entity\CommunicationPromotionProviderProduct;
 use App\Entity\CommunicationPromotions;
 use App\Exception\MyCurrentException;
 use App\Repository\CommunicationPromotionsRepository;
 use App\Service\CommunicationPromotionService;
+use App\Service\CreatePromotionV2Result;
 use App\Service\Pricing\CommunicationPromotionBindingService;
+use App\Service\Pricing\CommunicationPromotionEquivalenceService;
+use App\Service\Pricing\ContractRangeResult;
+use App\Service\Pricing\PromotionEquivalenceResult;
 use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
@@ -22,25 +28,34 @@ use Symfony\Component\Serializer\Normalizer\NormalizerInterface;
  * @covers \App\Controller\DashboardPromotionController
  *
  * Cubre solo los 3 endpoints nuevos de vínculo promoción→producto por
- * proveedor — el resto del controlador (CRUD de promociones) no cambió.
+ * proveedor y el alta V2 — el resto del controlador (CRUD legacy) no
+ * cambió.
  */
 class DashboardPromotionControllerTest extends TestCase
 {
     private CommunicationPromotionsRepository&MockObject $repository;
     private CommunicationPromotionBindingService&MockObject $bindingService;
+    private CommunicationPromotionService&MockObject $promotionService;
+    private CommunicationPromotionEquivalenceService&MockObject $equivalenceService;
+    private NormalizerInterface&MockObject $serializer;
     private DashboardPromotionController $controller;
 
     protected function setUp(): void
     {
         $this->repository = $this->createMock(CommunicationPromotionsRepository::class);
         $this->bindingService = $this->createMock(CommunicationPromotionBindingService::class);
+        $this->promotionService = $this->createMock(CommunicationPromotionService::class);
+        $this->equivalenceService = $this->createMock(CommunicationPromotionEquivalenceService::class);
+        $this->serializer = $this->createMock(NormalizerInterface::class);
+        $this->serializer->method('normalize')->willReturn([]);
 
         $this->controller = new DashboardPromotionController(
             $this->repository,
             $this->createMock(EntityManagerInterface::class),
-            $this->createMock(NormalizerInterface::class),
-            $this->createMock(CommunicationPromotionService::class),
+            $this->serializer,
+            $this->promotionService,
             $this->bindingService,
+            $this->equivalenceService,
         );
 
         $container = $this->createMock(ContainerInterface::class);
@@ -144,5 +159,107 @@ class DashboardPromotionControllerTest extends TestCase
 
         $data = json_decode($response->getContent(), true);
         $this->assertTrue($data['deleted']);
+    }
+
+    private function v2Dto(): CreatePromotionV2Dto
+    {
+        return new CreatePromotionV2Dto(
+            name: 'Promo V2',
+            description: 'Promo V2',
+            packageNameTemplate: 'Cubacel {monto} CUP',
+            packageDescriptionTemplate: 'Cubacel {monto} CUP',
+            startAt: '2026-08-18T00:00:00+00:00',
+            endAt: '2026-08-25T23:59:00+00:00',
+            environmentId: 4,
+            destinationCurrency: 'CUP',
+            amountFrom: 500.0,
+            amountTo: 525.0,
+            amountStep: 25.0,
+            priceFrom: 19.7,
+            priceTo: 20.71,
+            priceCurrency: 'USD',
+        );
+    }
+
+    public function testCreateV2ReturnsThePromotionAndGeneratedPackages(): void
+    {
+        $promotion = new CommunicationPromotions();
+        $packages = [
+            (new CommunicationPackage())->setName('p1')->setDescription('p1')->setDestinationAmount(500.0)->setDestinationCurrency('CUP'),
+            (new CommunicationPackage())->setName('p2')->setDescription('p2')->setDestinationAmount(525.0)->setDestinationCurrency('CUP'),
+        ];
+        $equivalences = new PromotionEquivalenceResult(
+            [['provider' => 'DTONE', 'matched' => 2, 'error' => null]],
+            [],
+        );
+        $result = new CreatePromotionV2Result($promotion, $packages, new ContractRangeResult(2, 0, 0, [1, 2], []), $equivalences);
+        $this->promotionService->expects($this->once())->method('createV2')->willReturn($result);
+
+        $response = $this->controller->createV2($this->v2Dto());
+
+        $this->assertSame(Response::HTTP_CREATED, $response->getStatusCode());
+        $data = json_decode($response->getContent(), true);
+        $this->assertSame(2, $data['packagesCreated']);
+        $this->assertCount(2, $data['packages']);
+        $this->assertEquals(500.0, $data['packages'][0]['destinationAmount']);
+        $this->assertSame(2, $data['contracts']['created']);
+        $this->assertSame('DTONE', $data['equivalences']['providers'][0]['provider']);
+        $this->assertSame([], $data['equivalences']['gaps']);
+    }
+
+    public function testCreateV2MapsDomainExceptionToItsHttpCode(): void
+    {
+        $this->promotionService->method('createV2')
+            ->willThrowException(new MyCurrentException('ENVIRONMENT_NOT_FOUND', 'Environment not found', 404));
+
+        $response = $this->controller->createV2($this->v2Dto());
+
+        $this->assertSame(404, $response->getStatusCode());
+    }
+
+    public function testEquivalencesReturnsNotFoundWhenPromotionDoesNotExist(): void
+    {
+        $this->repository->method('find')->willReturn(null);
+
+        $response = $this->controller->equivalences(999);
+
+        $this->assertSame(Response::HTTP_NOT_FOUND, $response->getStatusCode());
+    }
+
+    public function testEquivalencesReturnsCoverageFromTheService(): void
+    {
+        $promotion = new CommunicationPromotions();
+        $this->repository->method('find')->willReturn($promotion);
+        $this->equivalenceService->expects($this->once())->method('coverage')->with($promotion)->willReturn(
+            new PromotionEquivalenceResult([], [['packageId' => 1, 'destinationAmount' => 500.0, 'missingProviders' => ['DTONE']]]),
+        );
+
+        $response = $this->controller->equivalences(1);
+
+        $data = json_decode($response->getContent(), true);
+        $this->assertSame('DTONE', $data['gaps'][0]['missingProviders'][0]);
+    }
+
+    public function testRefreshEquivalencesReturnsNotFoundWhenPromotionDoesNotExist(): void
+    {
+        $this->repository->method('find')->willReturn(null);
+
+        $response = $this->controller->refreshEquivalences(999);
+
+        $this->assertSame(Response::HTTP_NOT_FOUND, $response->getStatusCode());
+    }
+
+    public function testRefreshEquivalencesDelegatesToTheService(): void
+    {
+        $promotion = new CommunicationPromotions();
+        $this->repository->method('find')->willReturn($promotion);
+        $this->equivalenceService->expects($this->once())->method('refreshForPromotion')->with($promotion)->willReturn(
+            new PromotionEquivalenceResult([['provider' => 'DTONE', 'matched' => 5, 'error' => null]], []),
+        );
+
+        $response = $this->controller->refreshEquivalences(1);
+
+        $data = json_decode($response->getContent(), true);
+        $this->assertSame(5, $data['providers'][0]['matched']);
     }
 }

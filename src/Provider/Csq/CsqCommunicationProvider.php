@@ -16,8 +16,10 @@ use App\Provider\Contract\ProviderDispatchResult;
 use App\Provider\Contract\ProviderHealthCheckInterface;
 use App\Provider\Contract\ProviderPingResult;
 use App\Provider\Contract\ProviderProductDto;
+use App\Provider\Contract\ProviderPromotionCatalogInterface;
 use App\Provider\Contract\ProviderStatusQuery;
 use App\Provider\Contract\ProviderStatusResult;
+use App\Provider\Contract\PromotionCatalogQuery;
 use App\Provider\Contract\RechargeProviderInterface;
 use App\Provider\Contract\RechargeRequest;
 use Psr\Log\LoggerInterface;
@@ -96,7 +98,8 @@ final class CsqCommunicationProvider implements
     ProviderHealthCheckInterface,
     ProviderCatalogInterface,
     RechargeProviderInterface,
-    ProviderBalanceInterface
+    ProviderBalanceInterface,
+    ProviderPromotionCatalogInterface
 {
     /** countryId de Cuba en el portfolio de CSQ (confirmado contra el payload real). */
     private const CUBA_COUNTRY_ID = 192;
@@ -291,6 +294,21 @@ final class CsqCommunicationProvider implements
                 );
             }
         }
+    }
+
+    /**
+     * CSQ no expone un endpoint de "promociones" propio — al igual que
+     * ETECSA, delega en fetchProducts() (su catálogo normal). A diferencia
+     * de ETECSA, sus productos SÍ tienen destinationAmount por tramo (un
+     * mismo articleId se expande a N filas, una por monto — ver
+     * fetchProducts()), pero cuál de esos montos corresponde a cada tramo
+     * de la promoción lo decide el orquestador (Fase 5D) por tupla, igual
+     * que con el resto del catálogo — este método no filtra, solo expone
+     * los candidatos.
+     */
+    public function fetchPromotionProducts(ProviderContext $context, PromotionCatalogQuery $query): iterable
+    {
+        return $this->fetchProducts($context);
     }
 
     /**

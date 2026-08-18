@@ -92,7 +92,7 @@ class PackageCatalogResolverTest extends TestCase
     private function contract(CommunicationPackage $package, float $price, string $currency = 'USD'): CommunicationContract
     {
         $contract = (new CommunicationContract())
-            ->setCommunicationPackage($package)
+            ->addPackage($package)
             ->setDestinationAmount($package->getDestinationAmount())
             ->setDestinationCurrency($package->getDestinationCurrency())
             ->setPrice($price)
@@ -137,6 +137,52 @@ class PackageCatalogResolverTest extends TestCase
         $this->assertCount(1, $offers);
         $this->assertSame(12.0, $offers[0]->price);
         $this->assertSame(PackageOfferSourceEnum::DEFAULT_CONTRACT, $offers[0]->source);
+    }
+
+    public function testCatalogForFlattensAllPackagesOfAContractSharedByTwo(): void
+    {
+        $account = $this->account(1);
+        $packageA = $this->package(10);
+        $packageB = $this->package(11);
+        $shared = (new CommunicationContract())
+            ->addPackage($packageA)
+            ->addPackage($packageB)
+            ->setDestinationAmount(500.0)
+            ->setDestinationCurrency('CUP')
+            ->setPrice(15.0)
+            ->setCurrency('USD');
+        $this->assignId($shared, 999);
+
+        $this->contractRepository->method('findActiveForTenant')->willReturn([$shared]);
+
+        $offers = $this->resolver->catalogFor($account);
+
+        $this->assertCount(2, $offers);
+        $this->assertSame([$packageA, $packageB], array_map(fn ($o) => $o->package, $offers));
+        $this->assertSame(15.0, $offers[0]->price);
+        $this->assertSame(15.0, $offers[1]->price);
+    }
+
+    public function testOfferForFindsAPackageThatIsNotTheFirstOfASharedContract(): void
+    {
+        $account = $this->account(1);
+        $packageA = $this->package(10);
+        $packageB = $this->package(11);
+        $shared = (new CommunicationContract())
+            ->addPackage($packageA)
+            ->addPackage($packageB)
+            ->setDestinationAmount(500.0)
+            ->setDestinationCurrency('CUP')
+            ->setPrice(15.0)
+            ->setCurrency('USD');
+
+        $this->contractRepository->method('findActiveForTenant')->willReturn([$shared]);
+
+        $offer = $this->resolver->offerFor($packageB, $account);
+
+        $this->assertNotNull($offer);
+        $this->assertSame($packageB, $offer->package);
+        $this->assertSame(15.0, $offer->price);
     }
 
     public function testCatalogForFallsBackToProductMaxWhenNoContractsAtAll(): void

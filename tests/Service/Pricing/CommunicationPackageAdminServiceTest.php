@@ -42,6 +42,19 @@ class CommunicationPackageAdminServiceTest extends TestCase
         return $repo;
     }
 
+    /**
+     * $contracts es el lado inverso (mappedBy) de CommunicationContract::
+     * $packages — no tiene un addContract() público porque nunca se muta
+     * desde este lado en producción; en el test se puebla por reflexión
+     * para simular "este paquete ya tiene un contrato asociado".
+     */
+    private function addContractTo(CommunicationPackage $package, CommunicationContract $contract): void
+    {
+        $property = new \ReflectionProperty($package, 'contracts');
+        $property->setAccessible(true);
+        $property->getValue($package)->add($contract);
+    }
+
     public function testCreatePersistsAllFields(): void
     {
         $dto = new CreateCommunicationPackageDto(
@@ -202,9 +215,8 @@ class CommunicationPackageAdminServiceTest extends TestCase
             ->setName('P')->setDescription('P')
             ->setDestinationAmount(1.0)->setDestinationCurrency('USD');
         $existingContract = $this->createMock(CommunicationContract::class);
+        $this->addContractTo($package, $existingContract);
 
-        $this->em->method('getRepository')->with(CommunicationContract::class)
-            ->willReturn($this->repoReturning($existingContract));
         $this->em->expects($this->never())->method('remove');
 
         $this->expectException(MyCurrentException::class);
@@ -219,8 +231,6 @@ class CommunicationPackageAdminServiceTest extends TestCase
             ->setName('P')->setDescription('P')
             ->setDestinationAmount(1.0)->setDestinationCurrency('USD');
 
-        $this->em->method('getRepository')->with(CommunicationContract::class)
-            ->willReturn($this->repoReturning(null));
         $this->em->expects($this->once())->method('remove')->with($package);
         $this->em->expects($this->once())->method('flush');
 

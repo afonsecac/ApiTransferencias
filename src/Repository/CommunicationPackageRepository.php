@@ -3,6 +3,7 @@
 namespace App\Repository;
 
 use App\Entity\CommunicationPackage;
+use App\Entity\CommunicationPromotions;
 use App\Service\Pricing\DestinationKey;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
@@ -50,15 +51,63 @@ class CommunicationPackageRepository extends ServiceEntityRepository
      * coma flotante (DestinationKey::EPSILON) — usado por
      * CommunicationContractService::createByRange() para resolver, monto a
      * monto, a qué CommunicationPackage corresponde cada paso del rango.
+     *
+     * Excluye SIEMPRE los paquetes generados por una promoción
+     * (promotion IS NOT NULL, ver CommunicationPackage::$promotion) — son
+     * copias con vigencia acotada, no catálogo regular; el admin de
+     * contratos no debe poder engancharse a uno por coincidencia de monto.
+     * Para resolver dentro del lote de una promoción concreta, ver
+     * findByDestinationForPromotion().
      */
     public function findByDestination(float $amount, string $currency): ?CommunicationPackage
     {
         return $this->createQueryBuilder('p')
             ->andWhere('p.destinationAmount BETWEEN :min AND :max')
             ->andWhere('p.destinationCurrency = :currency')
+            ->andWhere('p.promotion IS NULL')
             ->setParameter('min', $amount - DestinationKey::EPSILON)
             ->setParameter('max', $amount + DestinationKey::EPSILON)
             ->setParameter('currency', strtoupper($currency))
+            ->setMaxResults(1)
+            ->getQuery()
+            ->getOneOrNullResult();
+    }
+
+    /**
+     * Todos los tramos generados por una promoción V2, ordenados por monto
+     * — usado por CommunicationPromotionEquivalenceService (Fase 5D) para
+     * poblar/refrescar las equivalencias por proveedor sin depender de
+     * tener la lista en memoria (ej. acción manual "refrescar" sobre una
+     * promoción ya creada en una petición anterior).
+     *
+     * @return list<CommunicationPackage>
+     */
+    public function findByPromotion(CommunicationPromotions $promotion): array
+    {
+        return $this->createQueryBuilder('p')
+            ->andWhere('p.promotion = :promotion')
+            ->setParameter('promotion', $promotion)
+            ->orderBy('p.destinationAmount', 'ASC')
+            ->getQuery()
+            ->getResult();
+    }
+
+    /**
+     * Variante de findByDestination() acotada a los paquetes generados por
+     * UNA promoción concreta (Fase 5B) — misma tolerancia de coma flotante,
+     * pero nunca puede devolver un paquete del catálogo regular ni de otra
+     * promoción, aunque compartan tupla destino.
+     */
+    public function findByDestinationForPromotion(float $amount, string $currency, CommunicationPromotions $promotion): ?CommunicationPackage
+    {
+        return $this->createQueryBuilder('p')
+            ->andWhere('p.destinationAmount BETWEEN :min AND :max')
+            ->andWhere('p.destinationCurrency = :currency')
+            ->andWhere('p.promotion = :promotion')
+            ->setParameter('min', $amount - DestinationKey::EPSILON)
+            ->setParameter('max', $amount + DestinationKey::EPSILON)
+            ->setParameter('currency', strtoupper($currency))
+            ->setParameter('promotion', $promotion)
             ->setMaxResults(1)
             ->getQuery()
             ->getOneOrNullResult();

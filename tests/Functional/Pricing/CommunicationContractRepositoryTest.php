@@ -46,7 +46,7 @@ class CommunicationContractRepositoryTest extends ProviderFunctionalTestCase
         float $price = 10.0,
     ): CommunicationContract {
         $contract = (new CommunicationContract())
-            ->setCommunicationPackage($package)
+            ->addPackage($package)
             ->setTenant($tenant)
             ->setDestinationAmount($package->getDestinationAmount())
             ->setDestinationCurrency($package->getDestinationCurrency())
@@ -170,5 +170,75 @@ class CommunicationContractRepositoryTest extends ProviderFunctionalTestCase
         $this->assertCount(2, $result);
         $this->assertSame($newer->getId(), $result[0]->getId());
         $this->assertSame($older->getId(), $result[1]->getId());
+    }
+
+    public function testFindActiveForTenantEagerLoadsAllPackagesOfAContractSharedByTwo(): void
+    {
+        $now = new \DateTimeImmutable();
+        $client = $this->createClient();
+        $environment = $this->createEnvironment();
+        $account = $this->createAccount($client, $environment);
+
+        // Dos CommunicationPackage al mismo monto, un solo contrato (ver
+        // upsertContract() — Fase 6B): el fetch join no debe perder ninguno.
+        $packageA = $this->communicationPackage();
+        $packageB = $this->communicationPackage();
+        $contract = (new CommunicationContract())
+            ->addPackage($packageA)
+            ->addPackage($packageB)
+            ->setTenant($account)
+            ->setDestinationAmount(500.0)
+            ->setDestinationCurrency('CUP')
+            ->setPrice(10.0)
+            ->setCurrency('USD')
+            ->setStartAt($now->modify('-1 day'));
+        $this->em->persist($contract);
+        $this->em->flush();
+        $this->em->clear();
+
+        $result = $this->repository()->findActiveForTenant($account, $now);
+
+        $this->assertCount(1, $result);
+        $this->assertCount(2, $result[0]->getPackages());
+    }
+
+    public function testFindOpenContractMatchesByTupleWithFloatingPointTolerance(): void
+    {
+        $now = new \DateTimeImmutable();
+        $client = $this->createClient();
+        $environment = $this->createEnvironment();
+        $account = $this->createAccount($client, $environment);
+
+        $package = $this->communicationPackage();
+        $open = $this->contract($package, $account, $now->modify('-1 day'));
+        $this->em->flush();
+
+        $found = $this->repository()->findOpenContract($account, 500.0 + 0.001, 'cup');
+
+        $this->assertSame($open->getId(), $found?->getId());
+    }
+
+    public function testFindOpenContractReturnsNullWhenNoOpenContractMatches(): void
+    {
+        $client = $this->createClient();
+        $environment = $this->createEnvironment();
+        $account = $this->createAccount($client, $environment);
+
+        $this->assertNull($this->repository()->findOpenContract($account, 999.0, 'CUP'));
+    }
+
+    public function testFindOpenContractDistinguishesTenantFromDefault(): void
+    {
+        $now = new \DateTimeImmutable();
+        $client = $this->createClient();
+        $environment = $this->createEnvironment();
+        $account = $this->createAccount($client, $environment);
+
+        $package = $this->communicationPackage();
+        $default = $this->contract($package, null, $now->modify('-1 day'));
+        $this->em->flush();
+
+        $this->assertSame($default->getId(), $this->repository()->findOpenContract(null, 500.0, 'CUP')?->getId());
+        $this->assertNull($this->repository()->findOpenContract($account, 500.0, 'CUP'));
     }
 }

@@ -12,6 +12,7 @@ use App\Entity\CommunicationPackage;
 use App\Entity\Environment;
 use App\Entity\User;
 use App\Exception\MyCurrentException;
+use App\Repository\CommunicationContractRepository;
 use App\Repository\CommunicationPackageRepository;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\SecurityBundle\Security;
@@ -19,11 +20,16 @@ use Symfony\Bundle\SecurityBundle\Security;
 /**
  * Administración de CommunicationContract (V2) — calcado de
  * PackageContractService en estructura: alta única + alta en lote (misma
- * TargetAccountResolver), ambas idempotentes por (tenant, paquete): una
- * segunda llamada sobre el mismo par ACTUALIZA el contrato ABIERTO existente
- * (endAt IS NULL) en vez de duplicarlo — el índice único
- * uniq_com_contract_open_per_tenant_package lo garantiza a nivel de esquema.
- * "Pausar" (close()) es la única forma de dejar hueco a uno nuevo distinto.
+ * TargetAccountResolver), ambas idempotentes por (tenant, destinationAmount,
+ * destinationCurrency): una segunda llamada sobre la misma tupla ACTUALIZA
+ * el contrato ABIERTO existente (endAt IS NULL) en vez de duplicarlo — el
+ * índice único uniq_com_contract_open_per_tenant_amount lo garantiza a nivel
+ * de esquema. "Pausar" (close()) es la única forma de dejar hueco a uno
+ * nuevo distinto.
+ *
+ * Desde la Fase 6 (ManyToMany), un contrato puede cubrir VARIOS
+ * CommunicationPackage que compartan tupla — ver upsertContract() y el
+ * docblock de CommunicationContract.
  */
 class CommunicationContractService
 {
@@ -39,6 +45,7 @@ class CommunicationContractService
         private readonly TargetAccountResolver $targetAccountResolver,
         private readonly Security $security,
         private readonly CommunicationPackageRepository $packageRepository,
+        private readonly CommunicationContractRepository $contractRepository,
     ) {
     }
 
@@ -50,13 +57,13 @@ class CommunicationContractService
         $package = $this->findPackageOrFail((int) $dto->getCommunicationPackageId());
         $tenant = $this->resolveTenantOrFail($dto->getTenantId(), $dto->getEnvironmentId());
 
-        $contract = $this->upsertContract($package, $tenant);
-        $this->applyPricing($contract, (float) $dto->getPrice(), (string) $dto->getCurrency(), $dto->getStartAt(), $dto->getEndAt());
-        $this->stampCreatedBy($contract);
+        $result = $this->upsertContract($package, $tenant);
+        $this->applyPricing($result->contract, (float) $dto->getPrice(), (string) $dto->getCurrency(), $dto->getStartAt(), $dto->getEndAt(), $result->contractIsNew);
+        $this->stampCreatedBy($result->contract);
 
         $this->em->flush();
 
-        return $contract;
+        return $result->contract;
     }
 
     /**
@@ -81,17 +88,11 @@ class CommunicationContractService
         $accountIds = [];
 
         foreach ($accounts as $account) {
-            $isNew = $this->em->getRepository(CommunicationContract::class)->findOneBy([
-                'communicationPackage' => $package,
-                'tenant' => $account,
-                'endAt' => null,
-            ]) === null;
+            $result = $this->upsertContract($package, $account);
+            $this->applyPricing($result->contract, (float) $dto->getPrice(), (string) $dto->getCurrency(), $dto->getStartAt(), $dto->getEndAt(), $result->contractIsNew);
+            $this->stampCreatedBy($result->contract);
 
-            $contract = $this->upsertContract($package, $account);
-            $this->applyPricing($contract, (float) $dto->getPrice(), (string) $dto->getCurrency(), $dto->getStartAt(), $dto->getEndAt());
-            $this->stampCreatedBy($contract);
-
-            $isNew ? $created++ : $updated++;
+            $result->isNew ? $created++ : $updated++;
             $accountIds[] = $account->getId();
         }
 
@@ -151,18 +152,12 @@ class CommunicationContractService
                 ? round($priceFrom + ($priceTo - $priceFrom) * ($amount - $from) / $span, 2)
                 : round($priceFrom, 2);
 
-            $isNew = $this->em->getRepository(CommunicationContract::class)->findOneBy([
-                'communicationPackage' => $package,
-                'tenant' => $tenant,
-                'endAt' => null,
-            ]) === null;
+            $result = $this->upsertContract($package, $tenant);
+            $this->applyPricing($result->contract, $price, $priceCurrency, $dto->getStartAt(), $dto->getEndAt(), $result->contractIsNew);
+            $this->stampCreatedBy($result->contract);
 
-            $contract = $this->upsertContract($package, $tenant);
-            $this->applyPricing($contract, $price, $priceCurrency, $dto->getStartAt(), $dto->getEndAt());
-            $this->stampCreatedBy($contract);
-
-            $isNew ? $created++ : $updated++;
-            $contracts[] = $contract;
+            $result->isNew ? $created++ : $updated++;
+            $contracts[] = $result->contract;
         }
 
         $this->em->flush();
@@ -173,54 +168,99 @@ class CommunicationContractService
     }
 
     /**
-     * Edita un contrato existente — siempre uno a uno (a diferencia de
-     * createBatch()/createByRange()). El paquete al que apunta el contrato
-     * puede reasignarse, pero nunca por id: se referencia por
-     * destinationAmount (+ destinationCurrency opcional si además cambia de
-     * moneda/unidad), resuelto contra el catálogo vigente — mismo criterio
-     * que createByRange().
+     * Variante de createByRange() para promociones V2 (Fase 5B): en vez de
+     * resolver cada paquete por (monto, moneda) contra el catálogo regular
+     * (findByDestination() excluye a propósito los paquetes promocionales,
+     * ver su docblock), recibe DIRECTAMENTE la lista ya generada por
+     * CommunicationPackageAdminService::createBatch() — un contrato "por
+     * defecto" (tenant=null, catálogo compartido) por cada paquete, con el
+     * precio interpolado linealmente entre priceFrom (el de menor
+     * destinationAmount) y priceTo (el de mayor).
      *
-     * @throws MyCurrentException si se pide un destinationAmount sin ningún
-     *   CommunicationPackage correspondiente
+     * @param list<CommunicationPackage> $packages
+     */
+    public function createForPromotionPackages(
+        array $packages,
+        float $priceFrom,
+        float $priceTo,
+        string $currency,
+        ?string $startAt,
+        ?string $endAt,
+    ): ContractRangeResult {
+        if ($packages === []) {
+            return new ContractRangeResult(0, 0, 0, [], []);
+        }
+
+        $amounts = array_map(static fn (CommunicationPackage $p) => (float) $p->getDestinationAmount(), $packages);
+        $from = min($amounts);
+        $to = max($amounts);
+        $span = $to - $from;
+        $priceCurrency = strtoupper($currency);
+
+        $created = 0;
+        $updated = 0;
+        $contracts = [];
+
+        foreach ($packages as $package) {
+            $amount = (float) $package->getDestinationAmount();
+            $price = $span > 0
+                ? round($priceFrom + ($priceTo - $priceFrom) * ($amount - $from) / $span, 2)
+                : round($priceFrom, 2);
+
+            $result = $this->upsertContract($package, null);
+            $this->applyPricing($result->contract, $price, $priceCurrency, $startAt, $endAt, $result->contractIsNew);
+            $this->stampCreatedBy($result->contract);
+
+            $result->isNew ? $created++ : $updated++;
+            $contracts[] = $result->contract;
+        }
+
+        $this->em->flush();
+
+        $contractIds = array_map(static fn (CommunicationContract $c) => $c->getId(), $contracts);
+
+        return new ContractRangeResult($created, $updated, 0, $contractIds, []);
+    }
+
+    /**
+     * Edita un contrato existente — siempre uno a uno (a diferencia de
+     * createBatch()/createByRange()).
+     *
+     * Desde la Fase 6 (ManyToMany), `destinationAmount`/`destinationCurrency`
+     * son la IDENTIDAD del contrato, no la de un paquete puntual — editarlos
+     * "relabela" la tupla que este contrato representa, pero NO recalcula ni
+     * mueve su colección de `CommunicationPackage` (los paquetes que ya
+     * cubría siguen ahí, aunque ahora el contrato diga otro monto). Para
+     * "mover" paquetes de un contrato a otro, usar los flujos de creación
+     * (createSingle/createBatch/createByRange/createForPromotionPackages) —
+     * convergen solos al contrato correcto vía upsertContract().
+     *
+     * @throws MyCurrentException si ya existe OTRO contrato abierto para la
+     *   tupla (tenant, nuevo monto, nueva moneda)
      */
     public function update(CommunicationContract $contract, UpdateCommunicationContractDto $dto): CommunicationContract
     {
-        if ($dto->getDestinationAmount() !== null) {
+        if ($dto->getDestinationAmount() !== null || $dto->getDestinationCurrency() !== null) {
+            $amount = $dto->getDestinationAmount() ?? (float) $contract->getDestinationAmount();
             $currency = $dto->getDestinationCurrency() !== null
                 ? strtoupper($dto->getDestinationCurrency())
                 : (string) $contract->getDestinationCurrency();
 
-            $package = $this->packageRepository->findByDestination((float) $dto->getDestinationAmount(), $currency);
-            if ($package === null) {
+            // El índice único (tenant, amount, currency) WHERE endAt IS NULL
+            // solo permite un contrato abierto por tupla — si ya hay uno
+            // para la tupla destino, avisar en vez de dejar que el flush()
+            // reviente con una violación de integridad.
+            $conflict = $this->contractRepository->findOpenContract($contract->getTenant(), $amount, $currency);
+            if ($conflict !== null && $conflict !== $contract) {
                 throw new MyCurrentException(
-                    'COMMUNICATION_PACKAGE_NOT_FOUND',
-                    'No existe ningún paquete con ese monto de destino',
-                    404,
+                    'COMMUNICATION_CONTRACT_ALREADY_EXISTS',
+                    'Ya existe un contrato abierto para esa tupla y cliente',
+                    409,
                 );
             }
 
-            if ($package !== $contract->getCommunicationPackage()) {
-                // El índice único (tenant, communicationPackage) WHERE endAt
-                // IS NULL solo permite un contrato abierto por par — si ya
-                // hay uno para el paquete destino, avisar en vez de dejar
-                // que el flush() reviente con una violación de integridad.
-                $conflict = $this->em->getRepository(CommunicationContract::class)->findOneBy([
-                    'communicationPackage' => $package,
-                    'tenant' => $contract->getTenant(),
-                    'endAt' => null,
-                ]);
-                if ($conflict !== null && $conflict !== $contract) {
-                    throw new MyCurrentException(
-                        'COMMUNICATION_CONTRACT_ALREADY_EXISTS',
-                        'Ya existe un contrato abierto para ese paquete y cliente',
-                        409,
-                    );
-                }
-            }
-
-            $contract->setCommunicationPackage($package);
-            $contract->setDestinationAmount((float) $package->getDestinationAmount());
-            $contract->setDestinationCurrency((string) $package->getDestinationCurrency());
+            $contract->setDestinationAmount($amount);
+            $contract->setDestinationCurrency($currency);
         }
         if ($dto->getPrice() !== null) {
             $contract->setPrice($dto->getPrice());
@@ -331,43 +371,87 @@ class CommunicationContractService
     }
 
     /**
-     * Idempotente por (communicationPackage, tenant): reutiliza el contrato
-     * ABIERTO existente (endAt IS NULL) en vez de duplicar — el único que
-     * puede existir a la vez por el índice único de esquema.
+     * Idempotente por (tenant, destinationAmount, destinationCurrency): el
+     * contrato ABIERTO (endAt IS NULL) para esa tupla es único por
+     * esquema (uniq_com_contract_open_per_tenant_amount). Si $package NO
+     * está todavía en su colección, se agrega — es lo que hace que dos
+     * CommunicationPackage distintos (ej. uno del catálogo normal y uno
+     * generado por una promoción V2) que comparten tupla terminen en el
+     * MISMO contrato en vez de crear una fila nueva.
+     *
+     * `isNew` en el resultado distingue "este paquete acaba de sumarse"
+     * (contrato nuevo, o existente sin este paquete todavía) de "este
+     * paquete ya estaba" (re-afirmación de precio) — los contadores
+     * created/updated de cada flujo de alta lo usan directamente.
      */
-    private function upsertContract(CommunicationPackage $package, ?Account $tenant): CommunicationContract
+    private function upsertContract(CommunicationPackage $package, ?Account $tenant): UpsertContractResult
     {
-        $existing = $this->em->getRepository(CommunicationContract::class)->findOneBy([
-            'communicationPackage' => $package,
-            'tenant' => $tenant,
-            'endAt' => null,
-        ], ['id' => 'DESC']);
+        $amount = (float) $package->getDestinationAmount();
+        $currency = (string) $package->getDestinationCurrency();
 
-        if ($existing !== null) {
-            return $existing;
+        $contract = $this->contractRepository->findOpenContract($tenant, $amount, $currency);
+        if ($contract === null) {
+            $contract = (new CommunicationContract())
+                ->setTenant($tenant)
+                ->setDestinationAmount($amount)
+                ->setDestinationCurrency($currency);
+            $this->em->persist($contract);
+            $contract->addPackage($package);
+
+            return new UpsertContractResult($contract, true, true);
         }
 
-        $contract = (new CommunicationContract())
-            ->setCommunicationPackage($package)
-            ->setTenant($tenant)
-            ->setDestinationAmount((float) $package->getDestinationAmount())
-            ->setDestinationCurrency((string) $package->getDestinationCurrency());
+        $isNew = !$contract->getPackages()->contains($package);
+        if ($isNew) {
+            $contract->addPackage($package);
+        }
 
-        $this->em->persist($contract);
-
-        return $contract;
+        return new UpsertContractResult($contract, $isNew, false);
     }
 
-    private function applyPricing(CommunicationContract $contract, float $price, string $currency, ?string $startAt, ?string $endAt): void
+    /**
+     * Contrato NUEVO ($contractIsNew): fija startAt/endAt tal cual los pida
+     * el caller — está estableciendo la ventana desde cero.
+     *
+     * Contrato REUTILIZADO (se le suma un paquete, o se reafirma uno que ya
+     * tenía): NUNCA lo estrecha — solo ensancha. Sin este resguardo, fusionar
+     * un paquete promocional (con endAt corto) en un contrato "por defecto"
+     * indefinido le heredaría ese endAt corto a TODO el contrato, incluido
+     * el paquete no-promocional que ya cubría — justo el efecto que este
+     * ManyToMany existe para evitar (ver docblock de CommunicationContract).
+     * Simétrico para startAt: un merge no debe retrasar el inicio de algo
+     * que ya era visible.
+     */
+    private function applyPricing(CommunicationContract $contract, float $price, string $currency, ?string $startAt, ?string $endAt, bool $contractIsNew): void
     {
         $contract->setPrice($price);
         $contract->setCurrency(strtoupper($currency));
+
+        if ($contractIsNew) {
+            if ($startAt !== null) {
+                $contract->setStartAt(self::parseUtc($startAt));
+            }
+            if ($endAt !== null) {
+                $contract->setEndAt(self::parseUtc($endAt));
+            }
+
+            return;
+        }
+
         if ($startAt !== null) {
-            $contract->setStartAt(self::parseUtc($startAt));
+            $newStart = self::parseUtc($startAt);
+            if ($contract->getStartAt() === null || $newStart < $contract->getStartAt()) {
+                $contract->setStartAt($newStart);
+            }
         }
-        if ($endAt !== null) {
-            $contract->setEndAt(self::parseUtc($endAt));
+        if ($endAt !== null && $contract->getEndAt() !== null) {
+            $newEnd = self::parseUtc($endAt);
+            if ($newEnd > $contract->getEndAt()) {
+                $contract->setEndAt($newEnd);
+            }
         }
+        // $contract->getEndAt() === null (indefinido) nunca se estrecha,
+        // pase lo que pase en $endAt.
     }
 
     /**

@@ -8,6 +8,7 @@ use App\Entity\ClientProviderRouting;
 use App\Entity\CommunicationPackage;
 use App\Entity\CommunicationPackageProviderProduct;
 use App\Entity\CommunicationProduct;
+use App\Entity\CommunicationPromotions;
 use App\Entity\Environment;
 use App\Enums\CommunicationProviderEnum;
 use App\Exception\MyCurrentException;
@@ -95,6 +96,15 @@ class ProviderDispatchResolverTest extends TestCase
             ->setDescription('Paquete')
             ->setDestinationAmount(500.0)
             ->setDestinationCurrency('CUP');
+    }
+
+    /**
+     * Tramo generado por una promoción — a diferencia de package(), NUNCA
+     * debe caer al matching automático por tupla.
+     */
+    private function promotionalPackage(): CommunicationPackage
+    {
+        return $this->package()->setPromotion($this->createMock(CommunicationPromotions::class));
     }
 
     public function testSelectsTheFirstDispatchableProviderInPriorityOrder(): void
@@ -322,5 +332,82 @@ class ProviderDispatchResolverTest extends TestCase
         $selected = $this->resolver->select($account, $package);
 
         $this->assertSame(CommunicationProviderEnum::ETECSA, $selected->provider);
+    }
+
+    public function testPromotionalPackageNeverFallsBackToAutomaticMatchingWithoutABinding(): void
+    {
+        $account = $this->account(1);
+        $package = $this->promotionalPackage();
+
+        $this->routingRepo->method('findActiveProvidersOrderedForClient')->willReturn([$this->routing('CSQ')]);
+        $this->availabilityService->method('canDispatchTo')->willReturn(true);
+        // Sin vínculo explícito (setUp ya deja findForPackageAndProvider en null).
+        $this->productRepository->expects($this->never())->method('findMatchingDestination');
+
+        $this->expectException(MyCurrentException::class);
+
+        $this->resolver->select($account, $package);
+    }
+
+    public function testPromotionalPackageSkipsAProviderWithoutABindingAndTriesTheNextOne(): void
+    {
+        $account = $this->account(1);
+        $package = $this->promotionalPackage();
+        $bound = $this->createMock(CommunicationProduct::class);
+        $bound->method('getExternalRef')->willReturn('ref-dtone');
+        $bound->method('isEnabled')->willReturn(true);
+        $bound->method('getEnvironment')->willReturn(null);
+        $binding = $this->createMock(CommunicationPackageProviderProduct::class);
+        $binding->method('getProduct')->willReturn($bound);
+
+        $this->routingRepo->method('findActiveProvidersOrderedForClient')
+            ->willReturn([$this->routing('CSQ'), $this->routing('DTONE')]);
+        $this->availabilityService->method('canDispatchTo')->willReturn(true);
+        $this->packageBindingRepo = $this->createMock(CommunicationPackageProviderProductRepository::class);
+        $this->packageBindingRepo->method('findForPackageAndProvider')
+            ->willReturnCallback(fn ($pkg, $provider) => $provider === 'DTONE' ? $binding : null);
+        $this->resolver = new ProviderDispatchResolver(
+            $this->routingRepo,
+            $this->productRepository,
+            $this->packageBindingRepo,
+            $this->availabilityService,
+            new ProductSaleTypeMatcher(),
+            $this->sysConfigRepo,
+        );
+        $this->productRepository->expects($this->never())->method('findMatchingDestination');
+
+        $selected = $this->resolver->select($account, $package);
+
+        $this->assertSame(CommunicationProviderEnum::DTONE, $selected->provider);
+        $this->assertSame('ref-dtone', $selected->externalRef);
+    }
+
+    public function testPromotionalPackageStillUsesAnExplicitBindingWhenPresent(): void
+    {
+        $account = $this->account(1);
+        $package = $this->promotionalPackage();
+        $bound = $this->createMock(CommunicationProduct::class);
+        $bound->method('getExternalRef')->willReturn('ref-bound');
+        $bound->method('isEnabled')->willReturn(true);
+        $bound->method('getEnvironment')->willReturn(null);
+        $binding = $this->createMock(CommunicationPackageProviderProduct::class);
+        $binding->method('getProduct')->willReturn($bound);
+
+        $this->routingRepo->method('findActiveProvidersOrderedForClient')->willReturn([$this->routing('ETECSA')]);
+        $this->availabilityService->method('canDispatchTo')->willReturn(true);
+        $this->packageBindingRepo = $this->createMock(CommunicationPackageProviderProductRepository::class);
+        $this->packageBindingRepo->method('findForPackageAndProvider')->willReturn($binding);
+        $this->resolver = new ProviderDispatchResolver(
+            $this->routingRepo,
+            $this->productRepository,
+            $this->packageBindingRepo,
+            $this->availabilityService,
+            new ProductSaleTypeMatcher(),
+            $this->sysConfigRepo,
+        );
+
+        $selected = $this->resolver->select($account, $package);
+
+        $this->assertSame('ref-bound', $selected->externalRef);
     }
 }

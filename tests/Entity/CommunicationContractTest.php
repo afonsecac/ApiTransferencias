@@ -20,7 +20,7 @@ class CommunicationContractTest extends TestCase
             ->setDestinationCurrency('CUP');
 
         return (new CommunicationContract())
-            ->setCommunicationPackage($package)
+            ->addPackage($package)
             ->setDestinationAmount(500.0)
             ->setDestinationCurrency('CUP')
             ->setPrice(10.0)
@@ -85,5 +85,27 @@ class CommunicationContractTest extends TestCase
         $contract = $this->contract()->close($at);
 
         $this->assertSame($at, $contract->getEndAt());
+    }
+
+    public function testAddPackageIsIdempotent(): void
+    {
+        $contract = new CommunicationContract();
+        $package = (new CommunicationPackage())->setName('p')->setDescription('p')->setDestinationAmount(500.0)->setDestinationCurrency('CUP');
+
+        $contract->addPackage($package);
+        $contract->addPackage($package);
+
+        $this->assertCount(1, $contract->getPackages());
+        $this->assertTrue($contract->getPackages()->contains($package));
+    }
+
+    public function testRemovePackage(): void
+    {
+        $contract = $this->contract();
+        $package = $contract->getPackages()->first();
+
+        $contract->removePackage($package);
+
+        $this->assertCount(0, $contract->getPackages());
     }
 }

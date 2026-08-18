@@ -287,4 +287,43 @@ class CsqCommunicationProviderCatalogTest extends TestCase
 
         $this->assertSame([], $products);
     }
+
+    /**
+     * CSQ no tiene endpoint de "promociones" propio — fetchPromotionProducts()
+     * (Fase 5C) delega en fetchProducts() sin filtrar por tupla; es el
+     * orquestador (Fase 5D) quien decide qué candidato corresponde a cada
+     * tramo.
+     */
+    public function testFetchPromotionProductsDelegatesToFetchProductsWithoutFiltering(): void
+    {
+        $this->client->method('getPortfolio')->willReturn($this->portfolio([
+            [
+                'articleId' => 7951,
+                'name' => 'Cubacel Pack Combos',
+                'countryId' => 192,
+                'topupType' => 'Bundles',
+                'amountType' => 'by_list',
+                'saleAmount' => ['from' => null, 'to' => null, 'step' => null, 'list' => [2200, 3300]],
+                'exchangeRate' => 22.0,
+                'saleCurrency' => 'USD',
+                'destinationCurrency' => 'CUP',
+                'productDescription' => 'Combos',
+            ],
+        ]));
+
+        $query = new \App\Provider\Contract\PromotionCatalogQuery(
+            destinationCurrency: 'CUP',
+            destinationAmounts: [2200.0],
+            activeFrom: new \DateTimeImmutable('2026-08-18T00:00:00+00:00'),
+            activeTo: new \DateTimeImmutable('2026-08-25T23:59:00+00:00'),
+        );
+
+        $products = iterator_to_array($this->provider->fetchPromotionProducts($this->context(), $query));
+
+        // Devuelve TODOS los candidatos del catálogo (incluido 3300, que no
+        // está entre destinationAmounts) — el filtrado por tramo no es
+        // responsabilidad de este método para CSQ.
+        $this->assertCount(2, $products);
+        $this->assertSame(['7951-2200', '7951-3300'], array_map(static fn ($p) => $p->externalId, $products));
+    }
 }

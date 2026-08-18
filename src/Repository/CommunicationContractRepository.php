@@ -4,6 +4,7 @@ namespace App\Repository;
 
 use App\Entity\Account;
 use App\Entity\CommunicationContract;
+use App\Service\Pricing\DestinationKey;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\ORM\QueryBuilder;
 use Doctrine\Persistence\ManagerRegistry;
@@ -24,10 +25,12 @@ class CommunicationContractRepository extends ServiceEntityRepository
     }
 
     /**
-     * Contratos propios vigentes de un tenant, con su CommunicationPackage
-     * ya cargado (un solo JOIN — el match es por FK, no por tupla). Usado
-     * por PackageCatalogResolver::catalogFor() (Fase 2): si esto no está
-     * vacío, el catálogo visible del cliente es EXACTAMENTE estos paquetes.
+     * Contratos propios vigentes de un tenant, con sus CommunicationPackage
+     * ya cargados (fetch join sobre la colección — Doctrine hidrata UN
+     * CommunicationContract por fila lógica, con su colección poblada, no
+     * uno por paquete). Usado por PackageCatalogResolver::catalogFor()
+     * (Fase 2): si esto no está vacío, el catálogo visible del cliente es
+     * EXACTAMENTE los paquetes de estos contratos.
      *
      * @return list<CommunicationContract>
      */
@@ -63,11 +66,38 @@ class CommunicationContractRepository extends ServiceEntityRepository
     {
         return $this->createQueryBuilder('c')
             ->addSelect('p')
-            ->innerJoin('c.communicationPackage', 'p')
+            ->leftJoin('c.packages', 'p')
             ->andWhere('c.startAt <= :now')
             ->andWhere('c.endAt IS NULL OR c.endAt > :now')
             ->setParameter('now', $now)
             ->orderBy('c.startAt', 'DESC')
             ->addOrderBy('c.id', 'DESC');
+    }
+
+    /**
+     * El contrato ABIERTO (endAt IS NULL) para esta tupla — tolerancia de
+     * coma flotante igual que CommunicationPackageRepository::findByDestination()
+     * (DestinationKey::EPSILON). Es la clave de deduplicación de
+     * CommunicationContractService::upsertContract(): dos paquetes con la
+     * misma tupla y tenant terminan en el contrato que esto devuelve.
+     */
+    public function findOpenContract(?Account $tenant, float $amount, string $currency): ?CommunicationContract
+    {
+        $qb = $this->createQueryBuilder('c')
+            ->andWhere('c.destinationAmount BETWEEN :min AND :max')
+            ->andWhere('c.destinationCurrency = :currency')
+            ->andWhere('c.endAt IS NULL')
+            ->setParameter('min', $amount - DestinationKey::EPSILON)
+            ->setParameter('max', $amount + DestinationKey::EPSILON)
+            ->setParameter('currency', strtoupper($currency))
+            ->setMaxResults(1);
+
+        if ($tenant === null) {
+            $qb->andWhere('c.tenant IS NULL');
+        } else {
+            $qb->andWhere('c.tenant = :tenant')->setParameter('tenant', $tenant);
+        }
+
+        return $qb->getQuery()->getOneOrNullResult();
     }
 }

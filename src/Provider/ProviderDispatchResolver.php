@@ -29,9 +29,13 @@ use Symfony\Component\HttpFoundation\Response;
  * cliente, o con el switch apagado, se prueba solo el proveedor por
  * defecto.
  *
- * El camino "con promoción" (mapeo explícito CommunicationPromotionProviderProduct,
- * en vez de búsqueda automática por tupla) es Fase 5 — todavía no existe esa
- * entidad, así que select() solo cubre venta regular.
+ * Excepción al fallback: un paquete generado por una promoción
+ * (CommunicationPackage::$promotion !== null, ver Fase 5) exige SIEMPRE
+ * vínculo explícito — nunca cae a findMatchingDestination(). Es la garantía
+ * de "nunca despachar en silencio con el producto equivocado": si el admin
+ * (o el poblado automático por proveedor) no dejó una equivalencia para
+ * este tramo, ese proveedor simplemente no participa, se prueba el
+ * siguiente candidato de prioridad.
  */
 class ProviderDispatchResolver
 {
@@ -97,15 +101,23 @@ class ProviderDispatchResolver
      * El vínculo explícito (CommunicationPackageProviderProduct) gana
      * siempre que exista y siga siendo válido (habilitado + del entorno de
      * la cuenta) — el admin lo fijó a propósito, así que no se re-valida
-     * contra saleType ni tupla. Sin vínculo (o si el vinculado ya no sirve),
-     * cae al matching automático de siempre — ningún paquete deja de
-     * despachar solo porque todavía no fue vinculado a mano.
+     * contra saleType ni tupla.
+     *
+     * Sin vínculo (o si el vinculado ya no sirve): un paquete de catálogo
+     * regular cae al matching automático de siempre — ningún paquete deja
+     * de despachar solo porque todavía no fue vinculado a mano. Un paquete
+     * de PROMOCIÓN (getPromotion() !== null) NUNCA cae al automático — sin
+     * equivalencia explícita para este proveedor, no hay nada que devolver.
      */
     private function findDispatchableProduct(Account $account, CommunicationPackage $package, string $provider, ?string $saleType): ?CommunicationProduct
     {
         $bound = $this->packageBindingRepo->findForPackageAndProvider($package, $provider)?->getProduct();
         if ($bound !== null && $bound->isEnabled() && ($bound->getEnvironment() === null || $bound->getEnvironment() === $account->getEnvironment())) {
             return $bound;
+        }
+
+        if ($package->getPromotion() !== null) {
+            return null;
         }
 
         $candidates = $this->productRepository->findMatchingDestination(
