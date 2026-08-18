@@ -253,6 +253,19 @@ class CommunicationPackage
      */
     private ?ResolvedPackageOffer $resolvedOffer = null;
 
+    /**
+     * Null = catálogo regular (sincronizado o creado a mano). No nulo =
+     * este paquete fue generado por rango para una promoción V2 (ver
+     * CommunicationPromotionService/Fase 5) — activo solo durante su
+     * ventana (activeStartAt/activeEndAt heredados de la promoción) y
+     * SIN fallback a auto-match en ProviderDispatchResolver: un
+     * proveedor sin CommunicationPackageProviderProduct explícito para
+     * este paquete simplemente no lo despacha.
+     */
+    #[ORM\ManyToOne]
+    #[ORM\JoinColumn(name: 'promotion_id', nullable: true, onDelete: 'CASCADE')]
+    private ?CommunicationPromotions $promotion = null;
+
     public function __construct()
     {
         $this->benefits = [];
@@ -512,5 +525,17 @@ class CommunicationPackage
     public function getCurrency(): ?string
     {
         return $this->resolvedOffer?->currency;
+    }
+
+    public function getPromotion(): ?CommunicationPromotions
+    {
+        return $this->promotion;
+    }
+
+    public function setPromotion(?CommunicationPromotions $promotion): static
+    {
+        $this->promotion = $promotion;
+
+        return $this;
     }
 }
