@@ -104,4 +104,24 @@ class CommunicationPackageCatalogProviderTest extends TestCase
 
         $this->assertSame([$bound], $result);
     }
+
+    public function testExcludesPackagesOutsideTheirOwnActiveWindow(): void
+    {
+        $account = $this->createMock(Account::class);
+        $this->security->method('getUser')->willReturn($account);
+
+        $now = new \DateTimeImmutable();
+        $active = $this->packageWithId(1, 'Active');
+        $future = $this->packageWithId(2, 'Future')->setActiveStartAt($now->modify('+1 day'));
+
+        $this->catalogResolver->method('catalogFor')->willReturn([
+            new ResolvedPackageOffer($active, 10.0, 'USD', PackageOfferSourceEnum::PRODUCT_MAX),
+            new ResolvedPackageOffer($future, 20.0, 'USD', PackageOfferSourceEnum::PRODUCT_MAX),
+        ]);
+        $this->bindingRepo->method('findPackageIdsWithBindings')->willReturn([1, 2]);
+
+        $result = $this->provider->provide(new GetCollection());
+
+        $this->assertSame([$active], $result);
+    }
 }

@@ -26,6 +26,15 @@ use Symfony\Bundle\SecurityBundle\Security;
  * despachan de verdad. Este filtro es exclusivo de la vista móvil: el
  * dashboard (preview(), coverage()) sigue usando PackageCatalogResolver sin
  * este recorte, porque ahí el admin necesita ver el paquete PARA vincularlo.
+ *
+ * Tampoco se muestra un paquete fuera de su propia ventana activa
+ * (CommunicationPackage::isActiveAt()) — PackageCatalogResolver::
+ * offersFromContracts() no filtra por esto (solo mira si el CONTRATO está
+ * vigente, no el paquete), así que un paquete de promoción futura cuyo
+ * contrato ya esté vigente (ej. reutilizó el contrato "por defecto" del
+ * catálogo normal al mismo monto — ver upsertContract()) podía colarse aquí
+ * antes de tiempo. Ese mismo paquete SÍ debe aparecer en /upcoming
+ * (UpcomingPackageCatalogResolver), nunca en los dos a la vez.
  */
 final class CommunicationPackageCatalogProvider implements ProviderInterface
 {
@@ -46,9 +55,11 @@ final class CommunicationPackageCatalogProvider implements ProviderInterface
             return [];
         }
 
+        $now = new \DateTimeImmutable();
+
         $packages = array_map(
             static fn (ResolvedPackageOffer $offer): CommunicationPackage => $offer->package,
-            $this->catalogResolver->catalogFor($tenant),
+            $this->catalogResolver->catalogFor($tenant, $now),
         );
 
         $boundIds = $this->bindingRepo->findPackageIdsWithBindings(
@@ -57,7 +68,7 @@ final class CommunicationPackageCatalogProvider implements ProviderInterface
 
         return array_values(array_filter(
             $packages,
-            static fn (CommunicationPackage $p) => in_array($p->getId(), $boundIds, true)
+            static fn (CommunicationPackage $p) => in_array($p->getId(), $boundIds, true) && $p->isActiveAt($now)
         ));
     }
 }

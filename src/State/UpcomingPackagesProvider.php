@@ -7,16 +7,26 @@ use ApiPlatform\State\ProviderInterface;
 use App\Entity\Account;
 use App\Entity\CommunicationClientPackage;
 use App\Entity\CommunicationPromotions;
+use App\Service\Catalog\CatalogVersionResolver;
+use App\Service\Catalog\UpcomingPackageCatalogResolver;
 use App\Service\Pricing\PackageSalePriceResolver;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\SecurityBundle\Security;
 
+/**
+ * GET /communication/packages/upcoming — legacy V1 por defecto (paquetes de
+ * promociones legacy aún no arrancadas, vía CommunicationClientPackage::
+ * $promotionItems). Para cuentas marcadas V2 delega en
+ * UpcomingPackageCatalogResolver (paquetes V2 con activeStartAt futuro).
+ */
 class UpcomingPackagesProvider implements ProviderInterface
 {
     public function __construct(
         private readonly EntityManagerInterface $em,
         private readonly Security $security,
         private readonly PackageSalePriceResolver $salePriceResolver,
+        private readonly CatalogVersionResolver $catalogVersion,
+        private readonly UpcomingPackageCatalogResolver $upcomingResolver,
     ) {}
 
     public function provide(Operation $operation, array $uriVariables = [], array $context = []): object|array|null
@@ -24,6 +34,10 @@ class UpcomingPackagesProvider implements ProviderInterface
         $user = $this->security->getUser();
         if (!$user instanceof Account) {
             return [];
+        }
+
+        if ($this->catalogVersion->isV2($user)) {
+            return $this->upcomingResolver->upcomingFor($user);
         }
 
         $now = new \DateTimeImmutable();

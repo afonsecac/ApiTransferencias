@@ -47,6 +47,32 @@ class CommunicationPackageRepository extends ServiceEntityRepository
     }
 
     /**
+     * Paquetes que entrarán en vigencia a futuro (típicamente tramos de una
+     * promoción V2 aún no arrancada) — alimenta
+     * /communication/packages/upcoming para cuentas V2
+     * (UpcomingPackageCatalogResolver). Complemento exacto de
+     * findActiveCatalog(): un paquete nunca puede salir en las dos a la vez.
+     * Sin filtro de tenant: el catálogo V2 es compartido.
+     *
+     * @return list<CommunicationPackage>
+     */
+    public function findUpcoming(?\DateTimeImmutable $now = null): array
+    {
+        $now ??= new \DateTimeImmutable();
+
+        return $this->createQueryBuilder('p')
+            ->andWhere('p.isActive = :active')
+            ->andWhere('p.activeStartAt > :now')
+            ->setParameter('active', true)
+            ->setParameter('now', $now)
+            ->orderBy('p.activeStartAt', 'ASC')
+            ->addOrderBy('p.displayOrder', 'ASC')
+            ->addOrderBy('p.id', 'ASC')
+            ->getQuery()
+            ->getResult();
+    }
+
+    /**
      * Paquete cuyo destino coincide con la tupla dada, con tolerancia de
      * coma flotante (DestinationKey::EPSILON) — usado por
      * CommunicationContractService::createByRange() para resolver, monto a
