@@ -190,4 +190,36 @@ class DTOneHttpClientTest extends TestCase
         $this->assertCount(3, $items);
         $this->assertSame(2, $calls);
     }
+
+    /**
+     * GET /v1/promotions devuelve un array PLANO (no envuelto en "data",
+     * a diferencia de /v1/products) — esquema verificado contra
+     * https://developers.dtone.com/reference/getpromotions.
+     */
+    public function testIteratePromotionsFollowsPaginationOverAFlatArray(): void
+    {
+        $calls = 0;
+        $httpClient = new MockHttpClient(function (string $method, string $url) use (&$calls) {
+            $calls++;
+            $this->assertSame('GET', $method);
+            $this->assertStringContainsString('/v1/promotions', $url);
+
+            $page = $calls === 1
+                ? [['id' => 6999, 'title' => 'Promo A'], ['id' => 6987, 'title' => 'Promo B']]
+                : [['id' => 7001, 'title' => 'Promo C']];
+
+            return new MockResponse(json_encode($page), [
+                'http_code' => 200,
+                'response_headers' => ['x-total-pages: 2'],
+            ]);
+        });
+
+        $client = new DTOneHttpClient($httpClient, $this->credentialsResolver(), new NullLogger());
+
+        $items = iterator_to_array($client->iteratePromotions($this->context()));
+
+        $this->assertCount(3, $items);
+        $this->assertSame(2, $calls);
+        $this->assertSame(6999, $items[0]['id']);
+    }
 }

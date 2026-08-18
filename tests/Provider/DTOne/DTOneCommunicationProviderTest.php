@@ -8,6 +8,7 @@ use App\Enums\ProviderOutcomeEnum;
 use App\Exception\MyCurrentException;
 use App\Provider\Contract\ProviderContext;
 use App\Provider\Contract\ProviderStatusQuery;
+use App\Provider\Contract\PromotionCatalogQuery;
 use App\Provider\Contract\RechargeRequest;
 use App\Provider\DTOne\DTOneCommunicationProvider;
 use App\Provider\DTOne\DTOneHttpClient;
@@ -401,5 +402,89 @@ class DTOneCommunicationProviderTest extends TestCase
 
         $this->assertSame(25.0, $products[0]->destinationMinAmount);
         $this->assertSame(50.0, $products[0]->destinationMaxAmount);
+    }
+
+    private function query(array $amounts = [500.0, 625.0]): PromotionCatalogQuery
+    {
+        return new PromotionCatalogQuery(
+            destinationCurrency: 'CUP',
+            destinationAmounts: $amounts,
+            activeFrom: new \DateTimeImmutable('2026-08-18T00:00:00+00:00'),
+            activeTo: new \DateTimeImmutable('2026-08-25T23:59:00+00:00'),
+        );
+    }
+
+    private function catalogProduct(int $id, float $amount, string $name = 'Producto'): array
+    {
+        return [
+            'id' => $id,
+            'name' => $name,
+            'type' => 'FIXED_VALUE_RECHARGE',
+            'is_active' => true,
+            'destination' => ['amount' => $amount, 'unit' => 'CUP'],
+            'prices' => ['wholesale' => ['amount' => $amount / 25, 'unit' => 'USD']],
+        ];
+    }
+
+    public function testFetchPromotionProductsCrossReferencesLivePromotionsAgainstFullCatalog(): void
+    {
+        // La promoción vigente (35719) referencia productos por id/name/type
+        // únicamente — sin destinationAmount, así que hay que cruzar contra
+        // fetchProducts() (iterateProducts) para obtener la tupla completa.
+        $this->client->method('iteratePromotions')->willReturn((function () {
+            yield [
+                'id' => 6999,
+                'start_date' => '2026-08-15T00:00:00.000Z',
+                'end_date' => '2026-08-31T00:00:00.000Z',
+                'products' => [['id' => 35719, 'name' => '500 CUP', 'type' => 'FIXED_VALUE_RECHARGE']],
+            ];
+        })());
+        $this->client->method('iterateProducts')->willReturn((function () {
+            yield $this->catalogProduct(35719, 500.0);
+            // Mismo monto (625), pero NO referenciado por ninguna promoción vigente.
+            yield $this->catalogProduct(35733, 625.0);
+        })());
+
+        $products = iterator_to_array($this->provider->fetchPromotionProducts($this->context(), $this->query()));
+
+        $this->assertCount(1, $products);
+        $this->assertSame('35719', $products[0]->externalId);
+    }
+
+    public function testFetchPromotionProductsExcludesPromotionsOutsideTheRequestedWindow(): void
+    {
+        $this->client->method('iteratePromotions')->willReturn((function () {
+            yield [
+                'id' => 5000,
+                'start_date' => '2026-01-01T00:00:00.000Z',
+                'end_date' => '2026-01-31T00:00:00.000Z',
+                'products' => [['id' => 35719, 'name' => '500 CUP', 'type' => 'FIXED_VALUE_RECHARGE']],
+            ];
+        })());
+        $this->client->expects($this->never())->method('iterateProducts');
+
+        $products = iterator_to_array($this->provider->fetchPromotionProducts($this->context(), $this->query()));
+
+        $this->assertCount(0, $products);
+    }
+
+    public function testFetchPromotionProductsExcludesProductsWhoseAmountDoesNotMatchAnyTramo(): void
+    {
+        $this->client->method('iteratePromotions')->willReturn((function () {
+            yield [
+                'id' => 6999,
+                'start_date' => '2026-08-15T00:00:00.000Z',
+                'end_date' => '2026-08-31T00:00:00.000Z',
+                'products' => [['id' => 99999, 'name' => '900 CUP', 'type' => 'FIXED_VALUE_RECHARGE']],
+            ];
+        })());
+        $this->client->method('iterateProducts')->willReturn((function () {
+            // 900 CUP no está entre los tramos pedidos (500, 625).
+            yield $this->catalogProduct(99999, 900.0);
+        })());
+
+        $products = iterator_to_array($this->provider->fetchPromotionProducts($this->context(), $this->query()));
+
+        $this->assertCount(0, $products);
     }
 }
