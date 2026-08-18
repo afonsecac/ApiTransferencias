@@ -238,6 +238,18 @@ class CommunicationPromotions
         return $this->product;
     }
 
+    /**
+     * true = promoción V2 (catálogo compartido, sin producto de origen —
+     * ver createV2()). false = legacy (V1). Expuesto en el listado para
+     * que el dashboard sepa qué acciones mostrar (bindings legacy vs.
+     * equivalencias V2).
+     */
+    #[Groups(['comProm:read', 'promotion:list', 'promotion:detail'])]
+    public function isV2(): bool
+    {
+        return $this->product === null;
+    }
+
     public function setProduct(?CommunicationProduct $product): static
     {
         $this->product = $product;
