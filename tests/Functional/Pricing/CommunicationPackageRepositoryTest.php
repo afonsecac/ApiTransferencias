@@ -109,4 +109,50 @@ class CommunicationPackageRepositoryTest extends FunctionalTestCase
             array_map(static fn (CommunicationPackage $p) => $p->getId(), $result),
         );
     }
+
+    public function testFindUpcomingExcludesInactivePackages(): void
+    {
+        $now = new \DateTimeImmutable();
+        $this->package(isActive: false, activeStartAt: $now->modify('+1 day'));
+        $this->em->flush();
+
+        $this->assertSame([], $this->repository()->findUpcoming($now));
+    }
+
+    public function testFindUpcomingExcludesPackagesAlreadyActive(): void
+    {
+        $now = new \DateTimeImmutable();
+        $this->package(activeStartAt: $now->modify('-1 day'));
+        $this->em->flush();
+
+        $this->assertSame([], $this->repository()->findUpcoming($now));
+    }
+
+    public function testFindUpcomingIncludesFuturePackages(): void
+    {
+        $now = new \DateTimeImmutable();
+        $future = $this->package(activeStartAt: $now->modify('+1 day'));
+        $this->em->flush();
+
+        $result = $this->repository()->findUpcoming($now);
+
+        $this->assertCount(1, $result);
+        $this->assertSame($future->getId(), $result[0]->getId());
+    }
+
+    public function testFindUpcomingOrdersByActiveStartAtThenDisplayOrderThenId(): void
+    {
+        $now = new \DateTimeImmutable();
+        $later = $this->package(activeStartAt: $now->modify('+3 days'));
+        $second = $this->package(activeStartAt: $now->modify('+1 day'), displayOrder: 10);
+        $first = $this->package(activeStartAt: $now->modify('+1 day'), displayOrder: 0);
+        $this->em->flush();
+
+        $result = $this->repository()->findUpcoming($now);
+
+        $this->assertSame(
+            [$first->getId(), $second->getId(), $later->getId()],
+            array_map(static fn (CommunicationPackage $p) => $p->getId(), $result),
+        );
+    }
 }

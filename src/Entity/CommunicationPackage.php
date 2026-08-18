@@ -29,13 +29,19 @@ use Symfony\Component\Serializer\Attribute\Groups;
  * paquetes distintos pueden compartir tupla a propósito (ej. "Recarga 500
  * CUP" y "Bono navideño 500 CUP").
  *
- * `#[ApiResource]` en URI PROPIA (V2 Fase 3) — no reemplaza todavía a
- * /communication/packages (V1, CommunicationClientPackage): ese switch por
- * cliente es una fase posterior, una vez verificado que la forma del JSON
- * es idéntica. CommunicationPackageCatalogProvider bypasea el provider
- * Doctrine estándar (PackageCatalogResolver ya decide el conjunto completo
- * de paquetes visibles, no solo su precio), así que CurrentUserExtension no
- * llega a intervenir en esta operación en absoluto.
+ * `#[ApiResource]` en URI PROPIA (V2 Fase 3): `/communication/packages/catalog`.
+ * CommunicationPackageCatalogProvider bypasea el provider Doctrine estándar
+ * (PackageCatalogResolver ya decide el conjunto completo de paquetes
+ * visibles, no solo su precio), así que CurrentUserExtension no llega a
+ * intervenir en esta operación en absoluto.
+ *
+ * Desde el switch por cliente (ver CatalogVersionResolver), esta misma
+ * entidad también se sirve bajo `/communication/packages` (la URI histórica
+ * de CommunicationClientPackage/V1) para las cuentas marcadas V2 —
+ * CommunicationClientPackageProvider/ItemProvider/UpcomingPackagesProvider
+ * delegan aquí cuando corresponde. El grupo `comPackage:read` se mantiene
+ * deliberadamente con el mismo shape que V1 (ver getPromotions() más abajo)
+ * para que ambas URLs devuelvan JSON compatible.
  */
 #[ORM\Entity(repositoryClass: CommunicationPackageRepository::class)]
 #[ORM\HasLifecycleCallbacks]
@@ -233,9 +239,13 @@ class CommunicationPackage
     private bool $isActive = true;
 
     #[ORM\Column]
+    #[Groups(['comPackage:read'])]
+    #[ApiProperty(types: 'https://scheme.org/DateTime')]
     private ?\DateTimeImmutable $activeStartAt = null;
 
     #[ORM\Column(nullable: true)]
+    #[Groups(['comPackage:read'])]
+    #[ApiProperty(types: 'https://scheme.org/DateTime')]
     private ?\DateTimeImmutable $activeEndAt = null;
 
     #[ORM\Column]
@@ -560,5 +570,45 @@ class CommunicationPackage
         $this->promotion = $promotion;
 
         return $this;
+    }
+
+    /**
+     * Paridad de shape con CommunicationClientPackage::getPromotions() — V1
+     * devuelve un array de 0 o 1 CommunicationPromotions
+     * ($promotions[] = getPromotionItems()->first()). En V2 la relación es
+     * un ManyToOne simple, así que el array se construye directo, sin
+     * filtro de ventana: un paquete de promoción solo está en el catálogo
+     * mientras su propia ventana lo esté (ver isActiveAt()/findActiveCatalog()),
+     * y en /upcoming la promoción futura es justamente lo que se quiere
+     * mostrar.
+     *
+     * @return list<CommunicationPromotions>
+     */
+    #[Groups(['comPackage:read'])]
+    public function getPromotions(): array
+    {
+        return $this->promotion !== null ? [$this->promotion] : [];
+    }
+
+    /**
+     * Vigente en el instante dado — mismo criterio que
+     * CommunicationContract::isActiveAt(), aplicado al PAQUETE (no a su
+     * contrato): PackageCatalogResolver::offersFromContracts() no filtra
+     * por esto hoy (paquetes de promociones futuras pueden colarse en el
+     * catálogo antes de tiempo si su contrato ya está vigente) — este
+     * método es lo que usan CommunicationPackageCatalogProvider y
+     * CatalogPackageVisibilityResolver para cerrar ese hueco, sin tocar la
+     * precedencia de PackageCatalogResolver.
+     */
+    public function isActiveAt(\DateTimeImmutable $now): bool
+    {
+        if (!$this->isActive) {
+            return false;
+        }
+        if ($this->activeStartAt !== null && $this->activeStartAt > $now) {
+            return false;
+        }
+
+        return $this->activeEndAt === null || $this->activeEndAt > $now;
     }
 }

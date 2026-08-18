@@ -6,10 +6,13 @@ use ApiPlatform\Metadata\Operation;
 use ApiPlatform\State\ProviderInterface;
 use App\Entity\Account;
 use App\Entity\CommunicationClientPackage;
+use App\Entity\CommunicationPackage;
 use App\Entity\CommunicationPricePackage;
 use App\Entity\Environment;
 use App\Repository\CommunicationClientPackageRepository;
 use App\Repository\CommunicationPricePackageRepository;
+use App\Repository\SysConfigRepository;
+use App\Service\Catalog\CatalogVersionResolver;
 use App\Service\PackagePriceService;
 use App\Service\Pricing\PackageMaterializationService;
 use App\Service\Pricing\PackageSalePriceResolver;
@@ -32,6 +35,9 @@ class CommunicationClientPackageProviderTest extends TestCase
     private PackageMaterializationService&MockObject $materializationService;
     private Security&MockObject $security;
     private PackageSalePriceResolver&MockObject $salePriceResolver;
+    private SysConfigRepository&MockObject $sysConfigRepo;
+    private CatalogVersionResolver $catalogVersion;
+    private ProviderInterface&MockObject $catalogProvider;
     private CommunicationClientPackageProvider $provider;
 
     protected function setUp(): void
@@ -42,6 +48,13 @@ class CommunicationClientPackageProviderTest extends TestCase
         $this->materializationService = $this->createMock(PackageMaterializationService::class);
         $this->security = $this->createMock(Security::class);
         $this->salePriceResolver = $this->createMock(PackageSalePriceResolver::class);
+        // CatalogVersionResolver es `final` — no se puede mockear con
+        // createMock(), se construye real con su única dependencia
+        // (SysConfigRepository) mockeada. Por defecto isV2() da false (sin
+        // valor cacheado), igual que en producción sin el flag seteado.
+        $this->sysConfigRepo = $this->createMock(SysConfigRepository::class);
+        $this->catalogVersion = new CatalogVersionResolver($this->sysConfigRepo);
+        $this->catalogProvider = $this->createMock(ProviderInterface::class);
 
         $this->provider = new CommunicationClientPackageProvider(
             $this->itemProvider,
@@ -50,6 +63,8 @@ class CommunicationClientPackageProviderTest extends TestCase
             $this->materializationService,
             $this->security,
             $this->salePriceResolver,
+            $this->catalogVersion,
+            $this->catalogProvider,
             $this->createMock(LoggerInterface::class),
         );
     }
@@ -179,5 +194,41 @@ class CommunicationClientPackageProviderTest extends TestCase
         $result = $this->provider->provide($this->createMock(Operation::class));
 
         $this->assertSame($materialized, $result);
+    }
+
+    public function testDelegatesToCatalogProviderWhenAccountIsV2(): void
+    {
+        $tenant = $this->accountWithEnvironment();
+        $this->security->method('getUser')->willReturn($tenant);
+        $this->sysConfigRepo->method('findCachedValue')
+            ->with(CatalogVersionResolver::DEFAULT_VERSION_KEY)
+            ->willReturn('v2');
+
+        $v2Packages = [$this->createMock(CommunicationPackage::class)];
+        $this->catalogProvider->expects($this->once())->method('provide')->willReturn($v2Packages);
+
+        $this->itemProvider->expects($this->never())->method('provide');
+        $this->materializationService->expects($this->never())->method('materializeForTenant');
+        $this->salePriceResolver->expects($this->never())->method('resolveMany');
+
+        $result = $this->provider->provide($this->createMock(Operation::class));
+
+        $this->assertSame($v2Packages, $result);
+    }
+
+    public function testKeepsLegacyPathWhenAccountIsNotV2(): void
+    {
+        $tenant = $this->accountWithEnvironment();
+        $this->security->method('getUser')->willReturn($tenant);
+        $this->sysConfigRepo->method('findCachedValue')->willReturn(null);
+
+        $collection = $this->countableCollection([$this->createMock(CommunicationClientPackage::class)]);
+        $this->itemProvider->expects($this->once())->method('provide')->willReturn($collection);
+        $this->catalogProvider->expects($this->never())->method('provide');
+        $this->salePriceResolver->expects($this->once())->method('resolveMany');
+
+        $result = $this->provider->provide($this->createMock(Operation::class));
+
+        $this->assertSame($collection, $result);
     }
 }
