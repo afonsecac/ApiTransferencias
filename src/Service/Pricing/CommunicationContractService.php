@@ -57,13 +57,13 @@ class CommunicationContractService
         $package = $this->findPackageOrFail((int) $dto->getCommunicationPackageId());
         $tenant = $this->resolveTenantOrFail($dto->getTenantId(), $dto->getEnvironmentId());
 
-        $contract = $this->upsertContract($package, $tenant)->contract;
-        $this->applyPricing($contract, (float) $dto->getPrice(), (string) $dto->getCurrency(), $dto->getStartAt(), $dto->getEndAt());
-        $this->stampCreatedBy($contract);
+        $result = $this->upsertContract($package, $tenant);
+        $this->applyPricing($result->contract, (float) $dto->getPrice(), (string) $dto->getCurrency(), $dto->getStartAt(), $dto->getEndAt(), $result->contractIsNew);
+        $this->stampCreatedBy($result->contract);
 
         $this->em->flush();
 
-        return $contract;
+        return $result->contract;
     }
 
     /**
@@ -89,7 +89,7 @@ class CommunicationContractService
 
         foreach ($accounts as $account) {
             $result = $this->upsertContract($package, $account);
-            $this->applyPricing($result->contract, (float) $dto->getPrice(), (string) $dto->getCurrency(), $dto->getStartAt(), $dto->getEndAt());
+            $this->applyPricing($result->contract, (float) $dto->getPrice(), (string) $dto->getCurrency(), $dto->getStartAt(), $dto->getEndAt(), $result->contractIsNew);
             $this->stampCreatedBy($result->contract);
 
             $result->isNew ? $created++ : $updated++;
@@ -153,7 +153,7 @@ class CommunicationContractService
                 : round($priceFrom, 2);
 
             $result = $this->upsertContract($package, $tenant);
-            $this->applyPricing($result->contract, $price, $priceCurrency, $dto->getStartAt(), $dto->getEndAt());
+            $this->applyPricing($result->contract, $price, $priceCurrency, $dto->getStartAt(), $dto->getEndAt(), $result->contractIsNew);
             $this->stampCreatedBy($result->contract);
 
             $result->isNew ? $created++ : $updated++;
@@ -208,7 +208,7 @@ class CommunicationContractService
                 : round($priceFrom, 2);
 
             $result = $this->upsertContract($package, null);
-            $this->applyPricing($result->contract, $price, $priceCurrency, $startAt, $endAt);
+            $this->applyPricing($result->contract, $price, $priceCurrency, $startAt, $endAt, $result->contractIsNew);
             $this->stampCreatedBy($result->contract);
 
             $result->isNew ? $created++ : $updated++;
@@ -398,7 +398,7 @@ class CommunicationContractService
             $this->em->persist($contract);
             $contract->addPackage($package);
 
-            return new UpsertContractResult($contract, true);
+            return new UpsertContractResult($contract, true, true);
         }
 
         $isNew = !$contract->getPackages()->contains($package);
@@ -406,19 +406,52 @@ class CommunicationContractService
             $contract->addPackage($package);
         }
 
-        return new UpsertContractResult($contract, $isNew);
+        return new UpsertContractResult($contract, $isNew, false);
     }
 
-    private function applyPricing(CommunicationContract $contract, float $price, string $currency, ?string $startAt, ?string $endAt): void
+    /**
+     * Contrato NUEVO ($contractIsNew): fija startAt/endAt tal cual los pida
+     * el caller — está estableciendo la ventana desde cero.
+     *
+     * Contrato REUTILIZADO (se le suma un paquete, o se reafirma uno que ya
+     * tenía): NUNCA lo estrecha — solo ensancha. Sin este resguardo, fusionar
+     * un paquete promocional (con endAt corto) en un contrato "por defecto"
+     * indefinido le heredaría ese endAt corto a TODO el contrato, incluido
+     * el paquete no-promocional que ya cubría — justo el efecto que este
+     * ManyToMany existe para evitar (ver docblock de CommunicationContract).
+     * Simétrico para startAt: un merge no debe retrasar el inicio de algo
+     * que ya era visible.
+     */
+    private function applyPricing(CommunicationContract $contract, float $price, string $currency, ?string $startAt, ?string $endAt, bool $contractIsNew): void
     {
         $contract->setPrice($price);
         $contract->setCurrency(strtoupper($currency));
+
+        if ($contractIsNew) {
+            if ($startAt !== null) {
+                $contract->setStartAt(self::parseUtc($startAt));
+            }
+            if ($endAt !== null) {
+                $contract->setEndAt(self::parseUtc($endAt));
+            }
+
+            return;
+        }
+
         if ($startAt !== null) {
-            $contract->setStartAt(self::parseUtc($startAt));
+            $newStart = self::parseUtc($startAt);
+            if ($contract->getStartAt() === null || $newStart < $contract->getStartAt()) {
+                $contract->setStartAt($newStart);
+            }
         }
-        if ($endAt !== null) {
-            $contract->setEndAt(self::parseUtc($endAt));
+        if ($endAt !== null && $contract->getEndAt() !== null) {
+            $newEnd = self::parseUtc($endAt);
+            if ($newEnd > $contract->getEndAt()) {
+                $contract->setEndAt($newEnd);
+            }
         }
+        // $contract->getEndAt() === null (indefinido) nunca se estrecha,
+        // pase lo que pase en $endAt.
     }
 
     /**

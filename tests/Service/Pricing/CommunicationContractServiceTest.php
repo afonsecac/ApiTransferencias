@@ -227,6 +227,60 @@ class CommunicationContractServiceTest extends TestCase
         $this->assertTrue($contractB->getPackages()->contains($packageB));
     }
 
+    /**
+     * Fusionar un segundo paquete (ej. promocional) en un contrato "por
+     * defecto" ya existente e indefinido (endAt NULL) NO debe heredar el
+     * endAt corto del segundo alta — o el paquete original (no
+     * promocional) también dejaría de verse cuando el segundo expire. Este
+     * es exactamente el hallazgo que motivó todo el rediseño ManyToMany:
+     * sin este resguardo, fusionar reintroduce el mismo tipo de ocultación
+     * transitoria del catálogo normal que se intentaba evitar.
+     */
+    public function testMergingASecondPackageWithAShorterEndAtDoesNotShrinkTheExistingContractsWindow(): void
+    {
+        $packageA = $this->package(1);
+        $packageB = $this->package(2);
+
+        $packageRepo = $this->createMock(EntityRepository::class);
+        $packageRepo->method('find')->willReturnCallback(
+            static fn (int $id) => match ($id) {
+                1 => $packageA,
+                2 => $packageB,
+                default => null,
+            }
+        );
+        $this->em->method('getRepository')->with(CommunicationPackage::class)->willReturn($packageRepo);
+        $this->em->method('persist')->willReturnCallback(fn ($e) => $this->assignId($e, 1));
+
+        // Contrato "por defecto" indefinido (sin endAt) para el catálogo normal.
+        $dtoA = new CreateCommunicationContractDto(communicationPackageId: 1, price: 8.0, currency: 'USD');
+        $this->contractRepository->method('findOpenContract')->willReturn(null);
+        $contractA = $this->service->createSingle($dtoA);
+        $this->assertNull($contractA->getEndAt());
+
+        // Un segundo alta (ej. una promoción) sobre la misma tupla, con un
+        // endAt corto — findOpenContract ahora "encuentra" el contrato A.
+        $this->contractRepository = $this->createMock(CommunicationContractRepository::class);
+        $this->contractRepository->method('findOpenContract')->willReturn($contractA);
+        $this->service = new CommunicationContractService(
+            $this->em,
+            $this->targetAccountResolver,
+            $this->security,
+            $this->packageRepository,
+            $this->contractRepository,
+        );
+
+        $dtoB = new CreateCommunicationContractDto(communicationPackageId: 2, price: 9.0, currency: 'USD', endAt: '2026-08-25T00:00:00+00:00');
+        $contractB = $this->service->createSingle($dtoB);
+
+        $this->assertSame($contractA, $contractB);
+        $this->assertCount(2, $contractB->getPackages());
+        // El endAt corto de la fusión NO se aplicó — sigue indefinido.
+        $this->assertNull($contractB->getEndAt());
+        // El precio SÍ se actualiza — es la tupla compartida la que decide el precio.
+        $this->assertSame(9.0, $contractB->getPrice());
+    }
+
     public function testCreateSingleStampsCreatedByFromSecurity(): void
     {
         $dto = new CreateCommunicationContractDto(communicationPackageId: 1, price: 8.0, currency: 'USD');
