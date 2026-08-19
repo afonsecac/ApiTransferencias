@@ -3,6 +3,7 @@
 namespace App\Tests\Functional\Pricing;
 
 use App\Entity\CommunicationPackage;
+use App\Entity\CommunicationPromotions;
 use App\Repository\CommunicationPackageRepository;
 use App\Tests\Functional\FunctionalTestCase;
 
@@ -154,5 +155,63 @@ class CommunicationPackageRepositoryTest extends FunctionalTestCase
             [$first->getId(), $second->getId(), $later->getId()],
             array_map(static fn (CommunicationPackage $p) => $p->getId(), $result),
         );
+    }
+
+    private function promotion(\DateTimeImmutable $startAt, \DateTimeImmutable $endAt): CommunicationPromotions
+    {
+        self::$counter++;
+        $promotion = (new CommunicationPromotions())
+            ->setName("Promo {$this::$counter}")
+            ->setDescription("Promo {$this::$counter}")
+            ->setStartAt($startAt)
+            ->setEndAt($endAt);
+
+        $this->em->persist($promotion);
+
+        return $promotion;
+    }
+
+    public function testFindFutureForReserveReturnsPackageWhenPromotionHasNotStarted(): void
+    {
+        $now = new \DateTimeImmutable();
+        $promotion = $this->promotion($now->modify('+1 day'), $now->modify('+30 days'));
+        $package = $this->package(activeStartAt: $now->modify('+1 day'))->setPromotion($promotion);
+        $this->em->flush();
+
+        $result = $this->repository()->findFutureForReserve($package->getId(), $promotion->getId(), $now);
+
+        $this->assertNotNull($result);
+        $this->assertSame($package->getId(), $result->getId());
+    }
+
+    public function testFindFutureForReserveReturnsNullWhenPromotionAlreadyStarted(): void
+    {
+        $now = new \DateTimeImmutable();
+        $promotion = $this->promotion($now->modify('-1 day'), $now->modify('+30 days'));
+        $package = $this->package(activeStartAt: $now->modify('-1 day'))->setPromotion($promotion);
+        $this->em->flush();
+
+        $this->assertNull($this->repository()->findFutureForReserve($package->getId(), $promotion->getId(), $now));
+    }
+
+    public function testFindFutureForReserveReturnsNullWhenPackageBelongsToAnotherPromotion(): void
+    {
+        $now = new \DateTimeImmutable();
+        $promotion = $this->promotion($now->modify('+1 day'), $now->modify('+30 days'));
+        $otherPromotion = $this->promotion($now->modify('+1 day'), $now->modify('+30 days'));
+        $package = $this->package(activeStartAt: $now->modify('+1 day'))->setPromotion($promotion);
+        $this->em->flush();
+
+        $this->assertNull($this->repository()->findFutureForReserve($package->getId(), $otherPromotion->getId(), $now));
+    }
+
+    public function testFindFutureForReserveReturnsNullWhenPackageHasNoPromotion(): void
+    {
+        $now = new \DateTimeImmutable();
+        $promotion = $this->promotion($now->modify('+1 day'), $now->modify('+30 days'));
+        $package = $this->package(activeStartAt: $now->modify('+1 day'));
+        $this->em->flush();
+
+        $this->assertNull($this->repository()->findFutureForReserve($package->getId(), $promotion->getId(), $now));
     }
 }

@@ -206,18 +206,33 @@ class CommunicationSaleService extends CommonService
             $reserveDto->getPromotionId(),
             $reserveDto->getPackageId()
         );
+
+        // getFuturePromotionById() solo cubre CommunicationClientPackage
+        // (V1, ver su JOIN con CommunicationPromotions::$products) — una
+        // promoción V2 nunca la resuelve así, sus paquetes son
+        // CommunicationPackage con ManyToOne directo a la promoción (Fase
+        // 5, ver CommunicationPackageRepository::findFutureForReserve()).
+        $catalogPackage = null;
+        if ($promotion === null) {
+            /** @var \App\Repository\CommunicationPackageRepository $packageRepo */
+            $packageRepo = $this->em->getRepository(CommunicationPackage::class);
+            $catalogPackage = $packageRepo->findFutureForReserve(
+                $reserveDto->getPackageId(),
+                $reserveDto->getPromotionId(),
+            );
+            $promotion = $catalogPackage?->getPromotion();
+        }
+
         if (is_null($promotion)) {
             throw new MyCurrentException('COM007', 'The promotion is not active to reserves');
         }
 
-        // Reserve siempre trae promoción hoy (el DTO la exige) y las
-        // promociones V2 todavía no existen (ver Fase 5 del plan) — pasar
-        // $promotion fuerza la rama legacy en admit() sin importar
-        // CatalogVersionResolver::isV2(). El proveedor se resuelve por
-        // prioridad de cliente + vínculo promoción→producto (ver
-        // PromotionProviderDispatchResolver) y se congela ANTES de
-        // construir la venta.
-        $admission = $this->admit($user, $reserveDto->getPackageId(), 'recharge', forReserve: true, promotion: $promotion);
+        // El proveedor se resuelve por prioridad de cliente + vínculo
+        // promoción→producto (ver PromotionProviderDispatchResolver,
+        // agnóstico V1/V2) y se congela ANTES de construir la venta.
+        $admission = $catalogPackage !== null
+            ? $this->admitV2ForReserve($user, $catalogPackage, $promotion)
+            : $this->admit($user, $reserveDto->getPackageId(), 'recharge', forReserve: true, promotion: $promotion);
 
         $recharge = new CommunicationSaleRecharge();
         $recharge->setTenant($user);
@@ -474,10 +489,9 @@ class CommunicationSaleService extends CommonService
                     return;
                 }
                 if ($isV2Sale) {
-                    // Snapshot ya persistido en admit() (ver admitV2()) —
-                    // nunca se re-deriva, y V2 todavía no soporta
-                    // promociones (Fase 5), así que no hay sustitución de
-                    // productCode que aplicar aquí.
+                    // Snapshot ya persistido en admisión (admitV2() para
+                    // compra directa, admitV2ForReserve() para reserva de
+                    // promoción V2 — Fase 5) — nunca se re-deriva aquí.
                     $productCode = $saleRecharge->getDispatchExternalRef();
                     $destination = (object) [
                         'amount' => $saleRecharge->getDestinationAmount(),
@@ -931,11 +945,10 @@ class CommunicationSaleService extends CommonService
      * ProviderDispatchResolver::select(), devolviendo el snapshot que
      * applyAdmission() persistirá en la venta.
      *
-     * $promotion no nulo fuerza SIEMPRE la rama legacy, sin importar
-     * isV2(): las promociones V2 no existen todavía (Fase 5) y
-     * processReserve() hoy exige promoción en el 100% de los casos (el DTO
-     * la hace obligatoria) — este parámetro es lo que mantiene su rama V2
-     * inerte hasta que Fase 5 dé de alta el equivalente.
+     * $promotion no nulo fuerza SIEMPRE la rama legacy: esto es exclusivo
+     * del reserve V1. processReserve() resuelve el reserve V2 aparte, vía
+     * admitV2ForReserve() (Fase 5), sin pasar por aquí en absoluto — ver
+     * su propio docblock.
      *
      * @throws MyCurrentException
      */
@@ -1023,6 +1036,38 @@ class CommunicationSaleService extends CommonService
         // si ningún proveedor disponible de la prioridad del cliente cubre
         // la tupla — ver ProviderDispatchResolver.
         $dispatch = $this->dispatchResolver->select($user, $package, $saleType);
+
+        return new CommunicationSaleAdmission(
+            provider: $dispatch->provider->value,
+            amount: $offer->price,
+            currency: $offer->currency,
+            catalogPackage: $package,
+            dispatchProduct: $dispatch->product,
+            dispatchExternalRef: $dispatch->externalRef,
+            destinationAmount: $package->getDestinationAmount(),
+            destinationCurrency: $package->getDestinationCurrency(),
+        );
+    }
+
+    /**
+     * V2 Fase 5 — equivalente de admitLegacy() cuando processReserve()
+     * resuelve un CommunicationPackage de una promoción V2 aún futura (ver
+     * CommunicationPackageRepository::findFutureForReserve()). A diferencia
+     * de admitV2(), NO exige isPackageWithinActiveWindow(): el paquete
+     * todavía no está vigente por diseño, es justo lo que se está
+     * reservando. El precio se resuelve igual (offerForSale() solo mira el
+     * contrato, nunca la ventana activa del paquete — ver el docblock de
+     * PackageCatalogResolver), y el proveedor se resuelve a nivel de
+     * PROMOCIÓN (no de paquete) con el mismo mecanismo que ya usa el
+     * reserve legacy — PromotionProviderDispatchResolver es agnóstico de
+     * V1/V2.
+     *
+     * @throws MyCurrentException
+     */
+    private function admitV2ForReserve(Account $user, CommunicationPackage $package, CommunicationPromotions $promotion): CommunicationSaleAdmission
+    {
+        $offer = $this->packageCatalogResolver->offerForSale($package, $user);
+        $dispatch = $this->promotionDispatchResolver->select($user, $promotion);
 
         return new CommunicationSaleAdmission(
             provider: $dispatch->provider->value,
