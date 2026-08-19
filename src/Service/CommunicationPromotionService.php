@@ -3,8 +3,9 @@
 namespace App\Service;
 
 use App\DTO\CreateAdminPromotionDto;
+use App\DTO\CreateCommunicationPackageBatchDto;
+use App\DTO\CreatePromotionV2Dto;
 use App\DTO\UpdatePromotionDto;
-use App\Entity\Account;
 use App\Entity\CommunicationClientPackage;
 use App\Entity\CommunicationPrice;
 use App\Entity\CommunicationPricePackage;
@@ -17,6 +18,10 @@ use App\Exception\MyCurrentException;
 use App\Message\PromotionCreatedMessage;
 use App\Repository\EnvironmentRepository;
 use App\Repository\SysConfigRepository;
+use App\Service\Pricing\CommunicationContractService;
+use App\Service\Pricing\CommunicationPackageAdminService;
+use App\Service\Pricing\CommunicationPromotionEquivalenceService;
+use App\Service\Pricing\TargetAccountResolver;
 use Doctrine\ORM\EntityManagerInterface;
 use Psr\Log\LoggerInterface;
 use Symfony\Bundle\SecurityBundle\Security;
@@ -39,6 +44,10 @@ class CommunicationPromotionService extends CommonService
         SysConfigRepository $sysConfigRepo,
         SerializerInterface $serializer,
         private readonly MessageBusInterface $messageBus,
+        private readonly TargetAccountResolver $targetAccountResolver,
+        private readonly CommunicationPackageAdminService $packageAdminService,
+        private readonly CommunicationContractService $contractService,
+        private readonly CommunicationPromotionEquivalenceService $equivalenceService,
     ) {
         parent::__construct($em, $security, $parameters, $mailer, $logger, $passwordHasher, $environmentRepository, $sysConfigRepo, $serializer);
     }
@@ -142,19 +151,10 @@ class CommunicationPromotionService extends CommonService
         // Flush para asignar IDs a los precios nuevos
         $this->em->flush();
 
-        // 2. Obtener las cuentas (tenants) del environment
-        $accountCriteria = [
-            'environment' => $environment,
-            'isActive' => true,
-        ];
-        $accounts = $this->em->getRepository(Account::class)->findBy($accountCriteria);
-
-        // Si se pasan client IDs, filtrar solo esas cuentas
-        if (!empty($clientIds)) {
-            $accounts = array_filter($accounts, function (Account $account) use ($clientIds) {
-                return in_array($account->getClient()?->getId(), $clientIds, true);
-            });
-        }
+        // 2. Obtener las cuentas (tenants) del environment — clientIds vacío
+        // = todas las activas; con ids, solo esas (ver TargetAccountResolver,
+        // reutilizado también por PackageContractService en modo "rate").
+        $accounts = $this->targetAccountResolver->resolve($environment, $clientIds);
 
         if (empty($accounts)) {
             $this->logger->warning('createPackagesForPromotion: no hay cuentas activas para el environment', [
@@ -403,5 +403,97 @@ class CommunicationPromotionService extends CommonService
         $this->em->flush();
 
         return $promotion;
+    }
+
+    /**
+     * Alta de promoción V2 (Fase 5B, catálogo compartido) — genera un
+     * CommunicationPackage por cada monto de [amountFrom, amountTo] (paso
+     * amountStep), marcado con esta promoción y vigente SOLO durante
+     * [startAt, endAt]. A diferencia de createPackagesForPromotion()
+     * (legacy), no depende de un producto de origen ni genera nada por
+     * cliente — la visibilidad la decide PackageCatalogResolver como a
+     * cualquier paquete V2.
+     *
+     * NO crea contrato: el precio es responsabilidad exclusiva del flujo
+     * de CommunicationContract (aparte, ver CommunicationContractService)
+     * — createV2() solo vincula los contratos propios que un tenant YA
+     * tenga sobre el paquete regular equivalente (linkTenantContracts
+     * ToPromotionPackages()), para que la promoción no quede oculta para
+     * quien ya compraba ese paquete (ver PackageCatalogResolver::
+     * catalogFor()). Un paquete sin ningún contrato propio vinculado
+     * queda visible igual, al precio derivado del catálogo (MAX de
+     * producto + margen), hasta que se le cree un contrato a mano.
+     *
+     * Las equivalencias por proveedor (quién despacha cada tramo) se
+     * auto-pueblan al final vía CommunicationPromotionEquivalenceService
+     * (Fase 5D) — cada proveedor con capacidad de auto-poblado
+     * (ProviderPromotionCatalogInterface) cubre los tramos que pueda; los
+     * huecos quedan reportados en el resultado para curar a mano. Sin
+     * equivalencia (ni automática ni manual), ese proveedor no despacha el
+     * tramo (ProviderDispatchResolver en modo estricto para paquetes de
+     * promoción).
+     *
+     * @throws MyCurrentException
+     */
+    public function createV2(CreatePromotionV2Dto $dto): CreatePromotionV2Result
+    {
+        $environment = $this->em->getRepository(Environment::class)->find($dto->getEnvironmentId());
+        if ($environment === null) {
+            throw new MyCurrentException('ENVIRONMENT_NOT_FOUND', 'Environment not found', 404);
+        }
+
+        try {
+            $startAt = new \DateTimeImmutable((string) $dto->getStartAt());
+            $endAt = new \DateTimeImmutable((string) $dto->getEndAt());
+        } catch (\Exception) {
+            throw new MyCurrentException('INVALID_DATE', 'Invalid date format', 400);
+        }
+
+        $promotion = new CommunicationPromotions();
+        $promotion->setName((string) $dto->getName());
+        $promotion->setDescription((string) $dto->getDescription());
+        $promotion->setEnvironment($environment);
+        $promotion->setStartAt($startAt);
+        $promotion->setEndAt($endAt);
+        if ($dto->getKnowMore() !== null) {
+            $promotion->setKnowMore($dto->getKnowMore());
+        }
+        if ($dto->getInfoDescription() !== null) {
+            $promotion->setInfoDescription($dto->getInfoDescription());
+        }
+
+        $this->em->persist($promotion);
+        $this->em->flush();
+
+        $batchDto = new CreateCommunicationPackageBatchDto(
+            nameTemplate: (string) $dto->getPackageNameTemplate(),
+            descriptionTemplate: (string) $dto->getPackageDescriptionTemplate(),
+            knowMore: $dto->getKnowMore(),
+            fromAmount: $dto->getAmountFrom(),
+            toAmount: $dto->getAmountTo(),
+            step: $dto->getAmountStep(),
+            destinationCurrency: $dto->getDestinationCurrency(),
+            isActive: true,
+            activeStartAt: $dto->getStartAt(),
+            activeEndAt: $dto->getEndAt(),
+            displayOrder: $dto->getDisplayOrder(),
+            benefits: $dto->getBenefits(),
+            tags: $dto->getTags(),
+            service: $dto->getService(),
+            validity: $dto->getValidity(),
+        );
+
+        $packages = $this->packageAdminService->createBatch($batchDto);
+
+        foreach ($packages as $package) {
+            $package->setPromotion($promotion);
+        }
+        $this->em->flush();
+
+        $tenantContractsLinked = $this->contractService->linkTenantContractsToPromotionPackages($packages);
+
+        $equivalences = $this->equivalenceService->populateEquivalences($promotion, $packages);
+
+        return new CreatePromotionV2Result($promotion, $packages, $tenantContractsLinked, $equivalences);
     }
 }

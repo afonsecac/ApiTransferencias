@@ -119,6 +119,41 @@ class DTOneHttpClient
     }
 
     /**
+     * GET /v1/promotions — campañas de DTOne (esquema verificado contra
+     * https://developers.dtone.com/reference/getpromotions el 2026-08-18):
+     * array plano (NO envuelto en "data"), paginado con los MISMOS headers
+     * que /v1/products (X-Total-Pages). Cada promoción trae
+     * `{id, title, description, terms, start_date, end_date, operator,
+     * products: [{id, name, description, type}]}` — OJO: `products[]` NO
+     * trae destinationAmount/benefits, solo id/name/description/type; para
+     * esos datos hay que cruzar contra fetchProducts() (ver
+     * DTOneCommunicationProvider::fetchPromotionProducts()).
+     *
+     * @param array<string, mixed> $query
+     * @return iterable<array<string, mixed>>
+     */
+    public function iteratePromotions(ProviderContext $context, array $query = []): iterable
+    {
+        $page = 1;
+        $query['per_page'] ??= 100;
+
+        do {
+            $response = $this->requestRaw($context, 'GET', '/v1/promotions', null, $query + ['page' => $page]);
+            $body = json_decode($response->getContent(), true);
+
+            foreach ((array) ($body['data'] ?? $body) as $item) {
+                if (is_array($item)) {
+                    yield $item;
+                }
+            }
+
+            $headers = $response->getHeaders();
+            $totalPages = isset($headers['x-total-pages'][0]) ? (int) $headers['x-total-pages'][0] : 1;
+            $page++;
+        } while ($page <= $totalPages);
+    }
+
+    /**
      * GET /v1/balances — nuestro saldo con DTOne, multi-moneda.
      *
      * @return array<string, mixed>

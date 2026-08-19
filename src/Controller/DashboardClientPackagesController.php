@@ -19,6 +19,7 @@ use App\Entity\User;
 use App\Exception\MyCurrentException;
 use App\OpenApi\Attribute\DashboardEndpoint;
 use App\Service\CommunicationPackageService;
+use App\Service\Pricing\PackageSalePriceResolver;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\QueryBuilder;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -53,6 +54,7 @@ class DashboardClientPackagesController extends AbstractController
         private readonly EntityManagerInterface $em,
         private readonly Security $security,
         private readonly CommunicationPackageService $packageService,
+        private readonly PackageSalePriceResolver $salePriceResolver,
     ) {
     }
 
@@ -302,6 +304,18 @@ class DashboardClientPackagesController extends AbstractController
 
     private function applyPackageFilters(QueryBuilder $qb, Request $request): void
     {
+        // Selector de "paquete referencia" del formulario de contratos: no
+        // tiene tenant/cliente, así que applyClientFilter (que filtra o
+        // fuerza por cliente) no aplica — se excluiría todo por accidente.
+        if ($request->query->getBoolean('referenceOnly')) {
+            $qb->andWhere('cp.tenant IS NULL');
+            if ($search = $request->query->get('search')) {
+                $qb->andWhere('cp.name LIKE :s')->setParameter('s', "%{$search}%");
+            }
+
+            return;
+        }
+
         $this->applyClientFilter($qb, 'c', $request);
         $this->applyActivePackageFilter($qb, 'cp');
 
@@ -398,6 +412,36 @@ class DashboardClientPackagesController extends AbstractController
                 'id' => $cp->getTenant()?->getId(),
                 'clientName' => $cp->getTenant()?->getClient()?->getCompanyName(),
             ],
+            // Necesario en el frontend para excluir del selector de alta los
+            // productos que ya tienen un paquete referencia (índice único
+            // parcial uniq_ccp_reference_product) — sin esto, un admin puede
+            // elegir un producto ya usado y el alta se rechaza con 409.
+            'product' => $cp->resolveProduct() ? [
+                'id' => $cp->resolveProduct()->getId(),
+                'description' => $cp->resolveProduct()->getDescription(),
+            ] : null,
+            // El paquete referencia (tenant null) no tiene cuenta para
+            // resolver contra — su precio "real" se decide en la pantalla
+            // de contratos (Fase 3), aquí queda null a propósito.
+            'effectivePrice' => $this->resolveEffectivePrice($cp),
+        ];
+    }
+
+    private function resolveEffectivePrice(CommunicationClientPackage $cp): ?array
+    {
+        $tenant = $cp->getTenant();
+        if ($tenant === null) {
+            return null;
+        }
+
+        $resolved = $this->salePriceResolver->resolve($cp, $tenant);
+
+        return [
+            'amount' => $resolved->amount,
+            'currency' => $resolved->currency,
+            'source' => $resolved->source->value,
+            'contractId' => $resolved->contractId,
+            'note' => $resolved->note,
         ];
     }
 

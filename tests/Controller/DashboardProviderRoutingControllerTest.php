@@ -23,6 +23,7 @@ use App\Repository\SysConfigRepository;
 use App\Service\Provider\CurrencyExchangeRateSyncService;
 use App\Service\Provider\ProviderAvailabilityService;
 use App\Service\Provider\ProviderConnectionTestService;
+use App\Provider\ProviderCredentialsResolver;
 use App\Service\Provider\ProviderCredentialsAdminService;
 use App\Service\ProviderRoutingAdminService;
 use Doctrine\ORM\Query;
@@ -63,8 +64,9 @@ class DashboardProviderRoutingControllerTest extends TestCase
         $etecsa->method('getCode')->willReturn(CommunicationProviderEnum::ETECSA);
         $etecsa->method('getCapabilities')->willReturn([ProviderCapabilityEnum::RECHARGE, ProviderCapabilityEnum::PACKAGE_SALE]);
 
-        // ProviderRegistry es `final`: se instancia real, no se dobla.
+        // ProviderRegistry y ProviderCredentialsResolver son `final`: se instancian reales, no se doblan.
         $registry = new ProviderRegistry([$etecsa]);
+        $credentialsResolver = new ProviderCredentialsResolver($this->sysConfigRepo, $registry);
 
         $this->controller = new DashboardProviderRoutingController(
             $this->routingRepo,
@@ -76,6 +78,7 @@ class DashboardProviderRoutingControllerTest extends TestCase
             $this->credentialsAdminService,
             $this->connectionTestService,
             $this->availabilityService,
+            $credentialsResolver,
         );
 
         $container = $this->createMock(ContainerInterface::class);
@@ -115,8 +118,50 @@ class DashboardProviderRoutingControllerTest extends TestCase
 
         $this->assertCount(1, $data['providers']);
         $this->assertSame('ETECSA', $data['providers'][0]['code']);
+        $this->assertTrue($data['providers'][0]['enabledTest']);
+        $this->assertTrue($data['providers'][0]['enabledProd']);
         $this->assertTrue($data['routingEnabled']);
         $this->assertSame('ETECSA', $data['defaultProvider']);
+    }
+
+    public function testListProvidersMarksProviderDisabledForEnvironmentWithoutCredentials(): void
+    {
+        // Sin claves configuradas para PROD (findCachedValue devuelve null
+        // salvo el interruptor manual, que no está apagado) — pero
+        // getConfigSchema() del stub por defecto es [], así que forzamos un
+        // campo requerido para que isFullyConfigured() distinga TEST/PROD.
+        $etecsaWithSchema = $this->createMock(CommunicationProviderInterface::class);
+        $etecsaWithSchema->method('getCode')->willReturn(CommunicationProviderEnum::ETECSA);
+        $etecsaWithSchema->method('getCapabilities')->willReturn([]);
+        $field = new \App\Provider\Contract\ProviderConfigField('apiKey', 'API Key', true, true);
+        $etecsaWithSchema->method('getConfigSchema')->willReturn([$field]);
+
+        $registry = new ProviderRegistry([$etecsaWithSchema]);
+        $credentialsResolver = new ProviderCredentialsResolver($this->sysConfigRepo, $registry);
+        $this->controller = new DashboardProviderRoutingController(
+            $this->routingRepo,
+            $this->adminService,
+            $registry,
+            $this->sysConfigRepo,
+            $this->exchangeRateSyncService,
+            $this->exchangeRateRepo,
+            $this->credentialsAdminService,
+            $this->connectionTestService,
+            $this->availabilityService,
+            $credentialsResolver,
+        );
+        $container = $this->createMock(ContainerInterface::class);
+        $container->method('has')->willReturn(false);
+        $this->controller->setContainer($container);
+
+        $this->sysConfigRepo->method('findCachedValue')
+            ->willReturnCallback(fn (string $key) => $key === 'provider.etecsa.test.apiKey' ? 'secret' : null);
+
+        $response = $this->controller->listProviders();
+        $data = json_decode($response->getContent(), true);
+
+        $this->assertTrue($data['providers'][0]['enabledTest']);
+        $this->assertFalse($data['providers'][0]['enabledProd']);
     }
 
     public function testListProvidersReflectsKillSwitchDisabled(): void

@@ -95,6 +95,15 @@ final class CurrentUserExtension implements QueryCollectionExtensionInterface, Q
                 $queryBuilder->andWhere(sprintf('%s.tenant = :current_user', $rootAlias))
                     ->andWhere(sprintf('%s.removedAt IS NULL', $rootAlias))
                     ->setParameter('current_user', $user->getId());
+            } elseif (CommunicationPackage::class === $resourceClass) {
+                // Catálogo agnóstico de proveedor (V2): no tiene tenant
+                // propio, así que el filtro por defecto de abajo
+                // ("tenant = :current_user") no aplicaría — reventaría con
+                // un campo inexistente. La visibilidad real la decide
+                // PackageCatalogResolver, no esta extensión (de hecho, hoy
+                // ni siquiera llega a ejecutarse para esta operación:
+                // CommunicationPackageCatalogProvider bypasea el provider
+                // Doctrine estándar). Se deja sin filtro a propósito.
             } else {
                 $queryBuilder->andWhere(sprintf('%s.tenant = :current_user', $rootAlias))
                     ->setParameter('current_user', $user->getId());

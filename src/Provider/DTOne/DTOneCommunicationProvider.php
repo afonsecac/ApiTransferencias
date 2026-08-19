@@ -15,8 +15,10 @@ use App\Provider\Contract\ProviderConfigField;
 use App\Provider\Contract\ProviderContext;
 use App\Provider\Contract\ProviderDispatchResult;
 use App\Provider\Contract\ProviderProductDto;
+use App\Provider\Contract\ProviderPromotionCatalogInterface;
 use App\Provider\Contract\ProviderStatusQuery;
 use App\Provider\Contract\ProviderStatusResult;
+use App\Provider\Contract\PromotionCatalogQuery;
 use App\Provider\Contract\RechargeProviderInterface;
 use App\Provider\Contract\RechargeRequest;
 use Psr\Log\LoggerInterface;
@@ -53,7 +55,8 @@ final class DTOneCommunicationProvider implements
     RechargeProviderInterface,
     PackageSaleProviderInterface,
     ProviderBalanceInterface,
-    ProviderCatalogInterface
+    ProviderCatalogInterface,
+    ProviderPromotionCatalogInterface
 {
     /**
      * Valores de `type` (clasificación de producto de DTOne) soportados hoy
@@ -293,6 +296,82 @@ final class DTOneCommunicationProvider implements
                 ], static fn ($v) => $v !== null),
             );
         }
+    }
+
+    /**
+     * GET /v1/promotions filtrado por solapamiento de ventana con la
+     * promoción nuestra — a diferencia de fetchProducts() (catálogo
+     * completo), esto SOLO devuelve productos que de verdad pertenecen a
+     * una campaña vigente de DTOne. `products[]` de cada promoción trae
+     * únicamente {id, name, description, type} (sin destinationAmount ni
+     * benefits — esquema verificado, ver DTOneHttpClient::iteratePromotions()),
+     * así que se cruza contra fetchProducts() para obtener el
+     * ProviderProductDto completo de cada match, y se filtra el resultado
+     * final por los montos de los tramos de la promoción — nunca se
+     * devuelve un producto de una campaña vigente que no cubre ningún
+     * tramo pedido.
+     */
+    public function fetchPromotionProducts(ProviderContext $context, PromotionCatalogQuery $query): iterable
+    {
+        $matchedProductIds = [];
+        foreach ($this->client->iteratePromotions($context, ['country_iso_code' => self::COUNTRY_ISO_CODE]) as $promotion) {
+            if (!$this->promotionOverlapsWindow($promotion, $query)) {
+                continue;
+            }
+
+            foreach ((array) ($promotion['products'] ?? []) as $product) {
+                if (isset($product['id'])) {
+                    $matchedProductIds[(string) $product['id']] = true;
+                }
+            }
+        }
+
+        if ($matchedProductIds === []) {
+            return;
+        }
+
+        foreach ($this->fetchProducts($context) as $product) {
+            if (!isset($matchedProductIds[$product->externalId])) {
+                continue;
+            }
+            if ($this->matchesAnyTramo($product, $query)) {
+                yield $product;
+            }
+        }
+    }
+
+    /**
+     * @param array<string, mixed> $promotion
+     */
+    private function promotionOverlapsWindow(array $promotion, PromotionCatalogQuery $query): bool
+    {
+        try {
+            $start = isset($promotion['start_date']) ? new \DateTimeImmutable((string) $promotion['start_date']) : null;
+            $end = isset($promotion['end_date']) ? new \DateTimeImmutable((string) $promotion['end_date']) : null;
+        } catch (\Exception) {
+            return false;
+        }
+
+        if ($start !== null && $start > $query->activeTo) {
+            return false;
+        }
+
+        return $end === null || $end >= $query->activeFrom;
+    }
+
+    private function matchesAnyTramo(ProviderProductDto $product, PromotionCatalogQuery $query): bool
+    {
+        if ($product->destinationAmount === null || strtoupper((string) $product->destinationUnit) !== strtoupper($query->destinationCurrency)) {
+            return false;
+        }
+
+        foreach ($query->destinationAmounts as $amount) {
+            if (abs($product->destinationAmount - $amount) < 0.005) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

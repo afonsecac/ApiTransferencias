@@ -23,6 +23,9 @@ use App\Service\CommunicationSaleService;
 use App\Service\ConfigureSequenceService;
 use App\Service\HistoricalSaleService;
 use App\Service\NotificationCenterService;
+use App\Service\Pricing\PackageSalePriceResolver;
+use App\Service\Pricing\PriceSourceEnum;
+use App\Service\Pricing\ResolvedSalePrice;
 use App\Service\Provider\ProviderAvailabilityService;
 use App\Provider\ProviderContextFactory;
 use App\Provider\ProviderRegistry;
@@ -56,6 +59,7 @@ class CommunicationSaleServiceProviderGuardTest extends TestCase
     private SysConfigRepository&MockObject $sysConfigRepo;
     private BalanceService&MockObject $balanceService;
     private ProviderAvailabilityService&MockObject $availabilityService;
+    private PackageSalePriceResolver&MockObject $salePriceResolver;
     private CommunicationSaleService $service;
 
     protected function setUp(): void
@@ -66,6 +70,14 @@ class CommunicationSaleServiceProviderGuardTest extends TestCase
         $this->sysConfigRepo = $this->createMock(SysConfigRepository::class);
         $this->balanceService = $this->createMock(BalanceService::class);
         $this->availabilityService = $this->createMock(ProviderAvailabilityService::class);
+        // No es lo que este test cubre (ver el @covers de la clase): el
+        // guard de admisión corre ANTES de resolver el precio en las tres
+        // rutas, así que un valor fijo basta para los casos que sí llegan a
+        // resolveForSale().
+        $this->salePriceResolver = $this->createMock(PackageSalePriceResolver::class);
+        $this->salePriceResolver->method('resolveForSale')->willReturn(
+            new ResolvedSalePrice(10.0, 'USD', PriceSourceEnum::PRODUCT),
+        );
 
         $parameters = $this->createMock(ParameterBagInterface::class);
         $mailer = $this->createMock(MailerInterface::class);
@@ -105,6 +117,11 @@ class CommunicationSaleServiceProviderGuardTest extends TestCase
             $this->balanceService,
             $notificationCenter,
             $this->availabilityService,
+            $this->salePriceResolver,
+            new \App\Service\Catalog\CatalogVersionResolver($this->sysConfigRepo),
+            $this->createMock(\App\Service\Pricing\PackageCatalogResolver::class),
+            $this->createMock(\App\Provider\ProviderDispatchResolver::class),
+            $this->createMock(\App\Provider\PromotionProviderDispatchResolver::class),
         );
     }
 
@@ -150,6 +167,11 @@ class CommunicationSaleServiceProviderGuardTest extends TestCase
 
         $package = $this->createMock(CommunicationClientPackage::class);
         $package->method('getPriceClientPackage')->willReturn($pricePackage);
+        // resolveProduct() es un método real de la entidad (prioriza el
+        // contrato congelado, ver Entity/CommunicationClientPackage.php) —
+        // al mockear la clase entera hay que stubearlo explícitamente, no
+        // basta con stubear getPriceClientPackage()/getProduct().
+        $package->method('resolveProduct')->willReturn($product);
         $package->method('getAmount')->willReturn($amount);
         $package->method('getCurrency')->willReturn($currency);
         $package->method('getPromotionItems')->willReturn(new \Doctrine\Common\Collections\ArrayCollection());
@@ -246,6 +268,7 @@ class CommunicationSaleServiceProviderGuardTest extends TestCase
         $pricePackage->method('getProduct')->willReturn(null);
         $package = $this->createMock(CommunicationClientPackage::class);
         $package->method('getPriceClientPackage')->willReturn($pricePackage);
+        $package->method('resolveProduct')->willReturn(null);
         $package->method('getAmount')->willReturn(10.0);
         $package->method('getCurrency')->willReturn('USD');
         $package->method('getPromotionItems')->willReturn(new \Doctrine\Common\Collections\ArrayCollection());

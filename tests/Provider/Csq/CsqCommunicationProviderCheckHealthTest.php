@@ -9,6 +9,7 @@ use App\Provider\Csq\CsqCommunicationProvider;
 use App\Provider\Csq\CsqHttpClient;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
+use Psr\Log\NullLogger;
 
 /**
  * @covers \App\Provider\Csq\CsqCommunicationProvider::checkHealth
@@ -21,7 +22,7 @@ class CsqCommunicationProviderCheckHealthTest extends TestCase
     protected function setUp(): void
     {
         $this->client = $this->createMock(CsqHttpClient::class);
-        $this->provider = new CsqCommunicationProvider($this->client);
+        $this->provider = new CsqCommunicationProvider($this->client, new \App\Provider\Csq\CsqStatusMapper(), new NullLogger());
     }
 
     private function context(): ProviderContext

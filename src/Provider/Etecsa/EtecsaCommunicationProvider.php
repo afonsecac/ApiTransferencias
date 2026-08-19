@@ -19,8 +19,10 @@ use App\Provider\Contract\ProviderDispatchResult;
 use App\Provider\Contract\ProviderHealthCheckInterface;
 use App\Provider\Contract\ProviderPingResult;
 use App\Provider\Contract\ProviderProductDto;
+use App\Provider\Contract\ProviderPromotionCatalogInterface;
 use App\Provider\Contract\ProviderStatusQuery;
 use App\Provider\Contract\ProviderStatusResult;
+use App\Provider\Contract\PromotionCatalogQuery;
 use App\Provider\Contract\RechargeProviderInterface;
 use App\Provider\Contract\RechargeRequest;
 use App\Provider\Contract\TouristSimProviderInterface;
@@ -60,7 +62,8 @@ final class EtecsaCommunicationProvider implements
     ProviderCatalogInterface,
     TouristSimProviderInterface,
     GeoCatalogProviderInterface,
-    ProviderHealthCheckInterface
+    ProviderHealthCheckInterface,
+    ProviderPromotionCatalogInterface
 {
     public function __construct(
         private readonly EtecsaGatewayClient $client,
@@ -246,6 +249,17 @@ final class EtecsaCommunicationProvider implements
                 service: ['name' => 'MOBILE', 'subservice' => ['name' => 'AIRTIME']],
             );
         }
+    }
+
+    /**
+     * ETECSA no tiene concepto de "promoción" propio — su único producto es
+     * de monto flexible (destinationAmount siempre null en fetchProducts(),
+     * ver arriba), así que cubre cualquier tramo por igual. La vigencia de
+     * la promoción la impone nuestro CommunicationPackage, no ETECSA.
+     */
+    public function fetchPromotionProducts(ProviderContext $context, PromotionCatalogQuery $query): iterable
+    {
+        return $this->fetchProducts($context);
     }
 
     public function checkPhone(ProviderContext $context, string $phoneNumber): ProviderStatusResult

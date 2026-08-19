@@ -535,7 +535,10 @@ class BalanceService extends CommonService
             $item->system_reference = $operation->getCommunicationSale()?->getId();
             $item->client_reference = $operation->getCommunicationSale()?->getClientTransactionId();
             $item->legacy_reference = $operation->getCommunicationSale()?->getTransactionId();
-            $item->package = $operation->getCommunicationSale()?->getPackage()?->getName();
+            // ?->getPackage() es null en una venta V2 (ver
+            // CommunicationSaleService::admit()) — cae a ?->getCatalogPackage().
+            $item->package = $operation->getCommunicationSale()?->getPackage()?->getName()
+                ?? $operation->getCommunicationSale()?->getCatalogPackage()?->getName();
             $items[] = $item;
 
             $lastId = $operation->getId();

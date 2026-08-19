@@ -96,6 +96,50 @@ class CommunicationPricePackage
     private ?self $pricePackage = null;
 
     /**
+     * true = esta fila es un CONTRATO de precio (negociado a mano, o
+     * generado por PackageContractService en modo fijo/rate). false = solo
+     * un espejo del costo mayorista mantenido por
+     * ClientCatalogImportService/ProviderCatalogRefreshService — nunca se
+     * usa como fuente de precio de venta (PackageSalePriceResolver cae al
+     * producto vivo en su lugar). Backfill: `is_contract = NOT auto_managed`.
+     */
+    #[ORM\Column]
+    private bool $isContract = true;
+
+    /**
+     * FIXED = importe fijado a mano por el admin. RATE = calculado como
+     * basePrice * rateValue (+ conversión si baseCurrency !== currency) por
+     * PackageContractService::createByRate(). Null en filas no-contrato.
+     */
+    #[ORM\Column(length: 10, nullable: true)]
+    private ?string $contractMode = null;
+
+    /**
+     * Paquete referencia (CommunicationClientPackage con tenant IS NULL) al
+     * que pertenece este contrato — la clave real de búsqueda junto con
+     * $tenant (ver CommunicationClientPackage::resolveContractKey() y
+     * PackageSalePriceResolver). Se prefirió sobre `product` para que dos
+     * paquetes referencia del mismo producto puedan tener contratos
+     * independientes en el futuro.
+     */
+    #[ORM\ManyToOne(targetEntity: CommunicationClientPackage::class)]
+    private ?CommunicationClientPackage $referencePackage = null;
+
+    /**
+     * Precio base fijado por el admin en modo RATE (no el costo mayorista
+     * del proveedor). amount = round(basePrice * rateValue, 2), convertido
+     * si baseCurrency difiere de $currency.
+     */
+    #[ORM\Column(nullable: true)]
+    private ?float $basePrice = null;
+
+    #[ORM\Column(length: 3, nullable: true)]
+    private ?string $baseCurrency = null;
+
+    #[ORM\Column(nullable: true)]
+    private ?float $rateValue = null;
+
+    /**
      * @var Collection<int, CommunicationPromotions>
      */
     #[ORM\ManyToMany(targetEntity: CommunicationPromotions::class, mappedBy: 'packages')]
@@ -389,6 +433,78 @@ class CommunicationPricePackage
     public function setPricePackage(?self $pricePackage): static
     {
         $this->pricePackage = $pricePackage;
+
+        return $this;
+    }
+
+    public function isContract(): bool
+    {
+        return $this->isContract;
+    }
+
+    public function setIsContract(bool $isContract): static
+    {
+        $this->isContract = $isContract;
+
+        return $this;
+    }
+
+    public function getContractMode(): ?string
+    {
+        return $this->contractMode;
+    }
+
+    public function setContractMode(?string $contractMode): static
+    {
+        $this->contractMode = $contractMode;
+
+        return $this;
+    }
+
+    public function getReferencePackage(): ?CommunicationClientPackage
+    {
+        return $this->referencePackage;
+    }
+
+    public function setReferencePackage(?CommunicationClientPackage $referencePackage): static
+    {
+        $this->referencePackage = $referencePackage;
+
+        return $this;
+    }
+
+    public function getBasePrice(): ?float
+    {
+        return $this->basePrice;
+    }
+
+    public function setBasePrice(?float $basePrice): static
+    {
+        $this->basePrice = $basePrice;
+
+        return $this;
+    }
+
+    public function getBaseCurrency(): ?string
+    {
+        return $this->baseCurrency;
+    }
+
+    public function setBaseCurrency(?string $baseCurrency): static
+    {
+        $this->baseCurrency = $baseCurrency;
+
+        return $this;
+    }
+
+    public function getRateValue(): ?float
+    {
+        return $this->rateValue;
+    }
+
+    public function setRateValue(?float $rateValue): static
+    {
+        $this->rateValue = $rateValue;
 
         return $this;
     }

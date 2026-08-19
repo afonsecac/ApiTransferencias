@@ -84,8 +84,16 @@ class CommunicationPromotions
     #[Groups(['comProm:read', 'comPackage:read', 'promotion:list', 'promotion:detail'])]
     private ?\DateTimeImmutable $endAt = null;
 
+    /**
+     * "Producto de origen" legacy (V1) — un único producto de un único
+     * proveedor. Nullable desde el rediseño V2 (Fase 5): una promoción V2
+     * no tiene un producto de origen global, cada proveedor resuelve su
+     * propia equivalencia por tramo (ver CommunicationPackageProviderProduct
+     * + ProviderDispatchResolver en modo estricto). Las promociones legacy
+     * existentes siguen con este campo lleno.
+     */
     #[ORM\ManyToOne]
-    #[ORM\JoinColumn(nullable: false)]
+    #[ORM\JoinColumn(nullable: true)]
     private ?CommunicationProduct $product = null;
 
     #[ORM\ManyToMany(targetEntity: CommunicationClientPackage::class, inversedBy: 'promotionItems')]
@@ -228,6 +236,18 @@ class CommunicationPromotions
     public function getProduct(): ?CommunicationProduct
     {
         return $this->product;
+    }
+
+    /**
+     * true = promoción V2 (catálogo compartido, sin producto de origen —
+     * ver createV2()). false = legacy (V1). Expuesto en el listado para
+     * que el dashboard sepa qué acciones mostrar (bindings legacy vs.
+     * equivalencias V2).
+     */
+    #[Groups(['comProm:read', 'promotion:list', 'promotion:detail'])]
+    public function isV2(): bool
+    {
+        return $this->product === null;
     }
 
     public function setProduct(?CommunicationProduct $product): static

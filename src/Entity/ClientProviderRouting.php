@@ -38,6 +38,16 @@ class ClientProviderRouting
     #[ORM\Column(length: 20, nullable: true)]
     private ?string $fallbackProvider = null;
 
+    /**
+     * Orden en que ProviderDispatchResolver (V2 Fase 2) prueba los
+     * proveedores de un cliente al despachar una venta — menor = se intenta
+     * primero. Añadida en la migración de V2 Fase 1 (con backfill); no la
+     * lee ningún flujo de despacho todavía (ver
+     * Version20260810120200 para el detalle del backfill).
+     */
+    #[ORM\Column(type: 'smallint')]
+    private int $priority = 100;
+
     #[ORM\Column]
     private bool $isActive = true;
 
@@ -121,6 +131,18 @@ class ClientProviderRouting
     public function setFallbackProvider(?string $fallbackProvider): static
     {
         $this->fallbackProvider = $fallbackProvider;
+
+        return $this;
+    }
+
+    public function getPriority(): int
+    {
+        return $this->priority;
+    }
+
+    public function setPriority(int $priority): static
+    {
+        $this->priority = $priority;
 
         return $this;
     }

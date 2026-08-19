@@ -61,7 +61,12 @@ class DashboardSalesController extends AbstractController
             ->createQueryBuilder('s')
             ->leftJoin('s.tenant', 'a')
             ->leftJoin('a.client', 'c')
-            ->leftJoin('a.environment', 'e');
+            ->leftJoin('a.environment', 'e')
+            // getPromotionName() (grupo sale:list) recorre
+            // catalogPackage->promotion — sin estos joins, el normalizer
+            // dispara 2 queries lazy por fila con catalogPackage seteado.
+            ->leftJoin('s.catalogPackage', 'cp')->addSelect('cp')
+            ->leftJoin('cp.promotion', 'promo')->addSelect('promo');
 
         // Filtro por tipo: recharge, sale o ambos
         $type = $request->query->get('type');

@@ -32,7 +32,7 @@ class SyncProviderProductsCommand extends Command
     protected function configure(): void
     {
         $this->addOption('environment-id', null, InputOption::VALUE_REQUIRED, 'ID del Environment a sincronizar');
-        $this->addOption('provider', null, InputOption::VALUE_REQUIRED, 'Código del proveedor (ETECSA, DTONE)', CommunicationProviderEnum::ETECSA->value);
+        $this->addOption('provider', null, InputOption::VALUE_REQUIRED, 'Código del proveedor (ETECSA, DTONE, CSQ)', CommunicationProviderEnum::ETECSA->value);
         $this->addOption('sync', null, InputOption::VALUE_NONE, 'Ejecutar de forma síncrona (sin messenger). Sin esta opción despacha el mensaje al bus.');
     }
 

@@ -8,6 +8,7 @@ parameters:
     app.email.support: '%env(MAILER_DSN)%'
     app.microsoft.url: '%env(MICROSOFT_URL)%'
     app.phoneNumber: '%env(APP_TEST_PHONE)%'
+    app.csqPhoneNumber: '%env(APP_CSQ_TEST_PHONE)%'
     app.email.from: '%env(APP_MAILER_FROM)%'
     app.dashboard.url.comremit:  '%env(COMREMIT_DASHBOARD_URL)%'
     app.dashboard.url.sendmundo: '%env(SENDMUNDO_DASHBOARD_URL)%'
@@ -28,6 +29,16 @@ parameters:
     app.notifications.stream_ttl: '%env(int:default:notifications_stream_ttl_default:NOTIFICATIONS_STREAM_TTL)%'
     app.notifications.stream_interval: '%env(int:default:notifications_stream_interval_default:NOTIFICATIONS_STREAM_INTERVAL)%'
     app.notifications.max_streams: '%env(int:default:notifications_max_streams_default:NOTIFICATIONS_MAX_STREAMS)%'
+
+    # Expansión de catálogo `by_range` por proveedor (ver
+    # CsqCommunicationProvider::amountsFromRange()) — step de catálogo
+    # propio (NO el step nativo del proveedor, que suele ser demasiado fino
+    # para ser un catálogo manejable) y límites opcionales para acotar el
+    # rango real antes de generar productos. `~` (null) = sin límite
+    # adicional, se usa todo [realFrom, realTo] que reporte el proveedor.
+    app.csq.catalog_step_cup: 25.0
+    app.csq.catalog_min_amount_cup: ~
+    app.csq.catalog_max_amount_cup: ~
 
 
 services:
