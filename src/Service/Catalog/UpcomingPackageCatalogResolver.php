@@ -7,6 +7,7 @@ use App\Entity\CommunicationContract;
 use App\Entity\CommunicationPackage;
 use App\Repository\CommunicationContractRepository;
 use App\Repository\CommunicationPackageRepository;
+use App\Service\Pricing\BenefitOperationResolver;
 use App\Service\Pricing\PackageOfferSourceEnum;
 use App\Service\Pricing\ResolvedPackageOffer;
 
@@ -28,6 +29,7 @@ class UpcomingPackageCatalogResolver
     public function __construct(
         private readonly CommunicationPackageRepository $packageRepository,
         private readonly CommunicationContractRepository $contractRepository,
+        private readonly BenefitOperationResolver $benefitResolver,
     ) {
     }
 
@@ -65,6 +67,9 @@ class UpcomingPackageCatalogResolver
                 contractId: $contract->getId(),
                 note: 'Preview: contrato aún no vigente (paquete futuro).',
             ));
+            // Resuelve `operation` (MULTIPLY/ADD/SET) en vivo — nunca se
+            // persiste, ver BenefitOperationResolver.
+            $package->setBenefits($this->benefitResolver->resolve($package));
 
             $packages[] = $package;
         }

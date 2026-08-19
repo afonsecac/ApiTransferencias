@@ -7,6 +7,7 @@ use App\Entity\CommunicationPackage;
 use App\Entity\CommunicationPackageProviderProduct;
 use App\Repository\CommunicationPackageProviderProductRepository;
 use App\Service\Catalog\CatalogPackageVisibilityResolver;
+use App\Service\Pricing\BenefitOperationResolver;
 use App\Service\Pricing\PackageCatalogResolver;
 use App\Service\Pricing\PackageOfferSourceEnum;
 use App\Service\Pricing\ResolvedPackageOffer;
@@ -20,6 +21,7 @@ class CatalogPackageVisibilityResolverTest extends TestCase
 {
     private PackageCatalogResolver&MockObject $catalogResolver;
     private CommunicationPackageProviderProductRepository&MockObject $bindingRepo;
+    private BenefitOperationResolver&MockObject $benefitResolver;
     private CatalogPackageVisibilityResolver $resolver;
 
     protected function setUp(): void
@@ -27,8 +29,10 @@ class CatalogPackageVisibilityResolverTest extends TestCase
         $this->catalogResolver = $this->createMock(PackageCatalogResolver::class);
         $this->bindingRepo = $this->createMock(CommunicationPackageProviderProductRepository::class);
         $this->bindingRepo->method('findAllForPackage')->willReturn([$this->createMock(CommunicationPackageProviderProduct::class)]);
+        $this->benefitResolver = $this->createMock(BenefitOperationResolver::class);
+        $this->benefitResolver->method('resolve')->willReturnCallback(static fn (CommunicationPackage $p) => $p->getBenefits());
 
-        $this->resolver = new CatalogPackageVisibilityResolver($this->catalogResolver, $this->bindingRepo);
+        $this->resolver = new CatalogPackageVisibilityResolver($this->catalogResolver, $this->bindingRepo, $this->benefitResolver);
     }
 
     private function package(): CommunicationPackage
@@ -71,7 +75,7 @@ class CatalogPackageVisibilityResolverTest extends TestCase
         );
         $this->bindingRepo = $this->createMock(CommunicationPackageProviderProductRepository::class);
         $this->bindingRepo->method('findAllForPackage')->willReturn([]);
-        $this->resolver = new CatalogPackageVisibilityResolver($this->catalogResolver, $this->bindingRepo);
+        $this->resolver = new CatalogPackageVisibilityResolver($this->catalogResolver, $this->bindingRepo, $this->benefitResolver);
 
         $this->assertNull($this->resolver->visibleFor($package, $account));
     }

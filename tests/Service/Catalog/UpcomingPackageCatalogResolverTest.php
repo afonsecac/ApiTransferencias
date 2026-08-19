@@ -8,6 +8,7 @@ use App\Entity\CommunicationPackage;
 use App\Repository\CommunicationContractRepository;
 use App\Repository\CommunicationPackageRepository;
 use App\Service\Catalog\UpcomingPackageCatalogResolver;
+use App\Service\Pricing\BenefitOperationResolver;
 use App\Service\Pricing\PackageOfferSourceEnum;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
@@ -19,14 +20,17 @@ class UpcomingPackageCatalogResolverTest extends TestCase
 {
     private CommunicationPackageRepository&MockObject $packageRepository;
     private CommunicationContractRepository&MockObject $contractRepository;
+    private BenefitOperationResolver&MockObject $benefitResolver;
     private UpcomingPackageCatalogResolver $resolver;
 
     protected function setUp(): void
     {
         $this->packageRepository = $this->createMock(CommunicationPackageRepository::class);
         $this->contractRepository = $this->createMock(CommunicationContractRepository::class);
+        $this->benefitResolver = $this->createMock(BenefitOperationResolver::class);
+        $this->benefitResolver->method('resolve')->willReturnCallback(static fn (CommunicationPackage $p) => $p->getBenefits());
 
-        $this->resolver = new UpcomingPackageCatalogResolver($this->packageRepository, $this->contractRepository);
+        $this->resolver = new UpcomingPackageCatalogResolver($this->packageRepository, $this->contractRepository, $this->benefitResolver);
     }
 
     private function assignId(object $entity, int $id): void

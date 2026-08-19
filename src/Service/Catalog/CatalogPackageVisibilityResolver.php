@@ -5,6 +5,7 @@ namespace App\Service\Catalog;
 use App\Entity\Account;
 use App\Entity\CommunicationPackage;
 use App\Repository\CommunicationPackageProviderProductRepository;
+use App\Service\Pricing\BenefitOperationResolver;
 use App\Service\Pricing\PackageCatalogResolver;
 use App\Service\Pricing\PackageOfferSourceEnum;
 
@@ -28,6 +29,7 @@ class CatalogPackageVisibilityResolver
     public function __construct(
         private readonly PackageCatalogResolver $catalogResolver,
         private readonly CommunicationPackageProviderProductRepository $bindingRepo,
+        private readonly BenefitOperationResolver $benefitResolver,
     ) {
     }
 
@@ -47,6 +49,10 @@ class CatalogPackageVisibilityResolver
         if ($this->bindingRepo->findAllForPackage($package) === []) {
             return null;
         }
+
+        // Resuelve `operation` (MULTIPLY/ADD/SET) en vivo — nunca se
+        // persiste, ver BenefitOperationResolver.
+        $package->setBenefits($this->benefitResolver->resolve($package));
 
         return $package;
     }

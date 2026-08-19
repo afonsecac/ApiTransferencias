@@ -8,9 +8,7 @@ use App\DTO\UpdateCommunicationPackageDto;
 use App\Entity\CommunicationPackage;
 use App\Entity\CommunicationProduct;
 use App\Entity\Environment;
-use App\Enums\BenefitOperationEnum;
 use App\Exception\MyCurrentException;
-use App\Repository\CommunicationPackageRepository;
 use App\Repository\CommunicationProductRepository;
 use Doctrine\ORM\EntityManagerInterface;
 
@@ -38,7 +36,6 @@ class CommunicationPackageAdminService
     public function __construct(
         private readonly EntityManagerInterface $em,
         private readonly CommunicationProductRepository $productRepository,
-        private readonly CommunicationPackageRepository $packageRepository,
     ) {
     }
 
@@ -67,7 +64,6 @@ class CommunicationPackageAdminService
         $package->setService($dto->getService() ?? []);
         $package->setValidity($dto->getValidity());
         $this->applyCreditBenefitDefaults($package);
-        $this->applyBenefitOperations($package);
 
         $this->em->persist($package);
         $this->em->flush();
@@ -133,7 +129,6 @@ class CommunicationPackageAdminService
             $package->setService($dto->getService() ?? []);
             $package->setValidity($dto->getValidity());
             $this->applyCreditBenefitDefaults($package);
-        $this->applyBenefitOperations($package);
 
             $this->em->persist($package);
             $packages[] = $package;
@@ -203,95 +198,6 @@ class CommunicationPackageAdminService
         $package->setBenefits($benefits);
     }
 
-    /**
-     * Recalcula amount.base/promotion_bonus/totales de cada beneficio que
-     * traiga `operation` (MULTIPLY/ADD/SET) — ver BenefitOperationEnum y el
-     * OAProperty de CreatePromotionV2Dto::$benefits. Corre DESPUÉS de
-     * applyCreditBenefitDefaults() y sobrescribe lo que este haya puesto
-     * para el beneficio afectado. Sin `operation`, un beneficio no se toca
-     * — comportamiento previo intacto.
-     *
-     * Línea base contra la que se calcula (ver resolveBenefitBaseline()):
-     *  - CREDITS/CURRENCY: el propio destinationAmount del paquete — un
-     *    paquete de promoción de 600 CUP YA ES, por tupla, el "600 CUP" de
-     *    su paquete regular equivalente, no hace falta ir a buscarlo.
-     *  - Cualquier otro type/unit (ej. DATA/GB): el beneficio del MISMO
-     *    type+unit en el paquete regular equivalente (misma tupla, sin
-     *    promoción), si existe; si no, línea base 0 — típico de un bono
-     *    (ej. datos) que el paquete regular no traía.
-     */
-    private function applyBenefitOperations(CommunicationPackage $package): void
-    {
-        $benefits = $package->getBenefits();
-        $changed = false;
-
-        foreach ($benefits as &$benefit) {
-            if (!is_array($benefit)) {
-                continue;
-            }
-            $operation = BenefitOperationEnum::tryFrom((string) ($benefit['operation'] ?? ''));
-            if ($operation === null || !is_numeric($benefit['value'] ?? null)) {
-                continue;
-            }
-            $changed = true;
-
-            $baseline = $this->resolveBenefitBaseline($package, $benefit);
-            $value = (float) $benefit['value'];
-
-            [$base, $promotionBonus] = match ($operation) {
-                BenefitOperationEnum::MULTIPLY => [$baseline, $baseline * ($value - 1)],
-                BenefitOperationEnum::ADD => [$baseline, $value],
-                BenefitOperationEnum::SET => [$value, 0.0],
-            };
-
-            $isCurrency = ($benefit['unit_type'] ?? null) === 'CURRENCY';
-            $totalExcludingTax = $base + $promotionBonus;
-            $totalIncludingTax = $isCurrency
-                ? $totalExcludingTax * (1 + self::CURRENCY_FEE_PERCENT / 100)
-                : $totalExcludingTax;
-
-            $benefit['amount'] = [
-                'base' => self::normalizeNumber($base),
-                'promotion_bonus' => self::normalizeNumber($promotionBonus),
-                'total_excluding_tax' => self::normalizeNumber($totalExcludingTax),
-                'total_including_tax' => self::normalizeNumber($totalIncludingTax),
-            ];
-        }
-        unset($benefit);
-
-        if ($changed) {
-            $package->setBenefits($benefits);
-        }
-    }
-
-    /**
-     * @param array<string, mixed> $benefit
-     */
-    private function resolveBenefitBaseline(CommunicationPackage $package, array $benefit): float
-    {
-        if (($benefit['type'] ?? null) === 'CREDITS' && ($benefit['unit_type'] ?? null) === 'CURRENCY') {
-            return (float) $package->getDestinationAmount();
-        }
-
-        $regularPackage = $this->packageRepository->findByDestination(
-            (float) $package->getDestinationAmount(),
-            (string) $package->getDestinationCurrency(),
-        );
-        if ($regularPackage === null) {
-            return 0.0;
-        }
-
-        foreach ($regularPackage->getBenefits() as $regularBenefit) {
-            if (($regularBenefit['type'] ?? null) === ($benefit['type'] ?? null)
-                && ($regularBenefit['unit'] ?? null) === ($benefit['unit'] ?? null)
-            ) {
-                return (float) ($regularBenefit['amount']['base'] ?? 0);
-            }
-        }
-
-        return 0.0;
-    }
-
     private static function normalizeNumber(float $n): int|float
     {
         $rounded = round($n, 2);
@@ -354,7 +260,6 @@ class CommunicationPackageAdminService
             $package->setValidity($dto->getValidity());
         }
         $this->applyCreditBenefitDefaults($package);
-        $this->applyBenefitOperations($package);
 
         $this->em->flush();
 

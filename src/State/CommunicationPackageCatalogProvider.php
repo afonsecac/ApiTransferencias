@@ -7,6 +7,7 @@ use ApiPlatform\State\ProviderInterface;
 use App\Entity\Account;
 use App\Entity\CommunicationPackage;
 use App\Repository\CommunicationPackageProviderProductRepository;
+use App\Service\Pricing\BenefitOperationResolver;
 use App\Service\Pricing\PackageCatalogResolver;
 use App\Service\Pricing\ResolvedPackageOffer;
 use Symfony\Bundle\SecurityBundle\Security;
@@ -42,6 +43,7 @@ final class CommunicationPackageCatalogProvider implements ProviderInterface
         private readonly PackageCatalogResolver $catalogResolver,
         private readonly CommunicationPackageProviderProductRepository $bindingRepo,
         private readonly Security $security,
+        private readonly BenefitOperationResolver $benefitResolver,
     ) {
     }
 
@@ -66,9 +68,17 @@ final class CommunicationPackageCatalogProvider implements ProviderInterface
             array_map(static fn (CommunicationPackage $p) => (int) $p->getId(), $packages)
         );
 
-        return array_values(array_filter(
+        $visible = array_values(array_filter(
             $packages,
             static fn (CommunicationPackage $p) => in_array($p->getId(), $boundIds, true) && $p->isActiveAt($now)
         ));
+
+        // Resuelve `operation` (MULTIPLY/ADD/SET) en vivo contra el estado
+        // ACTUAL del catálogo — nunca se persiste (ver BenefitOperationResolver).
+        foreach ($visible as $package) {
+            $package->setBenefits($this->benefitResolver->resolve($package));
+        }
+
+        return $visible;
     }
 }
