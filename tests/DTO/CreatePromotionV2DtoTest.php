@@ -40,9 +40,6 @@ class CreatePromotionV2DtoTest extends TestCase
             amountFrom: 500.0,
             amountTo: 500.0,
             amountStep: 1.0,
-            priceFrom: 10.0,
-            priceTo: 10.0,
-            priceCurrency: 'USD',
             benefits: $benefits,
         );
     }

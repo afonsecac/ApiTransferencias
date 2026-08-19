@@ -142,11 +142,7 @@ class DashboardPromotionController extends AbstractController
                 'destinationAmount' => $p->getDestinationAmount(),
                 'destinationCurrency' => $p->getDestinationCurrency(),
             ], $result->packages),
-            'contracts' => [
-                'created' => $result->contracts->created,
-                'updated' => $result->contracts->updated,
-                'tenantContractsLinked' => $result->tenantContractsLinked,
-            ],
+            'tenantContractsLinked' => $result->tenantContractsLinked,
             'equivalences' => $this->serializeEquivalenceResult($result->equivalences),
         ], Response::HTTP_CREATED);
     }
