@@ -119,6 +119,33 @@ class CommunicationPackageRepository extends ServiceEntityRepository
     }
 
     /**
+     * Paquete de una promoción V2 aún no vigente, para
+     * CommunicationSaleService::processReserve() (Fase 5) — equivalente V2
+     * de CommunicationPromotionsRepository::getFuturePromotionById(), que
+     * solo cubre CommunicationClientPackage (V1) vía
+     * CommunicationPromotions::$products, un ManyToMany que nunca incluye
+     * CommunicationPackage (aquí la relación es el ManyToOne directo
+     * CommunicationPackage::$promotion). Mismo criterio "futuro":
+     * promo.startAt > $now.
+     */
+    public function findFutureForReserve(int $packageId, int $promotionId, ?\DateTimeImmutable $now = null): ?CommunicationPackage
+    {
+        $now ??= new \DateTimeImmutable();
+
+        return $this->createQueryBuilder('p')
+            ->innerJoin('p.promotion', 'promo')
+            ->andWhere('p.id = :packageId')
+            ->andWhere('promo.id = :promotionId')
+            ->andWhere('promo.startAt > :now')
+            ->setParameter('packageId', $packageId)
+            ->setParameter('promotionId', $promotionId)
+            ->setParameter('now', $now)
+            ->setMaxResults(1)
+            ->getQuery()
+            ->getOneOrNullResult();
+    }
+
+    /**
      * Variante de findByDestination() acotada a los paquetes generados por
      * UNA promoción concreta (Fase 5B) — misma tolerancia de coma flotante,
      * pero nunca puede devolver un paquete del catálogo regular ni de otra
