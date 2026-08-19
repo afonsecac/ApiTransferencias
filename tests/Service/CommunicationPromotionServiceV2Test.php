@@ -13,7 +13,6 @@ use App\Service\CommunicationPromotionService;
 use App\Service\Pricing\CommunicationContractService;
 use App\Service\Pricing\CommunicationPackageAdminService;
 use App\Service\Pricing\CommunicationPromotionEquivalenceService;
-use App\Service\Pricing\ContractRangeResult;
 use App\Service\Pricing\PromotionEquivalenceResult;
 use App\Service\Pricing\TargetAccountResolver;
 use Doctrine\ORM\EntityManagerInterface;
@@ -82,9 +81,6 @@ class CommunicationPromotionServiceV2Test extends TestCase
             amountFrom: 500.0,
             amountTo: 1250.0,
             amountStep: 25.0,
-            priceFrom: 19.7,
-            priceTo: 49.25,
-            priceCurrency: 'USD',
         );
     }
 
@@ -122,12 +118,6 @@ class CommunicationPromotionServiceV2Test extends TestCase
             }))
             ->willReturn($packages);
 
-        $contractResult = new ContractRangeResult(2, 0, 0, [10, 11], []);
-        $this->contractService->expects($this->once())
-            ->method('createForPromotionPackages')
-            ->with($packages, 19.7, 49.25, 'USD', '2026-08-18T00:00:00+00:00', '2026-08-25T23:59:00+00:00')
-            ->willReturn($contractResult);
-
         $this->contractService->expects($this->once())
             ->method('linkTenantContractsToPromotionPackages')
             ->with($packages)
@@ -142,7 +132,6 @@ class CommunicationPromotionServiceV2Test extends TestCase
         $result = $this->service->createV2($this->dto());
 
         $this->assertSame($packages, $result->packages);
-        $this->assertSame($contractResult, $result->contracts);
         $this->assertSame(3, $result->tenantContractsLinked);
         $this->assertSame($equivalencesResult, $result->equivalences);
         foreach ($result->packages as $package) {
@@ -162,7 +151,6 @@ class CommunicationPromotionServiceV2Test extends TestCase
         $single = [(new CommunicationPackage())->setName('p')->setDescription('p')->setDestinationAmount(500.0)->setDestinationCurrency('CUP')];
 
         $this->packageAdminService->method('createBatch')->willReturn($single);
-        $this->contractService->method('createForPromotionPackages')->willReturn(new ContractRangeResult(1, 0, 0, [1], []));
         $this->contractService->method('linkTenantContractsToPromotionPackages')->willReturn(0);
         $this->equivalenceService->method('populateEquivalences')->willReturn(new PromotionEquivalenceResult([], []));
 
@@ -178,13 +166,59 @@ class CommunicationPromotionServiceV2Test extends TestCase
             amountFrom: 500.0,
             amountTo: 500.0,
             amountStep: 1.0,
-            priceFrom: 19.7,
-            priceTo: 19.7,
-            priceCurrency: 'USD',
         );
 
         $result = $this->service->createV2($dto);
 
         $this->assertCount(1, $result->packages);
+    }
+
+    public function testSetsInfoDescriptionWhenProvided(): void
+    {
+        $environment = $this->createMock(Environment::class);
+        $envRepo = $this->createMock(EntityRepository::class);
+        $envRepo->method('find')->willReturn($environment);
+        $this->em->method('getRepository')->with(Environment::class)->willReturn($envRepo);
+
+        $single = [(new CommunicationPackage())->setName('p')->setDescription('p')->setDestinationAmount(500.0)->setDestinationCurrency('CUP')];
+        $this->packageAdminService->method('createBatch')->willReturn($single);
+        $this->contractService->method('linkTenantContractsToPromotionPackages')->willReturn(0);
+        $this->equivalenceService->method('populateEquivalences')->willReturn(new PromotionEquivalenceResult([], []));
+
+        $dto = new CreatePromotionV2Dto(
+            name: 'Con detalle',
+            description: 'Con detalle',
+            infoDescription: '<p>Detalle completo de la promoción</p>',
+            packageNameTemplate: 'Bono {monto} CUP',
+            packageDescriptionTemplate: 'Bono {monto} CUP',
+            startAt: '2026-08-18T00:00:00+00:00',
+            endAt: '2026-08-25T23:59:00+00:00',
+            environmentId: 4,
+            destinationCurrency: 'CUP',
+            amountFrom: 500.0,
+            amountTo: 500.0,
+            amountStep: 1.0,
+        );
+
+        $result = $this->service->createV2($dto);
+
+        $this->assertSame('<p>Detalle completo de la promoción</p>', $result->promotion->getInfoDescription());
+    }
+
+    public function testInfoDescriptionStaysNullWhenNotProvided(): void
+    {
+        $environment = $this->createMock(Environment::class);
+        $envRepo = $this->createMock(EntityRepository::class);
+        $envRepo->method('find')->willReturn($environment);
+        $this->em->method('getRepository')->with(Environment::class)->willReturn($envRepo);
+
+        $single = [(new CommunicationPackage())->setName('p')->setDescription('p')->setDestinationAmount(500.0)->setDestinationCurrency('CUP')];
+        $this->packageAdminService->method('createBatch')->willReturn($single);
+        $this->contractService->method('linkTenantContractsToPromotionPackages')->willReturn(0);
+        $this->equivalenceService->method('populateEquivalences')->willReturn(new PromotionEquivalenceResult([], []));
+
+        $result = $this->service->createV2($this->dto());
+
+        $this->assertNull($result->promotion->getInfoDescription());
     }
 }

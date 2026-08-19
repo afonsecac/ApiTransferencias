@@ -16,7 +16,6 @@ use App\Service\CreatePromotionV2Result;
 use App\Service\Pricing\CommunicationContractService;
 use App\Service\Pricing\CommunicationPromotionBindingService;
 use App\Service\Pricing\CommunicationPromotionEquivalenceService;
-use App\Service\Pricing\ContractRangeResult;
 use App\Service\Pricing\PromotionEquivalenceResult;
 use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\MockObject\MockObject;
@@ -179,9 +178,6 @@ class DashboardPromotionControllerTest extends TestCase
             amountFrom: 500.0,
             amountTo: 525.0,
             amountStep: 25.0,
-            priceFrom: 19.7,
-            priceTo: 20.71,
-            priceCurrency: 'USD',
         );
     }
 
@@ -196,7 +192,7 @@ class DashboardPromotionControllerTest extends TestCase
             [['provider' => 'DTONE', 'matched' => 2, 'error' => null]],
             [],
         );
-        $result = new CreatePromotionV2Result($promotion, $packages, new ContractRangeResult(2, 0, 0, [1, 2], []), 3, $equivalences);
+        $result = new CreatePromotionV2Result($promotion, $packages, 3, $equivalences);
         $this->promotionService->expects($this->once())->method('createV2')->willReturn($result);
 
         $response = $this->controller->createV2($this->v2Dto());
@@ -206,8 +202,7 @@ class DashboardPromotionControllerTest extends TestCase
         $this->assertSame(2, $data['packagesCreated']);
         $this->assertCount(2, $data['packages']);
         $this->assertEquals(500.0, $data['packages'][0]['destinationAmount']);
-        $this->assertSame(2, $data['contracts']['created']);
-        $this->assertSame(3, $data['contracts']['tenantContractsLinked']);
+        $this->assertSame(3, $data['tenantContractsLinked']);
         $this->assertSame('DTONE', $data['equivalences']['providers'][0]['provider']);
         $this->assertSame([], $data['equivalences']['gaps']);
     }

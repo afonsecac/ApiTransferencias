@@ -14,11 +14,18 @@ use Symfony\Component\Validator\Context\ExecutionContextInterface;
  * [amountFrom, amountTo] saltando de amountStep en amountStep (ambos
  * extremos incluidos, así que amountFrom == amountTo es válido para una
  * promoción de un solo producto), marcado con esta promoción — catálogo
- * compartido, vigente solo durante [startAt, endAt] — más un
- * CommunicationContract "por defecto" por cada uno, con el precio
- * interpolado linealmente entre priceFrom/priceTo. NO tiene productId: las
- * equivalencias por proveedor se resuelven aparte (Fase 5C/5D) — sin
- * equivalencia explícita, ningún proveedor despacha ese tramo.
+ * compartido, vigente solo durante [startAt, endAt]. NO tiene precio: el
+ * precio vive en CommunicationContract, un concepto aparte que se gestiona
+ * por su propio flujo administrativo (createSingle()/createBatch()/
+ * createByRange() en CommunicationContractService) — createV2() solo se
+ * encarga de generar los paquetes y sus beneficios; sin contrato propio de
+ * un tenant que ya cubra el paquete regular equivalente (ver
+ * linkTenantContractsToPromotionPackages()), el paquete recién creado
+ * queda visible al precio derivado del catálogo (PackageCatalogResolver,
+ * MAX de producto + margen) hasta que se le cree un contrato. Tampoco
+ * tiene productId: las equivalencias por proveedor se resuelven aparte
+ * (Fase 5C/5D) — sin equivalencia explícita, ningún proveedor despacha ese
+ * tramo.
  */
 class CreatePromotionV2Dto implements IInput
 {
@@ -29,6 +36,8 @@ class CreatePromotionV2Dto implements IInput
     #[Assert\NotBlank]
     #[Assert\Length(max: 255)]
     protected ?string $description;
+
+    protected ?string $infoDescription;
 
     #[Assert\NotBlank]
     #[Assert\Length(max: 255)]
@@ -67,18 +76,6 @@ class CreatePromotionV2Dto implements IInput
     #[Assert\Positive]
     protected ?float $amountStep;
 
-    #[Assert\NotNull]
-    #[Assert\PositiveOrZero]
-    protected ?float $priceFrom;
-
-    #[Assert\NotNull]
-    #[Assert\PositiveOrZero]
-    protected ?float $priceTo;
-
-    #[Assert\NotBlank]
-    #[Assert\Length(exactly: 3)]
-    protected ?string $priceCurrency;
-
     #[Assert\PositiveOrZero]
     protected ?int $displayOrder;
 
@@ -99,11 +96,12 @@ class CreatePromotionV2Dto implements IInput
                 // Cálculo en vivo contra la línea base (destinationAmount
                 // para CREDITS/CURRENCY; el beneficio del mismo type/unit
                 // en el paquete regular equivalente para el resto) — ver
-                // CommunicationPackageAdminService::applyBenefitOperations().
-                // Sin operation, amount.base/promotion_bonus se usan tal
-                // cual (comportamiento previo). Con operation, `value` es
-                // obligatorio y amount.base/promotion_bonus se recalculan,
-                // sobrescribiendo lo que se haya enviado.
+                // BenefitOperationResolver. Sin operation, amount.base/
+                // promotion_bonus se usan tal cual (comportamiento previo).
+                // Con operation, `value` es obligatorio y amount.base/
+                // promotion_bonus se recalculan EN VIVO al servir el
+                // catálogo (no al crear), sobrescribiendo lo que se haya
+                // enviado.
                 'operation' => ['type' => 'string', 'nullable' => true, 'enum' => ['MULTIPLY', 'ADD', 'SET']],
                 'value' => ['type' => 'number', 'nullable' => true, 'example' => 6],
                 // Franja horaria diaria de vigencia de este beneficio (uso
@@ -153,6 +151,7 @@ class CreatePromotionV2Dto implements IInput
     public function __construct(
         ?string $name = null,
         ?string $description = null,
+        ?string $infoDescription = null,
         ?string $packageNameTemplate = null,
         ?string $packageDescriptionTemplate = null,
         ?string $knowMore = null,
@@ -163,9 +162,6 @@ class CreatePromotionV2Dto implements IInput
         ?float $amountFrom = null,
         ?float $amountTo = null,
         ?float $amountStep = null,
-        ?float $priceFrom = null,
-        ?float $priceTo = null,
-        ?string $priceCurrency = null,
         ?int $displayOrder = null,
         ?array $benefits = null,
         ?array $tags = null,
@@ -174,6 +170,7 @@ class CreatePromotionV2Dto implements IInput
     ) {
         $this->name = $name;
         $this->description = $description;
+        $this->infoDescription = $infoDescription;
         $this->packageNameTemplate = $packageNameTemplate;
         $this->packageDescriptionTemplate = $packageDescriptionTemplate;
         $this->knowMore = $knowMore;
@@ -184,9 +181,6 @@ class CreatePromotionV2Dto implements IInput
         $this->amountFrom = $amountFrom;
         $this->amountTo = $amountTo;
         $this->amountStep = $amountStep;
-        $this->priceFrom = $priceFrom;
-        $this->priceTo = $priceTo;
-        $this->priceCurrency = $priceCurrency;
         $this->displayOrder = $displayOrder;
         $this->benefits = $benefits;
         $this->tags = $tags;
@@ -266,6 +260,9 @@ class CreatePromotionV2Dto implements IInput
     public function getDescription(): ?string { return $this->description; }
     public function setDescription(?string $v): void { $this->description = $v; }
 
+    public function getInfoDescription(): ?string { return $this->infoDescription; }
+    public function setInfoDescription(?string $v): void { $this->infoDescription = $v; }
+
     public function getPackageNameTemplate(): ?string { return $this->packageNameTemplate; }
     public function setPackageNameTemplate(?string $v): void { $this->packageNameTemplate = $v; }
 
@@ -295,15 +292,6 @@ class CreatePromotionV2Dto implements IInput
 
     public function getAmountStep(): ?float { return $this->amountStep; }
     public function setAmountStep(?float $v): void { $this->amountStep = $v; }
-
-    public function getPriceFrom(): ?float { return $this->priceFrom; }
-    public function setPriceFrom(?float $v): void { $this->priceFrom = $v; }
-
-    public function getPriceTo(): ?float { return $this->priceTo; }
-    public function setPriceTo(?float $v): void { $this->priceTo = $v; }
-
-    public function getPriceCurrency(): ?string { return $this->priceCurrency; }
-    public function setPriceCurrency(?string $v): void { $this->priceCurrency = $v; }
 
     public function getDisplayOrder(): ?int { return $this->displayOrder; }
     public function setDisplayOrder(?int $v): void { $this->displayOrder = $v; }

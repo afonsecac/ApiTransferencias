@@ -169,69 +169,15 @@ class CommunicationContractService
     }
 
     /**
-     * Variante de createByRange() para promociones V2 (Fase 5B): en vez de
-     * resolver cada paquete por (monto, moneda) contra el catálogo regular
-     * (findByDestination() excluye a propósito los paquetes promocionales,
-     * ver su docblock), recibe DIRECTAMENTE la lista ya generada por
-     * CommunicationPackageAdminService::createBatch() — un contrato "por
-     * defecto" (tenant=null, catálogo compartido) por cada paquete, con el
-     * precio interpolado linealmente entre priceFrom (el de menor
-     * destinationAmount) y priceTo (el de mayor).
-     *
-     * @param list<CommunicationPackage> $packages
-     */
-    public function createForPromotionPackages(
-        array $packages,
-        float $priceFrom,
-        float $priceTo,
-        string $currency,
-        ?string $startAt,
-        ?string $endAt,
-    ): ContractRangeResult {
-        if ($packages === []) {
-            return new ContractRangeResult(0, 0, 0, [], []);
-        }
-
-        $amounts = array_map(static fn (CommunicationPackage $p) => (float) $p->getDestinationAmount(), $packages);
-        $from = min($amounts);
-        $to = max($amounts);
-        $span = $to - $from;
-        $priceCurrency = strtoupper($currency);
-
-        $created = 0;
-        $updated = 0;
-        $contracts = [];
-
-        foreach ($packages as $package) {
-            $amount = (float) $package->getDestinationAmount();
-            $price = $span > 0
-                ? round($priceFrom + ($priceTo - $priceFrom) * ($amount - $from) / $span, 2)
-                : round($priceFrom, 2);
-
-            $result = $this->upsertContract($package, null);
-            $this->applyPricing($result->contract, $price, $priceCurrency, $startAt, $endAt, $result->contractIsNew);
-            $this->stampCreatedBy($result->contract);
-
-            $result->isNew ? $created++ : $updated++;
-            $contracts[] = $result->contract;
-        }
-
-        $this->em->flush();
-
-        $contractIds = array_map(static fn (CommunicationContract $c) => $c->getId(), $contracts);
-
-        return new ContractRangeResult($created, $updated, 0, $contractIds, []);
-    }
-
-    /**
      * Vincula, a cada paquete de promoción recién creado, los contratos
      * propios que un tenant YA tenga sobre su paquete regular equivalente
      * (misma tupla monto/moneda, sin promoción) — sin esto, un cliente con
      * contrato propio nunca ve la promoción: PackageCatalogResolver::
      * catalogFor() solo mira los contratos propios del tenant cuando
-     * existen (precedencia #1), y los contratos "por defecto" (tenant IS
-     * NULL) que createForPromotionPackages() genera quedan fuera de esa
-     * rama por completo.
+     * existen (precedencia #1), y un paquete de promoción sin contrato
+     * propio vinculado queda fuera de esa rama por completo (createV2()
+     * ya no crea contrato alguno — el precio es responsabilidad aparte de
+     * este servicio, ver createSingle()/createBatch()/createByRange()).
      *
      * No crea contratos nuevos ni toca precio/moneda/fechas: reutiliza el
      * MISMO contrato que el tenant ya tiene para el paquete regular (misma
@@ -294,8 +240,8 @@ class CommunicationContractService
      * mueve su colección de `CommunicationPackage` (los paquetes que ya
      * cubría siguen ahí, aunque ahora el contrato diga otro monto). Para
      * "mover" paquetes de un contrato a otro, usar los flujos de creación
-     * (createSingle/createBatch/createByRange/createForPromotionPackages) —
-     * convergen solos al contrato correcto vía upsertContract().
+     * (createSingle/createBatch/createByRange) — convergen solos al
+     * contrato correcto vía upsertContract().
      *
      * @throws MyCurrentException si ya existe OTRO contrato abierto para la
      *   tupla (tenant, nuevo monto, nueva moneda)

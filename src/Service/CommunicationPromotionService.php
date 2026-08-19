@@ -409,11 +409,20 @@ class CommunicationPromotionService extends CommonService
      * Alta de promoción V2 (Fase 5B, catálogo compartido) — genera un
      * CommunicationPackage por cada monto de [amountFrom, amountTo] (paso
      * amountStep), marcado con esta promoción y vigente SOLO durante
-     * [startAt, endAt], más un CommunicationContract "por defecto" por
-     * cada uno con el precio interpolado entre priceFrom/priceTo. A
-     * diferencia de createPackagesForPromotion() (legacy), no depende de
-     * un producto de origen ni genera nada por cliente — la visibilidad la
-     * decide PackageCatalogResolver como a cualquier paquete V2.
+     * [startAt, endAt]. A diferencia de createPackagesForPromotion()
+     * (legacy), no depende de un producto de origen ni genera nada por
+     * cliente — la visibilidad la decide PackageCatalogResolver como a
+     * cualquier paquete V2.
+     *
+     * NO crea contrato: el precio es responsabilidad exclusiva del flujo
+     * de CommunicationContract (aparte, ver CommunicationContractService)
+     * — createV2() solo vincula los contratos propios que un tenant YA
+     * tenga sobre el paquete regular equivalente (linkTenantContracts
+     * ToPromotionPackages()), para que la promoción no quede oculta para
+     * quien ya compraba ese paquete (ver PackageCatalogResolver::
+     * catalogFor()). Un paquete sin ningún contrato propio vinculado
+     * queda visible igual, al precio derivado del catálogo (MAX de
+     * producto + margen), hasta que se le cree un contrato a mano.
      *
      * Las equivalencias por proveedor (quién despacha cada tramo) se
      * auto-pueblan al final vía CommunicationPromotionEquivalenceService
@@ -449,6 +458,9 @@ class CommunicationPromotionService extends CommonService
         if ($dto->getKnowMore() !== null) {
             $promotion->setKnowMore($dto->getKnowMore());
         }
+        if ($dto->getInfoDescription() !== null) {
+            $promotion->setInfoDescription($dto->getInfoDescription());
+        }
 
         $this->em->persist($promotion);
         $this->em->flush();
@@ -478,19 +490,10 @@ class CommunicationPromotionService extends CommonService
         }
         $this->em->flush();
 
-        $contractResult = $this->contractService->createForPromotionPackages(
-            $packages,
-            (float) $dto->getPriceFrom(),
-            (float) $dto->getPriceTo(),
-            (string) $dto->getPriceCurrency(),
-            $dto->getStartAt(),
-            $dto->getEndAt(),
-        );
-
         $tenantContractsLinked = $this->contractService->linkTenantContractsToPromotionPackages($packages);
 
         $equivalences = $this->equivalenceService->populateEquivalences($promotion, $packages);
 
-        return new CreatePromotionV2Result($promotion, $packages, $contractResult, $tenantContractsLinked, $equivalences);
+        return new CreatePromotionV2Result($promotion, $packages, $tenantContractsLinked, $equivalences);
     }
 }

@@ -391,9 +391,6 @@ class CommunicationPackagesV2SwitchFunctionalTest extends ProviderFunctionalTest
             amountFrom: (float) $regularPackage->getDestinationAmount(),
             amountTo: (float) $regularPackage->getDestinationAmount(),
             amountStep: 1.0,
-            priceFrom: 25.0,
-            priceTo: 25.0,
-            priceCurrency: 'USD',
         );
 
         $result = $promotionService->createV2($dto);
@@ -437,9 +434,6 @@ class CommunicationPackagesV2SwitchFunctionalTest extends ProviderFunctionalTest
             amountFrom: 600.0,
             amountTo: 600.0,
             amountStep: 1.0,
-            priceFrom: 25.0,
-            priceTo: 25.0,
-            priceCurrency: 'USD',
             benefits: [[
                 'type' => 'CREDITS',
                 'unit' => 'CUP',
@@ -453,6 +447,10 @@ class CommunicationPackagesV2SwitchFunctionalTest extends ProviderFunctionalTest
         $promotionService = self::getContainer()->get(CommunicationPromotionService::class);
         $result = $promotionService->createV2($dto);
         $promoPackage = $result->packages[0];
+        // createV2() ya NO crea contrato (el precio es responsabilidad
+        // aparte de CommunicationContractService) — sin uno, el paquete
+        // no sería visible para este tenant sin contratos propios.
+        $this->defaultContractFor($promoPackage, 25.0);
         $this->bindProvider($promoPackage, $environment);
         $this->em->flush();
 
@@ -489,7 +487,7 @@ class CommunicationPackagesV2SwitchFunctionalTest extends ProviderFunctionalTest
             'type' => 'DATA', 'unit' => 'GB', 'unit_type' => 'DATA',
             'amount' => ['base' => 5, 'promotion_bonus' => 0, 'total_excluding_tax' => 5, 'total_including_tax' => 5],
         ]]);
-        $this->defaultContractFor($regularPackage, 10.0, new \DateTimeImmutable('-30 days'));
+        $regularContract = $this->defaultContractFor($regularPackage, 10.0, new \DateTimeImmutable('-30 days'));
         $this->bindProvider($regularPackage, $environment);
         $this->em->flush();
 
@@ -505,9 +503,6 @@ class CommunicationPackagesV2SwitchFunctionalTest extends ProviderFunctionalTest
             amountFrom: 600.0,
             amountTo: 600.0,
             amountStep: 1.0,
-            priceFrom: 25.0,
-            priceTo: 25.0,
-            priceCurrency: 'USD',
             benefits: [[
                 'type' => 'DATA',
                 'unit' => 'GB',
@@ -521,6 +516,10 @@ class CommunicationPackagesV2SwitchFunctionalTest extends ProviderFunctionalTest
         $promotionService = self::getContainer()->get(CommunicationPromotionService::class);
         $result = $promotionService->createV2($dto);
         $promoPackage = $result->packages[0];
+        // createV2() ya NO crea/extiende contrato — antes de este rediseño,
+        // el mismo tuple (600 CUP) hacía que se fusionara solo en el
+        // contrato "por defecto" de arriba; ahora es un paso manual aparte.
+        $regularContract->addPackage($promoPackage);
         $this->bindProvider($promoPackage, $environment);
         $this->em->flush();
 
