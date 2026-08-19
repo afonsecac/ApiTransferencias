@@ -2,5 +2,5 @@
 set -e
 
 echo "▶ PHPUnit tests..."
-php bin/phpunit --no-coverage
+docker compose exec -e APP_ENV=test worker php bin/phpunit --no-coverage
 echo "✔ Tests OK"
