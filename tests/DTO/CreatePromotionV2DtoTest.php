@@ -113,4 +113,48 @@ class CreatePromotionV2DtoTest extends TestCase
         $benefits = [['type' => 'DATA', 'unit' => 'ILIM', 'unit_type' => 'DATA', 'schedule' => ['start' => '01:00']]];
         $this->assertNotEmpty($this->scheduleViolations($benefits));
     }
+
+    private function operationViolations(?array $benefits): array
+    {
+        $violations = $this->validator->validate($this->dto($benefits));
+
+        $result = [];
+        foreach ($violations as $v) {
+            if (str_contains($v->getPropertyPath(), 'operation') || str_contains($v->getPropertyPath(), 'value')) {
+                $result[] = $v->getMessage();
+            }
+        }
+
+        return $result;
+    }
+
+    public function testBenefitWithoutOperationIsValid(): void
+    {
+        $benefits = [['type' => 'CREDITS', 'unit' => 'CUP', 'unit_type' => 'CURRENCY', 'amount' => ['base' => 600, 'promotion_bonus' => 0]]];
+        $this->assertSame([], $this->operationViolations($benefits));
+    }
+
+    public function testBenefitWithOperationAndNumericValueIsValid(): void
+    {
+        $benefits = [['type' => 'CREDITS', 'unit' => 'CUP', 'unit_type' => 'CURRENCY', 'operation' => 'MULTIPLY', 'value' => 6]];
+        $this->assertSame([], $this->operationViolations($benefits));
+    }
+
+    public function testBenefitWithUnknownOperationIsInvalid(): void
+    {
+        $benefits = [['type' => 'CREDITS', 'unit' => 'CUP', 'unit_type' => 'CURRENCY', 'operation' => 'DIVIDE', 'value' => 6]];
+        $this->assertNotEmpty($this->operationViolations($benefits));
+    }
+
+    public function testBenefitWithOperationButMissingValueIsInvalid(): void
+    {
+        $benefits = [['type' => 'CREDITS', 'unit' => 'CUP', 'unit_type' => 'CURRENCY', 'operation' => 'ADD']];
+        $this->assertNotEmpty($this->operationViolations($benefits));
+    }
+
+    public function testBenefitWithOperationAndNonNumericValueIsInvalid(): void
+    {
+        $benefits = [['type' => 'CREDITS', 'unit' => 'CUP', 'unit_type' => 'CURRENCY', 'operation' => 'SET', 'value' => 'ilimitado']];
+        $this->assertNotEmpty($this->operationViolations($benefits));
+    }
 }

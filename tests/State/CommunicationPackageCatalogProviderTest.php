@@ -7,6 +7,7 @@ use App\Entity\Account;
 use App\Entity\CommunicationPackage;
 use App\Entity\User;
 use App\Repository\CommunicationPackageProviderProductRepository;
+use App\Service\Pricing\BenefitOperationResolver;
 use App\Service\Pricing\PackageCatalogResolver;
 use App\Service\Pricing\PackageOfferSourceEnum;
 use App\Service\Pricing\ResolvedPackageOffer;
@@ -23,6 +24,7 @@ class CommunicationPackageCatalogProviderTest extends TestCase
     private PackageCatalogResolver&MockObject $catalogResolver;
     private CommunicationPackageProviderProductRepository&MockObject $bindingRepo;
     private Security&MockObject $security;
+    private BenefitOperationResolver&MockObject $benefitResolver;
     private CommunicationPackageCatalogProvider $provider;
 
     protected function setUp(): void
@@ -30,8 +32,10 @@ class CommunicationPackageCatalogProviderTest extends TestCase
         $this->catalogResolver = $this->createMock(PackageCatalogResolver::class);
         $this->bindingRepo = $this->createMock(CommunicationPackageProviderProductRepository::class);
         $this->security = $this->createMock(Security::class);
+        $this->benefitResolver = $this->createMock(BenefitOperationResolver::class);
+        $this->benefitResolver->method('resolve')->willReturnCallback(static fn (CommunicationPackage $p) => $p->getBenefits());
 
-        $this->provider = new CommunicationPackageCatalogProvider($this->catalogResolver, $this->bindingRepo, $this->security);
+        $this->provider = new CommunicationPackageCatalogProvider($this->catalogResolver, $this->bindingRepo, $this->security, $this->benefitResolver);
     }
 
     private function packageWithId(int $id, string $name): CommunicationPackage

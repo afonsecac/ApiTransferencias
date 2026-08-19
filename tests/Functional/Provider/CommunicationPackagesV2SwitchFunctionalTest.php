@@ -414,6 +414,141 @@ class CommunicationPackagesV2SwitchFunctionalTest extends ProviderFunctionalTest
         $this->assertContains($promoPackage->getId(), $ids, 'La promoción debe verse aunque el tenant ya tenga contrato propio.');
     }
 
+    // ---- 8. operación de beneficios (multiplicación/adición/igualdad), resuelta EN VIVO al servir el catálogo ----
+
+    public function testCatalogAppliesMultiplyOperationForACreditsCurrencyBenefit(): void
+    {
+        $this->setCatalogVersionDefault('v2');
+
+        $client = $this->createClient();
+        $environment = $this->createEnvironment();
+        $account = $this->createAccount($client, $environment);
+        $this->authenticateAs($account);
+
+        $dto = new CreatePromotionV2Dto(
+            name: 'Sextuplica',
+            description: 'Sextuplica',
+            packageNameTemplate: 'Promo {monto} CUP',
+            packageDescriptionTemplate: 'Promo {monto} CUP',
+            startAt: (new \DateTimeImmutable('-1 day'))->format('c'),
+            endAt: (new \DateTimeImmutable('+5 days'))->format('c'),
+            environmentId: $environment->getId(),
+            destinationCurrency: 'CUP',
+            amountFrom: 600.0,
+            amountTo: 600.0,
+            amountStep: 1.0,
+            priceFrom: 25.0,
+            priceTo: 25.0,
+            priceCurrency: 'USD',
+            benefits: [[
+                'type' => 'CREDITS',
+                'unit' => 'CUP',
+                'unit_type' => 'CURRENCY',
+                'operation' => 'MULTIPLY',
+                'value' => 6,
+            ]],
+        );
+
+        /** @var CommunicationPromotionService $promotionService */
+        $promotionService = self::getContainer()->get(CommunicationPromotionService::class);
+        $result = $promotionService->createV2($dto);
+        $promoPackage = $result->packages[0];
+        $this->bindProvider($promoPackage, $environment);
+        $this->em->flush();
+
+        $listed = $this->v1PackageProvider()->provide(new GetCollection(class: CommunicationClientPackage::class));
+        $served = current(array_filter(iterator_to_array($listed), static fn (CommunicationPackage $p) => $p->getId() === $promoPackage->getId()));
+
+        $benefit = $served->getBenefits()[0];
+        // Línea base = el propio destinationAmount (600 CUP) — CREDITS/CURRENCY
+        // nunca depende del paquete regular.
+        $this->assertSame(600, $benefit['amount']['base']);
+        $this->assertSame(3000, $benefit['amount']['promotion_bonus']);
+        $this->assertSame(3600, $benefit['amount']['total_excluding_tax']);
+    }
+
+    /**
+     * Prueba explícitamente el diseño "en vivo": el mismo paquete de
+     * promoción, sin volver a tocarlo, refleja un valor DISTINTO en una
+     * segunda petición después de que el paquete regular equivalente
+     * cambia su beneficio — no quedó una foto fija tomada al crear la
+     * promoción.
+     */
+    public function testCatalogRecalculatesAddOperationLiveAgainstTheCurrentRegularPackageBenefit(): void
+    {
+        $this->setCatalogVersionDefault('v2');
+
+        $client = $this->createClient();
+        $environment = $this->createEnvironment();
+        $account = $this->createAccount($client, $environment);
+        $this->authenticateAs($account);
+
+        $regularPackage = $this->v2Package(activeStartAt: new \DateTimeImmutable('-30 days'));
+        $regularPackage->setDestinationAmount(600.0)->setDestinationCurrency('CUP');
+        $regularPackage->setBenefits([[
+            'type' => 'DATA', 'unit' => 'GB', 'unit_type' => 'DATA',
+            'amount' => ['base' => 5, 'promotion_bonus' => 0, 'total_excluding_tax' => 5, 'total_including_tax' => 5],
+        ]]);
+        $this->defaultContractFor($regularPackage, 10.0, new \DateTimeImmutable('-30 days'));
+        $this->bindProvider($regularPackage, $environment);
+        $this->em->flush();
+
+        $dto = new CreatePromotionV2Dto(
+            name: 'Bonifica 20GB',
+            description: 'Bonifica 20GB',
+            packageNameTemplate: 'Promo {monto} CUP',
+            packageDescriptionTemplate: 'Promo {monto} CUP',
+            startAt: (new \DateTimeImmutable('-1 day'))->format('c'),
+            endAt: (new \DateTimeImmutable('+5 days'))->format('c'),
+            environmentId: $environment->getId(),
+            destinationCurrency: 'CUP',
+            amountFrom: 600.0,
+            amountTo: 600.0,
+            amountStep: 1.0,
+            priceFrom: 25.0,
+            priceTo: 25.0,
+            priceCurrency: 'USD',
+            benefits: [[
+                'type' => 'DATA',
+                'unit' => 'GB',
+                'unit_type' => 'DATA',
+                'operation' => 'ADD',
+                'value' => 20,
+            ]],
+        );
+
+        /** @var CommunicationPromotionService $promotionService */
+        $promotionService = self::getContainer()->get(CommunicationPromotionService::class);
+        $result = $promotionService->createV2($dto);
+        $promoPackage = $result->packages[0];
+        $this->bindProvider($promoPackage, $environment);
+        $this->em->flush();
+
+        $findServedPromo = function () use ($promoPackage): CommunicationPackage {
+            $listed = $this->v1PackageProvider()->provide(new GetCollection(class: CommunicationClientPackage::class));
+
+            return current(array_filter(iterator_to_array($listed), static fn (CommunicationPackage $p) => $p->getId() === $promoPackage->getId()));
+        };
+
+        $firstBenefit = $findServedPromo()->getBenefits()[0];
+        $this->assertSame(5, $firstBenefit['amount']['base']);
+        $this->assertSame(20, $firstBenefit['amount']['promotion_bonus']);
+        $this->assertSame(25, $firstBenefit['amount']['total_excluding_tax']);
+
+        // El admin corrige el paquete regular DESPUÉS de creada la promoción
+        // — sin tocar la promoción para nada.
+        $regularPackage->setBenefits([[
+            'type' => 'DATA', 'unit' => 'GB', 'unit_type' => 'DATA',
+            'amount' => ['base' => 8, 'promotion_bonus' => 0, 'total_excluding_tax' => 8, 'total_including_tax' => 8],
+        ]]);
+        $this->em->flush();
+
+        $secondBenefit = $findServedPromo()->getBenefits()[0];
+        $this->assertSame(8, $secondBenefit['amount']['base']);
+        $this->assertSame(20, $secondBenefit['amount']['promotion_bonus']);
+        $this->assertSame(28, $secondBenefit['amount']['total_excluding_tax']);
+    }
+
     // ---- Shape autoritativo: serializer real ----
 
     public function testRealSerializerProducesTheSameKeysForBothCatalogVersions(): void
