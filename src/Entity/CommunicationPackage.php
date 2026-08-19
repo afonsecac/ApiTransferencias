@@ -6,6 +6,8 @@ use ApiPlatform\Metadata\ApiResource;
 use ApiPlatform\Metadata\ApiProperty;
 use ApiPlatform\Metadata\Get;
 use ApiPlatform\Metadata\GetCollection;
+use ApiPlatform\OpenApi\Model\Operation as OpenApiOperation;
+use ApiPlatform\OpenApi\Model\Parameter as OpenApiParameter;
 use App\Repository\CommunicationPackageRepository;
 use App\Service\Pricing\ResolvedPackageOffer;
 use App\State\CommunicationPackageCatalogItemProvider;
@@ -58,11 +60,33 @@ use Symfony\Component\Serializer\Attribute\Groups;
             description: 'Catálogo agnóstico de proveedor (V2) resuelto para el cliente autenticado',
             name: 'CommunicationPackageCatalog',
             provider: CommunicationPackageCatalogProvider::class,
-            paginationEnabled: false,
+            openapi: new OpenApiOperation(
+                parameters: [
+                    new OpenApiParameter(
+                        name: 'orderBy[price]',
+                        in: 'query',
+                        description: 'Ordena por el precio resuelto para el cliente autenticado. Sin este parámetro, se ordena por id ascendente.',
+                        schema: ['type' => 'string', 'enum' => ['asc', 'desc']],
+                    ),
+                    new OpenApiParameter(
+                        name: 'price[gte]',
+                        in: 'query',
+                        description: 'Precio mínimo (inclusive).',
+                        schema: ['type' => 'number'],
+                    ),
+                    new OpenApiParameter(
+                        name: 'price[lte]',
+                        in: 'query',
+                        description: 'Precio máximo (inclusive).',
+                        schema: ['type' => 'number'],
+                    ),
+                ],
+            ),
         ),
     ],
     normalizationContext: ['groups' => ['comPackage:read']],
     security: "is_granted('ROLE_COM_API_USER')",
+    paginationMaximumItemsPerPage: 100,
 )]
 class CommunicationPackage
 {
