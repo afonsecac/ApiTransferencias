@@ -2,6 +2,7 @@
 
 namespace App\DTO;
 
+use App\DTO\Validation\BenefitOperationValidator;
 use App\OpenApi\Attribute\OAProperty;
 use Symfony\Component\Validator\Constraints as Assert;
 use Symfony\Component\Validator\Context\ExecutionContextInterface;
@@ -69,6 +70,14 @@ class CreateCommunicationPackageBatchDto implements IInput
                     'base' => ['type' => 'integer'],
                     'promotion_bonus' => ['type' => 'integer'],
                 ]],
+                // Cálculo en vivo contra la línea base (destinationAmount
+                // para CREDITS/CURRENCY; el beneficio del mismo type/unit
+                // en el paquete regular equivalente para el resto) — ver
+                // CommunicationPackageAdminService::applyBenefitOperations().
+                // Sin operation, amount.base/promotion_bonus se usan tal
+                // cual (comportamiento previo).
+                'operation' => ['type' => 'string', 'nullable' => true, 'enum' => ['MULTIPLY', 'ADD', 'SET']],
+                'value' => ['type' => 'number', 'nullable' => true, 'example' => 6],
             ],
         ],
     ])]
@@ -146,6 +155,12 @@ class CreateCommunicationPackageBatchDto implements IInput
                 ->atPath('toAmount')
                 ->addViolation();
         }
+    }
+
+    #[Assert\Callback]
+    public function validateBenefitsOperation(ExecutionContextInterface $context): void
+    {
+        BenefitOperationValidator::validate($this->benefits, $context);
     }
 
     public function getNameTemplate(): ?string { return $this->nameTemplate; }

@@ -10,6 +10,7 @@ use App\Entity\CommunicationPackage;
 use App\Entity\CommunicationProduct;
 use App\Entity\Environment;
 use App\Exception\MyCurrentException;
+use App\Repository\CommunicationPackageRepository;
 use App\Repository\CommunicationProductRepository;
 use App\Service\Pricing\CommunicationPackageAdminService;
 use Doctrine\ORM\EntityManagerInterface;
@@ -24,14 +25,16 @@ class CommunicationPackageAdminServiceTest extends TestCase
 {
     private EntityManagerInterface&MockObject $em;
     private CommunicationProductRepository&MockObject $productRepository;
+    private CommunicationPackageRepository&MockObject $packageRepository;
     private CommunicationPackageAdminService $service;
 
     protected function setUp(): void
     {
         $this->em = $this->createMock(EntityManagerInterface::class);
         $this->productRepository = $this->createMock(CommunicationProductRepository::class);
+        $this->packageRepository = $this->createMock(CommunicationPackageRepository::class);
 
-        $this->service = new CommunicationPackageAdminService($this->em, $this->productRepository);
+        $this->service = new CommunicationPackageAdminService($this->em, $this->productRepository, $this->packageRepository);
     }
 
     private function repoReturning(mixed $value): EntityRepository&MockObject
@@ -267,5 +270,138 @@ class CommunicationPackageAdminServiceTest extends TestCase
             'wholesalePrice' => 11.36,
             'priceCurrency' => 'USD',
         ]], $coverage);
+    }
+
+    public function testCreateAppliesMultiplyOperationAgainstTheOwnDestinationAmountForCreditsCurrency(): void
+    {
+        $dto = new CreateCommunicationPackageDto(
+            name: 'Promo 600 CUP',
+            description: 'Promo 600 CUP',
+            destinationAmount: 600.0,
+            destinationCurrency: 'CUP',
+            benefits: [[
+                'type' => 'CREDITS',
+                'unit' => 'CUP',
+                'unit_type' => 'CURRENCY',
+                'operation' => 'MULTIPLY',
+                'value' => 6,
+            ]],
+        );
+
+        // CREDITS/CURRENCY nunca necesita ir a buscar el paquete regular —
+        // su línea base es el propio destinationAmount.
+        $this->packageRepository->expects($this->never())->method('findByDestination');
+
+        $package = $this->service->create($dto);
+
+        $benefit = $package->getBenefits()[0];
+        $this->assertSame(600, $benefit['amount']['base']);
+        $this->assertSame(3000, $benefit['amount']['promotion_bonus']);
+        $this->assertSame(3600, $benefit['amount']['total_excluding_tax']);
+    }
+
+    public function testCreateAppliesAddOperationUsingTheRegularEquivalentPackageAsBaseline(): void
+    {
+        $dto = new CreateCommunicationPackageDto(
+            name: 'Promo 600 CUP',
+            description: 'Promo 600 CUP',
+            destinationAmount: 600.0,
+            destinationCurrency: 'CUP',
+            benefits: [[
+                'type' => 'DATA',
+                'unit' => 'GB',
+                'unit_type' => 'DATA',
+                'operation' => 'ADD',
+                'value' => 20,
+            ]],
+        );
+
+        $regularPackage = (new CommunicationPackage())
+            ->setName('Regular 600 CUP')->setDescription('Regular 600 CUP')
+            ->setDestinationAmount(600.0)->setDestinationCurrency('CUP')
+            ->setBenefits([['type' => 'DATA', 'unit' => 'GB', 'unit_type' => 'DATA', 'amount' => ['base' => 5]]]);
+
+        $this->packageRepository->expects($this->once())
+            ->method('findByDestination')
+            ->with(600.0, 'CUP')
+            ->willReturn($regularPackage);
+
+        $package = $this->service->create($dto);
+
+        $benefit = $package->getBenefits()[0];
+        $this->assertSame(5, $benefit['amount']['base']);
+        $this->assertSame(20, $benefit['amount']['promotion_bonus']);
+        $this->assertSame(25, $benefit['amount']['total_excluding_tax']);
+    }
+
+    public function testCreateAddOperationWithoutARegularEquivalentUsesZeroAsBaseline(): void
+    {
+        $dto = new CreateCommunicationPackageDto(
+            name: 'Promo 600 CUP',
+            description: 'Promo 600 CUP',
+            destinationAmount: 600.0,
+            destinationCurrency: 'CUP',
+            benefits: [[
+                'type' => 'DATA',
+                'unit' => 'GB',
+                'unit_type' => 'DATA',
+                'operation' => 'ADD',
+                'value' => 20,
+            ]],
+        );
+
+        $this->packageRepository->method('findByDestination')->willReturn(null);
+
+        $package = $this->service->create($dto);
+
+        $benefit = $package->getBenefits()[0];
+        $this->assertSame(0, $benefit['amount']['base']);
+        $this->assertSame(20, $benefit['amount']['promotion_bonus']);
+    }
+
+    public function testCreateAppliesSetOperationIgnoringAnyBaseline(): void
+    {
+        $dto = new CreateCommunicationPackageDto(
+            name: 'Promo datos ilimitados',
+            description: 'Promo datos ilimitados',
+            destinationAmount: 600.0,
+            destinationCurrency: 'CUP',
+            benefits: [[
+                'type' => 'DATA',
+                'unit' => 'GB',
+                'unit_type' => 'DATA',
+                'operation' => 'SET',
+                'value' => 100,
+            ]],
+        );
+
+        $package = $this->service->create($dto);
+
+        $benefit = $package->getBenefits()[0];
+        $this->assertSame(100, $benefit['amount']['base']);
+        $this->assertSame(0, $benefit['amount']['promotion_bonus']);
+    }
+
+    public function testCreateLeavesABenefitUntouchedWhenNoOperationIsSpecified(): void
+    {
+        $dto = new CreateCommunicationPackageDto(
+            name: 'Paquete normal',
+            description: 'Paquete normal',
+            destinationAmount: 600.0,
+            destinationCurrency: 'CUP',
+            benefits: [[
+                'type' => 'DATA',
+                'unit' => 'GB',
+                'unit_type' => 'DATA',
+                'amount' => ['base' => 5, 'promotion_bonus' => 0],
+            ]],
+        );
+
+        $this->packageRepository->expects($this->never())->method('findByDestination');
+
+        $package = $this->service->create($dto);
+
+        // Comportamiento previo intacto: sin operation, amount se conserva tal cual vino.
+        $this->assertSame(['base' => 5, 'promotion_bonus' => 0], $package->getBenefits()[0]['amount']);
     }
 }
