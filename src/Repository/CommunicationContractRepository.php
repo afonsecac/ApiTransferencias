@@ -4,6 +4,7 @@ namespace App\Repository;
 
 use App\Entity\Account;
 use App\Entity\CommunicationContract;
+use App\Entity\CommunicationPackage;
 use App\Service\Pricing\DestinationKey;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\ORM\QueryBuilder;
@@ -58,6 +59,26 @@ class CommunicationContractRepository extends ServiceEntityRepository
 
         return $this->baseActiveQueryBuilder($now)
             ->andWhere('c.tenant IS NULL')
+            ->getQuery()
+            ->getResult();
+    }
+
+    /**
+     * Contratos propios vigentes que YA cubren un paquete dado — usado para
+     * encontrar, dado el paquete regular equivalente a uno de promoción,
+     * qué tenants tienen contrato propio sobre él (ver
+     * CommunicationContractService::linkTenantContractsToPromotionPackage()).
+     *
+     * @return list<CommunicationContract>
+     */
+    public function findActiveTenantContractsForPackage(CommunicationPackage $package, ?\DateTimeImmutable $now = null): array
+    {
+        $now ??= new \DateTimeImmutable();
+
+        return $this->baseActiveQueryBuilder($now)
+            ->andWhere('c.tenant IS NOT NULL')
+            ->andWhere(':package MEMBER OF c.packages')
+            ->setParameter('package', $package)
             ->getQuery()
             ->getResult();
     }
