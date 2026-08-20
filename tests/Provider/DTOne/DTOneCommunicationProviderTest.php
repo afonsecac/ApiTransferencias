@@ -209,18 +209,45 @@ class DTOneCommunicationProviderTest extends TestCase
         $this->assertSame(ProviderOutcomeEnum::UNKNOWN, $result->outcome);
     }
 
-    public function testGetPlatformBalanceParsesDataArray(): void
+    /**
+     * Forma real confirmada en vivo el 2026-08-20 contra el sandbox TEST:
+     * un array plano de cuentas, `unit`/`available` (no `data`/`currency`/
+     * `amount`, que es lo que el código asumía antes de este fix — por
+     * eso "probar conexión" siempre mostraba el saldo vacío para DTOne).
+     */
+    public function testGetPlatformBalanceParsesFlatAccountsArray(): void
     {
         $this->client->method('getBalances')->willReturn([
-            'data' => [
-                ['currency' => 'USD', 'amount' => 123.45],
-                ['currency' => 'EUR', 'amount' => 10],
-            ],
+            ['available' => 123.45, 'credit_limit' => 0, 'holding' => 0, 'id' => 1, 'unit' => 'USD', 'unit_type' => 'CURRENCY'],
+            ['available' => 10.0, 'credit_limit' => 0, 'holding' => 0, 'id' => 2, 'unit' => 'EUR', 'unit_type' => 'CURRENCY'],
         ]);
 
         $result = $this->provider->getPlatformBalance($this->context());
 
         $this->assertSame(['USD' => 123.45, 'EUR' => 10.0], $result->amounts);
+    }
+
+    public function testGetPlatformBalanceIgnoresHoldingAndCreditLimit(): void
+    {
+        $this->client->method('getBalances')->willReturn([
+            ['available' => 99907.81, 'credit_limit' => 500.0, 'holding' => 250.0, 'id' => 1, 'unit' => 'EUR', 'unit_type' => 'CURRENCY'],
+        ]);
+
+        $result = $this->provider->getPlatformBalance($this->context());
+
+        $this->assertSame(['EUR' => 99907.81], $result->amounts);
+    }
+
+    public function testGetPlatformBalanceSkipsNonCurrencyEntries(): void
+    {
+        $this->client->method('getBalances')->willReturn([
+            ['available' => 5000.0, 'id' => 1, 'unit' => 'CREDIT', 'unit_type' => 'CREDIT_LINE'],
+            ['available' => 123.45, 'id' => 2, 'unit' => 'USD', 'unit_type' => 'CURRENCY'],
+        ]);
+
+        $result = $this->provider->getPlatformBalance($this->context());
+
+        $this->assertSame(['USD' => 123.45], $result->amounts);
     }
 
     public function testFetchProductsFiltersByCubaCountryIsoCode(): void
