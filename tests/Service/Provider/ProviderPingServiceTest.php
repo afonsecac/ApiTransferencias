@@ -205,6 +205,81 @@ class ProviderPingServiceTest extends TestCase
         $this->assertSame('timeout', $result->error);
     }
 
+    public function testPreferBalancePrefersBalanceOverHealthCheckWhenAdapterSupportsBoth(): void
+    {
+        $adapter = new class implements ProviderHealthCheckInterface, ProviderBalanceInterface {
+            public function getCode(): CommunicationProviderEnum
+            {
+                return CommunicationProviderEnum::DTONE;
+            }
+
+            public function getCapabilities(): array
+            {
+                return [];
+            }
+
+            public function getConfigSchema(): array
+            {
+                return [];
+            }
+
+            public function checkHealth(ProviderContext $context): ProviderPingResult
+            {
+                // El botón manual "probar conexión" (preferBalance: true) nunca
+                // debe llegar aquí cuando el adaptador también soporta balance
+                // — si este método se invoca, el test debe fallar de forma
+                // visible en vez de devolver un resultado que enmascare el bug.
+                throw new \LogicException('checkHealth() no debía llamarse con preferBalance: true');
+            }
+
+            public function getPlatformBalance(ProviderContext $context): ProviderBalanceResult
+            {
+                return new ProviderBalanceResult(['USD' => 374.0], new \DateTimeImmutable('2026-08-20T00:00:00+00:00'));
+            }
+        };
+        $registry = new ProviderRegistry([$adapter]);
+
+        $service = new ProviderPingService($registry, $this->credentialsResolver($registry, 'x'), $this->contextFactory());
+
+        $result = $service->ping(CommunicationProviderEnum::DTONE, 'TEST', preferBalance: true);
+
+        $this->assertTrue($result->available);
+        $this->assertSame(['USD' => 374.0], $result->details['amounts']);
+    }
+
+    public function testPreferBalanceFallsBackToHealthCheckWhenAdapterHasNoBalance(): void
+    {
+        $adapter = new class implements ProviderHealthCheckInterface {
+            public function getCode(): CommunicationProviderEnum
+            {
+                return CommunicationProviderEnum::DTONE;
+            }
+
+            public function getCapabilities(): array
+            {
+                return [];
+            }
+
+            public function getConfigSchema(): array
+            {
+                return [];
+            }
+
+            public function checkHealth(ProviderContext $context): ProviderPingResult
+            {
+                return ProviderPingResult::available(7);
+            }
+        };
+        $registry = new ProviderRegistry([$adapter]);
+
+        $service = new ProviderPingService($registry, $this->credentialsResolver($registry, 'x'), $this->contextFactory());
+
+        $result = $service->ping(CommunicationProviderEnum::DTONE, 'TEST', preferBalance: true);
+
+        $this->assertTrue($result->available);
+        $this->assertSame(7, $result->latencyMs);
+    }
+
     public function testPingReturnsUnavailableWhenProviderNotRegistered(): void
     {
         $registry = new ProviderRegistry([]);

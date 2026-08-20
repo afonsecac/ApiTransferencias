@@ -8,6 +8,8 @@ use App\Exception\MyCurrentException;
 use App\Provider\Contract\ProviderBalanceInterface;
 use App\Provider\Contract\ProviderBalanceResult;
 use App\Provider\Contract\ProviderContext;
+use App\Provider\Contract\ProviderHealthCheckInterface;
+use App\Provider\Contract\ProviderPingResult;
 use App\Provider\ProviderContextFactory;
 use App\Provider\ProviderCredentialsResolver;
 use App\Provider\ProviderRegistry;
@@ -115,6 +117,53 @@ class ProviderConnectionTestServiceTest extends TestCase
 
         $this->assertFalse($result['success']);
         $this->assertSame('faltan credenciales', $result['message']);
+    }
+
+    /**
+     * El botón "probar conexión" del dashboard debe consultar SIEMPRE el
+     * balance real cuando el proveedor lo soporta — aunque el adaptador
+     * tenga también su propio health-check (como CSQ/ETECSA), que es lo
+     * que usa el ping automático de 15 min en su lugar. Confirmado con el
+     * usuario: antes de este fix, CSQ mostraba `amounts: []` en el botón
+     * manual porque checkHealth() (un ping vacío, sin datos de saldo)
+     * tenía prioridad.
+     */
+    public function testPrefersBalanceOverHealthCheckEvenWhenAdapterSupportsBoth(): void
+    {
+        $adapter = new class implements ProviderHealthCheckInterface, ProviderBalanceInterface {
+            public function getCode(): CommunicationProviderEnum
+            {
+                return CommunicationProviderEnum::CSQ;
+            }
+
+            /** @return list<ProviderCapabilityEnum> */
+            public function getCapabilities(): array
+            {
+                return [ProviderCapabilityEnum::BALANCE];
+            }
+
+            public function getConfigSchema(): array
+            {
+                return [];
+            }
+
+            public function checkHealth(ProviderContext $context): ProviderPingResult
+            {
+                throw new \LogicException('checkHealth() no debía llamarse: el botón manual prefiere balance');
+            }
+
+            public function getPlatformBalance(ProviderContext $context): ProviderBalanceResult
+            {
+                return new ProviderBalanceResult(['USD' => 374.0], new \DateTimeImmutable('2026-08-20T00:00:00+00:00'));
+            }
+        };
+
+        $service = $this->service(new ProviderRegistry([$adapter]));
+
+        $result = $service->test(CommunicationProviderEnum::CSQ, 'TEST');
+
+        $this->assertTrue($result['success']);
+        $this->assertSame(['USD' => 374.0], $result['amounts']);
     }
 
     public function testReturnsFailureWhenProviderNotRegistered(): void
