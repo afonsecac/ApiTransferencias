@@ -154,12 +154,15 @@ class DTOneHttpClient
     }
 
     /**
-     * GET /v1/balances — nuestro saldo con DTOne, multi-moneda.
+     * GET /v1/balances — nuestro saldo con DTOne, multi-moneda. La
+     * respuesta es un array plano de cuentas (no un objeto envoltorio) —
+     * ver el docblock de DTOneCommunicationProvider::getPlatformBalance().
      *
-     * @return array<string, mixed>
+     * @return list<array<string, mixed>>
      */
     public function getBalances(ProviderContext $context): array
     {
+        /** @var list<array<string, mixed>> */
         return $this->request($context, 'GET', '/v1/balances');
     }
 

@@ -216,17 +216,33 @@ final class DTOneCommunicationProvider implements
         return $this->statusMapper->mapStatusQuery($raw);
     }
 
+    /**
+     * GET /v1/balances devuelve un array plano de cuentas, NO un objeto con
+     * `data`/`balances` (confirmado en vivo el 2026-08-20 contra el sandbox
+     * TEST real): `[{"available":99907.81,"credit_limit":0,"holding":0,
+     * "id":16679,"unit":"EUR","unit_type":"CURRENCY"}]`. La moneda es
+     * `unit` (no `currency`) y el saldo disponible es `available` (no
+     * `amount`) — `holding` es saldo retenido/pendiente, no usable, y
+     * `credit_limit` es una línea de crédito, no saldo propio; ninguno de
+     * los dos debe sumarse aquí. Se descartan entradas con `unit_type`
+     * distinto de CURRENCY (p. ej. una futura cuenta de crédito no
+     * monetaria) — hoy DTOne solo devuelve CURRENCY, pero el campo existe
+     * explícitamente para distinguirlas.
+     */
     public function getPlatformBalance(ProviderContext $context): ProviderBalanceResult
     {
         $raw = $this->client->getBalances($context);
         $amounts = [];
 
-        foreach ((array) ($raw['data'] ?? $raw['balances'] ?? []) as $entry) {
-            if (!is_array($entry) || !isset($entry['currency'])) {
+        foreach ($raw as $entry) {
+            if (!isset($entry['unit'], $entry['available'])) {
+                continue;
+            }
+            if (($entry['unit_type'] ?? 'CURRENCY') !== 'CURRENCY') {
                 continue;
             }
 
-            $amounts[(string) $entry['currency']] = (float) ($entry['amount'] ?? 0.0);
+            $amounts[(string) $entry['unit']] = (float) $entry['available'];
         }
 
         return new ProviderBalanceResult(amounts: $amounts, fetchedAt: new \DateTimeImmutable('now'));
