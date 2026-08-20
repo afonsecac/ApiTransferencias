@@ -34,14 +34,22 @@ class CommunicationSaleRechargeRepository extends ServiceEntityRepository
         // Esperar al menos 1 minuto tras el inicio de la promoción antes de enviar al proveedor
         $activationThreshold = $now->modify('-1 minute');
 
+        // LEFT JOIN + OR explícito (V1 r.package / V2 r.catalogPackage,
+        // nunca ambos — ver CommunicationSaleInfo) — un INNER JOIN sobre
+        // r.package solo (como antes de Fase 5) descarta en silencio
+        // cualquier reserva V2, cuyo package_id siempre es NULL.
         return $this->createQueryBuilder('r')
             ->join('r.promotion', 'p')
-            ->join('r.package', 'q')
+            ->leftJoin('r.package', 'q')
+            ->leftJoin('r.catalogPackage', 'cq')
             ->where('r.state = :state')
             ->andWhere('r.stateProcess = :stateProcess')
             ->andWhere('p.startAt <= :activationThreshold')
             ->andWhere('p.endAt >= :now')
-            ->andWhere('q.activeEndAt > :now')
+            ->andWhere(
+                '(r.package IS NOT NULL AND q.activeEndAt > :now)'
+                . ' OR (r.catalogPackage IS NOT NULL AND (cq.activeEndAt IS NULL OR cq.activeEndAt > :now))'
+            )
             ->setParameters(new ArrayCollection([
                 new Parameter('now', $now),
                 new Parameter('activationThreshold', $activationThreshold),
