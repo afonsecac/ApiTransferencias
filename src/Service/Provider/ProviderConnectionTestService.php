@@ -6,9 +6,13 @@ use App\Enums\CommunicationProviderEnum;
 
 /**
  * Prueba en vivo, bajo demanda, si las credenciales configuradas para un
- * proveedor/entorno funcionan. Delega el sondeo en ProviderPingService (la
- * misma ruta que usa el ping periódico — un solo comportamiento) y adapta su
- * ProviderPingResult a la forma de retorno histórica de este servicio.
+ * proveedor/entorno funcionan. Delega el sondeo en ProviderPingService con
+ * `preferBalance: true` — a diferencia del ping periódico automático (que
+ * prioriza un health-check barato para no golpear a cada proveedor con una
+ * consulta de saldo cada 15 minutos), este botón manual SIEMPRE debe
+ * consultar el balance real cuando el proveedor lo soporta (confirmado con
+ * el usuario), no solo verificar que responde. Adapta el ProviderPingResult
+ * resultante a la forma de retorno histórica de este servicio.
  * No hay circuit breaker ni estado persistido: es una señal honesta del
  * instante en que se pulsa el botón, no un histórico de fiabilidad.
  */
@@ -24,7 +28,7 @@ class ProviderConnectionTestService
      */
     public function test(CommunicationProviderEnum $provider, string $environmentType): array
     {
-        $result = $this->pingService->ping($provider, $environmentType);
+        $result = $this->pingService->ping($provider, $environmentType, preferBalance: true);
 
         if ($result->available) {
             return [
