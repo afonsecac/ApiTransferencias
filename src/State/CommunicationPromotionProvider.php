@@ -5,9 +5,7 @@ namespace App\State;
 use ApiPlatform\Metadata\Operation;
 use ApiPlatform\State\ProviderInterface;
 use App\Entity\Account;
-use App\Entity\CommunicationPackage;
 use App\Entity\CommunicationPromotions;
-use App\Repository\CommunicationPackageRepository;
 use Doctrine\Common\Collections\ArrayCollection;
 use Symfony\Bundle\SecurityBundle\Security;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
@@ -19,7 +17,6 @@ class CommunicationPromotionProvider implements ProviderInterface
         #[Autowire(service: 'api_platform.doctrine.orm.state.collection_provider')]
         private readonly ProviderInterface $itemProvider,
         private readonly Security $security,
-        private readonly CommunicationPackageRepository $packageRepository,
     ) {
     }
 
@@ -43,18 +40,15 @@ class CommunicationPromotionProvider implements ProviderInterface
 
                     if ($promotion->isV2()) {
                         // V2: no genera CommunicationClientPackage por tenant (catálogo
-                        // compartido), así que `products` se puebla desde el
-                        // CommunicationPackage de la promoción vía su FK `promotion`.
-                        $packages = $this->packageRepository->findByPromotion($promotion);
-                        $products = array_map(
-                            static fn (CommunicationPackage $package) => [
-                                'id' => $package->getId(),
-                                'description' => $package->getDescription(),
-                                'name' => $package->getName(),
-                            ],
-                            $packages
-                        );
-                        $promotion->setProductsTemp(new ArrayCollection($products));
+                        // compartido). `products` es una relación ManyToMany tipada a
+                        // CommunicationClientPackage que API Platform serializa como
+                        // to-many relation — NO admite elementos que no sean objetos de
+                        // esa clase (AbstractItemNormalizer::normalizeCollectionOfRelations
+                        // lanza "Unexpected non-object element in to-many relation" si se
+                        // le mete un array plano, como se intentó aquí y tumbó prod el
+                        // 2026-08-22). Se deja vacío a propósito; el listado de paquetes
+                        // V2 debe exponerse en un campo propio, respaldado por una
+                        // relación Doctrine real, no reutilizando este.
                         continue;
                     }
 
