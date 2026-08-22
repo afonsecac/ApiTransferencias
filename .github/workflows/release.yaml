@@ -1,0 +1,91 @@
+name: Release
+
+# Se dispara cuando "Deploy Production" (push a master) termina, y solo crea
+# tag + release si el deploy realmente tuvo éxito (health check incluido) —
+# así el release siempre representa código que quedó vivo en producción, no
+# solo código que se mergeó a master.
+on:
+  workflow_run:
+    workflows: ["Deploy Production"]
+    types: [completed]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+
+      # Versionado semver a partir de Conventional Commits desde el último
+      # tag: BREAKING CHANGE / "!" => major, "feat:" => minor, resto => patch.
+      # Requiere un tag inicial (ver v1.0.0 sembrado manualmente) — sin tag
+      # previo no hay base desde la que calcular el bump.
+      - name: Compute next version
+        id: version
+        run: |
+          set -euo pipefail
+
+          LAST_TAG=$(git tag --list 'v*' --sort=-v:refname | head -n1)
+          if [ -z "$LAST_TAG" ]; then
+            echo "No hay tags previos (v*). Sembrar un tag inicial (ej. v1.0.0) antes de que este workflow pueda calcular versiones." >&2
+            exit 1
+          fi
+
+          RANGE="${LAST_TAG}..HEAD"
+          COMMITS="$(git log "$RANGE" --pretty=format:%s)"
+
+          if [ -z "$COMMITS" ]; then
+            echo "Sin commits nuevos desde $LAST_TAG, no se crea release."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          BUMP="patch"
+          if echo "$COMMITS" | grep -qE '^[a-zA-Z]+(\([^)]*\))?!:|BREAKING CHANGE'; then
+            BUMP="major"
+          elif echo "$COMMITS" | grep -qE '^feat(\([^)]*\))?:'; then
+            BUMP="minor"
+          fi
+
+          VERSION="${LAST_TAG#v}"
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
+          case "$BUMP" in
+            major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
+            minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
+            patch) PATCH=$((PATCH + 1)) ;;
+          esac
+
+          NEW_TAG="v${MAJOR}.${MINOR}.${PATCH}"
+          echo "Bump: $BUMP -> $NEW_TAG (desde $LAST_TAG)"
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+          echo "new_tag=$NEW_TAG" >> "$GITHUB_OUTPUT"
+          echo "last_tag=$LAST_TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Create tag and GitHub release
+        if: steps.version.outputs.skip == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag "${{ steps.version.outputs.new_tag }}" "${{ github.event.workflow_run.head_sha }}"
+          git push origin "${{ steps.version.outputs.new_tag }}"
+
+          gh release create "${{ steps.version.outputs.new_tag }}" \
+            --title "${{ steps.version.outputs.new_tag }}" \
+            --target "${{ github.event.workflow_run.head_sha }}" \
+            --notes-start-tag "${{ steps.version.outputs.last_tag }}" \
+            --generate-notes
