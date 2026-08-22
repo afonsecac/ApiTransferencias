@@ -5,8 +5,10 @@ namespace App\State;
 use ApiPlatform\Metadata\Operation;
 use ApiPlatform\State\ProviderInterface;
 use App\Entity\Account;
+use App\Entity\CommunicationClientPackage;
+use App\Entity\CommunicationPackage;
 use App\Entity\CommunicationPromotions;
-use Doctrine\Common\Collections\ArrayCollection;
+use App\Repository\CommunicationPackageRepository;
 use Symfony\Bundle\SecurityBundle\Security;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
 
@@ -17,6 +19,7 @@ class CommunicationPromotionProvider implements ProviderInterface
         #[Autowire(service: 'api_platform.doctrine.orm.state.collection_provider')]
         private readonly ProviderInterface $itemProvider,
         private readonly Security $security,
+        private readonly CommunicationPackageRepository $packageRepository,
     ) {
     }
 
@@ -40,27 +43,39 @@ class CommunicationPromotionProvider implements ProviderInterface
 
                     if ($promotion->isV2()) {
                         // V2: no genera CommunicationClientPackage por tenant (catálogo
-                        // compartido). `products` es una relación ManyToMany tipada a
-                        // CommunicationClientPackage que API Platform serializa como
-                        // to-many relation — NO admite elementos que no sean objetos de
-                        // esa clase (AbstractItemNormalizer::normalizeCollectionOfRelations
-                        // lanza "Unexpected non-object element in to-many relation" si se
-                        // le mete un array plano, como se intentó aquí y tumbó prod el
-                        // 2026-08-22). Se deja vacío a propósito; el listado de paquetes
-                        // V2 debe exponerse en un campo propio, respaldado por una
-                        // relación Doctrine real, no reutilizando este.
+                        // compartido); se resuelve desde CommunicationPackage vía su FK
+                        // `promotion`. `products` se expone como array plano
+                        // (getProductsSummary/setProductsSummary), nunca como la
+                        // relación Doctrine to-many tipada — meter ahí objetos de otra
+                        // clase (o arrays planos) tumbó prod el 2026-08-22.
+                        $packages = $this->packageRepository->findByPromotion($promotion);
+                        $promotion->setProductsSummary(array_map(
+                            static fn (CommunicationPackage $package): array => [
+                                'id' => $package->getId(),
+                                'description' => $package->getDescription(),
+                                'name' => $package->getName(),
+                            ],
+                            $packages
+                        ));
                         continue;
                     }
 
                     $products = $promotion->getProducts()->filter(
-                        function (\App\Entity\CommunicationClientPackage $clientPackage) {
+                        function (CommunicationClientPackage $clientPackage) {
                             $user = $this->security->getUser();
 
                             return $user instanceof Account && $clientPackage->getTenant()?->getId(
                                 ) === $user->getId();
                         }
                     );
-                    $promotion->setProductsTemp(new ArrayCollection($products->getValues()));
+                    $promotion->setProductsSummary(array_map(
+                        static fn (CommunicationClientPackage $package): array => [
+                            'id' => $package->getId(),
+                            'description' => $package->getDescription(),
+                            'name' => $package->getName(),
+                        ],
+                        $products->getValues()
+                    ));
                 }
             }
         }
