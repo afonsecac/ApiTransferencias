@@ -424,4 +424,107 @@ class ClientCatalogImportServiceTest extends TestCase
 
         $this->service->importForRouting($routing);
     }
+
+    // ---- deriveTags() — Nauta WiFi vs. Nauta PLUS vs. Nauta Hogar ----
+
+    private function productWithServiceAndBenefits(int $id, array $service, array $benefits): CommunicationProduct&MockObject
+    {
+        $product = $this->createMock(CommunicationProduct::class);
+        $product->method('getId')->willReturn($id);
+        $product->method('getDescription')->willReturn('Producto de prueba');
+        $product->method('getExternalRef')->willReturn('ext-1');
+        $product->method('getService')->willReturn($service);
+        $product->method('getBenefits')->willReturn($benefits);
+
+        return $product;
+    }
+
+    /**
+     * @param array<string, mixed> $service
+     * @param array<int, array<string, mixed>> $benefits
+     */
+    private function importSingleProductAndCaptureTags(array $service, array $benefits): array
+    {
+        $client = (new Client())->setCurrency('USD');
+        $environment = $this->createMock(Environment::class);
+        $environment->method('getId')->willReturn(10);
+
+        $routing = new ClientProviderRouting();
+        $routing->setClient($client);
+        $routing->setEnvironment($environment);
+        $routing->setProvider(CommunicationProviderEnum::DTONE->value);
+
+        $this->catalogSyncService->method('syncProducts')->willReturn(new SyncResult());
+
+        $product = $this->productWithServiceAndBenefits(1, $service, $benefits);
+        $account = $this->accountWithId(101, $client, $environment);
+
+        $productRepo = $this->createMock(CommunicationProductRepository::class);
+        $productRepo->method('findBy')->willReturn([$product]);
+        $accountRepo = $this->createMock(AccountRepository::class);
+        $accountRepo->method('findBy')->willReturn([$account]);
+
+        $this->em->method('getRepository')->willReturnMap([
+            [CommunicationProduct::class, $productRepo],
+            [Account::class, $accountRepo],
+            [CommunicationClientPackage::class, $this->clientPackageRepo(null)],
+        ]);
+
+        $this->materializationService->method('materializeForTenant')->willReturn(new CommunicationClientPackage());
+
+        $persisted = [];
+        $this->em->method('persist')->willReturnCallback(function ($entity) use (&$persisted) {
+            $persisted[] = $entity;
+        });
+
+        $this->service->importForRouting($routing);
+
+        return $persisted;
+    }
+
+    public function testDerivesInternetTagForNautaWifiRecharge(): void
+    {
+        $persisted = $this->importSingleProductAndCaptureTags(
+            ['name' => 'Utilities', 'subservice' => ['name' => 'Internet']],
+            [['type' => 'CREDITS', 'unit' => 'CUP', 'unit_type' => 'CURRENCY', 'amount' => ['base' => 250]]],
+        );
+
+        $this->assertSame(['INTERNET'], $persisted[0]->getTags());
+    }
+
+    /**
+     * Nauta PLUS comparte subservice=Internet con Nauta WIFI Recharge, pero
+     * su benefit es de datos ilimitados (type=DATA, amount.base=-1) — debe
+     * quedar distinguible con un tag extra, no confundirse con la recarga
+     * simple (ver conversación sobre cómo diferenciar ambos productos).
+     */
+    public function testDerivesInternetAndUnlimitedTagsForNautaPlus(): void
+    {
+        $persisted = $this->importSingleProductAndCaptureTags(
+            ['name' => 'Utilities', 'subservice' => ['name' => 'Internet']],
+            [['type' => 'DATA', 'unit' => 'MB', 'unit_type' => 'DATA', 'amount' => ['base' => -1]]],
+        );
+
+        $this->assertSame(['INTERNET', 'UNLIMITED'], $persisted[0]->getTags());
+    }
+
+    public function testDerivesLandlineTagForNautaHogar(): void
+    {
+        $persisted = $this->importSingleProductAndCaptureTags(
+            ['name' => 'Utilities', 'subservice' => ['name' => 'Landline']],
+            [['type' => 'CREDITS', 'unit' => 'CUP', 'unit_type' => 'CURRENCY', 'amount' => ['base' => 480]]],
+        );
+
+        $this->assertSame(['LANDLINE'], $persisted[0]->getTags());
+    }
+
+    public function testDerivesNoTagForUnrecognizedSubservice(): void
+    {
+        $persisted = $this->importSingleProductAndCaptureTags(
+            ['name' => 'Utilities', 'subservice' => null],
+            [['type' => 'CREDITS', 'unit' => 'CUP', 'unit_type' => 'CURRENCY', 'amount' => ['base' => 1000]]],
+        );
+
+        $this->assertSame([], $persisted[0]->getTags());
+    }
 }

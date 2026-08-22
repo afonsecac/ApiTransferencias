@@ -200,19 +200,45 @@ class ClientCatalogImportService
     }
 
     /**
+     * Deriva tags a partir del `subservice` crudo del proveedor, más un tag
+     * `UNLIMITED` adicional cuando el primer benefit es de datos ilimitados
+     * (`type=DATA` con `amount.base` negativo — convención de DTOne para
+     * "sin límite", ver Nauta PLUS). Necesario porque Nauta WIFI Recharge y
+     * Nauta PLUS comparten el mismo `subservice=Internet` pero son productos
+     * distintos (recarga de saldo vs. plan de datos ilimitado por días) —
+     * sin este tag extra quedarían indistinguibles en el catálogo.
+     *
      * @return list<string>
      */
     private function deriveTags(?CommunicationProduct $product): array
     {
-        $allowedTags = ['AIRTIME', 'BUNDLE', 'DATA', 'SMS', 'INTERNET'];
+        $allowedTags = ['AIRTIME', 'BUNDLE', 'DATA', 'SMS', 'INTERNET', 'LANDLINE'];
         $subservice = $product?->getService()['subservice']['name'] ?? null;
-        if ($subservice === null) {
-            return [];
+
+        $tags = [];
+        if ($subservice !== null) {
+            $normalized = strtoupper($subservice);
+            if (in_array($normalized, $allowedTags, true)) {
+                $tags[] = $normalized;
+            }
         }
 
-        $normalized = strtoupper($subservice);
+        if ($this->hasUnlimitedDataBenefit($product)) {
+            $tags[] = 'UNLIMITED';
+        }
 
-        return in_array($normalized, $allowedTags, true) ? [$normalized] : [];
+        return $tags;
+    }
+
+    private function hasUnlimitedDataBenefit(?CommunicationProduct $product): bool
+    {
+        $firstBenefit = ($product?->getBenefits() ?? [])[0] ?? null;
+        if (!is_array($firstBenefit)) {
+            return false;
+        }
+
+        return ($firstBenefit['type'] ?? null) === 'DATA'
+            && (float) ($firstBenefit['amount']['base'] ?? 0) < 0;
     }
 
     /**

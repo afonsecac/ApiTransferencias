@@ -82,7 +82,7 @@ class CreateClientPackageDto implements IInput
     #[OAProperty(schema: [
         'type' => 'array',
         'nullable' => true,
-        'items' => ['type' => 'string', 'enum' => ['AIRTIME', 'BUNDLE', 'DATA', 'SMS', 'INTERNET']],
+        'items' => ['type' => 'string', 'enum' => ['AIRTIME', 'BUNDLE', 'DATA', 'SMS', 'INTERNET', 'LANDLINE', 'UNLIMITED']],
     ])]
     protected ?array $tags;
 
@@ -90,9 +90,9 @@ class CreateClientPackageDto implements IInput
         'type' => 'object',
         'nullable' => true,
         'properties' => [
-            'name'       => ['type' => 'string', 'enum' => ['Mobile', 'uSIM', 'Devices']],
+            'name'       => ['type' => 'string', 'enum' => ['Mobile', 'uSIM', 'Devices', 'Utilities']],
             'subservice' => ['type' => 'object', 'properties' => [
-                'name' => ['type' => 'string', 'enum' => ['AIRTIME', 'BUNDLE', 'DATA', 'SMS', 'INTERNET', 'uSIM']],
+                'name' => ['type' => 'string', 'enum' => ['AIRTIME', 'BUNDLE', 'DATA', 'SMS', 'INTERNET', 'LANDLINE', 'uSIM']],
             ]],
         ],
     ])]

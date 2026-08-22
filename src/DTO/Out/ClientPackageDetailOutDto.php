@@ -38,7 +38,7 @@ final class ClientPackageDetailOutDto extends ClientPackageOutDto
         schema: [
             'type' => 'array',
             'nullable' => true,
-            'items' => ['type' => 'string', 'enum' => ['AIRTIME', 'BUNDLE', 'DATA', 'SMS', 'INTERNET']],
+            'items' => ['type' => 'string', 'enum' => ['AIRTIME', 'BUNDLE', 'DATA', 'SMS', 'INTERNET', 'LANDLINE', 'UNLIMITED']],
         ],
         description: 'Categorías del paquete',
     )]
@@ -49,9 +49,9 @@ final class ClientPackageDetailOutDto extends ClientPackageOutDto
             'type' => 'object',
             'nullable' => true,
             'properties' => [
-                'name'       => ['type' => 'string', 'enum' => ['Mobile', 'uSIM', 'Devices']],
+                'name'       => ['type' => 'string', 'enum' => ['Mobile', 'uSIM', 'Devices', 'Utilities']],
                 'subservice' => ['type' => 'object', 'properties' => [
-                    'name' => ['type' => 'string', 'enum' => ['AIRTIME', 'BUNDLE', 'DATA', 'SMS', 'INTERNET', 'uSIM']],
+                    'name' => ['type' => 'string', 'enum' => ['AIRTIME', 'BUNDLE', 'DATA', 'SMS', 'INTERNET', 'LANDLINE', 'uSIM']],
                 ]],
             ],
         ],
