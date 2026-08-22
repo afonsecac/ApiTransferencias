@@ -14,6 +14,7 @@ use Doctrine\Common\Collections\Collection;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
 use Symfony\Component\Serializer\Attribute\Groups;
+use Symfony\Component\Serializer\Attribute\SerializedName;
 use Symfony\Component\Validator\Constraints as Assert;
 
 #[ORM\Entity(repositoryClass: CommunicationPromotionsRepository::class)]
@@ -97,9 +98,25 @@ class CommunicationPromotions
     private ?CommunicationProduct $product = null;
 
     #[ORM\ManyToMany(targetEntity: CommunicationClientPackage::class, inversedBy: 'promotionItems')]
-    #[Groups(['comProm:read', 'promotion:detail'])]
+    #[Groups(['promotion:detail'])]
     #[ApiProperty]
     private Collection $products;
+
+    /**
+     * Vista plana de `products` para el endpoint externo
+     * (/communication/promotions, ver CommunicationPromotionProvider) — V1:
+     * CommunicationClientPackage propios del tenant autenticado; V2: catálogo
+     * compartido resuelto vía CommunicationPackageRepository::findByPromotion().
+     * Nunca mapeada por Doctrine ni tipada a una entidad concreta a propósito:
+     * si se expone bajo el grupo `comProm:read` como relación Doctrine
+     * to-many (como estaba `products` antes), API Platform la normaliza vía
+     * AbstractItemNormalizer::normalizeCollectionOfRelations(), que exige que
+     * cada elemento sea un objeto — un array plano ahí tumbó prod el
+     * 2026-08-22 (500 en toda promoción con al menos un elemento no-objeto).
+     *
+     * @var array{id: int, description: string|null, name: string|null}[]
+     */
+    private array $productsSummary = [];
 
     #[ORM\Column(length: 500, nullable: true)]
     #[Groups(['comProm:read', 'comPackage:read', 'promotion:detail'])]
@@ -416,9 +433,22 @@ class CommunicationPromotions
         return $this;
     }
 
-    public function setProductsTemp(Collection $products): void
+    /**
+     * @return array{id: int, description: string|null, name: string|null}[]
+     */
+    #[Groups(['comProm:read'])]
+    #[SerializedName('products')]
+    public function getProductsSummary(): array
     {
-        $this->products = $products;
+        return $this->productsSummary;
+    }
+
+    /**
+     * @param array{id: int, description: string|null, name: string|null}[] $products
+     */
+    public function setProductsSummary(array $products): void
+    {
+        $this->productsSummary = $products;
     }
 
     public function getValidityInfo(): ?array
