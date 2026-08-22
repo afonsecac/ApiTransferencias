@@ -170,7 +170,7 @@ class CommunicationClientPackage
             'type' => 'array',
             'items' => [
                 'type' => 'string',
-                'enum' => ['AIRTIME', 'BUNDLE', 'DATA', 'SMS', 'INTERNET'],
+                'enum' => ['AIRTIME', 'BUNDLE', 'DATA', 'SMS', 'INTERNET', 'LANDLINE', 'UNLIMITED'],
             ],
         ]
     )]
@@ -184,14 +184,14 @@ class CommunicationClientPackage
             'properties' => [
                 'name' => [
                     'type' => 'string',
-                    'enum' => ['Mobile', 'uSIM', 'Devices'],
+                    'enum' => ['Mobile', 'uSIM', 'Devices', 'Utilities'],
                 ],
                 'subservice' => [
                     'type' => 'object',
                     'properties' => [
                         'name' => [
                             'type' => 'string',
-                            'enum' => ['AIRTIME', 'BUNDLE', 'DATA', 'SMS', 'INTERNET', 'uSIM'],
+                            'enum' => ['AIRTIME', 'BUNDLE', 'DATA', 'SMS', 'INTERNET', 'LANDLINE', 'uSIM'],
                         ],
                     ],
                 ],
