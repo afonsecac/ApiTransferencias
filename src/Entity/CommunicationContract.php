@@ -2,6 +2,7 @@
 
 namespace App\Entity;
 
+use App\Exception\MyCurrentException;
 use App\Repository\CommunicationContractRepository;
 use App\Service\Pricing\ServiceCategoryKey;
 use Doctrine\Common\Collections\ArrayCollection;
@@ -157,11 +158,32 @@ class CommunicationContract
         return $this->packages;
     }
 
+    /**
+     * Fase 3 del rediseño por categoría: rechaza un paquete de categoría
+     * distinta a la que ya cubre este contrato — la guarda solo se evalúa
+     * al agregar el SEGUNDO paquete en adelante (colección no vacía), nunca
+     * el primero, porque en ese momento la categoría del contrato puede
+     * todavía no estar seteada (ver upsertContract(), que persiste el
+     * contrato con setServiceCategory() antes de la primera addPackage(),
+     * pero otros constructores de test agregan el paquete antes de fijar
+     * la categoría — mismo criterio en ambos casos: el primer paquete
+     * nunca se rechaza a sí mismo).
+     */
     public function addPackage(CommunicationPackage $package): static
     {
-        if (!$this->packages->contains($package)) {
-            $this->packages->add($package);
+        if ($this->packages->contains($package)) {
+            return $this;
         }
+
+        if (!$this->packages->isEmpty() && $package->getServiceKey() !== $this->serviceKey) {
+            throw new MyCurrentException(
+                'COMMUNICATION_CONTRACT_CATEGORY_MISMATCH',
+                'El paquete pertenece a una categoría distinta a la de este contrato',
+                409,
+            );
+        }
+
+        $this->packages->add($package);
 
         return $this;
     }

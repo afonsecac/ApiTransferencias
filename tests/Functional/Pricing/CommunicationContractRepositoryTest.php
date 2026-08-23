@@ -213,7 +213,7 @@ class CommunicationContractRepositoryTest extends ProviderFunctionalTestCase
         $open = $this->contract($package, $account, $now->modify('-1 day'));
         $this->em->flush();
 
-        $found = $this->repository()->findOpenContract($account, 500.0 + 0.001, 'cup');
+        $found = $this->repository()->findOpenContract($account, 500.0 + 0.001, 'cup', '|');
 
         $this->assertSame($open->getId(), $found?->getId());
     }
@@ -224,7 +224,7 @@ class CommunicationContractRepositoryTest extends ProviderFunctionalTestCase
         $environment = $this->createEnvironment();
         $account = $this->createAccount($client, $environment);
 
-        $this->assertNull($this->repository()->findOpenContract($account, 999.0, 'CUP'));
+        $this->assertNull($this->repository()->findOpenContract($account, 999.0, 'CUP', '|'));
     }
 
     public function testFindOpenContractDistinguishesTenantFromDefault(): void
@@ -238,8 +238,74 @@ class CommunicationContractRepositoryTest extends ProviderFunctionalTestCase
         $default = $this->contract($package, null, $now->modify('-1 day'));
         $this->em->flush();
 
-        $this->assertSame($default->getId(), $this->repository()->findOpenContract(null, 500.0, 'CUP')?->getId());
-        $this->assertNull($this->repository()->findOpenContract($account, 500.0, 'CUP'));
+        $this->assertSame($default->getId(), $this->repository()->findOpenContract(null, 500.0, 'CUP', '|')?->getId());
+        $this->assertNull($this->repository()->findOpenContract($account, 500.0, 'CUP', '|'));
+    }
+
+    // ---- Fase 3: service_key es parte de la identidad del contrato ----
+
+    public function testTwoOpenContractsCoexistForTheSameTupleWhenCategoriesDiffer(): void
+    {
+        // La regresión central que compra la Fase 3: antes, el índice único
+        // uniq_com_contract_open_per_tenant_amount solo cubría (tenant,
+        // monto, moneda) — dos contratos abiertos para la misma tupla
+        // habrían violado esa restricción sin importar la categoría. Ahora
+        // que service_key es parte del índice, coexisten sin conflicto.
+        $now = new \DateTimeImmutable();
+        $client = $this->createClient();
+        $environment = $this->createEnvironment();
+        $account = $this->createAccount($client, $environment);
+
+        $mobilePackage = $this->communicationPackage();
+        $mobilePackage->setService(['name' => 'Mobile', 'subservice' => ['name' => 'AIRTIME']]);
+        $mobileContract = $this->contract($mobilePackage, $account, $now->modify('-1 day'))
+            ->setServiceCategory('Mobile', 'AIRTIME');
+
+        $utilitiesPackage = $this->communicationPackage();
+        $utilitiesPackage->setService(['name' => 'Utilities', 'subservice' => ['name' => 'INTERNET']]);
+        $utilitiesContract = $this->contract($utilitiesPackage, $account, $now->modify('-1 day'))
+            ->setServiceCategory('Utilities', 'INTERNET');
+
+        // Misma tupla monto/moneda a propósito — es justo el caso que antes
+        // habría violado el índice único.
+        $utilitiesContract->setDestinationAmount((float) $mobileContract->getDestinationAmount());
+        $utilitiesContract->setDestinationCurrency((string) $mobileContract->getDestinationCurrency());
+
+        $this->em->flush(); // No debe lanzar UniqueConstraintViolationException.
+
+        $this->assertNotNull($mobileContract->getId());
+        $this->assertNotNull($utilitiesContract->getId());
+        $this->assertNotSame($mobileContract->getId(), $utilitiesContract->getId());
+    }
+
+    public function testFindOpenContractDistinguishesByCategoryOnTheSameTuple(): void
+    {
+        $now = new \DateTimeImmutable();
+        $client = $this->createClient();
+        $environment = $this->createEnvironment();
+        $account = $this->createAccount($client, $environment);
+
+        $mobilePackage = $this->communicationPackage();
+        $mobilePackage->setService(['name' => 'Mobile', 'subservice' => ['name' => 'AIRTIME']]);
+        $mobileContract = $this->contract($mobilePackage, $account, $now->modify('-1 day'))
+            ->setServiceCategory('Mobile', 'AIRTIME');
+
+        $utilitiesPackage = $this->communicationPackage();
+        $utilitiesPackage->setService(['name' => 'Utilities', 'subservice' => ['name' => 'INTERNET']]);
+        $utilitiesContract = $this->contract($utilitiesPackage, $account, $now->modify('-1 day'))
+            ->setServiceCategory('Utilities', 'INTERNET');
+        $utilitiesContract->setDestinationAmount((float) $mobileContract->getDestinationAmount());
+        $utilitiesContract->setDestinationCurrency((string) $mobileContract->getDestinationCurrency());
+        $this->em->flush();
+
+        $amount = (float) $mobileContract->getDestinationAmount();
+        $currency = (string) $mobileContract->getDestinationCurrency();
+
+        $foundMobile = $this->repository()->findOpenContract($account, $amount, $currency, 'Mobile|AIRTIME');
+        $foundUtilities = $this->repository()->findOpenContract($account, $amount, $currency, 'Utilities|INTERNET');
+
+        $this->assertSame($mobileContract->getId(), $foundMobile?->getId());
+        $this->assertSame($utilitiesContract->getId(), $foundUtilities?->getId());
     }
 
     public function testFindActiveTenantContractsForPackageReturnsOnlyContractsCoveringThatPackage(): void

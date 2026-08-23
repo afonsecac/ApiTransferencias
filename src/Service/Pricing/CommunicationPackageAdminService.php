@@ -254,6 +254,21 @@ class CommunicationPackageAdminService
             $package->setTags($dto->getTags());
         }
         if ($dto->getService() !== null) {
+            // Fase 3 del rediseño por categoría: cambiar la categoría de un
+            // paquete que YA está en algún contrato dejaría a ese contrato
+            // cubriendo un paquete de una categoría distinta a la suya —
+            // exactamente el invariante que CommunicationContract::
+            // addPackage() exige al agregar, pero que no se re-valida sobre
+            // paquetes ya agregados. No soportado todavía: bloquear en vez
+            // de corromper el invariante en silencio.
+            $newServiceKey = ServiceCategoryKey::fromService($dto->getService());
+            if ($newServiceKey !== $package->getServiceKey() && !$package->getContracts()->isEmpty()) {
+                throw new MyCurrentException(
+                    'COMMUNICATION_PACKAGE_CATEGORY_LOCKED',
+                    'No se puede cambiar la categoría de un paquete que ya está en algún contrato',
+                    409,
+                );
+            }
             $package->setService($dto->getService());
         }
         if ($dto->getValidity() !== null) {

@@ -2,6 +2,7 @@
 
 namespace App\DTO;
 
+use App\OpenApi\Attribute\OAProperty;
 use Symfony\Component\Validator\Constraints as Assert;
 use Symfony\Component\Validator\Context\ExecutionContextInterface;
 
@@ -11,9 +12,16 @@ use Symfony\Component\Validator\Context\ExecutionContextInterface;
  * CommunicationPackage cuyo destino caiga en [fromAmount, toAmount]
  * saltando de `step` en `step`, con el precio interpolado linealmente entre
  * `priceFrom` (para fromAmount) y `priceTo` (para toAmount). Un monto del
- * rango sin CommunicationPackage correspondiente se omite (no aborta el
- * alta) y se reporta en la respuesta — ver
- * CommunicationContractService::createByRange().
+ * rango sin CommunicationPackage correspondiente (de la categoría pedida —
+ * ver `service` abajo) se omite (no aborta el alta) y se reporta en la
+ * respuesta — ver CommunicationContractService::createByRange().
+ *
+ * `service` (Fase 3) es obligatorio y, a diferencia de
+ * CreateCommunicationContractDto/Batch (que lo validan contra un paquete ya
+ * elegido), aquí es la ÚNICA forma de decidir a qué categoría pertenecen
+ * los paquetes que matchean cada monto del rango — sin esto, dos paquetes
+ * de categorías distintas que comparten tupla (monto, moneda) eran
+ * indistinguibles para este flujo.
  */
 class CreateCommunicationContractRangeDto implements IInput
 {
@@ -63,6 +71,18 @@ class CreateCommunicationContractRangeDto implements IInput
 
     protected ?string $endAt;
 
+    #[Assert\NotNull]
+    #[OAProperty(schema: [
+        'type' => 'object',
+        'properties' => [
+            'name'       => ['type' => 'string', 'enum' => ['Mobile', 'uSIM', 'Devices', 'Utilities']],
+            'subservice' => ['type' => 'object', 'properties' => [
+                'name' => ['type' => 'string', 'enum' => ['AIRTIME', 'BUNDLE', 'DATA', 'SMS', 'INTERNET', 'LANDLINE', 'uSIM']],
+            ]],
+        ],
+    ])]
+    protected ?array $service;
+
     public function __construct(
         ?float $fromAmount = null,
         ?float $toAmount = null,
@@ -75,6 +95,7 @@ class CreateCommunicationContractRangeDto implements IInput
         ?int $environmentId = null,
         ?string $startAt = null,
         ?string $endAt = null,
+        ?array $service = null,
     ) {
         $this->fromAmount = $fromAmount;
         $this->toAmount = $toAmount;
@@ -87,6 +108,7 @@ class CreateCommunicationContractRangeDto implements IInput
         $this->environmentId = $environmentId;
         $this->startAt = $startAt;
         $this->endAt = $endAt;
+        $this->service = $service;
     }
 
     #[Assert\Callback]
@@ -96,6 +118,14 @@ class CreateCommunicationContractRangeDto implements IInput
             $context->buildViolation('El monto final debe ser mayor o igual al monto inicial')
                 ->atPath('toAmount')
                 ->addViolation();
+        }
+    }
+
+    #[Assert\Callback]
+    public function validateService(ExecutionContextInterface $context): void
+    {
+        if (empty($this->service['name'] ?? null)) {
+            $context->buildViolation('service.name es requerido')->atPath('service')->addViolation();
         }
     }
 
@@ -131,4 +161,7 @@ class CreateCommunicationContractRangeDto implements IInput
 
     public function getEndAt(): ?string { return $this->endAt; }
     public function setEndAt(?string $v): void { $this->endAt = $v; }
+
+    public function getService(): ?array { return $this->service; }
+    public function setService(?array $v): void { $this->service = $v; }
 }

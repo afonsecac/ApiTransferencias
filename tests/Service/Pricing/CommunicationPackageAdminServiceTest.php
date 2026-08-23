@@ -195,6 +195,65 @@ class CommunicationPackageAdminServiceTest extends TestCase
         $this->assertSame(1, $updated->getDisplayOrder());
     }
 
+    // ---- Fase 3: la categoría no se puede editar una vez que el paquete está en algún contrato ----
+
+    public function testUpdateThrowsWhenChangingCategoryOfAPackageThatAlreadyHasAContract(): void
+    {
+        $package = (new CommunicationPackage())
+            ->setName('Recarga')->setDescription('Recarga')
+            ->setDestinationAmount(500.0)->setDestinationCurrency('CUP');
+        $package->setService(['name' => 'Mobile', 'subservice' => ['name' => 'AIRTIME']]);
+        $this->addContractTo($package, new CommunicationContract());
+
+        $dto = new UpdateCommunicationPackageDto(service: ['name' => 'Utilities', 'subservice' => ['name' => 'INTERNET']]);
+
+        $this->em->expects($this->never())->method('flush');
+
+        try {
+            $this->service->update($package, $dto);
+            $this->fail('Se esperaba MyCurrentException');
+        } catch (MyCurrentException $e) {
+            $this->assertSame('COMMUNICATION_PACKAGE_CATEGORY_LOCKED', $e->getCodeWork());
+        }
+        // La categoría original sigue intacta — el rechazo pasó ANTES de mutar el paquete.
+        $this->assertSame('Mobile', $package->getService()['name']);
+    }
+
+    public function testUpdateAllowsResendingTheSameCategoryEvenWithAContract(): void
+    {
+        // No es un cambio real — mismo `service`, misma serviceKey — no
+        // debe bloquearse aunque el paquete ya tenga contratos.
+        $package = (new CommunicationPackage())
+            ->setName('Recarga')->setDescription('Recarga')
+            ->setDestinationAmount(500.0)->setDestinationCurrency('CUP');
+        $package->setService(['name' => 'Mobile', 'subservice' => ['name' => 'AIRTIME']]);
+        $this->addContractTo($package, new CommunicationContract());
+
+        $dto = new UpdateCommunicationPackageDto(service: ['name' => 'Mobile', 'subservice' => ['name' => 'AIRTIME']]);
+
+        $this->em->expects($this->once())->method('flush');
+
+        $updated = $this->service->update($package, $dto);
+
+        $this->assertSame('Mobile', $updated->getService()['name']);
+    }
+
+    public function testUpdateAllowsChangingCategoryWhenPackageHasNoContracts(): void
+    {
+        $package = (new CommunicationPackage())
+            ->setName('Recarga')->setDescription('Recarga')
+            ->setDestinationAmount(500.0)->setDestinationCurrency('CUP');
+        $package->setService(['name' => 'Mobile', 'subservice' => ['name' => 'AIRTIME']]);
+
+        $dto = new UpdateCommunicationPackageDto(service: ['name' => 'Utilities', 'subservice' => ['name' => 'INTERNET']]);
+
+        $this->em->expects($this->once())->method('flush');
+
+        $updated = $this->service->update($package, $dto);
+
+        $this->assertSame('Utilities', $updated->getService()['name']);
+    }
+
     public function testToggleFlipsIsActiveAndFlushes(): void
     {
         $package = (new CommunicationPackage())
