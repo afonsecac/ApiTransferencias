@@ -7,13 +7,10 @@ use ApiPlatform\State\ProviderInterface;
 use App\Entity\Account;
 use App\Entity\CommunicationClientPackage;
 use App\Entity\CommunicationPackage;
-use App\Entity\CommunicationPricePackage;
 use App\Entity\Environment;
 use App\Repository\CommunicationClientPackageRepository;
-use App\Repository\CommunicationPricePackageRepository;
 use App\Repository\SysConfigRepository;
 use App\Service\Catalog\CatalogVersionResolver;
-use App\Service\PackagePriceService;
 use App\Service\Pricing\PackageMaterializationService;
 use App\Service\Pricing\PackageSalePriceResolver;
 use App\State\CommunicationClientPackageProvider;
@@ -31,7 +28,6 @@ class CommunicationClientPackageProviderTest extends TestCase
 {
     private ProviderInterface&MockObject $itemProvider;
     private EntityManagerInterface&MockObject $em;
-    private PackagePriceService&MockObject $packagePriceService;
     private PackageMaterializationService&MockObject $materializationService;
     private Security&MockObject $security;
     private PackageSalePriceResolver&MockObject $salePriceResolver;
@@ -44,7 +40,6 @@ class CommunicationClientPackageProviderTest extends TestCase
     {
         $this->itemProvider = $this->createMock(ProviderInterface::class);
         $this->em = $this->createMock(EntityManagerInterface::class);
-        $this->packagePriceService = $this->createMock(PackagePriceService::class);
         $this->materializationService = $this->createMock(PackageMaterializationService::class);
         $this->security = $this->createMock(Security::class);
         $this->salePriceResolver = $this->createMock(PackageSalePriceResolver::class);
@@ -59,7 +54,6 @@ class CommunicationClientPackageProviderTest extends TestCase
         $this->provider = new CommunicationClientPackageProvider(
             $this->itemProvider,
             $this->em,
-            $this->packagePriceService,
             $this->materializationService,
             $this->security,
             $this->salePriceResolver,
@@ -126,8 +120,6 @@ class CommunicationClientPackageProviderTest extends TestCase
         $this->em->method('getRepository')->with(CommunicationClientPackage::class)->willReturn($clientPackageRepo);
 
         $this->materializationService->expects($this->exactly(2))->method('materializeForTenant');
-        $this->packagePriceService->expects($this->never())->method('createPackageClient');
-        $this->packagePriceService->expects($this->never())->method('copyPricePackage');
         $this->em->expects($this->once())->method('flush');
         $this->salePriceResolver->expects($this->once())->method('resolveMany');
 
@@ -137,38 +129,32 @@ class CommunicationClientPackageProviderTest extends TestCase
         $this->assertSame($materialized, $result);
     }
 
-    public function testFallsBackToLegacyTemplatesWhenNoReferencesExist(): void
+    public function testDoesNotFlushOrReQueryWhenThereAreNoReferencesToMaterialize(): void
     {
+        // Fase 1 de la deprecación de V1: se retiró la red de seguridad de
+        // plantillas legacy (CommunicationPricePackage.tenant IS NULL) — sin
+        // referencias, materializedCount queda en 0 y no hay nada más que
+        // intentar.
         $tenant = $this->accountWithEnvironment();
         $this->security->method('getUser')->willReturn($tenant);
 
         $empty = $this->countableCollection([]);
-        $materialized = $this->countableCollection([$this->createMock(CommunicationClientPackage::class)]);
-        $this->itemProvider->expects($this->exactly(2))->method('provide')
-            ->willReturnOnConsecutiveCalls($empty, $materialized);
+        // itemProvider->provide() se llama dos veces: la consulta inicial, y
+        // la re-consulta tras intentar materializar (sin importar si
+        // materializedCount terminó en 0) — ver CommunicationClientPackageProvider::provide().
+        $this->itemProvider->expects($this->exactly(2))->method('provide')->willReturn($empty);
 
         $clientPackageRepo = $this->createMock(CommunicationClientPackageRepository::class);
         $clientPackageRepo->method('findReferencePackages')->willReturn([]);
-
-        $globalTemplate = $this->createMock(CommunicationPricePackage::class);
-        $pricePackageRepo = $this->createMock(CommunicationPricePackageRepository::class);
-        $pricePackageRepo->method('getPricesByEnvironment')->willReturnCallback(
-            function (?string $env, ?int $tenantId = null) use ($globalTemplate) {
-                return $tenantId === null ? [$globalTemplate] : [];
-            }
-        );
-
-        $this->em->method('getRepository')->willReturnMap([
-            [CommunicationClientPackage::class, $clientPackageRepo],
-            [CommunicationPricePackage::class, $pricePackageRepo],
-        ]);
+        $this->em->method('getRepository')->with(CommunicationClientPackage::class)->willReturn($clientPackageRepo);
 
         $this->materializationService->expects($this->never())->method('materializeForTenant');
-        $this->packagePriceService->expects($this->once())->method('copyPricePackage')->with($globalTemplate, $tenant);
-        $this->em->expects($this->once())->method('flush');
+        $this->em->expects($this->never())->method('flush');
+        $this->salePriceResolver->expects($this->once())->method('resolveMany');
 
-        $operation = $this->createMock(Operation::class);
-        $this->provider->provide($operation);
+        $result = $this->provider->provide($this->createMock(Operation::class));
+
+        $this->assertSame($empty, $result);
     }
 
     public function testRaceConditionOnUniqueConstraintIsCaughtAndDoesNotPropagate(): void

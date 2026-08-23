@@ -61,34 +61,6 @@ class CommunicationPricePackageRepository extends ServiceEntityRepository
             ->getQuery()->getScalarResult();
     }
 
-    public function getPricesByEnvironment(string $env = 'TEST', ?int $tenantId = null): array
-    {
-        $currentDate = new \DateTimeImmutable();
-        $dql = $this->createQueryBuilder('pp')
-            ->leftJoin('pp.product', 'p')
-            ->leftJoin('p.environment', 'e')
-            ->where('e.type = :type')
-            ->andWhere('pp.activeStartAt <= :currentDate')
-            ->andWhere('pp.activeEndAt > :currentDate')
-            ->andWhere('p.initialDate <= :currentDate')
-            ->andWhere('p.endDateAt > :currentDate')
-            ->andWhere('p.enabled <= :enabled')
-            ->setParameters(new ArrayCollection([
-                new Parameter('type', $env),
-                new Parameter('currentDate', $currentDate),
-                new Parameter('enabled', true),
-            ]));
-        if (!is_null($tenantId)) {
-            $dql = $dql
-                ->leftJoin('pp.tenant', 't')->andWhere('t.id = :tenant')
-                ->setParameter('tenant', $tenantId);
-        } else {
-            $dql->andWhere('pp.tenant IS NULL');
-        }
-
-        return $dql->orderBy('pp.price', 'ASC')->getQuery()->getResult();
-    }
-
     /**
      * El contrato vigente de un tenant para un paquete referencia concreto
      * (ver CommunicationClientPackage::resolveContractKey()) — usado por

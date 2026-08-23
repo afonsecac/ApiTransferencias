@@ -6,11 +6,8 @@ use ApiPlatform\Metadata\Operation;
 use ApiPlatform\State\ProviderInterface;
 use App\Entity\Account;
 use App\Entity\CommunicationClientPackage;
-use App\Entity\CommunicationPricePackage;
 use App\Repository\CommunicationClientPackageRepository;
-use App\Repository\CommunicationPricePackageRepository;
 use App\Service\Catalog\CatalogVersionResolver;
-use App\Service\PackagePriceService;
 use App\Service\Pricing\PackageMaterializationService;
 use App\Service\Pricing\PackageSalePriceResolver;
 use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
@@ -36,7 +33,6 @@ class CommunicationClientPackageProvider implements ProviderInterface
         private readonly ProviderInterface $itemProvider,
         #[Autowire(service: 'doctrine.orm.entity_manager')]
         private readonly EntityManagerInterface $em,
-        private readonly PackagePriceService  $packagePriceService,
         private readonly PackageMaterializationService $materializationService,
         private readonly Security $security,
         private readonly PackageSalePriceResolver $salePriceResolver,
@@ -70,14 +66,6 @@ class CommunicationClientPackageProvider implements ProviderInterface
             $tenant = $this->security->getUser();
             if (!is_null($tenant) && $tenant instanceof Account) {
                 $materializedCount = $this->materializeFromReferences($tenant);
-                // Sin ninguna referencia todavía (entorno recién migrado, o
-                // proveedor que aún no pasó por ClientCatalogImportService
-                // tras el rediseño): red de seguridad con el mecanismo
-                // anterior, plantillas en CommunicationPricePackage.tenant
-                // IS NULL. Se retira en la Fase 5 de limpieza.
-                if ($materializedCount === 0) {
-                    $materializedCount = $this->materializeFromLegacyTemplates($tenant);
-                }
 
                 if ($materializedCount > 0) {
                     try {
@@ -126,33 +114,6 @@ class CommunicationClientPackageProvider implements ProviderInterface
         }
 
         return count($references);
-    }
-
-    /**
-     * Rama legacy previa al rediseño de precios: plantillas propias del
-     * tenant si ya las tenía, o si no, copia de las plantillas globales
-     * (CommunicationPricePackage.tenant IS NULL). Se mantiene solo como red
-     * de seguridad — ver comentario en provide().
-     */
-    private function materializeFromLegacyTemplates(Account $tenant): int
-    {
-        /** @var CommunicationPricePackageRepository $pricePackageRepo */
-        $pricePackageRepo = $this->em->getRepository(CommunicationPricePackage::class);
-        $packageItems = $pricePackageRepo->getPricesByEnvironment($tenant->getEnvironment()?->getType(), $tenant->getId());
-        if (count($packageItems) > 0) {
-            foreach ($packageItems as $packageItem) {
-                $this->packagePriceService->createPackageClient($packageItem, $tenant);
-            }
-
-            return count($packageItems);
-        }
-
-        $packageItems = $pricePackageRepo->getPricesByEnvironment($tenant->getEnvironment()?->getType());
-        foreach ($packageItems as $packageItem) {
-            $this->packagePriceService->copyPricePackage($packageItem, $tenant);
-        }
-
-        return count($packageItems);
     }
 
     /**
