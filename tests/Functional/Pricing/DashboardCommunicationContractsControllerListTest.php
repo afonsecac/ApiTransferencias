@@ -120,4 +120,37 @@ class DashboardCommunicationContractsControllerListTest extends ProviderFunction
         $this->assertCount(1, $data['results']);
         $this->assertSame($shared->getId(), $data['results'][0]['id']);
     }
+
+    public function testListFiltersByServiceNameAlone(): void
+    {
+        // Fase 2, filtro de categoría en el dashboard: `serviceName` acota
+        // por servicio SIN exigir subservicio (a diferencia de `serviceKey`,
+        // que exige la combinación exacta) — así el admin puede filtrar
+        // "todo Mobile" sin elegir un subservicio concreto.
+        $mobile = (new CommunicationContract())
+            ->addPackage($this->communicationPackage('Recarga Mobile'))
+            ->setDestinationAmount(500.0)
+            ->setDestinationCurrency('CUP')
+            ->setPrice(10.0)
+            ->setCurrency('USD')
+            ->setServiceCategory('Mobile', 'AIRTIME');
+        $this->em->persist($mobile);
+
+        $utilities = (new CommunicationContract())
+            ->addPackage($this->communicationPackage('Nauta WiFi'))
+            ->setDestinationAmount(250.0)
+            ->setDestinationCurrency('CUP')
+            ->setPrice(5.0)
+            ->setCurrency('USD')
+            ->setServiceCategory('Utilities', 'INTERNET');
+        $this->em->persist($utilities);
+        $this->em->flush();
+        $this->em->clear();
+
+        $response = $this->controller()->list(new Request(['serviceName' => 'Mobile']));
+        $data = json_decode($response->getContent(), true);
+
+        $this->assertCount(1, $data['results']);
+        $this->assertSame($mobile->getId(), $data['results'][0]['id']);
+    }
 }

@@ -266,6 +266,18 @@ class DashboardCommunicationContractsController extends AbstractController
         if ($request->query->getBoolean('openOnly')) {
             $qb->andWhere('c.endAt IS NULL');
         }
+        // Filtro de búsqueda para el admin — no afecta qué contrato resuelve
+        // el precio (eso lo decide PackageCatalogResolver, gateado por
+        // ContractGatingScopeResolver). `serviceName` solo (categoría, sin
+        // subservicio) y `serviceKey` (categoría exacta, service+subservice)
+        // son independientes para que el filtro del dashboard pueda acotar
+        // solo por servicio cuando el admin no elige subservicio.
+        if ($serviceName = $request->query->get('serviceName')) {
+            $qb->andWhere('c.serviceName = :serviceName')->setParameter('serviceName', $serviceName);
+        }
+        if ($serviceKey = $request->query->get('serviceKey')) {
+            $qb->andWhere('c.serviceKey = :serviceKey')->setParameter('serviceKey', $serviceKey);
+        }
     }
 
     private function serialize(CommunicationContract $contract): array
@@ -284,6 +296,11 @@ class DashboardCommunicationContractsController extends AbstractController
             ],
             'destinationAmount' => $contract->getDestinationAmount(),
             'destinationCurrency' => $contract->getDestinationCurrency(),
+            // Fase 1 del rediseño por categoría — informativo: a partir de
+            // ahora dos contratos legítimos pueden compartir tenant+monto+
+            // moneda y solo diferir en categoría; sin esto se verían en el
+            // listado como dos filas idénticas e indistinguibles.
+            'service' => $contract->getServiceShape(),
             'price' => $contract->getPrice(),
             'currency' => $contract->getCurrency(),
             'startAt' => $contract->getStartAt()?->format('c'),

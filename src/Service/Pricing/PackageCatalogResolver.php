@@ -10,6 +10,7 @@ use App\Repository\CommunicationContractRepository;
 use App\Repository\CommunicationPackageRepository;
 use App\Repository\CommunicationProductRepository;
 use App\Repository\SysConfigRepository;
+use App\Service\Catalog\ContractGatingScopeResolver;
 use App\Service\Provider\ProductPriceResolver;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
@@ -21,17 +22,38 @@ use Symfony\Component\HttpFoundation\Response;
  * visibilidad (no solo precio): un cliente con contrato solo ve lo que su
  * contrato cubre, nada más.
  *
- * Precedencia (misma para catalogFor() y offerFor(), nunca diverge):
- *  1. Contratos propios vigentes del tenant — si hay al menos uno, el
- *     catálogo visible es EXACTAMENTE esos paquetes, a su precio.
+ * Desde la Fase 2 del rediseño de contratos por categoría, el ALCANCE de
+ * esa restricción "todo o nada" depende de
+ * `ContractGatingScopeResolver::isCategoryScoped()` (sys_config, kill
+ * switch — ver esa clase):
+ *
+ *  - Alcance TENANT (default, comportamiento histórico sin cambios —
+ *    catalogForTenantScope()/offerForTenantScope()): un contrato propio (o
+ *    "por defecto") vigente restringe TODO el catálogo del cliente,
+ *    cualquier categoría, a lo cubierto por sus contratos.
+ *  - Alcance CATEGORY (nuevo, detrás del flag —
+ *    catalogForCategoryScope()/offerForCategoryScope()): la restricción se
+ *    evalúa POR CATEGORÍA (service+subservice, ver ServiceCategoryKey). Una
+ *    categoría con al menos un contrato (propio o por defecto) del tenant
+ *    queda restringida a lo cubierto; una categoría SIN ningún contrato
+ *    sigue cayendo a MAX+margen, como si el tenant no tuviera contrato en
+ *    absoluto — exactamente igual que hoy cuando NO hay NINGÚN contrato.
+ *
+ * Precedencia dentro de cada alcance (misma para catalogFor() y offerFor(),
+ * nunca diverge):
+ *  1. Contratos propios vigentes del tenant (de la categoría, en alcance
+ *     CATEGORY) — si hay al menos uno, lo visible es EXACTAMENTE esos
+ *     paquetes, a su precio.
  *  2. Sin contrato propio: contratos "por defecto" (tenant IS NULL)
- *     vigentes — mismo efecto de restricción de visibilidad.
- *  3. Sin ningún contrato: catálogo activo completo, precio = MAX(price)
- *     entre los CommunicationProduct de cualquier proveedor que cubran la
- *     tupla (convertido a la moneda del cliente) + margen porcentual fijo
- *     global (sys_config). Un paquete sin ningún proveedor que lo cubra
- *     resuelve a UNAVAILABLE — catalogFor() lo excluye del resultado (vista
- *     de cliente); offerFor() lo devuelve tal cual (vista de admin, ver
+ *     vigentes (de la categoría, en alcance CATEGORY) — mismo efecto de
+ *     restricción de visibilidad.
+ *  3. Sin ningún contrato: paquetes activos (de la categoría no gateada, en
+ *     alcance CATEGORY), precio = MAX(price) entre los CommunicationProduct
+ *     de cualquier proveedor que cubran la tupla (convertido a la moneda
+ *     del cliente) + margen porcentual fijo global (sys_config). Un
+ *     paquete sin ningún proveedor que lo cubra resuelve a UNAVAILABLE —
+ *     catalogFor() lo excluye del resultado (vista de cliente); offerFor()
+ *     lo devuelve tal cual (vista de admin, ver
  *     DashboardCommunicationPackagesController en Fase 3).
  */
 class PackageCatalogResolver
@@ -44,6 +66,7 @@ class PackageCatalogResolver
         private readonly CommunicationProductRepository $productRepository,
         private readonly ProductPriceResolver $productPriceResolver,
         private readonly SysConfigRepository $sysConfigRepo,
+        private readonly ContractGatingScopeResolver $gatingScopeResolver,
         #[Autowire('@monolog.logger.provider')]
         private readonly LoggerInterface $providerLogger,
     ) {
@@ -58,25 +81,11 @@ class PackageCatalogResolver
     {
         $now ??= new \DateTimeImmutable();
 
-        $tenantContracts = $this->contractRepository->findActiveForTenant($account, $now);
-        if ($tenantContracts !== []) {
-            return $this->offersFromContracts($tenantContracts, PackageOfferSourceEnum::TENANT_CONTRACT);
+        if (!$this->gatingScopeResolver->isCategoryScoped($account)) {
+            return $this->catalogForTenantScope($account, $now);
         }
 
-        $defaultContracts = $this->contractRepository->findActiveDefaults($now);
-        if ($defaultContracts !== []) {
-            return $this->offersFromContracts($defaultContracts, PackageOfferSourceEnum::DEFAULT_CONTRACT);
-        }
-
-        $offers = [];
-        foreach ($this->packageRepository->findActiveCatalog($now) as $package) {
-            $offer = $this->offerFromProductMax($package, $account);
-            if ($offer->source !== PackageOfferSourceEnum::UNAVAILABLE) {
-                $offers[] = $offer;
-            }
-        }
-
-        return $offers;
+        return $this->catalogForCategoryScope($account, $now);
     }
 
     /**
@@ -88,17 +97,11 @@ class PackageCatalogResolver
     {
         $now ??= new \DateTimeImmutable();
 
-        $tenantContracts = $this->contractRepository->findActiveForTenant($account, $now);
-        if ($tenantContracts !== []) {
-            return $this->offerFromContractsForPackage($tenantContracts, $package, PackageOfferSourceEnum::TENANT_CONTRACT);
+        if (!$this->gatingScopeResolver->isCategoryScoped($account)) {
+            return $this->offerForTenantScope($package, $account, $now);
         }
 
-        $defaultContracts = $this->contractRepository->findActiveDefaults($now);
-        if ($defaultContracts !== []) {
-            return $this->offerFromContractsForPackage($defaultContracts, $package, PackageOfferSourceEnum::DEFAULT_CONTRACT);
-        }
-
-        return $this->offerFromProductMax($package, $account);
+        return $this->offerForCategoryScope($package, $account, $now);
     }
 
     /**
@@ -107,6 +110,9 @@ class PackageCatalogResolver
      * ninguno cubre este paquete (offerFor() devolvió null).
      * `PACKAGE_PRICE_UNAVAILABLE` = visible pero sin proveedor que lo cubra
      * (mismo codeWork que ya usa PackageSalePriceResolver para V1).
+     *
+     * Delega en offerFor() para TODO — incluido el alcance tenant/category
+     * del kill switch: no hay ninguna ruta de compra que lo evite.
      */
     public function offerForSale(CommunicationPackage $package, Account $account, ?\DateTimeImmutable $now = null): ResolvedPackageOffer
     {
@@ -131,6 +137,133 @@ class PackageCatalogResolver
     }
 
     /**
+     * Alcance TENANT (default) — comportamiento histórico, SIN CAMBIOS
+     * respecto a antes de la Fase 2: la presencia de cualquier contrato
+     * propio (o por defecto) restringe TODO el catálogo, cualquier
+     * categoría.
+     */
+    private function catalogForTenantScope(Account $account, \DateTimeImmutable $now): array
+    {
+        $tenantContracts = $this->contractRepository->findActiveForTenant($account, $now);
+        if ($tenantContracts !== []) {
+            return $this->offersFromContracts($tenantContracts, PackageOfferSourceEnum::TENANT_CONTRACT);
+        }
+
+        $defaultContracts = $this->contractRepository->findActiveDefaults($now);
+        if ($defaultContracts !== []) {
+            return $this->offersFromContracts($defaultContracts, PackageOfferSourceEnum::DEFAULT_CONTRACT);
+        }
+
+        $offers = [];
+        foreach ($this->packageRepository->findActiveCatalog($now) as $package) {
+            $offer = $this->offerFromProductMax($package, $account);
+            if ($offer->source !== PackageOfferSourceEnum::UNAVAILABLE) {
+                $offers[] = $offer;
+            }
+        }
+
+        return $offers;
+    }
+
+    /**
+     * Alcance CATEGORY (Fase 2, detrás del flag) — la MISMA precedencia de
+     * 3 niveles que catalogForTenantScope(), pero evaluada
+     * independientemente por cada categoría (service+subservice) en vez de
+     * una sola vez para todo el tenant.
+     */
+    private function catalogForCategoryScope(Account $account, \DateTimeImmutable $now): array
+    {
+        $tenantByCategory = $this->groupByCategory($this->contractRepository->findActiveForTenant($account, $now));
+        $defaultByCategory = $this->groupByCategory($this->contractRepository->findActiveDefaults($now));
+
+        $offers = [];
+        $seenPackageIds = [];
+        $gatedCategories = [];
+
+        foreach ($tenantByCategory as $categoryKey => $contracts) {
+            $gatedCategories[$categoryKey] = true;
+            array_push($offers, ...$this->offersFromContracts($contracts, PackageOfferSourceEnum::TENANT_CONTRACT, $seenPackageIds));
+        }
+        foreach ($defaultByCategory as $categoryKey => $contracts) {
+            if (isset($gatedCategories[$categoryKey])) {
+                continue; // el tenant ya gobierna esta categoría con contrato propio
+            }
+            $gatedCategories[$categoryKey] = true;
+            array_push($offers, ...$this->offersFromContracts($contracts, PackageOfferSourceEnum::DEFAULT_CONTRACT, $seenPackageIds));
+        }
+
+        // Categorías SIN ningún contrato (ni propio ni por defecto): caen a
+        // MAX+margen, exactamente como el catálogo entero cae hoy cuando no
+        // hay ningún contrato en absoluto (catalogForTenantScope() rama 3).
+        foreach ($this->packageRepository->findActiveCatalogExcludingCategories(array_keys($gatedCategories), $now) as $package) {
+            $offer = $this->offerFromProductMax($package, $account);
+            if ($offer->source !== PackageOfferSourceEnum::UNAVAILABLE) {
+                $offers[] = $offer;
+            }
+        }
+
+        return $offers;
+    }
+
+    private function offerForTenantScope(CommunicationPackage $package, Account $account, \DateTimeImmutable $now): ?ResolvedPackageOffer
+    {
+        $tenantContracts = $this->contractRepository->findActiveForTenant($account, $now);
+        if ($tenantContracts !== []) {
+            return $this->offerFromContractsForPackage($tenantContracts, $package, PackageOfferSourceEnum::TENANT_CONTRACT);
+        }
+
+        $defaultContracts = $this->contractRepository->findActiveDefaults($now);
+        if ($defaultContracts !== []) {
+            return $this->offerFromContractsForPackage($defaultContracts, $package, PackageOfferSourceEnum::DEFAULT_CONTRACT);
+        }
+
+        return $this->offerFromProductMax($package, $account);
+    }
+
+    private function offerForCategoryScope(CommunicationPackage $package, Account $account, \DateTimeImmutable $now): ?ResolvedPackageOffer
+    {
+        $categoryKey = $package->getServiceKey();
+
+        $tenantContracts = $this->filterByCategory($this->contractRepository->findActiveForTenant($account, $now), $categoryKey);
+        if ($tenantContracts !== []) {
+            return $this->offerFromContractsForPackage($tenantContracts, $package, PackageOfferSourceEnum::TENANT_CONTRACT);
+        }
+
+        $defaultContracts = $this->filterByCategory($this->contractRepository->findActiveDefaults($now), $categoryKey);
+        if ($defaultContracts !== []) {
+            return $this->offerFromContractsForPackage($defaultContracts, $package, PackageOfferSourceEnum::DEFAULT_CONTRACT);
+        }
+
+        return $this->offerFromProductMax($package, $account);
+    }
+
+    /**
+     * @param list<CommunicationContract> $contracts
+     * @return array<string, list<CommunicationContract>>
+     */
+    private function groupByCategory(array $contracts): array
+    {
+        $grouped = [];
+        foreach ($contracts as $contract) {
+            $grouped[$contract->getServiceKey()][] = $contract;
+        }
+
+        return $grouped;
+    }
+
+    /**
+     * @param list<CommunicationContract> $contracts
+     * @return list<CommunicationContract>
+     */
+    private function filterByCategory(array $contracts, string $categoryKey): array
+    {
+        return array_values(array_filter(
+            $contracts,
+            static fn (CommunicationContract $c) => $c->getServiceKey() === $categoryKey,
+        ));
+    }
+
+    /**
      * Aplana: por cada contrato, por cada CommunicationPackage de su
      * colección (Fase 6 — un contrato puede cubrir varios), una oferta.
      * Dedup defensivo por packageId — un paquete nunca debería aparecer dos
@@ -138,13 +271,23 @@ class PackageCatalogResolver
      * guarda como cinturón de seguridad ante contratos superpuestos creados
      * a mano.
      *
+     * $seenPackageIds se pasa por referencia y, si el caller no da uno
+     * explícito, cada llamada arranca con un array vacío propio (mismo
+     * comportamiento que antes de la Fase 2, usado por
+     * catalogForTenantScope() sin cambios). catalogForCategoryScope() SÍ
+     * pasa uno compartido entre varias llamadas (una por categoría) para
+     * que el dedup cubra TODO el catálogo, no solo un grupo — si el
+     * invariante "todos los paquetes de un contrato comparten categoría"
+     * se violara por un bug futuro, un paquete en contratos de más de una
+     * categoría no aparecería duplicado.
+     *
      * @param list<CommunicationContract> $contracts
+     * @param array<int|string, bool> $seenPackageIds
      * @return list<ResolvedPackageOffer>
      */
-    private function offersFromContracts(array $contracts, PackageOfferSourceEnum $source): array
+    private function offersFromContracts(array $contracts, PackageOfferSourceEnum $source, array &$seenPackageIds = []): array
     {
         $offers = [];
-        $seenPackageIds = [];
         foreach ($contracts as $contract) {
             foreach ($contract->getPackages() as $package) {
                 if (isset($seenPackageIds[$package->getId()])) {
