@@ -10,6 +10,7 @@ use ApiPlatform\OpenApi\Model\Operation as OpenApiOperation;
 use ApiPlatform\OpenApi\Model\Parameter as OpenApiParameter;
 use App\Repository\CommunicationPackageRepository;
 use App\Service\Pricing\ResolvedPackageOffer;
+use App\Service\Pricing\ServiceCategoryKey;
 use App\State\CommunicationPackageCatalogItemProvider;
 use App\State\CommunicationPackageCatalogProvider;
 use Doctrine\Common\Collections\ArrayCollection;
@@ -221,6 +222,21 @@ class CommunicationPackage
     private array $service = [];
 
     /**
+     * Derivada de `$service` (nombre+subservicio) por ServiceCategoryKey —
+     * SE DERIVA EN setService(), nunca en un lifecycle callback (Doctrine ya
+     * calculó el changeset cuando corre preUpdate; ver mismo razonamiento
+     * en CommunicationContract::$serviceKey). Fase 1 del rediseño de
+     * contratos por categoría (agosto 2026) — permite filtrar/indexar por
+     * categoría en SQL sin queries JSON (sin precedente en este repo).
+     * Default `'|'`, NO `''` — debe coincidir con lo que produce
+     * `ServiceCategoryKey::of(null, null)` para un `service=[]` recién
+     * construido (el separador siempre está presente); un default `''`
+     * aquí divergería de la clave real que setService() derivaría.
+     */
+    #[ORM\Column(length: 191)]
+    private string $serviceKey = '|';
+
+    /**
      * @var array{quantity?: int, unit?: string}|null
      */
     #[ORM\Column(nullable: true)]
@@ -318,7 +334,10 @@ class CommunicationPackage
     {
         $this->benefits = [];
         $this->tags = [];
-        $this->service = [];
+        // Vía setService(), no asignación directa — es el único punto que
+        // deriva $serviceKey; el default de la propiedad ('|') es un
+        // resguardo, no la fuente de verdad.
+        $this->setService([]);
         $this->activeStartAt = new \DateTimeImmutable();
         $this->contracts = new ArrayCollection();
     }
@@ -404,8 +423,14 @@ class CommunicationPackage
     public function setService(array $service): static
     {
         $this->service = $service;
+        $this->serviceKey = ServiceCategoryKey::fromService($service);
 
         return $this;
+    }
+
+    public function getServiceKey(): string
+    {
+        return $this->serviceKey;
     }
 
     public function getValidity(): ?array

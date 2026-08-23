@@ -7,6 +7,8 @@ use App\Entity\CommunicationContract;
 use App\Entity\CommunicationPackage;
 use App\Repository\CommunicationContractRepository;
 use App\Repository\CommunicationPackageRepository;
+use App\Repository\SysConfigRepository;
+use App\Service\Catalog\ContractGatingScopeResolver;
 use App\Service\Catalog\UpcomingPackageCatalogResolver;
 use App\Service\Pricing\BenefitOperationResolver;
 use App\Service\Pricing\PackageOfferSourceEnum;
@@ -15,12 +17,18 @@ use PHPUnit\Framework\TestCase;
 
 /**
  * @covers \App\Service\Catalog\UpcomingPackageCatalogResolver
+ *
+ * Todos los tests corren con ContractGatingScopeResolver devolviendo
+ * `false` (alcance tenant, default) salvo el bloque "alcance category" al
+ * final — mismo criterio que PackageCatalogResolverTest.
  */
 class UpcomingPackageCatalogResolverTest extends TestCase
 {
     private CommunicationPackageRepository&MockObject $packageRepository;
     private CommunicationContractRepository&MockObject $contractRepository;
     private BenefitOperationResolver&MockObject $benefitResolver;
+    private SysConfigRepository&MockObject $gatingSysConfigRepo;
+    private ContractGatingScopeResolver $gatingScopeResolver;
     private UpcomingPackageCatalogResolver $resolver;
 
     protected function setUp(): void
@@ -30,7 +38,20 @@ class UpcomingPackageCatalogResolverTest extends TestCase
         $this->benefitResolver = $this->createMock(BenefitOperationResolver::class);
         $this->benefitResolver->method('resolve')->willReturnCallback(static fn (CommunicationPackage $p) => $p->getBenefits());
 
-        $this->resolver = new UpcomingPackageCatalogResolver($this->packageRepository, $this->contractRepository, $this->benefitResolver);
+        // ContractGatingScopeResolver es `final` — instancia real sobre un
+        // SysConfigRepository mockeado propio, mismo criterio (y misma
+        // razón para NO poner un willReturn(null) de relleno acá) que
+        // PackageCatalogResolverTest.
+        $this->gatingSysConfigRepo = $this->createMock(SysConfigRepository::class);
+        $this->gatingScopeResolver = new ContractGatingScopeResolver($this->gatingSysConfigRepo);
+
+        $this->resolver = new UpcomingPackageCatalogResolver($this->packageRepository, $this->contractRepository, $this->benefitResolver, $this->gatingScopeResolver);
+    }
+
+    private function enableCategoryScope(): void
+    {
+        $this->gatingSysConfigRepo->method('findCachedValue')
+            ->willReturnCallback(fn (string $key) => $key === ContractGatingScopeResolver::SCOPE_KEY ? 'category' : null);
     }
 
     private function assignId(object $entity, int $id): void
@@ -58,6 +79,22 @@ class UpcomingPackageCatalogResolverTest extends TestCase
             ->setPrice($price)->setCurrency($currency)
             ->setStartAt($startAt);
         $this->assignId($contract, random_int(1000, 999999));
+
+        return $contract;
+    }
+
+    private function packageInCategory(int $id, string $serviceName, string $subserviceName): CommunicationPackage
+    {
+        $package = $this->package($id);
+        $package->setService(['name' => $serviceName, 'subservice' => ['name' => $subserviceName]]);
+
+        return $package;
+    }
+
+    private function contractInCategory(?Account $tenant, float $price, \DateTimeImmutable $startAt, string $serviceName, string $subserviceName): CommunicationContract
+    {
+        $contract = $this->contract($tenant, $price, $startAt);
+        $contract->setServiceCategory($serviceName, $subserviceName);
 
         return $contract;
     }
@@ -185,5 +222,61 @@ class UpcomingPackageCatalogResolverTest extends TestCase
 
         $this->assertCount(1, $result);
         $this->assertSame(9.0, $result[0]->getAmount());
+    }
+
+    // ---- Fase 2: alcance CATEGORY (ContractGatingScopeResolver::isCategoryScoped() === true) ----
+
+    public function testCategoryScopeStillShowsPreviewWhenPackageIsInACategoryWithoutAnyTenantContract(): void
+    {
+        // El tenant tiene contrato propio activo en Mobile/Airtime (otro
+        // paquete), pero el paquete próximo a arrancar es Utilities/Internet
+        // — categoría sin ningún contrato propio del tenant, así que NO
+        // debe gatearse: cae al contrato "por defecto" de su categoría,
+        // igual que si el tenant no tuviera contrato en absoluto.
+        $this->enableCategoryScope();
+
+        $tenant = $this->createMock(Account::class);
+        $tenant->method('getId')->willReturn(1);
+
+        $otherPackage = $this->packageInCategory(1, 'Mobile', 'Airtime');
+        $ownActiveContract = $this->contractInCategory($tenant, 5.0, new \DateTimeImmutable('-1 day'), 'Mobile', 'Airtime');
+        $this->linkContractToPackage($ownActiveContract, $otherPackage);
+
+        $upcomingPackage = $this->packageInCategory(2, 'Utilities', 'Internet');
+        $default = $this->contractInCategory(null, 12.0, new \DateTimeImmutable('+1 day'), 'Utilities', 'Internet');
+        $this->linkContractToPackage($default, $upcomingPackage);
+
+        $this->packageRepository->method('findUpcoming')->willReturn([$upcomingPackage]);
+        $this->contractRepository->method('findActiveForTenant')->willReturn([$ownActiveContract]);
+
+        $result = $this->resolver->upcomingFor($tenant);
+
+        $this->assertCount(1, $result);
+        $this->assertSame(12.0, $result[0]->getAmount());
+    }
+
+    public function testCategoryScopeSkipsPackageWhenItsOwnCategoryIsGatedByTenantAndNotCovered(): void
+    {
+        // No-regresión: dentro de una categoría donde el tenant SÍ tiene
+        // contrato propio, la regla sigue siendo "todo o nada" — el alcance
+        // category solo la acota a esa categoría, no la debilita.
+        $this->enableCategoryScope();
+
+        $tenant = $this->createMock(Account::class);
+        $tenant->method('getId')->willReturn(1);
+
+        $upcomingPackage = $this->packageInCategory(1, 'Mobile', 'Airtime');
+        $otherPackage = $this->packageInCategory(2, 'Mobile', 'Airtime');
+
+        $default = $this->contractInCategory(null, 12.0, new \DateTimeImmutable('+1 day'), 'Mobile', 'Airtime');
+        $this->linkContractToPackage($default, $upcomingPackage);
+
+        $ownActiveContract = $this->contractInCategory($tenant, 5.0, new \DateTimeImmutable('-1 day'), 'Mobile', 'Airtime');
+        $this->linkContractToPackage($ownActiveContract, $otherPackage);
+
+        $this->packageRepository->method('findUpcoming')->willReturn([$upcomingPackage]);
+        $this->contractRepository->method('findActiveForTenant')->willReturn([$ownActiveContract]);
+
+        $this->assertSame([], $this->resolver->upcomingFor($tenant));
     }
 }

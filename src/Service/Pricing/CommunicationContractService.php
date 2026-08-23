@@ -399,10 +399,17 @@ class CommunicationContractService
 
         $contract = $this->contractRepository->findOpenContract($tenant, $amount, $currency);
         if ($contract === null) {
+            $service = $package->getService();
             $contract = (new CommunicationContract())
                 ->setTenant($tenant)
                 ->setDestinationAmount($amount)
-                ->setDestinationCurrency($currency);
+                ->setDestinationCurrency($currency)
+                // Fase 1 del rediseño por categoría (ver docblock de
+                // CommunicationContract): solo clasificación informativa
+                // por ahora, todavía NO forma parte de la identidad del
+                // contrato ni se usa para elegir/matchear uno existente
+                // arriba (eso es Fase 3).
+                ->setServiceCategory($service['name'] ?? null, $service['subservice']['name'] ?? null);
             $this->em->persist($contract);
             $contract->addPackage($package);
 

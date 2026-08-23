@@ -3,6 +3,7 @@
 namespace App\Entity;
 
 use App\Repository\CommunicationContractRepository;
+use App\Service\Pricing\ServiceCategoryKey;
 use Doctrine\Common\Collections\ArrayCollection;
 use Doctrine\Common\Collections\Collection;
 use Doctrine\ORM\Mapping as ORM;
@@ -24,6 +25,16 @@ use Doctrine\ORM\Mapping as ORM;
  * visibilidad/precio que uno específico (ver PackageCatalogResolver, Fase
  * 2). Sin `isActive`: la vigencia es solo `startAt`/`endAt` — "pausar" es
  * cerrar (`endAt = now()`) y crear uno nuevo si se reactiva.
+ *
+ * `serviceName`/`subserviceName`/`serviceKey` (Fase 1 del rediseño de
+ * contratos por categoría, agosto 2026): clasificación del contrato, mismo
+ * vocabulario que `CommunicationPackage::$service`. Todavía NO forman parte
+ * de la identidad/unicidad del contrato ni son usados por
+ * `PackageCatalogResolver` — eso es Fase 3, deliberadamente separada porque
+ * cambia qué contrato termina cubriendo qué paquete (dato, no solo
+ * comportamiento de lectura). Por ahora son solo clasificación informativa,
+ * derivada del paquete que se le vincula (ver
+ * CommunicationContractService::upsertContract()).
  */
 #[ORM\Entity(repositoryClass: CommunicationContractRepository::class)]
 #[ORM\HasLifecycleCallbacks]
@@ -65,6 +76,35 @@ class CommunicationContract
     private ?string $destinationCurrency = null;
 
     /**
+     * Clasificación (Fase 1 del rediseño de contratos por categoría) —
+     * mismo shape de nombre/subservicio que CommunicationPackage::$service,
+     * pero guardado como columnas planas (no JSON): a diferencia del
+     * paquete, aquí no hay un shape más rico que preservar, y así
+     * `serviceKey` se deriva de una fuente única sin riesgo de que un JSON
+     * independiente se desincronice. Se setean juntos vía
+     * setServiceCategory() — nunca `$serviceKey` sola.
+     */
+    #[ORM\Column(length: 255, nullable: true)]
+    private ?string $serviceName = null;
+
+    #[ORM\Column(length: 255, nullable: true)]
+    private ?string $subserviceName = null;
+
+    /**
+     * Derivada de $serviceName/$subserviceName vía ServiceCategoryKey — SE
+     * DERIVA EN EL SETTER (ver setServiceCategory()), nunca en un
+     * #[ORM\PreUpdate]: Doctrine ya calculó el changeset cuando corre
+     * preUpdate, así que mutar la entidad ahí no persiste sin
+     * PreUpdateEventArgs::setNewValue() (innecesariamente complejo).
+     * Derivarla en el setter es correcto y trivial. Default `'|'` (no
+     * `''`) como resguardo — coincide con lo que produce
+     * `ServiceCategoryKey::of(null, null)`, aunque el constructor ya llama
+     * a setServiceCategory(null, null) como fuente de verdad real.
+     */
+    #[ORM\Column(length: 191)]
+    private string $serviceKey = '|';
+
+    /**
      * Lo que se le cobra al cliente. CHECK >= 0 a nivel de esquema (un
      * contrato en $0 es un precio real y deliberado, ej. cortesía).
      */
@@ -98,6 +138,10 @@ class CommunicationContract
     {
         $this->startAt = new \DateTimeImmutable();
         $this->packages = new ArrayCollection();
+        // Vía setServiceCategory(), no asignación directa — mismo criterio
+        // que CommunicationPackage::__construct(): un único punto deriva
+        // $serviceKey, el default de la propiedad es solo un resguardo.
+        $this->setServiceCategory(null, null);
     }
 
     public function getId(): ?int
@@ -163,6 +207,56 @@ class CommunicationContract
         $this->destinationCurrency = $destinationCurrency;
 
         return $this;
+    }
+
+    public function getServiceName(): ?string
+    {
+        return $this->serviceName;
+    }
+
+    public function getSubserviceName(): ?string
+    {
+        return $this->subserviceName;
+    }
+
+    public function getServiceKey(): string
+    {
+        return $this->serviceKey;
+    }
+
+    /**
+     * Única forma de establecer la categoría — deriva $serviceKey en el
+     * mismo paso, no hay setServiceKey() independiente (ver docblock de la
+     * propiedad).
+     */
+    public function setServiceCategory(?string $serviceName, ?string $subserviceName): static
+    {
+        $this->serviceName = $serviceName;
+        $this->subserviceName = $subserviceName;
+        $this->serviceKey = ServiceCategoryKey::of($serviceName, $subserviceName);
+
+        return $this;
+    }
+
+    /**
+     * Shape `{name, subservice: {name}}` — mismo formato que
+     * CommunicationPackage::getService(), reconstruido desde las columnas
+     * planas para que el DTO de salida tenga forma compatible.
+     *
+     * @return array{name?: string, subservice?: array{name?: string}}
+     */
+    public function getServiceShape(): array
+    {
+        if ($this->serviceName === null) {
+            return [];
+        }
+
+        $shape = ['name' => $this->serviceName];
+        if ($this->subserviceName !== null) {
+            $shape['subservice'] = ['name' => $this->subserviceName];
+        }
+
+        return $shape;
     }
 
     public function getPrice(): ?float
