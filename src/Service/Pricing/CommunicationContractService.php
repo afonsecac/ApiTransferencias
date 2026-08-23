@@ -22,15 +22,20 @@ use Symfony\Bundle\SecurityBundle\Security;
  * Administración de CommunicationContract (V2) — calcado de
  * PackageContractService en estructura: alta única + alta en lote (misma
  * TargetAccountResolver), ambas idempotentes por (tenant, destinationAmount,
- * destinationCurrency): una segunda llamada sobre la misma tupla ACTUALIZA
- * el contrato ABIERTO existente (endAt IS NULL) en vez de duplicarlo — el
- * índice único uniq_com_contract_open_per_tenant_amount lo garantiza a nivel
- * de esquema. "Pausar" (close()) es la única forma de dejar hueco a uno
- * nuevo distinto.
+ * destinationCurrency, serviceKey): una segunda llamada sobre la misma
+ * tupla+categoría ACTUALIZA el contrato ABIERTO existente (endAt IS NULL)
+ * en vez de duplicarlo — el índice único
+ * uniq_com_contract_open_per_tenant_amount (incluye service_key desde la
+ * Fase 3 del rediseño por categoría) lo garantiza a nivel de esquema.
+ * "Pausar" (close()) es la única forma de dejar hueco a uno nuevo distinto.
  *
  * Desde la Fase 6 (ManyToMany), un contrato puede cubrir VARIOS
  * CommunicationPackage que compartan tupla — ver upsertContract() y el
- * docblock de CommunicationContract.
+ * docblock de CommunicationContract. Desde la Fase 3 del rediseño por
+ * categoría, esos paquetes también deben compartir `serviceKey`
+ * (`CommunicationContract::addPackage()` lo exige) — dos paquetes con la
+ * misma tupla monto/moneda pero categorías distintas SIEMPRE terminan en
+ * dos contratos separados, nunca uno mezclado.
  */
 class CommunicationContractService
 {
@@ -56,6 +61,7 @@ class CommunicationContractService
     public function createSingle(CreateCommunicationContractDto $dto): CommunicationContract
     {
         $package = $this->findPackageOrFail((int) $dto->getCommunicationPackageId());
+        $this->assertServiceMatchesPackage((array) $dto->getService(), $package);
         $tenant = $this->resolveTenantOrFail($dto->getTenantId(), $dto->getEnvironmentId());
 
         $result = $this->upsertContract($package, $tenant);
@@ -73,6 +79,7 @@ class CommunicationContractService
     public function createBatch(CreateCommunicationContractBatchDto $dto): ContractBatchResult
     {
         $package = $this->findPackageOrFail((int) $dto->getCommunicationPackageId());
+        $this->assertServiceMatchesPackage((array) $dto->getService(), $package);
 
         $environment = $this->em->getRepository(Environment::class)->find($dto->getEnvironmentId());
         if ($environment === null) {
@@ -129,6 +136,7 @@ class CommunicationContractService
         }
 
         $tenant = $this->resolveTenantOrFail($dto->getTenantId(), $dto->getEnvironmentId());
+        $serviceKey = ServiceCategoryKey::fromService((array) $dto->getService());
 
         $priceFrom = (float) $dto->getPriceFrom();
         $priceTo = (float) $dto->getPriceTo();
@@ -143,7 +151,11 @@ class CommunicationContractService
         for ($i = 0; $i < $count; $i++) {
             $amount = round($from + $i * $step, 2);
 
-            $package = $this->packageRepository->findByDestination($amount, $destinationCurrency);
+            // Filtrado por categoría (Fase 3): sin esto, un monto que
+            // coincide con paquetes de MÁS de una categoría matchearía
+            // el primero que encuentre, sin relación con la categoría
+            // pedida en $dto->getService().
+            $package = $this->packageRepository->findByDestination($amount, $destinationCurrency, $serviceKey);
             if ($package === null) {
                 $skippedAmounts[] = $amount;
                 continue;
@@ -192,9 +204,21 @@ class CommunicationContractService
     {
         $linked = 0;
         foreach ($promoPackages as $promoPackage) {
+            // Filtrado por la categoría del propio paquete de promoción
+            // (Fase 3): antes de esto, un paquete promocional podía
+            // engancharse al contrato de OTRA categoría que casualmente
+            // compartiera tupla monto/moneda con el paquete regular
+            // equivocado — ahora, si el paquete de promoción no heredó
+            // correctamente la categoría del regular (ver
+            // CommunicationPromotionService::createV2(), que la toma del
+            // DTO de la promoción, no la deriva automáticamente), esto
+            // simplemente no encuentra match y se omite (getLinked() no
+            // cuenta este paquete) en vez de vincular la categoría
+            // equivocada.
             $regularPackage = $this->packageRepository->findByDestination(
                 (float) $promoPackage->getDestinationAmount(),
                 (string) $promoPackage->getDestinationCurrency(),
+                $promoPackage->getServiceKey(),
             );
             if ($regularPackage === null) {
                 continue;
@@ -258,7 +282,7 @@ class CommunicationContractService
             // solo permite un contrato abierto por tupla — si ya hay uno
             // para la tupla destino, avisar en vez de dejar que el flush()
             // reviente con una violación de integridad.
-            $conflict = $this->contractRepository->findOpenContract($contract->getTenant(), $amount, $currency);
+            $conflict = $this->contractRepository->findOpenContract($contract->getTenant(), $amount, $currency, $contract->getServiceKey());
             if ($conflict !== null && $conflict !== $contract) {
                 throw new MyCurrentException(
                     'COMMUNICATION_CONTRACT_ALREADY_EXISTS',
@@ -332,6 +356,34 @@ class CommunicationContractService
     }
 
     /**
+     * Fase 3 del rediseño por categoría: `service` es explícito y
+     * obligatorio en los DTOs de alta (decisión del usuario — "exigir la
+     * categoría explícitamente" en vez de derivarla en silencio del
+     * paquete elegido), pero como el paquete YA se identifica por
+     * `communicationPackageId`, lo único que falta validar es que ambos
+     * coincidan — si no, es casi seguro que el admin eligió el paquete
+     * equivocado, y mejor avisar que dejar el contrato en la categoría
+     * real del paquete sin que quien lo creó se entere.
+     *
+     * @param array{name?: string, subservice?: array{name?: string}} $dtoService
+     *
+     * @throws MyCurrentException
+     */
+    private function assertServiceMatchesPackage(array $dtoService, CommunicationPackage $package): void
+    {
+        $given = ServiceCategoryKey::fromService($dtoService);
+        $expected = $package->getServiceKey();
+
+        if ($given !== $expected) {
+            throw new MyCurrentException(
+                'COMMUNICATION_CONTRACT_SERVICE_MISMATCH',
+                'La categoría indicada no coincide con la del paquete elegido',
+                422,
+            );
+        }
+    }
+
+    /**
      * @throws MyCurrentException
      */
     private function findPackageOrFail(int $id): CommunicationPackage
@@ -396,19 +448,19 @@ class CommunicationContractService
     {
         $amount = (float) $package->getDestinationAmount();
         $currency = (string) $package->getDestinationCurrency();
+        $serviceKey = $package->getServiceKey();
 
-        $contract = $this->contractRepository->findOpenContract($tenant, $amount, $currency);
+        $contract = $this->contractRepository->findOpenContract($tenant, $amount, $currency, $serviceKey);
         if ($contract === null) {
             $service = $package->getService();
             $contract = (new CommunicationContract())
                 ->setTenant($tenant)
                 ->setDestinationAmount($amount)
                 ->setDestinationCurrency($currency)
-                // Fase 1 del rediseño por categoría (ver docblock de
-                // CommunicationContract): solo clasificación informativa
-                // por ahora, todavía NO forma parte de la identidad del
-                // contrato ni se usa para elegir/matchear uno existente
-                // arriba (eso es Fase 3).
+                // Fase 3 del rediseño por categoría: `service` ya forma
+                // parte de la identidad del contrato — findOpenContract()
+                // arriba ya filtró por $serviceKey, así que esto SIEMPRE
+                // coincide con lo que addPackage() va a exigir abajo.
                 ->setServiceCategory($service['name'] ?? null, $service['subservice']['name'] ?? null);
             $this->em->persist($contract);
             $contract->addPackage($package);
