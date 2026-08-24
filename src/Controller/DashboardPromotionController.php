@@ -11,7 +11,6 @@ use App\DTO\UpsertPromotionDto;
 use App\Exception\MyCurrentException;
 use App\Entity\CommunicationProduct;
 use App\Entity\CommunicationPromotions;
-use App\Entity\Environment;
 use App\OpenApi\Attribute\DashboardEndpoint;
 use App\Repository\CommunicationPromotionsRepository;
 use App\Service\CommunicationPromotionService;
@@ -81,45 +80,26 @@ class DashboardPromotionController extends AbstractController
         return $this->json($this->normalizeDetail($promotion));
     }
 
+    /**
+     * Fase 2 de la deprecación del catálogo V1 (ver plan en memoria del
+     * proyecto): el alta de promociones V1 queda cerrada — usar
+     * POST /promotions/v2 (createV2()) en su lugar. Deliberadamente NO se
+     * toca esta acción para promociones V1 YA EXISTENTES (edit/detalle
+     * siguen funcionando igual): hay al menos una promoción V1 real, vigente
+     * hasta 2026-09-01, todavía vendiéndose en producción (confirmado contra
+     * staging y prod, no solo dev) — bloquear su edición o su venta
+     * rompería una campaña activa. Solo se cierra la puerta de ENTRADA a
+     * paquetes V1 nuevos.
+     */
     #[Route('', name: 'dashboard_promotions_create', methods: ['POST'])]
     #[IsGranted('ROLE_ADMIN')]
-    #[DashboardEndpoint(summary: 'Crear promoción', tag: 'Promotions', requestDto: UpsertPromotionDto::class, responseStatusCode: 201)]
+    #[DashboardEndpoint(summary: 'Crear promoción (V1, deshabilitado — usar /v2)', tag: 'Promotions', requestDto: UpsertPromotionDto::class, responseStatusCode: 201)]
     public function create(UpsertPromotionDto $dto): JsonResponse
     {
-        $promotion = new CommunicationPromotions();
-        $this->hydratePromotion($promotion, $dto);
-
-        $conn = $this->em->getConnection();
-        $conn->beginTransaction();
-        try {
-            $this->em->persist($promotion);
-            $this->em->flush();
-
-            $packagesCreated = $this->promotionService->createPackagesForPromotion($promotion, [
-                'currency'   => $dto->getCurrency(),
-                'amountFrom' => $dto->getAmountFrom(),
-                'amountTo'   => $dto->getAmountTo(),
-                'amountStep' => $dto->getAmountStep(),
-                'clients'    => $dto->getClients() ?? [],
-            ]);
-
-            $conn->commit();
-        } catch (\Throwable $e) {
-            $conn->rollBack();
-            return $this->json(
-                ['error' => ['message' => 'No se pudo crear la promoción y sus paquetes: ' . $e->getMessage()]],
-                Response::HTTP_UNPROCESSABLE_ENTITY
-            );
-        }
-
-        $result = $this->normalizeDetail($promotion);
-        $result['packagesCreated'] = $packagesCreated;
-
-        if ($packagesCreated === 0) {
-            $result['warning'] = 'No se generaron paquetes para esta promoción. Verifica que existan precios activos en el rango indicado y cuentas activas en el environment.';
-        }
-
-        return $this->json($result, Response::HTTP_CREATED);
+        return $this->json(
+            ['error' => ['message' => 'La creación de promociones V1 está deshabilitada — usá el alta V2 (POST /promotions/v2).', 'code' => 'V1_PROMOTION_CREATION_DISABLED']],
+            Response::HTTP_GONE,
+        );
     }
 
     #[Route('/v2', name: 'dashboard_promotions_create_v2', methods: ['POST'])]
@@ -303,46 +283,6 @@ class DashboardPromotionController extends AbstractController
             'wholesalePrice' => $product->getPrice() ?? 0.0,
             'priceCurrency' => $product->getPriceCurrency(),
         ];
-    }
-
-    private function hydratePromotion(CommunicationPromotions $promotion, UpsertPromotionDto $dto): void
-    {
-        $promotion->setName($dto->getName());
-        $promotion->setDescription($dto->getDescription());
-        $promotion->setTerms($dto->getTerms() ?? []);
-        $promotion->setStartAt(new \DateTimeImmutable($dto->getStartAt()));
-        $promotion->setEndAt(new \DateTimeImmutable($dto->getEndAt()));
-
-        if ($dto->getPriority() !== null) {
-            $promotion->setPriority($dto->getPriority());
-        }
-
-        if ($dto->getInfoDescription() !== null) {
-            $promotion->setInfoDescription($dto->getInfoDescription());
-        }
-        if ($dto->getKnowMore() !== null) {
-            $promotion->setKnowMore($dto->getKnowMore());
-        }
-        if ($dto->getValidityInfo() !== null) {
-            $promotion->setValidityInfo($dto->getValidityInfo());
-        }
-
-        if ($dto->getEnvironmentId() !== null) {
-            $environment = $this->em->getRepository(Environment::class)->find($dto->getEnvironmentId());
-            if ($environment !== null) {
-                $promotion->setEnvironment($environment);
-            }
-        }
-
-        if ($dto->getProductId() !== null) {
-            $product = $this->em->getRepository(CommunicationProduct::class)->find($dto->getProductId());
-            if ($product !== null) {
-                $promotion->setProduct($product);
-                if ($promotion->getEnvironment() === null) {
-                    $promotion->setEnvironment($product->getEnvironment());
-                }
-            }
-        }
     }
 
     private function normalizeDetail(CommunicationPromotions $promotion): array

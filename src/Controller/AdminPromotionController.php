@@ -3,9 +3,7 @@
 namespace App\Controller;
 
 use App\DTO\CreateAdminPromotionDto;
-use App\Exception\MyCurrentException;
 use App\OpenApi\Attribute\DashboardEndpoint;
-use App\Service\CommunicationPromotionService;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Response;
@@ -13,21 +11,18 @@ use Symfony\Component\Routing\Attribute\Route;
 #[Route('/admin/promotion')]
 class AdminPromotionController extends AbstractController
 {
-    public function __construct(
-        private readonly CommunicationPromotionService $service,
-    ) {
-    }
-
+    /**
+     * Fase 2 de la deprecación del catálogo V1 (ver plan en memoria del
+     * proyecto): el alta de promociones V1 queda cerrada — usar
+     * POST /promotions/v2 (DashboardPromotionController::createV2()).
+     */
     #[Route('/create', name: 'admin_promotion_index', methods: ['POST'])]
-    #[DashboardEndpoint(summary: 'Crear promoción (admin)', tag: 'Admin Promotions', requestDto: CreateAdminPromotionDto::class, responseStatusCode: 201)]
+    #[DashboardEndpoint(summary: 'Crear promoción (V1, deshabilitado — usar /promotions/v2)', tag: 'Admin Promotions', requestDto: CreateAdminPromotionDto::class, responseStatusCode: 201)]
     public function index(CreateAdminPromotionDto $dto): JsonResponse
     {
-        try {
-            $promotion = $this->service->createFromDto($dto);
-        } catch (MyCurrentException $e) {
-            return $this->json(['error' => ['message' => $e->getMessage()]], $e->getCode());
-        }
-
-        return $this->json($promotion, Response::HTTP_CREATED);
+        return $this->json(
+            ['error' => ['message' => 'La creación de promociones V1 está deshabilitada — usá el alta V2 (POST /promotions/v2).', 'code' => 'V1_PROMOTION_CREATION_DISABLED']],
+            Response::HTTP_GONE,
+        );
     }
 }

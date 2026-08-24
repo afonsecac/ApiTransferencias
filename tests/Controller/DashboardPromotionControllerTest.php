@@ -5,6 +5,7 @@ namespace App\Tests\Controller;
 use App\Controller\DashboardPromotionController;
 use App\DTO\CreatePromotionV2Dto;
 use App\DTO\SetPromotionProviderProductDto;
+use App\DTO\UpsertPromotionDto;
 use App\Entity\CommunicationPackage;
 use App\Entity\CommunicationProduct;
 use App\Entity\CommunicationPromotionProviderProduct;
@@ -74,6 +75,19 @@ class DashboardPromotionControllerTest extends TestCase
         $product->method('getExternalRef')->willReturn('ref-1');
 
         return $product;
+    }
+
+    public function testCreateRejectsWithGoneAndNeverTouchesTheService(): void
+    {
+        // Fase 2 de la deprecación de V1: el alta V1 queda cerrada — usar
+        // createV2(). No debe persistir nada ni llamar al servicio.
+        $this->promotionService->expects($this->never())->method('createPackagesForPromotion');
+
+        $response = $this->controller->create(new UpsertPromotionDto());
+
+        $this->assertSame(Response::HTTP_GONE, $response->getStatusCode());
+        $body = json_decode($response->getContent(), true);
+        $this->assertSame('V1_PROMOTION_CREATION_DISABLED', $body['error']['code']);
     }
 
     public function testListBindingsReturnsNotFoundWhenPromotionDoesNotExist(): void
