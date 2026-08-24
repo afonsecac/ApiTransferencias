@@ -9,6 +9,7 @@ use App\Entity\CommunicationClientPackage;
 use App\Entity\CommunicationProduct;
 use App\Entity\Environment;
 use App\Enums\CommunicationProviderEnum;
+use App\Service\Catalog\CatalogVersionResolver;
 use App\Service\Pricing\PackageMaterializationService;
 use Doctrine\ORM\EntityManagerInterface;
 use Psr\Log\LoggerInterface;
@@ -42,6 +43,15 @@ use Symfony\Component\DependencyInjection\Attribute\Autowire;
  * Best-effort: un fallo al sincronizar (p.ej. proveedor inalcanzable) se
  * loguea y no impide que ProviderRoutingAdminService::create()/update()
  * complete la creación/actualización del routing en sí.
+ *
+ * Fase 3 de la deprecación de V1: la sincronización de `CommunicationProduct`
+ * (`catalogSyncService->syncProducts()`) sigue corriendo SIEMPRE — la
+ * necesitan tanto V1 como V2 (MAX+margen, coverage/bindings). Lo que
+ * cambió es la materialización de `CommunicationClientPackage` (referencia +
+ * copia por cuenta): solo se hace para cuentas que SIGUEN siendo V1
+ * (`CatalogVersionResolver::isV2()`) — una cuenta V2 nunca lee esas filas
+ * (su catálogo es `CommunicationPackage`, resuelto por
+ * `PackageCatalogResolver`), así que crearlas era puro desperdicio.
  */
 class ClientCatalogImportService
 {
@@ -57,6 +67,7 @@ class ClientCatalogImportService
         private readonly CommunicationCatalogSyncService $catalogSyncService,
         private readonly PackageMaterializationService $materializationService,
         private readonly ProductSaleTypeMatcher $saleTypeMatcher,
+        private readonly CatalogVersionResolver $catalogVersion,
         #[Autowire('@monolog.logger.provider')]
         private readonly LoggerInterface $providerLogger,
     ) {
@@ -107,6 +118,23 @@ class ClientCatalogImportService
                 'isActive' => true,
             ]);
 
+            // Fase 3 de la deprecación de V1: materializar un
+            // CommunicationClientPackage (referencia + copia por cuenta) es
+            // puro desperdicio para una cuenta ya V2 — su catálogo se
+            // resuelve contra CommunicationPackage (PackageCatalogResolver),
+            // nunca lee estas filas. Antes de este fix, routear un cliente ya
+            // V2 a un proveedor nuevo seguía creando filas V1 sin que nada
+            // las usara jamás — era el "grifo abierto" real encontrado en la
+            // investigación de esta deprecación (confirmado contra staging Y
+            // producción, no solo dev).
+            $v1Accounts = array_values(array_filter(
+                $accounts,
+                fn (Account $account) => !$this->catalogVersion->isV2($account),
+            ));
+            if ($v1Accounts === []) {
+                continue;
+            }
+
             foreach ($products as $product) {
                 if (!$this->saleTypeMatcher->matches($product, $routing->getSaleType())) {
                     continue;
@@ -117,7 +145,7 @@ class ClientCatalogImportService
                     $touched = true;
                 }
 
-                foreach ($accounts as $account) {
+                foreach ($v1Accounts as $account) {
                     if ($this->createClientPackageIfMissing($reference, $account)) {
                         $touched = true;
                     }

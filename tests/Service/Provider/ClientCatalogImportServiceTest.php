@@ -12,6 +12,8 @@ use App\Enums\CommunicationProviderEnum;
 use App\Repository\AccountRepository;
 use App\Repository\CommunicationClientPackageRepository;
 use App\Repository\CommunicationProductRepository;
+use App\Repository\SysConfigRepository;
+use App\Service\Catalog\CatalogVersionResolver;
 use App\Service\Pricing\PackageMaterializationService;
 use App\Service\Provider\ClientCatalogImportService;
 use App\Service\Provider\CommunicationCatalogSyncService;
@@ -38,6 +40,8 @@ class ClientCatalogImportServiceTest extends TestCase
     private EntityManagerInterface&MockObject $em;
     private CommunicationCatalogSyncService&MockObject $catalogSyncService;
     private PackageMaterializationService&MockObject $materializationService;
+    private SysConfigRepository&MockObject $gatingSysConfigRepo;
+    private CatalogVersionResolver $catalogVersion;
     private ClientCatalogImportService $service;
 
     protected function setUp(): void
@@ -45,14 +49,29 @@ class ClientCatalogImportServiceTest extends TestCase
         $this->em = $this->createMock(EntityManagerInterface::class);
         $this->catalogSyncService = $this->createMock(CommunicationCatalogSyncService::class);
         $this->materializationService = $this->createMock(PackageMaterializationService::class);
+        // CatalogVersionResolver es `final` — instancia real sobre un
+        // SysConfigRepository mockeado propio (mismo patrón que
+        // PackageCatalogResolverTest/ContractGatingScopeResolverTest). Sin
+        // stub por defecto: un mock sin configurar ya devuelve null →
+        // isV2() da false (todas las cuentas quedan V1) salvo que un test
+        // llame explícitamente a markAccountsAsV2().
+        $this->gatingSysConfigRepo = $this->createMock(SysConfigRepository::class);
+        $this->catalogVersion = new CatalogVersionResolver($this->gatingSysConfigRepo);
 
         $this->service = new ClientCatalogImportService(
             $this->em,
             $this->catalogSyncService,
             $this->materializationService,
             new ProductSaleTypeMatcher(),
+            $this->catalogVersion,
             new NullLogger(),
         );
+    }
+
+    private function markAccountsAsV2(): void
+    {
+        $this->gatingSysConfigRepo->method('findCachedValue')
+            ->willReturnCallback(fn (string $key) => $key === CatalogVersionResolver::DEFAULT_VERSION_KEY ? 'v2' : null);
     }
 
     private function accountWithId(int $id, Client $client, Environment $environment): Account&MockObject
@@ -207,6 +226,107 @@ class ClientCatalogImportServiceTest extends TestCase
         $this->assertSame($account1, $materializeCalls[0][1]);
         $this->assertSame($persisted[0], $materializeCalls[1][0]);
         $this->assertSame($account2, $materializeCalls[1][1]);
+    }
+
+    // ---- Fase 3 de la deprecación de V1: cuentas ya V2 no materializan V1 ----
+
+    public function testSkipsReferenceAndMaterializationWhenAllAccountsAreAlreadyV2(): void
+    {
+        $this->markAccountsAsV2();
+
+        $client = (new Client())->setCurrency('USD');
+        $environment = $this->createMock(Environment::class);
+        $environment->method('getId')->willReturn(10);
+
+        $routing = new ClientProviderRouting();
+        $routing->setClient($client);
+        $routing->setEnvironment($environment);
+        $routing->setProvider(CommunicationProviderEnum::DTONE->value);
+
+        // syncProducts() SIEMPRE corre — V2 también depende de que
+        // CommunicationProduct exista (MAX+margen, coverage/bindings).
+        $this->catalogSyncService->expects($this->once())
+            ->method('syncProducts')
+            ->with(CommunicationProviderEnum::DTONE, $environment)
+            ->willReturn(new SyncResult(1, 0, 0));
+
+        $product = $this->productWithId(1);
+        $account = $this->accountWithId(101, $client, $environment);
+
+        $productRepo = $this->createMock(CommunicationProductRepository::class);
+        $productRepo->method('findBy')->willReturn([$product]);
+        $accountRepo = $this->createMock(AccountRepository::class);
+        $accountRepo->method('findBy')->willReturn([$account]);
+
+        $this->em->method('getRepository')->willReturnMap([
+            [CommunicationProduct::class, $productRepo],
+            [Account::class, $accountRepo],
+        ]);
+
+        $this->em->expects($this->never())->method('persist');
+        $this->materializationService->expects($this->never())->method('materializeForTenant');
+        $this->em->expects($this->never())->method('flush');
+
+        $this->service->importForRouting($routing);
+    }
+
+    public function testOnlyMaterializesForTheStillV1AccountsWhenMixedWithV2(): void
+    {
+        // OJO: NO llamar a markAccountsAsV2() acá — este test necesita que
+        // el default GLOBAL se mantenga en "v1" (sin stub = null, isV2()
+        // cae en false) y que SOLO el cliente 200 sea V2 vía la lista de
+        // pilotos. PHPUnit usa el PRIMER stub sin restricciones que
+        // matchea una invocación, no el último — dos willReturnCallback()
+        // seguidos sobre el mismo mock pisarían el segundo en silencio.
+        $client = (new Client())->setCurrency('USD');
+        $environment = $this->createMock(Environment::class);
+        $environment->method('getId')->willReturn(10);
+
+        $routing = new ClientProviderRouting();
+        $routing->setClient($client);
+        $routing->setEnvironment($environment);
+        $routing->setProvider(CommunicationProviderEnum::DTONE->value);
+
+        $this->catalogSyncService->method('syncProducts')->willReturn(new SyncResult(1, 0, 0));
+
+        $product = $this->productWithId(1);
+        // El cliente 200 está en la lista de pilotos V2 — el resto sigue V1.
+        $v2Client = $this->createMock(Client::class);
+        $v2Client->method('getId')->willReturn(200);
+        $v1Account = $this->accountWithId(101, $client, $environment);
+        $v2Account = $this->accountWithId(102, $v2Client, $environment);
+
+        $this->gatingSysConfigRepo->method('findCachedValue')->willReturnCallback(
+            fn (string $key) => match ($key) {
+                CatalogVersionResolver::V2_CLIENTS_KEY => '200',
+                default => null,
+            }
+        );
+
+        $productRepo = $this->createMock(CommunicationProductRepository::class);
+        $productRepo->method('findBy')->willReturn([$product]);
+        $accountRepo = $this->createMock(AccountRepository::class);
+        $accountRepo->method('findBy')->willReturn([$v1Account, $v2Account]);
+
+        $this->em->method('getRepository')->willReturnMap([
+            [CommunicationProduct::class, $productRepo],
+            [Account::class, $accountRepo],
+            [CommunicationClientPackage::class, $this->clientPackageRepo(null)],
+        ]);
+
+        $materializedFor = [];
+        $this->materializationService->method('materializeForTenant')
+            ->willReturnCallback(function ($reference, $account) use (&$materializedFor) {
+                $materializedFor[] = $account;
+
+                return new CommunicationClientPackage();
+            });
+        $this->em->method('persist')->willReturnCallback(fn () => null);
+        $this->em->expects($this->once())->method('flush');
+
+        $this->service->importForRouting($routing);
+
+        $this->assertSame([$v1Account], $materializedFor);
     }
 
     public function testSkipsWhenReferenceAndMaterializedPackageAlreadyExist(): void

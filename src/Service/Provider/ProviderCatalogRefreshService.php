@@ -25,6 +25,17 @@ use Symfony\Component\DependencyInjection\Attribute\Autowire;
  * ClientCatalogImportService al cambiar el routing de un cliente. Este
  * servicio solo actualiza lo que ya existe.
  *
+ * Fase 3 de la deprecación de V1 — verificado que V2 NO necesita su propio
+ * pipeline aparte: PackageCatalogResolver::offerFromProductMax() resuelve el
+ * precio MAX+margen leyendo CommunicationProduct EN VIVO en cada consulta
+ * (mismo ProductPriceResolver que usa este cron), sin ninguna tabla
+ * intermedia cacheada. El único insumo real que V2 necesita es
+ * CommunicationProduct fresco, y eso ya lo garantiza
+ * catalogSyncService->syncProducts() más abajo — que corre siempre, sin
+ * mirar el switch V1/V2. Lo que SÍ es 100% V1 en este servicio es
+ * propagateToPricePackages() (solo toca CommunicationPricePackage.autoManaged):
+ * se puede borrar sin reemplazo el día que se borre V1 (Fase 5), no antes.
+ *
  * Cuidado de implementación: CommunicationPricePackage tiene un callback
  * #[ORM\PreFlush] que toca updatedAt en CUALQUIER instancia manejada al
  * hacer flush(), sin importar si esa instancia concreta cambió. Por eso

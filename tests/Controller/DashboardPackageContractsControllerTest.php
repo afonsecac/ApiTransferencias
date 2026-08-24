@@ -8,10 +8,7 @@ use App\DTO\CreateRateContractDto;
 use App\Entity\Account;
 use App\Entity\CommunicationClientPackage;
 use App\Entity\CommunicationPricePackage;
-use App\Exception\MyCurrentException;
 use App\Service\CommunicationPackageService;
-use App\Service\Pricing\ContractBatchResult;
-use App\Service\Pricing\PackageContractService;
 use App\Service\Pricing\PackageSalePriceResolver;
 use App\Service\Pricing\PriceSourceEnum;
 use App\Service\Pricing\ResolvedSalePrice;
@@ -28,7 +25,6 @@ use Symfony\Component\HttpFoundation\Response;
 class DashboardPackageContractsControllerTest extends TestCase
 {
     private EntityManagerInterface&MockObject $em;
-    private PackageContractService&MockObject $contractService;
     private CommunicationPackageService&MockObject $packageService;
     private PackageSalePriceResolver&MockObject $salePriceResolver;
     private DashboardPackageContractsController $controller;
@@ -36,13 +32,11 @@ class DashboardPackageContractsControllerTest extends TestCase
     protected function setUp(): void
     {
         $this->em = $this->createMock(EntityManagerInterface::class);
-        $this->contractService = $this->createMock(PackageContractService::class);
         $this->packageService = $this->createMock(CommunicationPackageService::class);
         $this->salePriceResolver = $this->createMock(PackageSalePriceResolver::class);
 
         $this->controller = new DashboardPackageContractsController(
             $this->em,
-            $this->contractService,
             $this->packageService,
             $this->salePriceResolver,
         );
@@ -82,50 +76,24 @@ class DashboardPackageContractsControllerTest extends TestCase
         $this->assertSame(Response::HTTP_NOT_FOUND, $response->getStatusCode());
     }
 
-    public function testCreateFixedReturnsCreatedWithSerializedContract(): void
+    public function testCreateFixedIsDisabledAndReturnsGone(): void
     {
-        $contract = (new CommunicationPricePackage())
-            ->setContractMode('FIXED')
-            ->setAmount(10.0)
-            ->setCurrency('USD');
-
-        $this->contractService->method('createFixed')->willReturn($contract);
-
         $dto = new CreateFixedContractDto(tenantId: 1, referencePackageId: 1, amount: 10.0, currency: 'USD');
         $response = $this->controller->createFixed($dto);
 
-        $this->assertSame(Response::HTTP_CREATED, $response->getStatusCode());
+        $this->assertSame(Response::HTTP_GONE, $response->getStatusCode());
         $data = json_decode($response->getContent(), true);
-        $this->assertEquals(10.0, $data['amount']);
-        $this->assertSame('FIXED', $data['contractMode']);
+        $this->assertSame('V1_CONTRACT_CREATION_DISABLED', $data['error']['code']);
     }
 
-    public function testCreateFixedMapsDomainExceptionToItsHttpCode(): void
+    public function testCreateByRateIsDisabledAndReturnsGone(): void
     {
-        $this->contractService->method('createFixed')
-            ->willThrowException(new MyCurrentException('TENANT_NOT_FOUND', 'Tenant not found', 404));
-
-        $dto = new CreateFixedContractDto(tenantId: 999, referencePackageId: 1, amount: 10.0, currency: 'USD');
-        $response = $this->controller->createFixed($dto);
-
-        $this->assertSame(404, $response->getStatusCode());
-        $data = json_decode($response->getContent(), true);
-        $this->assertSame('Tenant not found', $data['error']['message']);
-    }
-
-    public function testCreateByRateReturnsBatchResult(): void
-    {
-        $this->contractService->method('createByRate')
-            ->willReturn(new ContractBatchResult(3, 1, [10, 11, 12]));
-
         $dto = new CreateRateContractDto(referencePackageId: 1, basePrice: 100.0, baseCurrency: 'USD', rateValue: 1.1, currency: 'USD', environmentId: 5);
         $response = $this->controller->createByRate($dto);
 
-        $this->assertSame(Response::HTTP_CREATED, $response->getStatusCode());
+        $this->assertSame(Response::HTTP_GONE, $response->getStatusCode());
         $data = json_decode($response->getContent(), true);
-        $this->assertSame(3, $data['created']);
-        $this->assertSame(1, $data['updated']);
-        $this->assertSame([10, 11, 12], $data['accountIds']);
+        $this->assertSame('V1_CONTRACT_CREATION_DISABLED', $data['error']['code']);
     }
 
     public function testToggleReturnsNotFoundWhenContractDoesNotExist(): void

@@ -4,7 +4,6 @@ namespace App\Controller;
 
 use App\DTO\CreateFixedContractDto;
 use App\DTO\CreateRateContractDto;
-use App\DTO\Out\ContractBatchResultOutDto;
 use App\DTO\Out\DeletedOutDto;
 use App\DTO\Out\PackageContractOutDto;
 use App\DTO\Out\PaginatedListOutDto;
@@ -14,10 +13,8 @@ use App\DTO\UpdatePricePackageDto;
 use App\Entity\Account;
 use App\Entity\CommunicationClientPackage;
 use App\Entity\CommunicationPricePackage;
-use App\Exception\MyCurrentException;
 use App\OpenApi\Attribute\DashboardEndpoint;
 use App\Service\CommunicationPackageService;
-use App\Service\Pricing\PackageContractService;
 use App\Service\Pricing\PackageSalePriceResolver;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\QueryBuilder;
@@ -31,8 +28,14 @@ use Symfony\Component\Security\Http\Attribute\IsGranted;
 /**
  * Administración de contratos de precio por cliente — pantalla propia
  * separada de /client/prices (que sigue siendo el CRUD crudo de
- * CommunicationPricePackage, sin el concepto de contrato). Ver
- * PackageContractService para los dos modos de alta (fijo / rate).
+ * CommunicationPricePackage, sin el concepto de contrato).
+ *
+ * Fase 3 de la deprecación de V1: las altas nuevas (createFixed/createByRate,
+ * antes delegadas en PackageContractService) están deshabilitadas — devuelven
+ * 410 y redirigen al alta V2 (DashboardCommunicationContractsController,
+ * /catalog/contracts). Editar/activar/desactivar/borrar contratos V1
+ * existentes sigue funcionando: no es un alta nueva, y la promoción #90
+ * activa en producción hasta 2026-09-01 depende de datos V1 vivos.
  */
 #[IsGranted('ROLE_ADMIN')]
 class DashboardPackageContractsController extends AbstractController
@@ -47,7 +50,6 @@ class DashboardPackageContractsController extends AbstractController
 
     public function __construct(
         private readonly EntityManagerInterface $em,
-        private readonly PackageContractService $contractService,
         private readonly CommunicationPackageService $packageService,
         private readonly PackageSalePriceResolver $salePriceResolver,
     ) {
@@ -137,33 +139,23 @@ class DashboardPackageContractsController extends AbstractController
     }
 
     #[Route('/client/contracts/fixed', name: 'dashboard_package_contracts_create_fixed', methods: ['POST'])]
-    #[DashboardEndpoint(summary: 'Crear contrato de precio (precio a precio)', tag: 'Package Contracts', requestDto: CreateFixedContractDto::class, responseDto: PackageContractOutDto::class, responseStatusCode: 201)]
+    #[DashboardEndpoint(summary: 'Crear contrato de precio (V1, deshabilitado — usar /catalog/contracts)', tag: 'Package Contracts', requestDto: CreateFixedContractDto::class, responseStatusCode: 201)]
     public function createFixed(CreateFixedContractDto $dto): JsonResponse
     {
-        try {
-            $contract = $this->contractService->createFixed($dto);
-        } catch (MyCurrentException $e) {
-            return $this->json(['error' => ['message' => $e->getMessage()]], $e->getCode());
-        }
-
-        return $this->json($this->serializeContract($contract), Response::HTTP_CREATED);
+        return $this->json(
+            ['error' => ['message' => 'El alta de contratos de precio V1 está deshabilitada — usá el alta V2 (POST /catalog/contracts).', 'code' => 'V1_CONTRACT_CREATION_DISABLED']],
+            Response::HTTP_GONE,
+        );
     }
 
     #[Route('/client/contracts/rate', name: 'dashboard_package_contracts_create_rate', methods: ['POST'])]
-    #[DashboardEndpoint(summary: 'Crear contratos de precio por tasa (lote de clientes)', tag: 'Package Contracts', requestDto: CreateRateContractDto::class, responseDto: ContractBatchResultOutDto::class, responseStatusCode: 201)]
+    #[DashboardEndpoint(summary: 'Crear contratos de precio por tasa (V1, deshabilitado — usar /catalog/contracts/range)', tag: 'Package Contracts', requestDto: CreateRateContractDto::class, responseStatusCode: 201)]
     public function createByRate(CreateRateContractDto $dto): JsonResponse
     {
-        try {
-            $result = $this->contractService->createByRate($dto);
-        } catch (MyCurrentException $e) {
-            return $this->json(['error' => ['message' => $e->getMessage()]], $e->getCode());
-        }
-
-        return $this->json([
-            'created' => $result->created,
-            'updated' => $result->updated,
-            'accountIds' => $result->accountIds,
-        ], Response::HTTP_CREATED);
+        return $this->json(
+            ['error' => ['message' => 'El alta de contratos de precio V1 está deshabilitada — usá el alta V2 (POST /catalog/contracts/range).', 'code' => 'V1_CONTRACT_CREATION_DISABLED']],
+            Response::HTTP_GONE,
+        );
     }
 
     #[Route('/client/contracts/{id}', name: 'dashboard_package_contracts_update', methods: ['PATCH'], requirements: ['id' => '\d+'])]
