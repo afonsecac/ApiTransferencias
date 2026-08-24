@@ -171,14 +171,10 @@ class CommunicationPackageRepository extends ServiceEntityRepository
     }
 
     /**
-     * Paquete de una promoción V2 aún no vigente, para
-     * CommunicationSaleService::processReserve() (Fase 5) — equivalente V2
-     * de CommunicationPromotionsRepository::getFuturePromotionById(), que
-     * solo cubre CommunicationClientPackage (V1) vía
-     * CommunicationPromotions::$products, un ManyToMany que nunca incluye
-     * CommunicationPackage (aquí la relación es el ManyToOne directo
-     * CommunicationPackage::$promotion). Mismo criterio "futuro":
-     * promo.startAt > $now.
+     * Paquete de una promoción aún no vigente, para
+     * CommunicationSaleService::processReserve() — la relación es el
+     * ManyToOne directo CommunicationPackage::$promotion. Criterio
+     * "futuro": promo.startAt > $now.
      */
     public function findFutureForReserve(int $packageId, int $promotionId, ?\DateTimeImmutable $now = null): ?CommunicationPackage
     {
