@@ -4,8 +4,7 @@ namespace App\Tests\Service;
 
 use App\Entity\Account;
 use App\Entity\Client;
-use App\Entity\CommunicationClientPackage;
-use App\Entity\CommunicationProduct;
+use App\Entity\CommunicationPackage;
 use App\Entity\CommunicationSaleRecharge;
 use App\Entity\Environment;
 use App\Enums\CommunicationStateEnum;
@@ -16,7 +15,6 @@ use App\Provider\ProviderContextFactory;
 use App\Provider\ProviderRegistry;
 use App\Provider\ProviderResolver;
 use App\Repository\ClientProviderRoutingRepository;
-use App\Repository\CommunicationClientPackageRepository;
 use App\Repository\CommunicationSaleRechargeRepository;
 use App\Repository\EnvironmentRepository;
 use App\Repository\SysConfigRepository;
@@ -25,9 +23,9 @@ use App\Service\CommunicationSaleService;
 use App\Service\ConfigureSequenceService;
 use App\Service\HistoricalSaleService;
 use App\Service\NotificationCenterService;
-use App\Service\Pricing\PackageSalePriceResolver;
-use App\Service\Pricing\PriceSourceEnum;
-use App\Service\Pricing\ResolvedSalePrice;
+use App\Service\Pricing\PackageCatalogResolver;
+use App\Service\Pricing\PackageOfferSourceEnum;
+use App\Service\Pricing\ResolvedPackageOffer;
 use App\Service\Provider\ProviderAvailabilityService;
 use App\DTO\AccountBalanceDto;
 use Doctrine\DBAL\Connection;
@@ -60,6 +58,7 @@ class CommunicationSaleServiceDTOnePhoneSwapTest extends TestCase
     private BalanceService&MockObject $balanceService;
     private ProviderAvailabilityService&MockObject $availabilityService;
     private DTOneHttpClient&MockObject $dtoneClient;
+    private PackageCatalogResolver&MockObject $packageCatalogResolver;
     private CommunicationSaleService $service;
     private CommunicationSaleRecharge $saleRecharge;
 
@@ -87,10 +86,7 @@ class CommunicationSaleServiceDTOnePhoneSwapTest extends TestCase
         $this->availabilityService = $this->createMock(ProviderAvailabilityService::class);
         $configureSequence = $this->createMock(ConfigureSequenceService::class);
 
-        $salePriceResolver = $this->createMock(PackageSalePriceResolver::class);
-        $salePriceResolver->method('resolve')->willReturn(
-            new ResolvedSalePrice(100.0, 'USD', PriceSourceEnum::PRODUCT),
-        );
+        $this->packageCatalogResolver = $this->createMock(PackageCatalogResolver::class);
 
         $routingRepo = $this->createMock(ClientProviderRoutingRepository::class);
         $providerResolver = new ProviderResolver($sysConfigRepo, $routingRepo, new NullLogger());
@@ -119,9 +115,7 @@ class CommunicationSaleServiceDTOnePhoneSwapTest extends TestCase
             $this->balanceService,
             $notificationCenter,
             $this->availabilityService,
-            $salePriceResolver,
-            new \App\Service\Catalog\CatalogVersionResolver($sysConfigRepo),
-            $this->createMock(\App\Service\Pricing\PackageCatalogResolver::class),
+            $this->packageCatalogResolver,
             $this->createMock(\App\Provider\ProviderDispatchResolver::class),
             $this->createMock(\App\Provider\PromotionProviderDispatchResolver::class),
         );
@@ -149,26 +143,21 @@ class CommunicationSaleServiceDTOnePhoneSwapTest extends TestCase
         $account->method('getEnvironment')->willReturn($environment);
         $account->method('getId')->willReturn(99);
 
-        $product = $this->createMock(CommunicationProduct::class);
-        $product->method('getProvider')->willReturn('DTONE');
-        $product->method('getPackageType')->willReturn('FIXED_VALUE_RECHARGE');
-        $product->method('getExternalRef')->willReturn('35718');
-        $product->method('getPackageId')->willReturn(35718);
+        $catalogPackage = $this->createMock(CommunicationPackage::class);
+        $catalogPackage->method('getId')->willReturn(1);
 
-        $package = $this->createMock(CommunicationClientPackage::class);
-        $package->method('resolveProduct')->willReturn($product);
-        $package->method('getAmount')->willReturn(100.0);
-        $package->method('getCurrency')->willReturn('USD');
-        $package->method('getDestination')->willReturn(['amount' => 250, 'unit' => 'CUP']);
-        $package->method('getPromotionItems')->willReturn(new \Doctrine\Common\Collections\ArrayCollection());
-
-        $packageRepo = $this->createMock(CommunicationClientPackageRepository::class);
-        $packageRepo->method('getPackageById')->willReturn($package);
+        $this->packageCatalogResolver->method('offerFor')->with($catalogPackage, $account)->willReturn(
+            new ResolvedPackageOffer($catalogPackage, 100.0, 'USD', PackageOfferSourceEnum::PRODUCT_MAX),
+        );
 
         $recharge = new CommunicationSaleRecharge();
         $recharge->setPackageId(1);
         $recharge->setTenant($account);
         $recharge->setProvider('DTONE');
+        $recharge->setCatalogPackage($catalogPackage);
+        $recharge->setDispatchExternalRef('35718');
+        $recharge->setDestinationAmount(250.0);
+        $recharge->setDestinationCurrency('CUP');
         $recharge->setTransactionId('2608110100042');
         $recharge->setPhoneNumber($phoneNumber);
         $recharge->setState(CommunicationStateEnum::PENDING);
@@ -182,7 +171,6 @@ class CommunicationSaleServiceDTOnePhoneSwapTest extends TestCase
         $environmentRepo->method('find')->with(10)->willReturn($environment);
 
         $this->em->method('getRepository')->willReturnMap([
-            [CommunicationClientPackage::class, $packageRepo],
             [CommunicationSaleRecharge::class, $saleRepo],
             [Environment::class, $environmentRepo],
         ]);

@@ -11,14 +11,12 @@ use App\Service\CommunicationSaleService;
 /**
  * @covers \App\Service\CommunicationSaleService
  *
- * Fase 3, contra Postgres real (no mocks): el guard de admisión introducido
- * en resolveAndGuardProvider() debe leer el proveedor REAL desde la cadena
- * de relaciones Doctrine package -> priceClientPackage -> product, y
- * validarlo contra las filas REALES de client_provider_routing a través del
- * repositorio real (no un doble). Esto es justo lo que
- * CommunicationSaleServiceProviderGuardTest (unitario, con mocks) no puede
- * verificar: que la consulta SQL de allowedForClient() y la travesía de
- * relaciones del producto funcionan de verdad.
+ * Contra Postgres real (no mocks): el guard de qué proveedor despacha una
+ * venta vive en ProviderDispatchResolver::select() (ver su propia suite
+ * unitaria, ProviderDispatchResolverTest) — CommunicationSaleService::admitV2()
+ * solo delega. Esto verifica el camino end-to-end real: la consulta SQL de
+ * ClientProviderRoutingRepository y el binding CommunicationPackageProviderProduct
+ * funcionan de verdad, no solo contra dobles.
  */
 class CommunicationSaleServiceProviderGuardFunctionalTest extends ProviderFunctionalTestCase
 {
@@ -41,38 +39,41 @@ class CommunicationSaleServiceProviderGuardFunctionalTest extends ProviderFuncti
     public function testRejectsRechargeWhenProductProviderNotAllowedForClient(): void
     {
         // Sin filas de client_provider_routing y con el kill switch en su
-        // valor sembrado ('0' = ignorar la tabla), allowedForClient() solo
-        // permite ETECSA. Un producto DTONE debe rechazarse con 409.
+        // valor sembrado ('0' = ignorar la tabla), candidateProviders()
+        // solo prueba ETECSA. El paquete solo tiene vínculo a DTONE — ningún
+        // proveedor candidato puede despacharlo, PACKAGE_NOT_DISPATCHABLE.
         $client = $this->createClient();
         $environment = $this->createEnvironment();
         $account = $this->createAccount($client, $environment);
-        $package = $this->createSellablePackage($environment, $account, CommunicationProviderEnum::DTONE->value);
+        $package = $this->createSellableV2Package($environment, CommunicationProviderEnum::DTONE->value);
 
         $this->authenticateAs($account);
 
         try {
             $this->saleService()->processRecharge($this->rechargeRequest($package->getId()));
-            $this->fail('Se esperaba MyCurrentException por proveedor no habilitado.');
+            $this->fail('Se esperaba MyCurrentException por proveedor no despachable.');
         } catch (MyCurrentException $e) {
             $this->assertSame(409, $e->getCode());
-            $this->assertSame(
-                'El paquete pertenece a un proveedor no habilitado para este cliente',
-                $e->getMessage(),
-            );
+            $this->assertSame('PACKAGE_NOT_DISPATCHABLE', $e->getCodeWork());
         }
     }
 
     public function testAdmitsRechargeWhenProductProviderMatchesDefault(): void
     {
-        $this->setSysConfig('communications.dispatch.enabled', '0');
+        // canDispatchTo() (que ProviderDispatchResolver::select() exige de
+        // cada candidato en admisión, no solo al despachar) requiere
+        // credenciales configuradas — sin esto ningún proveedor es
+        // candidato viable, sin importar el binding del paquete.
+        $this->setSysConfig('provider.etecsa.test.base_url', 'https://etecsa.example.test');
+        $this->setSysConfig('provider.etecsa.test.api_key', 'functional-key');
 
         $client = $this->createClient();
         $environment = $this->createEnvironment();
         $account = $this->createAccount($client, $environment);
-        // Amount 0: hasAvailableBalance() sin ledger seeded (0 disponible)
+        // Precio 0: hasAvailableBalance() sin ledger seeded (0 disponible)
         // sigue admitiendo una venta de importe 0 — evita tener que sembrar
         // BalanceOperation solo para probar el guard de proveedor.
-        $package = $this->createSellablePackage($environment, $account, CommunicationProviderEnum::ETECSA->value, amount: 0.0);
+        $package = $this->createSellableV2Package($environment, CommunicationProviderEnum::ETECSA->value, price: 0.0);
 
         $this->authenticateAs($account);
 
@@ -85,13 +86,15 @@ class CommunicationSaleServiceProviderGuardFunctionalTest extends ProviderFuncti
 
     public function testAdmitsDtoneProductWhenClientHasActiveDtoneRouting(): void
     {
-        $this->setSysConfig('communications.dispatch.enabled', '0');
         $this->setSysConfig(ProviderResolver::ROUTING_ENABLED_KEY, '1');
+        $this->setSysConfig('provider.dtone.test.base_url', 'https://dtone.example.test');
+        $this->setSysConfig('provider.dtone.test.api_key', 'functional-key');
+        $this->setSysConfig('provider.dtone.test.api_secret', 'functional-secret');
 
         $client = $this->createClient();
         $environment = $this->createEnvironment();
         $account = $this->createAccount($client, $environment);
-        $package = $this->createSellablePackage($environment, $account, CommunicationProviderEnum::DTONE->value, amount: 0.0);
+        $package = $this->createSellableV2Package($environment, CommunicationProviderEnum::DTONE->value, price: 0.0);
 
         $this->createRouting($client, CommunicationProviderEnum::DTONE->value);
 
