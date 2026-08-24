@@ -4,7 +4,6 @@ namespace App\Repository;
 
 use App\Entity\Account;
 use App\Entity\CommunicationClientPackage;
-use App\Entity\Environment;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Common\Collections\ArrayCollection;
 use Doctrine\ORM\Query\Parameter;
@@ -103,26 +102,5 @@ class CommunicationClientPackageRepository extends ServiceEntityRepository
         }
 
         return $dql->orderBy('c.companyName')->addOrderBy('p.amount')->getQuery()->getResult();
-    }
-
-    /**
-     * Paquetes REFERENCIA (tenant IS NULL) vigentes de un entorno — el
-     * origen de las materializaciones por cuenta. Ver
-     * CommunicationClientPackageProvider/PackageMaterializationService.
-     *
-     * @return CommunicationClientPackage[]
-     */
-    public function findReferencePackages(Environment $environment, \DateTimeImmutable $now): array
-    {
-        return $this->createQueryBuilder('p')
-            ->where('p.tenant IS NULL')
-            ->andWhere('p.environment = :environment')
-            ->andWhere('p.isActive = :isActive')
-            ->andWhere('p.activeStartAt <= :now')
-            ->andWhere('p.activeEndAt IS NULL OR p.activeEndAt > :now')
-            ->setParameter('environment', $environment)
-            ->setParameter('isActive', true)
-            ->setParameter('now', $now)
-            ->getQuery()->getResult();
     }
 }

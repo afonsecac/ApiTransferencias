@@ -38,13 +38,14 @@ use Symfony\Component\Serializer\Attribute\Groups;
  * visibles, no solo su precio), así que CurrentUserExtension no llega a
  * intervenir en esta operación en absoluto.
  *
- * Desde el switch por cliente (ver CatalogVersionResolver), esta misma
- * entidad también se sirve bajo `/communication/packages` (la URI histórica
- * de CommunicationClientPackage/V1) para las cuentas marcadas V2 —
- * CommunicationClientPackageProvider/ItemProvider/UpcomingPackagesProvider
- * delegan aquí cuando corresponde. El grupo `comPackage:read` se mantiene
- * deliberadamente con el mismo shape que V1 (ver getPromotions() más abajo)
- * para que ambas URLs devuelvan JSON compatible.
+ * Fase 4 de la deprecación de V1: esta misma entidad también se sirve bajo
+ * `/communication/packages` (la URI histórica de CommunicationClientPackage)
+ * — CommunicationClientPackageProvider/ItemProvider/UpcomingPackagesProvider
+ * delegan aquí SIEMPRE, sin bifurcación por CatalogVersionResolver::isV2()
+ * (todas las cuentas ya resuelven V2). El grupo `comPackage:read` se
+ * mantiene deliberadamente con el mismo shape que V1 (ver getPromotions()
+ * más abajo, y CommunicationPackageShapeParityTest) para que ambas URLs
+ * devuelvan JSON compatible — la app móvil no necesita migrar de URL.
  */
 #[ORM\Entity(repositoryClass: CommunicationPackageRepository::class)]
 #[ORM\HasLifecycleCallbacks]

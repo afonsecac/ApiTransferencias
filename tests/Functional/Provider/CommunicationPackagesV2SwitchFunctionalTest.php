@@ -25,10 +25,20 @@ use App\State\UpcomingPackagesProvider;
  * @covers \App\State\CommunicationClientPackageItemProvider
  * @covers \App\State\UpcomingPackagesProvider
  *
- * Verificación end-to-end del switch V1/V2 de `/communication/packages`
- * contra Postgres real — el mock no puede validar que
- * CatalogVersionResolver realmente lee sys_config, ni que el shape
- * serializado real de ambas entidades coincide.
+ * Verificación end-to-end de `/communication/packages` contra Postgres real
+ * — el mock no puede validar el shape serializado real de ambas entidades.
+ *
+ * Fase 4 de la deprecación de V1: hasta antes de esta fase, este archivo
+ * verificaba el switch V1/V2 (`communications.catalog.version.default`)
+ * decidiendo cuál de las dos entidades servía este endpoint. Las 3
+ * bifurcaciones isV2() se retiraron — los 3 providers ahora delegan SIEMPRE
+ * en el catálogo V2, sin mirar el switch — así que el nombre de esta clase
+ * y de sus helpers (`v1PackageProvider()`, etc.) son historia: se
+ * conservan porque siguen siendo los providers reales de
+ * `/communication/packages`, no porque quede alguna rama V1 que probar. El
+ * switch (`setCatalogVersionDefault()`) se sigue seteando en algunos tests
+ * solo para probar que YA NO tiene ningún efecto sobre este endpoint (ver
+ * testCatalogVersionDefaultNoLongerAffectsThisEndpoint).
  */
 class CommunicationPackagesV2SwitchFunctionalTest extends ProviderFunctionalTestCase
 {
@@ -160,24 +170,36 @@ class CommunicationPackagesV2SwitchFunctionalTest extends ProviderFunctionalTest
         return self::getContainer()->get(UpcomingPackagesProvider::class);
     }
 
-    // ---- 1. default v1 → sigue viendo CommunicationClientPackage (regresión) ----
+    // ---- 1. el switch V1/V2 ya no afecta este endpoint (Fase 4 de la deprecación de V1) ----
 
-    public function testDefaultV1ServesLegacyClientPackages(): void
+    /**
+     * Regresión: antes de la Fase 4, `communications.catalog.version.default
+     * = 'v1'` hacía que este endpoint sirviera CommunicationClientPackage
+     * (V1) de verdad. Las 3 bifurcaciones isV2() se retiraron —
+     * CommunicationClientPackageProvider/ItemProvider/UpcomingPackagesProvider
+     * delegan SIEMPRE en el catálogo V2, sin mirar el switch. Este test deja
+     * el valor histórico 'v1' seteado a propósito para confirmar que ya no
+     * revive la rama vieja.
+     */
+    public function testCatalogVersionDefaultNoLongerAffectsThisEndpoint(): void
     {
         $this->setCatalogVersionDefault('v1');
 
         $client = $this->createClient();
         $environment = $this->createEnvironment();
         $account = $this->createAccount($client, $environment);
-        $this->createSellablePackage($environment, $account, 'CSQ');
         $this->authenticateAs($account);
+
+        $package = $this->v2Package(activeStartAt: new \DateTimeImmutable('-1 day'));
+        $this->defaultContractFor($package, 15.0);
+        $this->bindProvider($package, $environment);
+        $this->em->flush();
 
         $result = $this->v1PackageProvider()->provide(new GetCollection(class: CommunicationClientPackage::class));
 
-        $this->assertNotEmpty(iterator_to_array($result));
-        foreach ($result as $item) {
-            $this->assertInstanceOf(CommunicationClientPackage::class, $item);
-        }
+        $this->assertCount(1, $result);
+        $this->assertInstanceOf(CommunicationPackage::class, $result[0]);
+        $this->assertSame($package->getId(), $result[0]->getId());
     }
 
     // ---- 2. default v2 → CommunicationPackage con precio del contrato ----
