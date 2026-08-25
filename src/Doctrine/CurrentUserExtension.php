@@ -11,7 +11,6 @@ use App\Entity\BankCard;
 use App\Entity\Beneficiary;
 use App\Entity\City;
 use App\Entity\Sender;
-use App\Entity\CommunicationClientPackage;
 use App\Entity\CommunicationNationality;
 use App\Entity\CommunicationOffice;
 use App\Entity\CommunicationPackage;
@@ -66,7 +65,6 @@ final class CurrentUserExtension implements QueryCollectionExtensionInterface, Q
 
         if ($user instanceof Account) {
             $rootAlias = $queryBuilder->getRootAliases()[0];
-            $currentDate = new \DateTimeImmutable('now');
             if (in_array(
                 $resourceClass,
                 [
@@ -107,18 +105,6 @@ final class CurrentUserExtension implements QueryCollectionExtensionInterface, Q
             } else {
                 $queryBuilder->andWhere(sprintf('%s.tenant = :current_user', $rootAlias))
                     ->setParameter('current_user', $user->getId());
-                if ($resourceClass === CommunicationClientPackage::class) {
-                    $queryBuilder->andWhere(
-                        sprintf(
-                            '(%s.activeStartAt <= :currentDate AND %s.activeEndAt IS NULL) OR (:currentDate BETWEEN %s.activeStartAt AND %s.activeEndAt)',
-                            $rootAlias,
-                            $rootAlias,
-                            $rootAlias,
-                            $rootAlias
-                        )
-                    )
-                        ->setParameter('currentDate', $currentDate);
-                }
             }
         }
     }

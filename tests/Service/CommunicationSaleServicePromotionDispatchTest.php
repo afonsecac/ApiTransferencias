@@ -4,9 +4,7 @@ namespace App\Tests\Service;
 
 use App\Entity\Account;
 use App\Entity\Client;
-use App\Entity\CommunicationClientPackage;
-use App\Entity\CommunicationProduct;
-use App\Entity\CommunicationPromotions;
+use App\Entity\CommunicationPackage;
 use App\Entity\CommunicationSaleRecharge;
 use App\Entity\Environment;
 use App\Enums\CommunicationStateEnum;
@@ -17,8 +15,6 @@ use App\Provider\ProviderContextFactory;
 use App\Provider\ProviderRegistry;
 use App\Provider\ProviderResolver;
 use App\Repository\ClientProviderRoutingRepository;
-use App\Repository\CommunicationClientPackageRepository;
-use App\Repository\CommunicationPromotionsRepository;
 use App\Repository\CommunicationSaleRechargeRepository;
 use App\Repository\EnvironmentRepository;
 use App\Repository\SysConfigRepository;
@@ -27,9 +23,9 @@ use App\Service\CommunicationSaleService;
 use App\Service\ConfigureSequenceService;
 use App\Service\HistoricalSaleService;
 use App\Service\NotificationCenterService;
-use App\Service\Pricing\PackageSalePriceResolver;
-use App\Service\Pricing\PriceSourceEnum;
-use App\Service\Pricing\ResolvedSalePrice;
+use App\Service\Pricing\PackageCatalogResolver;
+use App\Service\Pricing\PackageOfferSourceEnum;
+use App\Service\Pricing\ResolvedPackageOffer;
 use App\Service\Provider\ProviderAvailabilityService;
 use App\DTO\AccountBalanceDto;
 use Doctrine\DBAL\Connection;
@@ -49,11 +45,10 @@ use Symfony\Component\Serializer\SerializerInterface;
 /**
  * @covers \App\Service\CommunicationSaleService::invokeRechargeCommunication
  *
- * Cubre la preferencia por dispatchExternalRef (congelado en admisión por
- * PromotionProviderDispatchResolver, ver admitLegacy()) sobre
- * promotion->getProduct() al resolver el productCode a despachar — el
- * punto exacto donde antes se ignoraba el proveedor real de la venta y
- * siempre se usaba el producto "de origen" de la promoción.
+ * Cubre que el despacho de una recarga de promoción usa el
+ * dispatchExternalRef congelado en admisión (PromotionProviderDispatchResolver,
+ * ver admitV2ForReserve()) — no un producto "de origen" resuelto de nuevo en
+ * el despacho.
  */
 class CommunicationSaleServicePromotionDispatchTest extends TestCase
 {
@@ -61,10 +56,11 @@ class CommunicationSaleServicePromotionDispatchTest extends TestCase
     private Connection&MockObject $connection;
     private BalanceService&MockObject $balanceService;
     private ProviderAvailabilityService&MockObject $availabilityService;
+    private PackageCatalogResolver&MockObject $packageCatalogResolver;
     private CsqHttpClient&MockObject $csqClient;
     private CommunicationSaleService $service;
     private CommunicationSaleRecharge $saleRecharge;
-    private CommunicationPromotions&MockObject $promotion;
+    private CommunicationPackage $catalogPackage;
 
     protected function setUp(): void
     {
@@ -91,10 +87,7 @@ class CommunicationSaleServicePromotionDispatchTest extends TestCase
         $this->availabilityService = $this->createMock(ProviderAvailabilityService::class);
         $configureSequence = $this->createMock(ConfigureSequenceService::class);
 
-        $salePriceResolver = $this->createMock(PackageSalePriceResolver::class);
-        $salePriceResolver->method('resolve')->willReturn(
-            new ResolvedSalePrice(100.0, 'USD', PriceSourceEnum::PRODUCT),
-        );
+        $this->packageCatalogResolver = $this->createMock(PackageCatalogResolver::class);
 
         $routingRepo = $this->createMock(ClientProviderRoutingRepository::class);
         $providerResolver = new ProviderResolver($sysConfigRepo, $routingRepo, new NullLogger());
@@ -123,9 +116,7 @@ class CommunicationSaleServicePromotionDispatchTest extends TestCase
             $this->balanceService,
             $notificationCenter,
             $this->availabilityService,
-            $salePriceResolver,
-            new \App\Service\Catalog\CatalogVersionResolver($sysConfigRepo),
-            $this->createMock(\App\Service\Pricing\PackageCatalogResolver::class),
+            $this->packageCatalogResolver,
             $this->createMock(\App\Provider\ProviderDispatchResolver::class),
             $this->createMock(\App\Provider\PromotionProviderDispatchResolver::class),
         );
@@ -154,39 +145,30 @@ class CommunicationSaleServicePromotionDispatchTest extends TestCase
         $account->method('getEnvironment')->willReturn($environment);
         $account->method('getId')->willReturn(99);
 
-        // Producto "de origen" de la promoción — el que se usaba SIEMPRE
-        // antes de este cambio, sin importar el proveedor real de la venta.
-        $defaultProduct = $this->createMock(CommunicationProduct::class);
-        $defaultProduct->method('getProvider')->willReturn('CSQ');
-        $defaultProduct->method('getExternalRef')->willReturn('1111-2200');
+        $this->catalogPackage = (new CommunicationPackage())
+            ->setName('Promo CSQ')
+            ->setDescription('Promo CSQ')
+            ->setDestinationAmount(2200.0)
+            ->setDestinationCurrency('CUP');
+        $this->assignId($this->catalogPackage, 7);
 
-        $this->promotion = $this->createMock(CommunicationPromotions::class);
-        $this->promotion->method('getProduct')->willReturn($defaultProduct);
-
-        $promotionRepo = $this->createMock(CommunicationPromotionsRepository::class);
-        $promotionRepo->method('getActivePromotionById')->with(42)->willReturn($this->promotion);
-
-        $product = $this->createMock(CommunicationProduct::class);
-        $product->method('getProvider')->willReturn('CSQ');
-        $product->method('getPackageType')->willReturn('Bundles');
-        $product->method('getExternalRef')->willReturn('1111-2200');
-        $product->method('getPackageId')->willReturn(0);
-
-        $package = $this->createMock(CommunicationClientPackage::class);
-        $package->method('resolveProduct')->willReturn($product);
-        $package->method('getAmount')->willReturn(100.0);
-        $package->method('getCurrency')->willReturn('USD');
-        $package->method('getDestination')->willReturn(['amount' => 2200, 'unit' => 'CUP']);
-        $package->method('getPromotionItems')->willReturn(new \Doctrine\Common\Collections\ArrayCollection());
-
-        $packageRepo = $this->createMock(CommunicationClientPackageRepository::class);
-        $packageRepo->method('getPackageById')->willReturn($package);
+        $this->packageCatalogResolver->method('offerFor')->with($this->catalogPackage, $account)->willReturn(
+            new ResolvedPackageOffer($this->catalogPackage, 100.0, 'USD', PackageOfferSourceEnum::PROMOTION),
+        );
 
         $recharge = new CommunicationSaleRecharge();
-        $recharge->setPackageId(1);
+        $recharge->setPackageId(7);
         $recharge->setTenant($account);
         $recharge->setProvider('CSQ');
         $recharge->setPromotionId(42);
+        $recharge->setCatalogPackage($this->catalogPackage);
+        // Congelado en admisión (PromotionProviderDispatchResolver, ver
+        // admitV2ForReserve()) — distinto del producto "de origen" de la
+        // promoción a propósito, para confirmar que el despacho usa este
+        // valor y no vuelve a resolver nada.
+        $recharge->setDispatchExternalRef('9999-2200');
+        $recharge->setDestinationAmount(2200.0);
+        $recharge->setDestinationCurrency('CUP');
         $recharge->setTransactionId('2608100100042');
         $recharge->setPhoneNumber('53500000');
         $recharge->setState(CommunicationStateEnum::PENDING);
@@ -200,16 +182,14 @@ class CommunicationSaleServicePromotionDispatchTest extends TestCase
         $environmentRepo->method('find')->with(10)->willReturn($environment);
 
         $this->em->method('getRepository')->willReturnMap([
-            [CommunicationClientPackage::class, $packageRepo],
             [CommunicationSaleRecharge::class, $saleRepo],
             [Environment::class, $environmentRepo],
-            [CommunicationPromotions::class, $promotionRepo],
         ]);
 
         return $recharge;
     }
 
-    private function stubSuccessfulPurchase(): void
+    public function testUsesTheFrozenDispatchExternalRef(): void
     {
         $this->availabilityService->method('canDispatchTo')->willReturn(true);
         $this->csqClient->method('purchase')->willReturn([
@@ -219,34 +199,10 @@ class CommunicationSaleServicePromotionDispatchTest extends TestCase
         $balance = new AccountBalanceDto('USD', 1000.0);
         $this->balanceService->method('balance')->willReturn($balance);
         $this->connection->method('executeStatement')->willReturn(1);
-    }
-
-    public function testUsesTheFrozenDispatchExternalRefInsteadOfThePromotionsDefaultProduct(): void
-    {
-        // Reserva creada DESPUÉS de este cambio: admitLegacy() ya congeló
-        // el producto resuelto por PromotionProviderDispatchResolver para
-        // el proveedor real de la venta — distinto del producto "de
-        // origen" de la promoción (articleId 1111).
-        $this->saleRecharge->setDispatchExternalRef('9999-2200');
-        $this->stubSuccessfulPurchase();
 
         $this->csqClient->expects($this->once())
             ->method('purchase')
             ->with($this->anything(), 9999, $this->anything(), $this->anything(), $this->anything());
-
-        $this->service->invokeRechargeCommunication(555);
-    }
-
-    public function testFallsBackToThePromotionsDefaultProductWhenNoDispatchExternalRefIsFrozen(): void
-    {
-        // Reserva creada ANTES de este cambio (o cualquier fila histórica):
-        // dispatchExternalRef nunca se pobló — debe comportarse EXACTAMENTE
-        // igual que antes (regresión crítica).
-        $this->stubSuccessfulPurchase();
-
-        $this->csqClient->expects($this->once())
-            ->method('purchase')
-            ->with($this->anything(), 1111, $this->anything(), $this->anything(), $this->anything());
 
         $this->service->invokeRechargeCommunication(555);
     }

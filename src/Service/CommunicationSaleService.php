@@ -7,11 +7,9 @@ use App\DTO\NotificationDraft;
 use App\DTO\ReserveRecharge;
 use App\Entity\Account;
 use App\Entity\BalanceOperation;
-use App\Entity\CommunicationClientPackage;
 use App\Entity\CommunicationNationality;
 use App\Entity\CommunicationOffice;
 use App\Entity\CommunicationPackage;
-use App\Entity\CommunicationProduct;
 use App\Entity\CommunicationPromotions;
 use App\Entity\CommunicationSaleHistory;
 use App\Entity\CommunicationSaleInfo;
@@ -43,10 +41,8 @@ use App\Provider\TransactionStatus;
 use App\Repository\BalanceOperationRepository;
 use App\Repository\EnvironmentRepository;
 use App\Repository\SysConfigRepository;
-use App\Service\Catalog\CatalogVersionResolver;
 use App\Service\Pricing\PackageCatalogResolver;
 use App\Service\Pricing\PackageOfferSourceEnum;
-use App\Service\Pricing\PackageSalePriceResolver;
 use App\Service\Provider\ProviderAvailabilityService;
 use Doctrine\DBAL\Exception;
 use Doctrine\ORM\EntityManagerInterface;
@@ -98,8 +94,6 @@ class CommunicationSaleService extends CommonService
         private readonly BalanceService $balanceService,
         private readonly NotificationCenterService $notificationCenter,
         private readonly ProviderAvailabilityService $availabilityService,
-        private readonly PackageSalePriceResolver $salePriceResolver,
-        private readonly CatalogVersionResolver $catalogVersionResolver,
         private readonly PackageCatalogResolver $packageCatalogResolver,
         private readonly ProviderDispatchResolver $dispatchResolver,
         private readonly PromotionProviderDispatchResolver $promotionDispatchResolver,
@@ -200,39 +194,23 @@ class CommunicationSaleService extends CommonService
         if (!$user instanceof Account) {
             throw new AccessDeniedException();
         }
-        /** @var \App\Repository\CommunicationPromotionsRepository $promotionRepo */
-        $promotionRepo = $this->em->getRepository(CommunicationPromotions::class);
-        $promotion = $promotionRepo->getFuturePromotionById(
+
+        /** @var \App\Repository\CommunicationPackageRepository $packageRepo */
+        $packageRepo = $this->em->getRepository(CommunicationPackage::class);
+        $catalogPackage = $packageRepo->findFutureForReserve(
+            $reserveDto->getPackageId(),
             $reserveDto->getPromotionId(),
-            $reserveDto->getPackageId()
         );
+        $promotion = $catalogPackage?->getPromotion();
 
-        // getFuturePromotionById() solo cubre CommunicationClientPackage
-        // (V1, ver su JOIN con CommunicationPromotions::$products) — una
-        // promoción V2 nunca la resuelve así, sus paquetes son
-        // CommunicationPackage con ManyToOne directo a la promoción (Fase
-        // 5, ver CommunicationPackageRepository::findFutureForReserve()).
-        $catalogPackage = null;
-        if ($promotion === null) {
-            /** @var \App\Repository\CommunicationPackageRepository $packageRepo */
-            $packageRepo = $this->em->getRepository(CommunicationPackage::class);
-            $catalogPackage = $packageRepo->findFutureForReserve(
-                $reserveDto->getPackageId(),
-                $reserveDto->getPromotionId(),
-            );
-            $promotion = $catalogPackage?->getPromotion();
-        }
-
-        if (is_null($promotion)) {
+        if ($catalogPackage === null || $promotion === null) {
             throw new MyCurrentException('COM007', 'The promotion is not active to reserves');
         }
 
         // El proveedor se resuelve por prioridad de cliente + vínculo
-        // promoción→producto (ver PromotionProviderDispatchResolver,
-        // agnóstico V1/V2) y se congela ANTES de construir la venta.
-        $admission = $catalogPackage !== null
-            ? $this->admitV2ForReserve($user, $catalogPackage, $promotion)
-            : $this->admit($user, $reserveDto->getPackageId(), 'recharge', forReserve: true, promotion: $promotion);
+        // promoción→producto (ver PromotionProviderDispatchResolver) y se
+        // congela ANTES de construir la venta.
+        $admission = $this->admitV2ForReserve($user, $catalogPackage, $promotion);
 
         $recharge = new CommunicationSaleRecharge();
         $recharge->setTenant($user);
@@ -312,8 +290,8 @@ class CommunicationSaleService extends CommonService
             );
 
         // El proveedor es propiedad del producto, no de la cuenta — se
-        // valida y se congela ANTES de construir la venta (ver admit()).
-        $admission = $this->admit($user, $recharge->getPackageId(), 'recharge');
+        // valida y se congela ANTES de construir la venta (ver admitV2()).
+        $admission = $this->admitV2($user, $recharge->getPackageId(), 'recharge');
 
         $recharge->setTransactionId($transactionId);
         $this->applyAdmission($recharge, $admission);
@@ -424,34 +402,16 @@ class CommunicationSaleService extends CommonService
             }
             try {
                 $balance = $this->balanceService->balance($user->getId());
-                // V2 (catalogPackage persistido en admisión, ver admit()):
-                // NUNCA re-derivar por $saleRecharge->getPackageId() — para
-                // una venta V2 ese id es un CommunicationPackage.id, no un
-                // CommunicationClientPackage.id (podría, en el peor caso,
-                // coincidir por casualidad con un id no relacionado).
-                $isV2Sale = $saleRecharge->getCatalogPackage() !== null;
-                $package = null;
-                if ($isV2Sale) {
-                    $offer = $this->packageCatalogResolver->offerFor($saleRecharge->getCatalogPackage(), $user);
-                    $currentAmount = ($offer !== null && $offer->source !== PackageOfferSourceEnum::UNAVAILABLE)
-                        ? $offer->price
-                        : null;
-                } else {
-                    /** @var \App\Repository\CommunicationClientPackageRepository $clientPackageRepo */
-                    $clientPackageRepo = $this->em->getRepository(CommunicationClientPackage::class);
-                    $package = $clientPackageRepo->getPackageById(
-                        $saleRecharge->getPackageId(),
-                        $user
-                    );
-                    // Recheck asíncrono contra el mismo resolver que cobró en
-                    // processRecharge() — $package->getAmount() a secas
-                    // devolvería el snapshot crudo (0 para un paquete sin
-                    // contrato materializado sin caché de precio), no el precio
-                    // real vigente.
-                    $currentAmount = $package !== null
-                        ? $this->salePriceResolver->resolve($package, $user)->amount
-                        : null;
-                }
+                // catalogPackage persistido en admisión (ver admitV2()) —
+                // NUNCA re-derivar por $saleRecharge->getPackageId() a
+                // secas: ver PackageCatalogResolver.
+                $catalogPackage = $saleRecharge->getCatalogPackage();
+                $offer = $catalogPackage !== null
+                    ? $this->packageCatalogResolver->offerFor($catalogPackage, $user)
+                    : null;
+                $currentAmount = ($offer !== null && $offer->source !== PackageOfferSourceEnum::UNAVAILABLE)
+                    ? $offer->price
+                    : null;
                 if ($currentAmount === null || $balance->amount < $currentAmount) {
                     $saleRecharge->setState(CommunicationStateEnum::REJECTED);
                     $saleRecharge->setStateProcess(CommunicationStateEnum::REJECTED->value);
@@ -488,56 +448,14 @@ class CommunicationSaleService extends CommonService
 
                     return;
                 }
-                if ($isV2Sale) {
-                    // Snapshot ya persistido en admisión (admitV2() para
-                    // compra directa, admitV2ForReserve() para reserva de
-                    // promoción V2 — Fase 5) — nunca se re-deriva aquí.
-                    $productCode = $saleRecharge->getDispatchExternalRef();
-                    $destination = (object) [
-                        'amount' => $saleRecharge->getDestinationAmount(),
-                        'unit' => $saleRecharge->getDestinationCurrency(),
-                    ];
-                } else {
-                    // externalRef, no packageId: packageId es la columna legacy
-                    // (entero) que CommunicationCatalogSyncService colapsa a 0
-                    // para cualquier proveedor cuyo id externo no sea numérico
-                    // (CSQ usa "{articleId}-{amount}", ver
-                    // CsqCommunicationProvider::fetchProducts()) — mandar
-                    // packageId aquí le enviaría "0" al adaptador del proveedor
-                    // como productExternalId, inservible para despachar nada.
-                    // resolveProductExternalId() usa externalRef con fallback a
-                    // packageId (productos creados a mano nunca setean
-                    // externalRef) — ver su docblock.
-                    $productCode = $this->resolveProductExternalId($package->resolveProduct());
-                    if (!is_null($saleRecharge->getPromotionId())) {
-                        /** @var \App\Repository\CommunicationPromotionsRepository $promotionRepo */
-                        $promotionRepo = $this->em->getRepository(CommunicationPromotions::class);
-                        $promotion = $promotionRepo->getActivePromotionById(
-                            $saleRecharge->getPromotionId()
-                        );
-                        if (!is_null($promotion)) {
-                            // dispatchExternalRef ya viene resuelto POR PROVEEDOR
-                            // desde admitLegacy() (PromotionProviderDispatchResolver)
-                            // para reservas creadas después de este cambio — evita
-                            // usar siempre promotion->getProduct() (el producto "de
-                            // origen"), que puede no ser el del proveedor real
-                            // elegido para esta venta. Reservas anteriores (sin
-                            // dispatchExternalRef) caen al comportamiento de siempre.
-                            $productCode = $saleRecharge->getDispatchExternalRef()
-                                ?? $this->resolveProductExternalId($promotion->getProduct());
-                        }
-                        $saleRecharge->setPromotionId($saleRecharge->getPromotionId());
-                        $saleRecharge->setPromotion($promotion);
-                    } elseif ($package->getPromotionItems()->count() === 1) {
-                        $promotion = $package->getPromotionItems()->first();
-                        $saleRecharge->setPromotionId($promotion->getId());
-                        $saleRecharge->setPromotion($promotion);
-                        $productCode = $saleRecharge->getDispatchExternalRef()
-                            ?? $this->resolveProductExternalId($promotion?->getProduct());
-                    }
-
-                    $destination = (object)$package->getDestination();
-                }
+                // Snapshot ya persistido en admisión (admitV2() para compra
+                // directa, admitV2ForReserve() para reserva de promoción) —
+                // nunca se re-deriva aquí.
+                $productCode = $saleRecharge->getDispatchExternalRef();
+                $destination = (object) [
+                    'amount' => $saleRecharge->getDestinationAmount(),
+                    'unit' => $saleRecharge->getDestinationCurrency(),
+                ];
 
                 // El proveedor se resuelve ANTES de aplicar cualquier
                 // sustitución de sandbox: cada rama de abajo es una
@@ -725,8 +643,8 @@ class CommunicationSaleService extends CommonService
                 STR_PAD_LEFT
             );
         // El proveedor es propiedad del producto, no de la cuenta — se
-        // valida y se congela ANTES de construir la venta (ver admit()).
-        $admission = $this->admit($user, $sale->getPackageId(), 'sale');
+        // valida y se congela ANTES de construir la venta (ver admitV2()).
+        $admission = $this->admitV2($user, $sale->getPackageId(), 'sale');
 
         $sale->setTransactionId($transactionId);
         $this->applyAdmission($sale, $admission);
@@ -833,26 +751,16 @@ class CommunicationSaleService extends CommonService
                 $this->failSale($sale, 'Missing nationality', 'INTERNAL_MISSING_NATIONALITY');
                 return;
             }
-            // V2 (dispatchProduct persistido en admisión, ver admitV2()):
-            // getPackage() es null a propósito — el snapshot ya trae todo
-            // lo que hace falta, sin volver a resolver nada.
-            $isV2Sale = $sale->getCatalogPackage() !== null;
-            $package = $sale->getPackage();
-            if (!$isV2Sale && !$package instanceof CommunicationClientPackage) {
+            // dispatchProduct persistido en admisión (ver admitV2()) — el
+            // snapshot ya trae todo lo que hace falta, sin volver a
+            // resolver nada.
+            if ($sale->getCatalogPackage() === null) {
                 $this->failSale($sale, 'Missing package', 'INTERNAL_MISSING_PACKAGE');
                 return;
             }
             $officeComId = $commercialOffice->getComId();
-            if ($isV2Sale) {
-                $packageProductId = $sale->getDispatchExternalRef();
-                $productKind = $sale->getDispatchProduct()?->getPackageType();
-            } else {
-                $resolvedProduct = $package->resolveProduct();
-                // resolveProductExternalId(): externalRef con fallback a
-                // packageId — ver su docblock.
-                $packageProductId = $this->resolveProductExternalId($resolvedProduct);
-                $productKind = $resolvedProduct?->getPackageType();
-            }
+            $packageProductId = $sale->getDispatchExternalRef();
+            $productKind = $sale->getDispatchProduct()?->getPackageType();
 
             $provider = $this->providerResolver->resolveForSale($sale);
             $adapter = $this->providerRegistry->getFor($provider, PackageSaleProviderInterface::class);
@@ -937,87 +845,13 @@ class CommunicationSaleService extends CommonService
     }
 
     /**
-     * V2 Fase 4 — único punto de admisión de venta para
-     * processReserve()/processRecharge()/executeSale(): bifurca por
-     * CatalogVersionResolver::isV2(). Rama legacy: mismo código de siempre
-     * (resolveAndGuardProvider() + PackageSalePriceResolver), sin cambio de
-     * comportamiento. Rama V2: PackageCatalogResolver::offerForSale() +
+     * Único punto de admisión de venta para
+     * processRecharge()/executeSale() (processReserve() resuelve su propia
+     * reserva vía admitV2ForReserve(), sin pasar por aquí — ver su propio
+     * docblock): PackageCatalogResolver::offerForSale() +
      * ProviderDispatchResolver::select(), devolviendo el snapshot que
      * applyAdmission() persistirá en la venta.
      *
-     * $promotion no nulo fuerza SIEMPRE la rama legacy: esto es exclusivo
-     * del reserve V1. processReserve() resuelve el reserve V2 aparte, vía
-     * admitV2ForReserve() (Fase 5), sin pasar por aquí en absoluto — ver
-     * su propio docblock.
-     *
-     * @throws MyCurrentException
-     */
-    private function admit(
-        Account $user,
-        int $packageId,
-        string $saleType,
-        bool $forReserve = false,
-        ?CommunicationPromotions $promotion = null,
-    ): CommunicationSaleAdmission {
-        if ($promotion === null && $this->catalogVersionResolver->isV2($user)) {
-            return $this->admitV2($user, $packageId, $saleType);
-        }
-
-        return $this->admitLegacy($user, $packageId, $saleType, $forReserve, $promotion);
-    }
-
-    /**
-     * @throws MyCurrentException
-     */
-    private function admitLegacy(Account $user, int $packageId, string $saleType, bool $forReserve, ?CommunicationPromotions $promotion = null): CommunicationSaleAdmission
-    {
-        /** @var \App\Repository\CommunicationClientPackageRepository $clientPackageRepo */
-        $clientPackageRepo = $this->em->getRepository(CommunicationClientPackage::class);
-        $package = $forReserve
-            ? $clientPackageRepo->getPackageByIdForReserve($packageId, $user)
-            : $clientPackageRepo->getPackageById($packageId, $user);
-        if (is_null($package)) {
-            throw new MyCurrentException('COM003', 'The package don\'t exist');
-        }
-
-        if ($saleType === 'recharge') {
-            $this->assertRechargeableProduct($package);
-        }
-
-        $dispatchProduct = null;
-        $dispatchExternalRef = null;
-        if ($promotion !== null) {
-            // Selección de proveedor por prioridad (ClientProviderRouting),
-            // igual que ProviderDispatchResolver hace para paquetes V2 —
-            // ver PromotionProviderDispatchResolver. Reemplaza a
-            // resolveAndGuardProvider() SOLO cuando hay promoción; el
-            // proveedor ya no lo decide ciegamente el producto "de origen".
-            $dispatch = $this->promotionDispatchResolver->select($user, $promotion);
-            $productProvider = $dispatch->provider->value;
-            $dispatchProduct = $dispatch->product;
-            $dispatchExternalRef = $dispatch->externalRef;
-        } else {
-            $productProvider = $this->resolveAndGuardProvider($user, $package);
-        }
-
-        // Único punto de precio: mismo resolver que usa el listado
-        // (GET /communication/packages) — antes del rediseño de precios,
-        // reserve/recharge cobraban ClientPackage.amount y executeSale()
-        // cobraba priceClientPackage.amount, y podían divergir tras un
-        // cambio de tarifa del proveedor. Ver PackageSalePriceResolver.
-        $resolvedPrice = $this->salePriceResolver->resolveForSale($package, $user);
-
-        return new CommunicationSaleAdmission(
-            provider: $productProvider,
-            amount: $resolvedPrice->amount,
-            currency: $resolvedPrice->currency,
-            legacyPackage: $package,
-            dispatchProduct: $dispatchProduct,
-            dispatchExternalRef: $dispatchExternalRef,
-        );
-    }
-
-    /**
      * @throws MyCurrentException
      */
     private function admitV2(Account $user, int $packageId, string $saleType): CommunicationSaleAdmission
@@ -1096,106 +930,15 @@ class CommunicationSaleService extends CommonService
     }
 
     /**
-     * Vuelca el snapshot de admit() en la venta: el paquete legacy
-     * (CommunicationClientPackage) o el snapshot V2 completo — nunca ambos.
+     * Vuelca el snapshot de admitV2()/admitV2ForReserve() en la venta.
      */
     private function applyAdmission(CommunicationSaleInfo $sale, CommunicationSaleAdmission $admission): void
     {
-        if ($admission->legacyPackage !== null) {
-            $sale->setPackage($admission->legacyPackage);
-            // Promoción con vínculo por proveedor resuelto (ver admitLegacy()):
-            // congela el producto elegido para que invokeRechargeCommunication()
-            // no tenga que re-derivarlo de promotion->getProduct() a ciegas.
-            // No se toca catalogPackage/destinationAmount/destinationCurrency:
-            // eso mantendría isV2() en true, y las promociones siguen siendo
-            // legacy (Fase 5 pendiente).
-            if ($admission->dispatchProduct !== null) {
-                $sale->setDispatchProduct($admission->dispatchProduct);
-                $sale->setDispatchExternalRef($admission->dispatchExternalRef);
-            }
-
-            return;
-        }
-
         $sale->setCatalogPackage($admission->catalogPackage);
         $sale->setDispatchProduct($admission->dispatchProduct);
         $sale->setDispatchExternalRef($admission->dispatchExternalRef);
         $sale->setDestinationAmount($admission->destinationAmount);
         $sale->setDestinationCurrency($admission->destinationCurrency);
-    }
-
-    /**
-     * El proveedor es propiedad del producto, no de la cuenta: se lee de
-     * package.resolveProduct().provider (prioriza el contrato congelado si
-     * lo hay, si no el producto directo — ver
-     * CommunicationClientPackage::resolveProduct(), que reemplaza el acceso
-     * directo a priceClientPackage desde este rediseño: un paquete SIN
-     * contrato también debe poder resolver su proveedor) y se valida contra
-     * ProviderResolver::allowedForClient() ANTES de admitir la venta. Esto
-     * es lo que impide que el routing de un cliente (Fase 2) mande un
-     * productCode de un proveedor a otro distinto — el error se detecta en
-     * admisión, no como un fallo silencioso en el despacho.
-     */
-    private function resolveAndGuardProvider(Account $user, CommunicationClientPackage $package): string
-    {
-        $productProvider = $package->resolveProduct()?->getProvider()
-            ?? CommunicationProviderEnum::ETECSA->value;
-
-        $client = $user->getClient();
-        if ($client !== null) {
-            $allowed = array_map(
-                static fn (CommunicationProviderEnum $p) => $p->value,
-                $this->providerResolver->allowedForClient($client, $user->getEnvironment()?->getId()),
-            );
-
-            if (!in_array($productProvider, $allowed, true)) {
-                throw new MyCurrentException(
-                    'PROVIDER_NOT_ALLOWED_FOR_CLIENT',
-                    'El paquete pertenece a un proveedor no habilitado para este cliente',
-                    Response::HTTP_CONFLICT,
-                );
-            }
-        }
-
-        return $productProvider;
-    }
-
-    /**
-     * Un producto PIN_PURCHASE (código/voucher que el cliente debe canjear)
-     * nunca se vende como recarga: se acredita al teléfono, no entrega un
-     * código. Decisión de negocio: todo lo que sea PIN_PURCHASE se considera
-     * un paquete, vendible solo por executeSale(), nunca por
-     * processReserve()/processRecharge().
-     */
-    private function assertRechargeableProduct(CommunicationClientPackage $package): void
-    {
-        $packageType = $package->resolveProduct()?->getPackageType();
-
-        if ($packageType !== null && str_contains($packageType, 'PIN_PURCHASE')) {
-            throw new MyCurrentException(
-                'PRODUCT_REQUIRES_PACKAGE_SALE',
-                'Este producto se canjea por código y solo puede venderse como paquete, no como recarga',
-                Response::HTTP_CONFLICT,
-            );
-        }
-    }
-
-    /**
-     * externalRef es la clave canónica ante el proveedor (para ETECSA/DTOne
-     * coincide con packageId en forma de string). Fallback a packageId
-     * porque los productos creados a mano vía POST /products
-     * (CommunicationProductService::createProduct()) nunca setean
-     * externalRef — solo los sincronizados vía
-     * CommunicationCatalogSyncService lo hacen — así que quedarían con
-     * productExternalId vacío sin este fallback.
-     */
-    private function resolveProductExternalId(?CommunicationProduct $product): ?string
-    {
-        if ($product === null) {
-            return null;
-        }
-
-        return $product->getExternalRef() !== '' ? $product->getExternalRef() : (string) $product->getPackageId();
     }
 
     private function claimForSending(CommunicationSaleInfo $sale): bool

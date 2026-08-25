@@ -5,8 +5,7 @@ namespace App\Tests\Service;
 use App\DTO\AccountBalanceDto;
 use App\Entity\Account;
 use App\Entity\Client;
-use App\Entity\CommunicationClientPackage;
-use App\Entity\CommunicationProduct;
+use App\Entity\CommunicationPackage;
 use App\Entity\CommunicationSaleRecharge;
 use App\Entity\Environment;
 use App\Enums\CommunicationProviderEnum;
@@ -28,22 +27,18 @@ use App\Provider\ProviderRegistry;
 use App\Provider\ProviderResolver;
 use App\Provider\TransactionStatus;
 use App\Repository\ClientProviderRoutingRepository;
-use App\Repository\CommunicationClientPackageRepository;
 use App\Repository\CommunicationSaleRechargeRepository;
 use App\Repository\EnvironmentRepository;
 use App\Repository\SysConfigRepository;
 use App\Service\BalanceService;
-use App\Service\Catalog\CatalogVersionResolver;
 use App\Service\CommunicationSaleService;
 use App\Service\ConfigureSequenceService;
 use App\Service\HistoricalSaleService;
 use App\Service\NotificationCenterService;
 use App\Service\Pricing\PackageCatalogResolver;
-use App\Service\Pricing\PackageSalePriceResolver;
-use App\Service\Pricing\PriceSourceEnum;
-use App\Service\Pricing\ResolvedSalePrice;
+use App\Service\Pricing\PackageOfferSourceEnum;
+use App\Service\Pricing\ResolvedPackageOffer;
 use App\Service\Provider\ProviderAvailabilityService;
-use Doctrine\Common\Collections\ArrayCollection;
 use Doctrine\DBAL\Connection;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\Mapping\ClassMetadata;
@@ -74,6 +69,7 @@ class CommunicationSaleServiceTransactionStatusTest extends TestCase
     private HistoricalSaleService&MockObject $historicalSaleService;
     private ProviderAvailabilityService&MockObject $availabilityService;
     private CsqHttpClient&MockObject $csqClient;
+    private PackageCatalogResolver&MockObject $packageCatalogResolver;
     private CommunicationSaleService $service;
     private CommunicationSaleRecharge $saleRecharge;
 
@@ -106,10 +102,7 @@ class CommunicationSaleServiceTransactionStatusTest extends TestCase
         $this->availabilityService = $this->createMock(ProviderAvailabilityService::class);
         $configureSequence = $this->createMock(ConfigureSequenceService::class);
 
-        $salePriceResolver = $this->createMock(PackageSalePriceResolver::class);
-        $salePriceResolver->method('resolve')->willReturn(
-            new ResolvedSalePrice(100.0, 'USD', PriceSourceEnum::PRODUCT),
-        );
+        $this->packageCatalogResolver = $this->createMock(PackageCatalogResolver::class);
 
         $routingRepo = $this->createMock(ClientProviderRoutingRepository::class);
         $providerResolver = new ProviderResolver($sysConfigRepo, $routingRepo, new NullLogger());
@@ -138,9 +131,7 @@ class CommunicationSaleServiceTransactionStatusTest extends TestCase
             $this->balanceService,
             $notificationCenter,
             $this->availabilityService,
-            $salePriceResolver,
-            new CatalogVersionResolver($sysConfigRepo),
-            $this->createMock(PackageCatalogResolver::class),
+            $this->packageCatalogResolver,
             $this->createMock(\App\Provider\ProviderDispatchResolver::class),
             $this->createMock(\App\Provider\PromotionProviderDispatchResolver::class),
         );
@@ -209,26 +200,21 @@ class CommunicationSaleServiceTransactionStatusTest extends TestCase
         $account->method('getEnvironment')->willReturn($environment);
         $account->method('getId')->willReturn(99);
 
-        $product = $this->createMock(CommunicationProduct::class);
-        $product->method('getProvider')->willReturn($provider);
-        $product->method('getPackageType')->willReturn('Bundles');
-        $product->method('getExternalRef')->willReturn('7951-2200');
-        $product->method('getPackageId')->willReturn(0);
+        $catalogPackage = $this->createMock(CommunicationPackage::class);
+        $catalogPackage->method('getId')->willReturn(1);
 
-        $package = $this->createMock(CommunicationClientPackage::class);
-        $package->method('resolveProduct')->willReturn($product);
-        $package->method('getAmount')->willReturn(100.0);
-        $package->method('getCurrency')->willReturn('USD');
-        $package->method('getDestination')->willReturn(['amount' => 2200, 'unit' => 'CUP']);
-        $package->method('getPromotionItems')->willReturn(new ArrayCollection());
-
-        $packageRepo = $this->createMock(CommunicationClientPackageRepository::class);
-        $packageRepo->method('getPackageById')->willReturn($package);
+        $this->packageCatalogResolver->method('offerFor')->with($catalogPackage, $account)->willReturn(
+            new ResolvedPackageOffer($catalogPackage, 100.0, 'USD', PackageOfferSourceEnum::PRODUCT_MAX),
+        );
 
         $recharge = new CommunicationSaleRecharge();
         $recharge->setPackageId(1);
         $recharge->setTenant($account);
         $recharge->setProvider($provider);
+        $recharge->setCatalogPackage($catalogPackage);
+        $recharge->setDispatchExternalRef('7951-2200');
+        $recharge->setDestinationAmount(2200.0);
+        $recharge->setDestinationCurrency('CUP');
         $recharge->setTransactionId('2608100100042');
         $recharge->setPhoneNumber('53500000');
         $recharge->setState(CommunicationStateEnum::PENDING);
@@ -242,7 +228,6 @@ class CommunicationSaleServiceTransactionStatusTest extends TestCase
         $environmentRepo->method('find')->with(10)->willReturn($environment);
 
         $this->em->method('getRepository')->willReturnMap([
-            [CommunicationClientPackage::class, $packageRepo],
             [CommunicationSaleRecharge::class, $saleRepo],
             // checkStatusOrder() busca por la clase base, no por la
             // subclase — mismo repo mock, mismo objeto.

@@ -5,7 +5,6 @@ namespace App\Tests\Service;
 use App\DTO\ReserveRecharge;
 use App\Entity\Account;
 use App\Entity\Client;
-use App\Entity\CommunicationClientPackage;
 use App\Entity\CommunicationNationality;
 use App\Entity\CommunicationOffice;
 use App\Entity\CommunicationPackage;
@@ -22,22 +21,17 @@ use App\Provider\ProviderRegistry;
 use App\Provider\ProviderResolver;
 use App\Provider\SelectedDispatch;
 use App\Repository\ClientProviderRoutingRepository;
-use App\Repository\CommunicationClientPackageRepository;
-use App\Repository\CommunicationPromotionsRepository;
+use App\Repository\CommunicationPackageRepository;
 use App\Repository\EnvironmentRepository;
 use App\Repository\SysConfigRepository;
 use App\Service\BalanceService;
-use App\Service\Catalog\CatalogVersionResolver;
 use App\Service\CommunicationSaleService;
 use App\Service\ConfigureSequenceService;
 use App\Service\HistoricalSaleService;
 use App\Service\NotificationCenterService;
 use App\Service\Pricing\PackageCatalogResolver;
 use App\Service\Pricing\PackageOfferSourceEnum;
-use App\Service\Pricing\PackageSalePriceResolver;
-use App\Service\Pricing\PriceSourceEnum;
 use App\Service\Pricing\ResolvedPackageOffer;
-use App\Service\Pricing\ResolvedSalePrice;
 use App\Service\Provider\ProviderAvailabilityService;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\EntityRepository;
@@ -54,11 +48,11 @@ use Symfony\Component\Serializer\SerializerInterface;
 /**
  * @covers \App\Service\CommunicationSaleService
  *
- * Cubre exclusivamente la bifurcación V2 de admit() (V2 Fase 4) — la rama
- * legacy ya está cubierta por CommunicationSaleServiceProviderGuardTest/
- * CommunicationSaleServicePricingTest, que siguen pasando sin ningún cambio
- * de expectativas (ver ambos archivos): "flag OFF = comportamiento
- * idéntico" es justamente que esos tests ni se tocaron.
+ * Cubre admitV2()/admitV2ForReserve() — único camino de admisión desde la
+ * Fase 5 de la deprecación de V1 (admitLegacy() se retiró junto con
+ * resolveAndGuardProvider()/assertRechargeableProduct(); el guard de
+ * proveedor/despacho vive ahora en ProviderDispatchResolver, ver su propia
+ * suite ProviderDispatchResolverTest).
  */
 class CommunicationSaleServiceV2AdmissionTest extends TestCase
 {
@@ -94,23 +88,11 @@ class CommunicationSaleServiceV2AdmissionTest extends TestCase
         $notificationCenter = $this->createMock(NotificationCenterService::class);
         $configureSequence = $this->createMock(ConfigureSequenceService::class);
         $configureSequence->method('getLastSequence')->willReturn(1);
-        // Solo lo usa la rama legacy (processReserve() con promoción, ver
-        // testProcessReserveAlwaysUsesLegacyEvenWhenClientIsInV2) — valor
-        // fijo, no es lo que este archivo cubre.
-        $salePriceResolver = $this->createMock(PackageSalePriceResolver::class);
-        $salePriceResolver->method('resolveForSale')->willReturn(
-            new ResolvedSalePrice(5.0, 'USD', PriceSourceEnum::PRODUCT),
-        );
 
         $routingRepo = $this->createMock(ClientProviderRoutingRepository::class);
         $providerRegistry = new ProviderRegistry([]);
         $providerResolver = new ProviderResolver($sysConfigRepo, $routingRepo, $this->createMock(LoggerInterface::class));
         $providerContextFactory = new ProviderContextFactory($providerResolver);
-
-        // Cliente en V2 por default global — ver CatalogVersionResolver.
-        $sysConfigRepo->method('findCachedValue')
-            ->willReturnCallback(fn (string $key) => $key === CatalogVersionResolver::DEFAULT_VERSION_KEY ? 'v2' : null);
-        $catalogVersionResolver = new CatalogVersionResolver($sysConfigRepo);
 
         $this->service = new CommunicationSaleService(
             $this->em,
@@ -131,8 +113,6 @@ class CommunicationSaleServiceV2AdmissionTest extends TestCase
             $this->balanceService,
             $notificationCenter,
             $this->availabilityService,
-            $salePriceResolver,
-            $catalogVersionResolver,
             $this->packageCatalogResolver,
             $this->dispatchResolver,
             $this->promotionDispatchResolver,
@@ -179,7 +159,7 @@ class CommunicationSaleServiceV2AdmissionTest extends TestCase
         ]);
     }
 
-    public function testProcessRechargeUsesV2AdmissionWhenClientIsInV2(): void
+    public function testProcessRechargeUsesV2Admission(): void
     {
         $account = $this->account(1);
         $this->security->method('getUser')->willReturn($account);
@@ -214,11 +194,10 @@ class CommunicationSaleServiceV2AdmissionTest extends TestCase
         $this->assertSame('7854-250', $result->getDispatchExternalRef());
         $this->assertSame(500.0, $result->getDestinationAmount());
         $this->assertSame('CUP', $result->getDestinationCurrency());
-        // Rama V2: nunca toca el paquete legacy.
         $this->assertNull($result->getPackage());
     }
 
-    public function testProcessRechargeThrowsCom003WhenV2PackageDoesNotExist(): void
+    public function testProcessRechargeThrowsCom003WhenPackageDoesNotExist(): void
     {
         $account = $this->account(1);
         $this->security->method('getUser')->willReturn($account);
@@ -233,7 +212,7 @@ class CommunicationSaleServiceV2AdmissionTest extends TestCase
         $this->service->processRecharge($recharge);
     }
 
-    public function testProcessRechargeThrowsCom003WhenV2PackageIsInactive(): void
+    public function testProcessRechargeThrowsCom003WhenPackageIsInactive(): void
     {
         $account = $this->account(1);
         $this->security->method('getUser')->willReturn($account);
@@ -250,7 +229,7 @@ class CommunicationSaleServiceV2AdmissionTest extends TestCase
         $this->service->processRecharge($recharge);
     }
 
-    public function testProcessRechargeThrowsCom003WhenV2PackageWindowHasNotStartedYet(): void
+    public function testProcessRechargeThrowsCom003WhenPackageWindowHasNotStartedYet(): void
     {
         $account = $this->account(1);
         $this->security->method('getUser')->willReturn($account);
@@ -359,82 +338,21 @@ class CommunicationSaleServiceV2AdmissionTest extends TestCase
         $this->assertNull($result->getPackage());
     }
 
-    public function testProcessReserveUsesLegacyWhenV1PromotionIsFound(): void
+    public function testProcessReserveUsesAdmitV2ForReserveWhenPackageIsFuture(): void
     {
-        // getFuturePromotionById() (V1) resuelve directo → nunca se llega a
-        // intentar la resolución V2 (ver docblock de processReserve()).
         $account = $this->account(1);
         $this->security->method('getUser')->willReturn($account);
-
-        $product = $this->createMock(CommunicationProduct::class);
-        $product->method('getProvider')->willReturn('ETECSA');
-        $product->method('getPackageType')->willReturn(null);
-        $legacyPackage = $this->createMock(CommunicationClientPackage::class);
-        $legacyPackage->method('resolveProduct')->willReturn($product);
-        $legacyPackage->method('getAmount')->willReturn(5.0);
-        $legacyPackage->method('getCurrency')->willReturn('USD');
-        $legacyPackage->method('getPromotionItems')->willReturn(new \Doctrine\Common\Collections\ArrayCollection());
-
-        $legacyPackageRepo = $this->createMock(CommunicationClientPackageRepository::class);
-        $legacyPackageRepo->method('getPackageByIdForReserve')->willReturn($legacyPackage);
-
-        $promotion = $this->createMock(CommunicationPromotions::class);
-        $promotionRepo = $this->createMock(CommunicationPromotionsRepository::class);
-        $promotionRepo->method('getFuturePromotionById')->willReturn($promotion);
-
-        // La rama V2 (find() de CommunicationPackage) nunca debe consultarse.
-        $catalogPackageRepo = $this->createMock(EntityRepository::class);
-        $catalogPackageRepo->expects($this->never())->method('find');
-
-        $this->em->method('getRepository')->willReturnMap([
-            [CommunicationClientPackage::class, $legacyPackageRepo],
-            [CommunicationPromotions::class, $promotionRepo],
-            [CommunicationPackage::class, $catalogPackageRepo],
-        ]);
-        $this->packageCatalogResolver->expects($this->never())->method('offerForSale');
-        $this->dispatchResolver->expects($this->never())->method('select');
-
-        // Con promoción, admitLegacy() ahora resuelve el proveedor vía
-        // PromotionProviderDispatchResolver (prioridad de cliente + vínculo
-        // promoción→producto) en vez de resolveAndGuardProvider() — ver
-        // docblock de admit()/admitLegacy().
-        $this->promotionDispatchResolver->method('select')
-            ->willReturn(new SelectedDispatch(CommunicationProviderEnum::ETECSA, $product, 'etecsa-ext-ref'));
-
-        $this->balanceService->method('hasAvailableBalance')->willReturn(true);
-
-        $reserve = new ReserveRecharge('5550001234', 1, 1, 'reserve-ctx-v2');
-
-        $result = $this->service->processReserve($reserve);
-
-        $this->assertSame('ETECSA', $result->getProvider());
-        $this->assertNull($result->getCatalogPackage());
-        $this->assertSame('etecsa-ext-ref', $result->getDispatchExternalRef());
-    }
-
-    public function testProcessReserveUsesV2WhenV1LookupFailsButV2PackageIsFuture(): void
-    {
-        // getFuturePromotionById() (V1) no encuentra nada — es una
-        // promoción V2 (CommunicationPackage::$promotion, ManyToOne
-        // directo, nunca cubierto por esa consulta) — ver
-        // CommunicationPackageRepository::findFutureForReserve() (Fase 5).
-        $account = $this->account(1);
-        $this->security->method('getUser')->willReturn($account);
-
-        $promotionRepo = $this->createMock(CommunicationPromotionsRepository::class);
-        $promotionRepo->method('getFuturePromotionById')->willReturn(null);
 
         $promotion = $this->createMock(CommunicationPromotions::class);
         $package = $this->catalogPackage()->setPromotion($promotion);
 
-        $catalogPackageRepo = $this->createMock(\App\Repository\CommunicationPackageRepository::class);
+        $catalogPackageRepo = $this->createMock(CommunicationPackageRepository::class);
         $catalogPackageRepo->expects($this->once())
             ->method('findFutureForReserve')
             ->with(42, 93)
             ->willReturn($package);
 
         $this->em->method('getRepository')->willReturnMap([
-            [CommunicationPromotions::class, $promotionRepo],
             [CommunicationPackage::class, $catalogPackageRepo],
         ]);
 
@@ -449,8 +367,8 @@ class CommunicationSaleServiceV2AdmissionTest extends TestCase
             ->with($account, $promotion)
             ->willReturn(new SelectedDispatch(CommunicationProviderEnum::CSQ, $product, '7854-250'));
         // Reserve resuelve el proveedor a nivel de PROMOCIÓN — el dispatch
-        // por paquete (usado en la compra V2 directa, admitV2()) nunca se
-        // toca aquí.
+        // por paquete (usado en la compra directa, admitV2()) nunca se toca
+        // aquí.
         $this->dispatchResolver->expects($this->never())->method('select');
 
         $this->balanceService->method('hasAvailableBalance')->willReturn(true);
@@ -468,19 +386,15 @@ class CommunicationSaleServiceV2AdmissionTest extends TestCase
         $this->assertSame('CUP', $result->getDestinationCurrency());
     }
 
-    public function testProcessReserveThrowsCom007WhenNeitherV1NorV2ResolvesTheFuturePromotion(): void
+    public function testProcessReserveThrowsCom007WhenNoFuturePromotionPackageIsFound(): void
     {
         $account = $this->account(1);
         $this->security->method('getUser')->willReturn($account);
 
-        $promotionRepo = $this->createMock(CommunicationPromotionsRepository::class);
-        $promotionRepo->method('getFuturePromotionById')->willReturn(null);
-
-        $catalogPackageRepo = $this->createMock(\App\Repository\CommunicationPackageRepository::class);
+        $catalogPackageRepo = $this->createMock(CommunicationPackageRepository::class);
         $catalogPackageRepo->method('findFutureForReserve')->willReturn(null);
 
         $this->em->method('getRepository')->willReturnMap([
-            [CommunicationPromotions::class, $promotionRepo],
             [CommunicationPackage::class, $catalogPackageRepo],
         ]);
 
@@ -488,6 +402,31 @@ class CommunicationSaleServiceV2AdmissionTest extends TestCase
         $this->expectExceptionMessage('The promotion is not active to reserves');
 
         $reserve = new ReserveRecharge('5550001234', 93, 42, 'reserve-ctx-v2-missing');
+
+        $this->service->processReserve($reserve);
+    }
+
+    public function testProcessReserveThrowsCom007WhenFuturePackageHasNoPromotion(): void
+    {
+        // No debería poder pasar en la práctica (findFutureForReserve() hace
+        // INNER JOIN con la promoción), pero el chequeo explícito documenta
+        // el invariante y evita un TypeError si algún día deja de serlo.
+        $account = $this->account(1);
+        $this->security->method('getUser')->willReturn($account);
+
+        $package = $this->catalogPackage();
+
+        $catalogPackageRepo = $this->createMock(CommunicationPackageRepository::class);
+        $catalogPackageRepo->method('findFutureForReserve')->willReturn($package);
+
+        $this->em->method('getRepository')->willReturnMap([
+            [CommunicationPackage::class, $catalogPackageRepo],
+        ]);
+
+        $this->expectException(MyCurrentException::class);
+        $this->expectExceptionMessage('The promotion is not active to reserves');
+
+        $reserve = new ReserveRecharge('5550001234', 93, 42, 'reserve-ctx-v2-no-promo');
 
         $this->service->processReserve($reserve);
     }

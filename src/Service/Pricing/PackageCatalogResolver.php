@@ -108,8 +108,7 @@ class PackageCatalogResolver
      * Guardia de venta: además de resolver, rechaza lo que no es vendible.
      * `PACKAGE_NOT_VISIBLE_FOR_CLIENT` = el cliente tiene contrato(s) pero
      * ninguno cubre este paquete (offerFor() devolvió null).
-     * `PACKAGE_PRICE_UNAVAILABLE` = visible pero sin proveedor que lo cubra
-     * (mismo codeWork que ya usa PackageSalePriceResolver para V1).
+     * `PACKAGE_PRICE_UNAVAILABLE` = visible pero sin proveedor que lo cubra.
      *
      * Delega en offerFor() para TODO — incluido el alcance tenant/category
      * del kill switch: no hay ninguna ruta de compra que lo evite.

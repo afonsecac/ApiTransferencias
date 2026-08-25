@@ -5,6 +5,10 @@ declare(strict_types=1);
 namespace App\Command;
 
 use App\Entity\CommunicationPromotions;
+use App\Repository\CommunicationPackageRepository;
+use App\Service\Pricing\PackageCatalogResolver;
+use App\Service\Pricing\PackageOfferSourceEnum;
+use App\Service\Pricing\TargetAccountResolver;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bridge\Twig\Mime\TemplatedEmail;
 use Symfony\Component\Console\Attribute\AsCommand;
@@ -27,6 +31,9 @@ class TestPromotionEmailCommand extends Command
         private readonly MailerInterface $mailer,
         private readonly ParameterBagInterface $parameterBag,
         private readonly EntityManagerInterface $em,
+        private readonly CommunicationPackageRepository $packageRepository,
+        private readonly PackageCatalogResolver $catalogResolver,
+        private readonly TargetAccountResolver $targetAccountResolver,
     ) {
         parent::__construct();
     }
@@ -61,13 +68,31 @@ class TestPromotionEmailCommand extends Command
             return Command::FAILURE;
         }
 
-        // Detect clientId from the first package if not provided
+        $isV1Promotion = $promotion->getProducts()->count() > 0;
+
+        // Detect clientId from the first package if not provided. V1: la
+        // copia por tenant lo trae directo. V2 (Fase 2 de la deprecación de
+        // V1): el catálogo es compartido, no hay copia por tenant — se
+        // busca el primer contrato PROPIO (no "por defecto") vinculado a
+        // algún paquete de la promoción.
         if ($clientId === null) {
-            foreach ($promotion->getProducts() as $pkg) {
-                $detectedId = $pkg->getTenant()?->getClient()?->getId();
-                if ($detectedId !== null) {
-                    $clientId = $detectedId;
-                    break;
+            if ($isV1Promotion) {
+                foreach ($promotion->getProducts() as $pkg) {
+                    $detectedId = $pkg->getTenant()?->getClient()?->getId();
+                    if ($detectedId !== null) {
+                        $clientId = $detectedId;
+                        break;
+                    }
+                }
+            } else {
+                foreach ($this->packageRepository->findByPromotion($promotion) as $pkg) {
+                    foreach ($pkg->getContracts() as $contract) {
+                        $detectedId = $contract->getTenant()?->getClient()?->getId();
+                        if ($detectedId !== null) {
+                            $clientId = $detectedId;
+                            break 2;
+                        }
+                    }
                 }
             }
         }
@@ -77,15 +102,38 @@ class TestPromotionEmailCommand extends Command
             return Command::FAILURE;
         }
 
-        $packages = [];
-        foreach ($promotion->getProducts() as $pkg) {
-            if ($pkg->getTenant()?->getClient()?->getId() === $clientId) {
+        if ($isV1Promotion) {
+            $packages = [];
+            foreach ($promotion->getProducts() as $pkg) {
+                if ($pkg->getTenant()?->getClient()?->getId() === $clientId) {
+                    $packages[] = [
+                        'name'          => $pkg->getName(),
+                        'price'         => $pkg->getPriceClientPackage()?->getPrice(),
+                        'priceCurrency' => $pkg->getPriceClientPackage()?->getPriceCurrency(),
+                        'amount'        => $pkg->getAmount(),
+                        'currency'      => $pkg->getCurrency(),
+                    ];
+                }
+            }
+        } else {
+            $environment = $promotion->getEnvironment();
+            $account = $environment !== null ? $this->targetAccountResolver->resolveOne($environment, $clientId) : null;
+            if ($account === null) {
+                $output->writeln('<error>No active account found for that client in the promotion\'s environment.</error>');
+                return Command::FAILURE;
+            }
+
+            $packages = [];
+            foreach ($this->packageRepository->findByPromotion($promotion) as $pkg) {
+                $offer = $this->catalogResolver->offerFor($pkg, $account);
+                $offerVisible = $offer !== null && $offer->source !== PackageOfferSourceEnum::UNAVAILABLE;
+
                 $packages[] = [
                     'name'          => $pkg->getName(),
-                    'price'         => $pkg->getPriceClientPackage()?->getPrice(),
-                    'priceCurrency' => $pkg->getPriceClientPackage()?->getPriceCurrency(),
-                    'amount'        => $pkg->getAmount(),
-                    'currency'      => $pkg->getCurrency(),
+                    'price'         => $offerVisible ? $offer->price : null,
+                    'priceCurrency' => $offerVisible ? $offer->currency : null,
+                    'amount'        => $pkg->getDestinationAmount(),
+                    'currency'      => $pkg->getDestinationCurrency(),
                 ];
             }
         }
