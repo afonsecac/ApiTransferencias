@@ -314,6 +314,36 @@ class DashboardCommunicationPackagesController extends AbstractController
         if ($search = $request->query->get('search')) {
             $qb->andWhere('p.name LIKE :s')->setParameter('s', "%{$search}%");
         }
+        if ($request->query->has('inPromotion')) {
+            $qb->andWhere($request->query->getBoolean('inPromotion') ? 'p.promotion IS NOT NULL' : 'p.promotion IS NULL');
+        }
+        if ($tag = $request->query->get('tag')) {
+            // tags es json (no jsonb) — DQL no puede comparar json con LIKE
+            // directamente (Postgres lo rechaza: "operator does not exist:
+            // json ~~ unknown"), así que se resuelve el conjunto de ids por
+            // SQL crudo y se filtra por IN() en la QueryBuilder normal.
+            $ids = $this->packageIdsWithTag($tag);
+            $qb->andWhere('p.id IN (:tagIds)')->setParameter('tagIds', $ids === [] ? [0] : $ids);
+        }
+        if ($createdFrom = $request->query->get('createdFrom')) {
+            $qb->andWhere('p.createdAt >= :createdFrom')->setParameter('createdFrom', new \DateTimeImmutable($createdFrom));
+        }
+        if ($createdTo = $request->query->get('createdTo')) {
+            $qb->andWhere('p.createdAt <= :createdTo')->setParameter('createdTo', new \DateTimeImmutable($createdTo . ' 23:59:59'));
+        }
+    }
+
+    /**
+     * @return list<int>
+     */
+    private function packageIdsWithTag(string $tag): array
+    {
+        $rows = $this->em->getConnection()->executeQuery(
+            'SELECT id FROM communication_package WHERE tags::text LIKE :tag',
+            ['tag' => '%"' . addcslashes($tag, '%_\\') . '"%']
+        )->fetchFirstColumn();
+
+        return array_map('intval', $rows);
     }
 
     private function serialize(CommunicationPackage $package, bool $hasBindings = false): array
@@ -335,6 +365,7 @@ class DashboardCommunicationPackagesController extends AbstractController
             'createdAt' => $package->getCreatedAt()?->format('c'),
             'updatedAt' => $package->getUpdatedAt()?->format('c'),
             'hasBindings' => $hasBindings,
+            'promotionId' => $package->getPromotion()?->getId(),
         ];
     }
 

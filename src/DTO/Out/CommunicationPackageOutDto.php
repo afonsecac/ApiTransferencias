@@ -21,4 +21,6 @@ final class CommunicationPackageOutDto
     public ?string $updatedAt = null;
     /** true si el paquete tiene al menos un vínculo explícito paquete→producto por proveedor. */
     public bool $hasBindings = false;
+    /** No nulo = paquete generado por rango para esta promoción (ver CommunicationPackage::$promotion). */
+    public ?int $promotionId = null;
 }
