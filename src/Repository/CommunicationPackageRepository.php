@@ -47,6 +47,46 @@ class CommunicationPackageRepository extends ServiceEntityRepository
     }
 
     /**
+     * Igual que findActiveCatalog() pero excluye categorías ya resueltas por
+     * contrato (Fase 2 del rediseño de contratos por categoría) — evita que
+     * PackageCatalogResolver::catalogFor() dispare el cálculo de precio MAX
+     * (findMatchingDestination() + N resoluciones de precio) sobre paquetes
+     * de categorías que de todas formas se van a descartar porque ya las
+     * cubre un contrato. Sin esto, un tenant 100% cubierto por contratos
+     * pagaría el costo de una consulta que hoy (regla "todo o nada" por
+     * tenant) NUNCA se ejecuta.
+     *
+     * $serviceKeys VACÍO delega en findActiveCatalog() a propósito: un
+     * `NOT IN ()` con lista vacía compila a `NOT IN (NULL)` en Postgres (vía
+     * el binding de parámetros de Doctrine) y devuelve CERO filas — el
+     * comportamiento correcto acá es "ninguna categoría excluida todavía",
+     * no "excluir todo".
+     *
+     * @param list<string> $serviceKeys
+     */
+    public function findActiveCatalogExcludingCategories(array $serviceKeys, ?\DateTimeImmutable $now = null): array
+    {
+        if ($serviceKeys === []) {
+            return $this->findActiveCatalog($now);
+        }
+
+        $now ??= new \DateTimeImmutable();
+
+        return $this->createQueryBuilder('p')
+            ->andWhere('p.isActive = :active')
+            ->andWhere('p.activeStartAt <= :now')
+            ->andWhere('p.activeEndAt IS NULL OR p.activeEndAt > :now')
+            ->andWhere('p.serviceKey NOT IN (:serviceKeys)')
+            ->setParameter('active', true)
+            ->setParameter('now', $now)
+            ->setParameter('serviceKeys', $serviceKeys)
+            ->orderBy('p.displayOrder', 'ASC')
+            ->addOrderBy('p.id', 'ASC')
+            ->getQuery()
+            ->getResult();
+    }
+
+    /**
      * Paquetes que entrarán en vigencia a futuro (típicamente tramos de una
      * promoción V2 aún no arrancada) — alimenta
      * /communication/packages/upcoming para cuentas V2
@@ -76,7 +116,9 @@ class CommunicationPackageRepository extends ServiceEntityRepository
      * Paquete cuyo destino coincide con la tupla dada, con tolerancia de
      * coma flotante (DestinationKey::EPSILON) — usado por
      * CommunicationContractService::createByRange() para resolver, monto a
-     * monto, a qué CommunicationPackage corresponde cada paso del rango.
+     * monto, a qué CommunicationPackage corresponde cada paso del rango, y
+     * por linkTenantContractsToPromotionPackages() para hallar el paquete
+     * regular equivalente de uno de promoción.
      *
      * Excluye SIEMPRE los paquetes generados por una promoción
      * (promotion IS NOT NULL, ver CommunicationPackage::$promotion) — son
@@ -84,19 +126,29 @@ class CommunicationPackageRepository extends ServiceEntityRepository
      * contratos no debe poder engancharse a uno por coincidencia de monto.
      * Para resolver dentro del lote de una promoción concreta, ver
      * findByDestinationForPromotion().
+     *
+     * `$serviceKey` (Fase 3 del rediseño por categoría) — opcional, sin
+     * filtrar por defecto (compatibilidad con BenefitOperationResolver,
+     * que todavía no lo pasa). Cuando se da, cierra la fuga donde dos
+     * paquetes de categorías DISTINTAS que comparten tupla monto/moneda se
+     * confundían entre sí (ej. un paquete promocional enganchándose al
+     * contrato de otra categoría).
      */
-    public function findByDestination(float $amount, string $currency): ?CommunicationPackage
+    public function findByDestination(float $amount, string $currency, ?string $serviceKey = null): ?CommunicationPackage
     {
-        return $this->createQueryBuilder('p')
+        $qb = $this->createQueryBuilder('p')
             ->andWhere('p.destinationAmount BETWEEN :min AND :max')
             ->andWhere('p.destinationCurrency = :currency')
             ->andWhere('p.promotion IS NULL')
             ->setParameter('min', $amount - DestinationKey::EPSILON)
             ->setParameter('max', $amount + DestinationKey::EPSILON)
-            ->setParameter('currency', strtoupper($currency))
-            ->setMaxResults(1)
-            ->getQuery()
-            ->getOneOrNullResult();
+            ->setParameter('currency', strtoupper($currency));
+
+        if ($serviceKey !== null) {
+            $qb->andWhere('p.serviceKey = :serviceKey')->setParameter('serviceKey', $serviceKey);
+        }
+
+        return $qb->setMaxResults(1)->getQuery()->getOneOrNullResult();
     }
 
     /**
@@ -119,14 +171,10 @@ class CommunicationPackageRepository extends ServiceEntityRepository
     }
 
     /**
-     * Paquete de una promoción V2 aún no vigente, para
-     * CommunicationSaleService::processReserve() (Fase 5) — equivalente V2
-     * de CommunicationPromotionsRepository::getFuturePromotionById(), que
-     * solo cubre CommunicationClientPackage (V1) vía
-     * CommunicationPromotions::$products, un ManyToMany que nunca incluye
-     * CommunicationPackage (aquí la relación es el ManyToOne directo
-     * CommunicationPackage::$promotion). Mismo criterio "futuro":
-     * promo.startAt > $now.
+     * Paquete de una promoción aún no vigente, para
+     * CommunicationSaleService::processReserve() — la relación es el
+     * ManyToOne directo CommunicationPackage::$promotion. Criterio
+     * "futuro": promo.startAt > $now.
      */
     public function findFutureForReserve(int $packageId, int $promotionId, ?\DateTimeImmutable $now = null): ?CommunicationPackage
     {

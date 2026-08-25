@@ -11,7 +11,11 @@ use App\Enums\NotificationAudienceEnum;
 use App\Enums\NotificationLevelEnum;
 use App\Enums\NotificationTypeEnum;
 use App\Message\PromotionCreatedMessage;
+use App\Repository\CommunicationPackageRepository;
 use App\Service\NotificationCenterService;
+use App\Service\Pricing\PackageCatalogResolver;
+use App\Service\Pricing\PackageOfferSourceEnum;
+use App\Service\Pricing\TargetAccountResolver;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bridge\Twig\Mime\TemplatedEmail;
 use Symfony\Component\DependencyInjection\ParameterBag\ParameterBagInterface;
@@ -28,6 +32,9 @@ class PromotionCreatedMessageHandler
         private readonly ParameterBagInterface $parameterBag,
         private readonly EntityManagerInterface $em,
         private readonly NotificationCenterService $notificationCenter,
+        private readonly CommunicationPackageRepository $packageRepository,
+        private readonly PackageCatalogResolver $catalogResolver,
+        private readonly TargetAccountResolver $targetAccountResolver,
     ) {}
 
     public function __invoke(PromotionCreatedMessage $message): void
@@ -57,18 +64,9 @@ class PromotionCreatedMessageHandler
             );
         }
 
-        $packages = [];
-        foreach ($promotion->getProducts() as $pkg) {
-            if ($pkg->getTenant()?->getClient()?->getId() === $message->getClientId()) {
-                $packages[] = [
-                    'name'          => $pkg->getName(),
-                    'price'         => $pkg->getPriceClientPackage()?->getPrice(),
-                    'priceCurrency' => $pkg->getPriceClientPackage()?->getPriceCurrency(),
-                    'amount'        => $pkg->getAmount(),
-                    'currency'      => $pkg->getCurrency(),
-                ];
-            }
-        }
+        $packages = $promotion->getProducts()->count() > 0
+            ? $this->packagesForV1Promotion($promotion, $message->getClientId())
+            : $this->packagesForV2Promotion($promotion, $message->getClientId());
         usort($packages, fn($a, $b) => $a['price'] <=> $b['price']);
 
         $contractWith = $message->getContractWith() ?? 'comremit';
@@ -94,5 +92,74 @@ class PromotionCreatedMessageHandler
             ]);
 
         $this->mailer->send($mail);
+    }
+
+    /**
+     * Camino V1: los paquetes de la promoción ya son copias POR TENANT
+     * (CommunicationClientPackage), así que basta con filtrar los que
+     * pertenecen a este cliente. `price`/`priceCurrency` viene del contrato
+     * congelado (si tiene); `amount`/`currency` es el snapshot crudo
+     * persistido (getAmount()/getCurrency() sin resolvedSalePrice inyectado
+     * en este contexto de background job — no hay request en curso).
+     *
+     * @return list<array{name: string, price: ?float, priceCurrency: ?string, amount: ?float, currency: ?string}>
+     */
+    private function packagesForV1Promotion(CommunicationPromotions $promotion, int $clientId): array
+    {
+        $packages = [];
+        foreach ($promotion->getProducts() as $pkg) {
+            if ($pkg->getTenant()?->getClient()?->getId() === $clientId) {
+                $packages[] = [
+                    'name'          => $pkg->getName(),
+                    'price'         => $pkg->getPriceClientPackage()?->getPrice(),
+                    'priceCurrency' => $pkg->getPriceClientPackage()?->getPriceCurrency(),
+                    'amount'        => $pkg->getAmount(),
+                    'currency'      => $pkg->getCurrency(),
+                ];
+            }
+        }
+
+        return $packages;
+    }
+
+    /**
+     * Camino V2 (Fase 2 de la deprecación de V1): el catálogo V2 es
+     * COMPARTIDO, no hay una copia por tenant que filtrar — hay que resolver
+     * la cuenta activa de este cliente en el entorno de la promoción y
+     * consultarle el precio a PackageCatalogResolver::offerFor() por cada
+     * paquete de la promoción (CommunicationPackageRepository::findByPromotion()).
+     * Sin cuenta activa para este cliente en este entorno, no hay nada que
+     * mandar (mismo resultado práctico que el filtro por tenant del camino
+     * V1: lista vacía). `amount`/`currency` es directo del paquete
+     * (destinationAmount/destinationCurrency — no depende de resolver
+     * oferta), igual de "snapshot crudo" que el camino V1.
+     *
+     * @return list<array{name: string, price: ?float, priceCurrency: ?string, amount: ?float, currency: ?string}>
+     */
+    private function packagesForV2Promotion(CommunicationPromotions $promotion, int $clientId): array
+    {
+        $environment = $promotion->getEnvironment();
+        $account = $environment !== null
+            ? $this->targetAccountResolver->resolveOne($environment, $clientId)
+            : null;
+        if ($account === null) {
+            return [];
+        }
+
+        $packages = [];
+        foreach ($this->packageRepository->findByPromotion($promotion) as $pkg) {
+            $offer = $this->catalogResolver->offerFor($pkg, $account);
+            $offerVisible = $offer !== null && $offer->source !== PackageOfferSourceEnum::UNAVAILABLE;
+
+            $packages[] = [
+                'name'          => $pkg->getName(),
+                'price'         => $offerVisible ? $offer->price : null,
+                'priceCurrency' => $offerVisible ? $offer->currency : null,
+                'amount'        => $pkg->getDestinationAmount(),
+                'currency'      => $pkg->getDestinationCurrency(),
+            ];
+        }
+
+        return $packages;
     }
 }

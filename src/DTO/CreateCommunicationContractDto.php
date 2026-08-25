@@ -2,7 +2,9 @@
 
 namespace App\DTO;
 
+use App\OpenApi\Attribute\OAProperty;
 use Symfony\Component\Validator\Constraints as Assert;
+use Symfony\Component\Validator\Context\ExecutionContextInterface;
 
 /**
  * Alta de UN CommunicationContract (V2) — CommunicationContractService::createSingle().
@@ -16,6 +18,13 @@ use Symfony\Component\Validator\Constraints as Assert;
  * resuelve a la cuenta ACTIVA de ese cliente en `environmentId` vía
  * TargetAccountResolver, igual que el alta en lote. `environmentId` es
  * obligatorio cuando se da `tenantId`.
+ *
+ * `service` (Fase 3 del rediseño de contratos por categoría) es
+ * obligatorio y debe coincidir con la categoría real de
+ * `communicationPackageId` — CommunicationContractService lo valida contra
+ * el paquete elegido (422 si no coincide). Exigirlo explícito, en vez de
+ * derivarlo en silencio del paquete, es una decisión deliberada: atrapa el
+ * caso de elegir el paquete equivocado en vez de propagarlo en silencio.
  */
 class CreateCommunicationContractDto implements IInput
 {
@@ -41,6 +50,18 @@ class CreateCommunicationContractDto implements IInput
 
     protected ?string $endAt;
 
+    #[Assert\NotNull]
+    #[OAProperty(schema: [
+        'type' => 'object',
+        'properties' => [
+            'name'       => ['type' => 'string', 'enum' => ['Mobile', 'uSIM', 'Devices', 'Utilities']],
+            'subservice' => ['type' => 'object', 'properties' => [
+                'name' => ['type' => 'string', 'enum' => ['AIRTIME', 'BUNDLE', 'DATA', 'SMS', 'INTERNET', 'LANDLINE', 'uSIM']],
+            ]],
+        ],
+    ])]
+    protected ?array $service;
+
     public function __construct(
         ?int $communicationPackageId = null,
         ?int $tenantId = null,
@@ -49,6 +70,7 @@ class CreateCommunicationContractDto implements IInput
         ?string $currency = null,
         ?string $startAt = null,
         ?string $endAt = null,
+        ?array $service = null,
     ) {
         $this->communicationPackageId = $communicationPackageId;
         $this->tenantId = $tenantId;
@@ -57,6 +79,15 @@ class CreateCommunicationContractDto implements IInput
         $this->currency = $currency;
         $this->startAt = $startAt;
         $this->endAt = $endAt;
+        $this->service = $service;
+    }
+
+    #[Assert\Callback]
+    public function validateService(ExecutionContextInterface $context): void
+    {
+        if (empty($this->service['name'] ?? null)) {
+            $context->buildViolation('service.name es requerido')->atPath('service')->addViolation();
+        }
     }
 
     public function getCommunicationPackageId(): ?int { return $this->communicationPackageId; }
@@ -79,4 +110,7 @@ class CreateCommunicationContractDto implements IInput
 
     public function getEndAt(): ?string { return $this->endAt; }
     public function setEndAt(?string $v): void { $this->endAt = $v; }
+
+    public function getService(): ?array { return $this->service; }
+    public function setService(?array $v): void { $this->service = $v; }
 }

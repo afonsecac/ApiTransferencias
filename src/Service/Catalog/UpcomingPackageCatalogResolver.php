@@ -23,6 +23,13 @@ use App\Service\Pricing\ResolvedPackageOffer;
  * CommunicationPackage::getContracts() en un servicio exclusivo del
  * preview, sin tocar la precedencia de PackageCatalogResolver::catalogFor()/
  * offerFor().
+ *
+ * Segundo consumidor de la regla "todo o nada" de contratos (encontrado en
+ * la revisión de la Fase 2, no en el diseño original) — respeta el MISMO
+ * kill switch que PackageCatalogResolver (ContractGatingScopeResolver): con
+ * el flag apagado (default), el gateo sigue siendo por tenant completo,
+ * sin cambios; con el flag encendido, se evalúa por categoría (ver
+ * isGatedAway()).
  */
 class UpcomingPackageCatalogResolver
 {
@@ -30,6 +37,7 @@ class UpcomingPackageCatalogResolver
         private readonly CommunicationPackageRepository $packageRepository,
         private readonly CommunicationContractRepository $contractRepository,
         private readonly BenefitOperationResolver $benefitResolver,
+        private readonly ContractGatingScopeResolver $gatingScopeResolver,
     ) {
     }
 
@@ -41,16 +49,18 @@ class UpcomingPackageCatalogResolver
         $now ??= new \DateTimeImmutable();
 
         $ownActiveContracts = $this->contractRepository->findActiveForTenant($tenant, $now);
+        $categoryScoped = $this->gatingScopeResolver->isCategoryScoped($tenant);
 
         $packages = [];
         foreach ($this->packageRepository->findUpcoming($now) as $package) {
             // Fuga de prioridad de tenant: si la cuenta ya tiene contrato(s)
-            // propio(s) vigente(s) y ninguno cubre este paquete, cuando la
-            // promoción arranque su contrato "por defecto" NO le va a ganar
-            // al contrato propio (ver PackageCatalogResolver::catalogFor())
-            // — no tiene sentido mostrar un preview de algo que después no
-            // le va a aparecer.
-            if ($ownActiveContracts !== [] && !$this->coveredByAnyContract($package, $ownActiveContracts)) {
+            // propio(s) vigente(s) (de la categoría del paquete, cuando el
+            // flag está en "category") y ninguno cubre este paquete, cuando
+            // la promoción arranque su contrato "por defecto" NO le va a
+            // ganar al contrato propio (ver PackageCatalogResolver::
+            // catalogFor()) — no tiene sentido mostrar un preview de algo
+            // que después no le va a aparecer.
+            if ($this->isGatedAway($package, $ownActiveContracts, $categoryScoped)) {
                 continue;
             }
 
@@ -75,6 +85,41 @@ class UpcomingPackageCatalogResolver
         }
 
         return $packages;
+    }
+
+    /**
+     * Flag apagado (alcance tenant, default): gateado si el tenant tiene
+     * CUALQUIER contrato propio vigente y ninguno cubre este paquete —
+     * comportamiento histórico, sin cambios.
+     *
+     * Flag encendido (alcance category): gateado solo si el tenant tiene
+     * contrato propio vigente EN LA CATEGORÍA de este paquete y ninguno de
+     * esos lo cubre. Sin contrato propio en esta categoría (aunque tenga en
+     * otras) → no gateado, cae al contrato "por defecto" o queda sin
+     * preview, igual que si el tenant no tuviera contrato en absoluto.
+     *
+     * @param list<CommunicationContract> $ownActiveContracts
+     */
+    private function isGatedAway(CommunicationPackage $package, array $ownActiveContracts, bool $categoryScoped): bool
+    {
+        if ($ownActiveContracts === []) {
+            return false;
+        }
+
+        if (!$categoryScoped) {
+            return !$this->coveredByAnyContract($package, $ownActiveContracts);
+        }
+
+        $categoryContracts = array_values(array_filter(
+            $ownActiveContracts,
+            static fn (CommunicationContract $c) => $c->getServiceKey() === $package->getServiceKey(),
+        ));
+
+        if ($categoryContracts === []) {
+            return false;
+        }
+
+        return !$this->coveredByAnyContract($package, $categoryContracts);
     }
 
     /**

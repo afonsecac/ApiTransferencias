@@ -35,10 +35,9 @@ use Symfony\Component\Security\Http\Attribute\IsGranted;
 
 /**
  * Administración del catálogo agnóstico de proveedor (V2) —
- * App\Entity\CommunicationPackage. No confundir con /client/packages (V1,
- * CommunicationClientPackage): este catálogo es único y global, sin tenant
- * propio; la visibilidad/precio por cliente se decide vía /catalog/contracts
- * y PackageCatalogResolver.
+ * App\Entity\CommunicationPackage: único y global, sin tenant propio; la
+ * visibilidad/precio por cliente se decide vía /catalog/contracts y
+ * PackageCatalogResolver.
  */
 #[IsGranted('ROLE_ADMIN')]
 class DashboardCommunicationPackagesController extends AbstractController

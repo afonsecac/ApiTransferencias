@@ -2,7 +2,6 @@
 
 namespace App\Service;
 
-use App\DTO\CreateAdminPromotionDto;
 use App\DTO\CreateCommunicationPackageBatchDto;
 use App\DTO\CreatePromotionV2Dto;
 use App\DTO\UpdatePromotionDto;
@@ -368,43 +367,6 @@ class CommunicationPromotionService extends CommonService
     /**
      * @throws MyCurrentException
      */
-    public function createFromDto(CreateAdminPromotionDto $dto): CommunicationPromotions
-    {
-        $product = $this->em->getRepository(CommunicationProduct::class)->find($dto->getProductId());
-        if ($product === null) {
-            throw new MyCurrentException('PRODUCT_NOT_FOUND', 'Product not found', 404);
-        }
-
-        $promotion = new CommunicationPromotions();
-        $promotion->setName($dto->getName());
-        $promotion->setDescription($dto->getDescription());
-        $promotion->setProduct($product);
-        $promotion->setEnvironment($product->getEnvironment());
-        $promotion->setStartAt(new \DateTimeImmutable($dto->getStartAt()));
-        $promotion->setEndAt(new \DateTimeImmutable($dto->getEndAt()));
-        $promotion->setTerms($dto->getTerms() ?? []);
-        $promotion->setValidityInfo($dto->getValidity() ?? []);
-
-        if ($dto->getInfoDescription() !== null) {
-            $promotion->setInfoDescription($dto->getInfoDescription());
-        }
-        if ($dto->getKnowMore() !== null) {
-            $promotion->setKnowMore($dto->getKnowMore());
-        }
-
-        foreach ($dto->getProducts() ?? [] as $item) {
-            $package = $this->em->getRepository(CommunicationClientPackage::class)->find($item['productId'] ?? 0);
-            if ($package !== null) {
-                $promotion->addProduct($package);
-            }
-        }
-
-        $this->em->persist($promotion);
-        $this->em->flush();
-
-        return $promotion;
-    }
-
     /**
      * Alta de promoción V2 (Fase 5B, catálogo compartido) — genera un
      * CommunicationPackage por cada monto de [amountFrom, amountTo] (paso

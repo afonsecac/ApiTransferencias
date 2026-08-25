@@ -12,9 +12,8 @@ use App\Service\Pricing\PackageOfferSourceEnum;
 /**
  * Criterio de "¿este CommunicationPackage (V2) es visible para este tenant
  * ahora mismo?" — extraído de CommunicationPackageCatalogItemProvider para
- * poder reutilizarlo también desde CommunicationClientPackageItemProvider
- * (V1) cuando CatalogVersionResolver::isV2() delega en el catálogo V2 sobre
- * la URL histórica `/communication/packages/{id}`.
+ * poder reutilizarlo también desde CommunicationClientPackageItemProvider,
+ * que delega aquí sobre la URL histórica `/communication/packages/{id}`.
  *
  * Un paquete que existe pero no es visible para este tenant (fuera de su
  * contrato), sin proveedor que lo cubra (UNAVAILABLE), fuera de su propia

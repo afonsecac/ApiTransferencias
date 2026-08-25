@@ -96,21 +96,29 @@ class CommunicationContractRepository extends ServiceEntityRepository
     }
 
     /**
-     * El contrato ABIERTO (endAt IS NULL) para esta tupla — tolerancia de
-     * coma flotante igual que CommunicationPackageRepository::findByDestination()
+     * El contrato ABIERTO (endAt IS NULL) para esta tupla+categoría —
+     * tolerancia de coma flotante igual que
+     * CommunicationPackageRepository::findByDestination()
      * (DestinationKey::EPSILON). Es la clave de deduplicación de
      * CommunicationContractService::upsertContract(): dos paquetes con la
-     * misma tupla y tenant terminan en el contrato que esto devuelve.
+     * misma tupla+tenant+categoría terminan en el contrato que esto
+     * devuelve — desde la Fase 3 del rediseño por categoría, `$serviceKey`
+     * es parte de esta identidad (índice único
+     * uniq_com_contract_open_per_tenant_amount incluye service_key), así
+     * que dos paquetes que comparten tupla pero difieren en categoría
+     * producen DOS contratos distintos, no uno solo mezclado.
      */
-    public function findOpenContract(?Account $tenant, float $amount, string $currency): ?CommunicationContract
+    public function findOpenContract(?Account $tenant, float $amount, string $currency, string $serviceKey): ?CommunicationContract
     {
         $qb = $this->createQueryBuilder('c')
             ->andWhere('c.destinationAmount BETWEEN :min AND :max')
             ->andWhere('c.destinationCurrency = :currency')
+            ->andWhere('c.serviceKey = :serviceKey')
             ->andWhere('c.endAt IS NULL')
             ->setParameter('min', $amount - DestinationKey::EPSILON)
             ->setParameter('max', $amount + DestinationKey::EPSILON)
             ->setParameter('currency', strtoupper($currency))
+            ->setParameter('serviceKey', $serviceKey)
             ->setMaxResults(1);
 
         if ($tenant === null) {

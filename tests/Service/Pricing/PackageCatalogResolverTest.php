@@ -12,6 +12,7 @@ use App\Exception\MyCurrentException;
 use App\Repository\CommunicationContractRepository;
 use App\Repository\CommunicationPackageRepository;
 use App\Repository\CommunicationProductRepository;
+use App\Service\Catalog\ContractGatingScopeResolver;
 use App\Service\Pricing\PackageCatalogResolver;
 use App\Service\Pricing\PackageOfferSourceEnum;
 use App\Service\Provider\ProductPriceResolver;
@@ -29,6 +30,12 @@ use Psr\Log\LoggerInterface;
  * PRESENCIA de contratos (propios o por defecto) restringe la visibilidad
  * por completo — un paquete no cubierto por el contrato NO cae a MAX, se
  * considera no visible.
+ *
+ * Todos los tests de esta clase corren con ContractGatingScopeResolver
+ * devolviendo `false` (alcance tenant, default) salvo el bloque explícito
+ * "alcance category" al final — así el comportamiento histórico queda
+ * cubierto exactamente como antes de la Fase 2, sin tocar ningún test
+ * existente.
  */
 class PackageCatalogResolverTest extends TestCase
 {
@@ -37,6 +44,8 @@ class PackageCatalogResolverTest extends TestCase
     private CommunicationProductRepository&MockObject $productRepository;
     private ProductPriceResolver&MockObject $productPriceResolver;
     private SysConfigRepository&MockObject $sysConfigRepo;
+    private SysConfigRepository&MockObject $gatingSysConfigRepo;
+    private ContractGatingScopeResolver $gatingScopeResolver;
     private PackageCatalogResolver $resolver;
 
     protected function setUp(): void
@@ -47,14 +56,33 @@ class PackageCatalogResolverTest extends TestCase
         $this->productPriceResolver = $this->createMock(ProductPriceResolver::class);
         $this->sysConfigRepo = $this->createMock(SysConfigRepository::class);
 
+        // ContractGatingScopeResolver es `final` (no se puede mockear con
+        // createMock) — se usa una instancia real sobre un
+        // SysConfigRepository mockeado propio, controlado vía
+        // enableCategoryScope(). SIN configurar ningún stub acá a propósito
+        // (un mock sin stub devuelve null por defecto): PHPUnit usa el
+        // PRIMER stub registrado que matchea una invocación sin
+        // restricciones (no el último), así que un `willReturn(null)` de
+        // relleno acá bloquearía para siempre el `willReturnCallback` de
+        // enableCategoryScope() en los tests que lo llaman.
+        $this->gatingSysConfigRepo = $this->createMock(SysConfigRepository::class);
+        $this->gatingScopeResolver = new ContractGatingScopeResolver($this->gatingSysConfigRepo);
+
         $this->resolver = new PackageCatalogResolver(
             $this->contractRepository,
             $this->packageRepository,
             $this->productRepository,
             $this->productPriceResolver,
             $this->sysConfigRepo,
+            $this->gatingScopeResolver,
             $this->createMock(LoggerInterface::class),
         );
+    }
+
+    private function enableCategoryScope(): void
+    {
+        $this->gatingSysConfigRepo->method('findCachedValue')
+            ->willReturnCallback(fn (string $key) => $key === ContractGatingScopeResolver::SCOPE_KEY ? 'category' : null);
     }
 
     private function assignId(object $entity, int $id): void
@@ -98,6 +126,22 @@ class PackageCatalogResolverTest extends TestCase
             ->setPrice($price)
             ->setCurrency($currency);
         $this->assignId($contract, random_int(1000, 999999));
+
+        return $contract;
+    }
+
+    private function packageInCategory(int $id, string $serviceName, string $subserviceName, float $amount = 500.0, string $currency = 'CUP'): CommunicationPackage
+    {
+        $package = $this->package($id, $amount, $currency);
+        $package->setService(['name' => $serviceName, 'subservice' => ['name' => $subserviceName]]);
+
+        return $package;
+    }
+
+    private function contractInCategory(CommunicationPackage $package, float $price, string $serviceName, string $subserviceName, string $currency = 'USD'): CommunicationContract
+    {
+        $contract = $this->contract($package, $price, $currency);
+        $contract->setServiceCategory($serviceName, $subserviceName);
 
         return $contract;
     }
@@ -369,5 +413,150 @@ class PackageCatalogResolverTest extends TestCase
         $offer = $this->resolver->offerForSale($package, $account);
 
         $this->assertSame(15.0, $offer->price);
+    }
+
+    // ---- Fase 2: alcance CATEGORY (ContractGatingScopeResolver::isCategoryScoped() === true) ----
+
+    public function testCatalogForCategoryScopeFallsBackToMaxForCategoryWithNoContract(): void
+    {
+        $this->enableCategoryScope();
+
+        $account = $this->account(1, 'USD');
+        $packageA = $this->packageInCategory(10, 'Mobile', 'Airtime');
+        $contractA = $this->contractInCategory($packageA, 15.0, 'Mobile', 'Airtime');
+        $packageB = $this->packageInCategory(20, 'Utilities', 'Internet', 300.0, 'CUP');
+        $product = $this->createMock(CommunicationProduct::class);
+
+        $this->contractRepository->method('findActiveForTenant')->willReturn([$contractA]);
+        $this->contractRepository->method('findActiveDefaults')->willReturn([]);
+        $this->packageRepository->method('findActiveCatalogExcludingCategories')
+            ->with(['Mobile|Airtime'])
+            ->willReturn([$packageB]);
+        $this->productRepository->method('findMatchingDestination')->willReturn([$product]);
+        $this->productPriceResolver->method('resolve')->willReturn(new ResolvedProductPrice(8.0, 'USD', null, null, null));
+
+        $offers = $this->resolver->catalogFor($account);
+
+        $this->assertCount(2, $offers);
+        $byPackageId = [];
+        foreach ($offers as $offer) {
+            $byPackageId[$offer->package->getId()] = $offer;
+        }
+        $this->assertSame(PackageOfferSourceEnum::TENANT_CONTRACT, $byPackageId[10]->source);
+        $this->assertSame(PackageOfferSourceEnum::PRODUCT_MAX, $byPackageId[20]->source);
+        $this->assertSame(8.0, $byPackageId[20]->price);
+    }
+
+    public function testCatalogForCategoryScopeUsesDefaultContractForCategoryWithoutTenantContract(): void
+    {
+        $this->enableCategoryScope();
+
+        $account = $this->account(1);
+        $packageA = $this->packageInCategory(10, 'Mobile', 'Airtime');
+        $tenantContractA = $this->contractInCategory($packageA, 15.0, 'Mobile', 'Airtime');
+        $packageB = $this->packageInCategory(20, 'Utilities', 'Internet', 300.0, 'CUP');
+        $defaultContractB = $this->contractInCategory($packageB, 5.0, 'Utilities', 'Internet');
+
+        $this->contractRepository->method('findActiveForTenant')->willReturn([$tenantContractA]);
+        $this->contractRepository->method('findActiveDefaults')->willReturn([$defaultContractB]);
+        $this->packageRepository->method('findActiveCatalogExcludingCategories')->willReturn([]);
+
+        $offers = $this->resolver->catalogFor($account);
+
+        $this->assertCount(2, $offers);
+        $sources = array_map(fn ($o) => $o->source, $offers);
+        $this->assertContains(PackageOfferSourceEnum::TENANT_CONTRACT, $sources);
+        $this->assertContains(PackageOfferSourceEnum::DEFAULT_CONTRACT, $sources);
+    }
+
+    public function testOfferForCategoryScopeReturnsMaxOfferForPackageInUngatedCategory(): void
+    {
+        $this->enableCategoryScope();
+
+        $account = $this->account(1, 'USD');
+        $packageA = $this->packageInCategory(10, 'Mobile', 'Airtime');
+        $contractA = $this->contractInCategory($packageA, 15.0, 'Mobile', 'Airtime');
+        $packageB = $this->packageInCategory(20, 'Utilities', 'Internet', 300.0, 'CUP');
+        $product = $this->createMock(CommunicationProduct::class);
+
+        $this->contractRepository->method('findActiveForTenant')->willReturn([$contractA]);
+        $this->contractRepository->method('findActiveDefaults')->willReturn([]);
+        $this->productRepository->method('findMatchingDestination')->willReturn([$product]);
+        $this->productPriceResolver->method('resolve')->willReturn(new ResolvedProductPrice(8.0, 'USD', null, null, null));
+
+        $offer = $this->resolver->offerFor($packageB, $account);
+
+        $this->assertNotNull($offer);
+        $this->assertSame(PackageOfferSourceEnum::PRODUCT_MAX, $offer->source);
+        $this->assertSame(8.0, $offer->price);
+    }
+
+    public function testOfferForCategoryScopeReturnsNullWhenPackageInGatedCategoryNotCoveredByContract(): void
+    {
+        // No-regresión: un paquete de una categoría SÍ gateada (el tenant
+        // tiene contrato ahí) que ese contrato no cubre sigue sin caer a
+        // MAX — el alcance category no debilita la regla dentro de una
+        // categoría gateada, solo la acota a esa categoría.
+        $this->enableCategoryScope();
+
+        $account = $this->account(1);
+        $contractedPackage = $this->packageInCategory(1, 'Mobile', 'Airtime');
+        $askedPackage = $this->packageInCategory(2, 'Mobile', 'Airtime');
+        $contract = $this->contractInCategory($contractedPackage, 15.0, 'Mobile', 'Airtime');
+
+        $this->contractRepository->method('findActiveForTenant')->willReturn([$contract]);
+        $this->contractRepository->method('findActiveDefaults')->willReturn([]);
+        $this->productRepository->expects($this->never())->method('findMatchingDestination');
+
+        $this->assertNull($this->resolver->offerFor($askedPackage, $account));
+    }
+
+    public function testOfferForCategoryScopeTreatsEmptyCategoryLikeGatedTenantScope(): void
+    {
+        // Datos legacy sin service/subservice (serviceKey '|' por defecto,
+        // ver ServiceCategoryKey::of(null,null)): tenant y paquete caen en
+        // la MISMA categoría vacía, así que el comportamiento es idéntico
+        // al histórico "todo o nada" — protege los datos ya existentes.
+        $this->enableCategoryScope();
+
+        $account = $this->account(1);
+        $contractedPackage = $this->package(1);
+        $askedPackage = $this->package(2);
+        $contract = $this->contract($contractedPackage, 15.0);
+
+        $this->contractRepository->method('findActiveForTenant')->willReturn([$contract]);
+        $this->contractRepository->method('findActiveDefaults')->willReturn([]);
+        $this->productRepository->expects($this->never())->method('findMatchingDestination');
+
+        $this->assertNull($this->resolver->offerFor($askedPackage, $account));
+    }
+
+    public function testOfferForSaleRespectsTheCategoryScopeFlagJustLikeOfferFor(): void
+    {
+        // Requisito explícito del plan: offerForSale() (el guardia REAL de
+        // compra, no solo de listado) tiene que respetar el mismo flag.
+        // Delega en offerFor() para todo, así que basta con confirmar que
+        // NO lanza PACKAGE_NOT_VISIBLE_FOR_CLIENT para un paquete de una
+        // categoría sin contrato del tenant cuando el flag está en
+        // "category" — con el flag apagado (ver
+        // testOfferForSaleThrowsPackageNotVisibleWhenNotCoveredByContract),
+        // el mismo escenario SÍ lanza esa excepción.
+        $this->enableCategoryScope();
+
+        $account = $this->account(1, 'USD');
+        $contractedPackage = $this->packageInCategory(1, 'Mobile', 'Airtime');
+        $askedPackage = $this->packageInCategory(2, 'Utilities', 'Internet');
+        $contract = $this->contractInCategory($contractedPackage, 15.0, 'Mobile', 'Airtime');
+        $product = $this->createMock(CommunicationProduct::class);
+
+        $this->contractRepository->method('findActiveForTenant')->willReturn([$contract]);
+        $this->contractRepository->method('findActiveDefaults')->willReturn([]);
+        $this->productRepository->method('findMatchingDestination')->willReturn([$product]);
+        $this->productPriceResolver->method('resolve')->willReturn(new ResolvedProductPrice(8.0, 'USD', null, null, null));
+
+        $offer = $this->resolver->offerForSale($askedPackage, $account);
+
+        $this->assertSame(PackageOfferSourceEnum::PRODUCT_MAX, $offer->source);
+        $this->assertSame(8.0, $offer->price);
     }
 }

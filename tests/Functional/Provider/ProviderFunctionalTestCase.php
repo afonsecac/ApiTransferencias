@@ -6,6 +6,9 @@ use App\Entity\Account;
 use App\Entity\Client;
 use App\Entity\ClientProviderRouting;
 use App\Entity\CommunicationClientPackage;
+use App\Entity\CommunicationContract;
+use App\Entity\CommunicationPackage;
+use App\Entity\CommunicationPackageProviderProduct;
 use App\Entity\CommunicationPricePackage;
 use App\Entity\CommunicationProduct;
 use App\Entity\Environment;
@@ -162,6 +165,65 @@ abstract class ProviderFunctionalTestCase extends FunctionalTestCase
         $this->em->flush();
 
         return $clientPackage;
+    }
+
+    /**
+     * Paquete V2 (catálogo agnóstico de proveedor) + contrato "por defecto"
+     * (tenant NULL, vigente) + vínculo explícito a un producto de UN
+     * proveedor — listo para venderse vía
+     * CommunicationSaleService::admitV2()/admitV2ForReserve()
+     * (PackageCatalogResolver resuelve el precio, ProviderDispatchResolver
+     * el despacho). Reemplaza a createSellablePackage() (V1, retirada de
+     * CommunicationSaleService en la Fase 5 de la deprecación de V1) para
+     * los tests funcionales que necesitan una venta completa de punta a
+     * punta.
+     */
+    protected function createSellableV2Package(
+        Environment $environment,
+        string $provider,
+        float $price = 5.0,
+        string $currency = 'USD',
+        float $destinationAmount = 500.0,
+        string $destinationCurrency = 'CUP',
+    ): CommunicationPackage {
+        static $counter = 0;
+        $counter++;
+
+        $package = (new CommunicationPackage())
+            ->setName("Paquete V2 funcional {$counter}")
+            ->setDescription("Paquete V2 funcional {$counter}")
+            ->setDestinationAmount($destinationAmount)
+            ->setDestinationCurrency($destinationCurrency);
+        $this->em->persist($package);
+
+        $contract = (new CommunicationContract())
+            ->addPackage($package)
+            ->setDestinationAmount($destinationAmount)
+            ->setDestinationCurrency($destinationCurrency)
+            ->setPrice($price)
+            ->setCurrency($currency);
+        $this->em->persist($contract);
+
+        $product = (new CommunicationProduct())
+            ->setEnvironment($environment)
+            ->setPackageId(300000 + $counter)
+            ->setPackageType('RECHARGE')
+            ->setPrice($price)
+            ->setEnabled(true)
+            ->setDescription("Producto V2 funcional {$counter}")
+            ->setProvider($provider)
+            ->setExternalRef((string) (300000 + $counter));
+        $this->em->persist($product);
+
+        $binding = (new CommunicationPackageProviderProduct())
+            ->setCommunicationPackage($package)
+            ->setProvider($provider)
+            ->setProduct($product);
+        $this->em->persist($binding);
+
+        $this->em->flush();
+
+        return $package;
     }
 
     protected function createRouting(

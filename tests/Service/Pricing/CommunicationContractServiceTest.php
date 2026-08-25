@@ -78,6 +78,14 @@ class CommunicationContractServiceTest extends TestCase
         return $package;
     }
 
+    private function packageInCategory(int $id, string $serviceName, string $subserviceName): CommunicationPackage
+    {
+        $package = $this->package($id);
+        $package->setService(['name' => $serviceName, 'subservice' => ['name' => $subserviceName]]);
+
+        return $package;
+    }
+
     private function contract(CommunicationPackage $package): CommunicationContract
     {
         return (new CommunicationContract())
@@ -298,6 +306,121 @@ class CommunicationContractServiceTest extends TestCase
         $this->assertSame($user, $contract->getCreatedBy());
     }
 
+    // ---- Fase 3: `service` explícito, validado contra la categoría real del paquete ----
+
+    public function testCreateSingleThrowsWhenServiceDoesNotMatchThePackagesActualCategory(): void
+    {
+        $dto = new CreateCommunicationContractDto(
+            communicationPackageId: 1,
+            price: 8.0,
+            currency: 'USD',
+            service: ['name' => 'Utilities', 'subservice' => ['name' => 'INTERNET']],
+        );
+        $package = $this->packageInCategory(1, 'Mobile', 'AIRTIME');
+
+        $this->em->method('getRepository')->with(CommunicationPackage::class)
+            ->willReturn($this->repoReturning($package));
+
+        $this->em->expects($this->never())->method('persist');
+        $this->em->expects($this->never())->method('flush');
+
+        try {
+            $this->service->createSingle($dto);
+            $this->fail('Se esperaba MyCurrentException');
+        } catch (MyCurrentException $e) {
+            $this->assertSame('COMMUNICATION_CONTRACT_SERVICE_MISMATCH', $e->getCodeWork());
+        }
+    }
+
+    public function testCreateSingleSucceedsWhenServiceMatchesThePackagesActualCategory(): void
+    {
+        $dto = new CreateCommunicationContractDto(
+            communicationPackageId: 1,
+            price: 8.0,
+            currency: 'USD',
+            service: ['name' => 'Mobile', 'subservice' => ['name' => 'AIRTIME']],
+        );
+        $package = $this->packageInCategory(1, 'Mobile', 'AIRTIME');
+
+        $this->em->method('getRepository')->with(CommunicationPackage::class)
+            ->willReturn($this->repoReturning($package));
+        $this->contractRepository->method('findOpenContract')->willReturn(null);
+
+        $contract = $this->service->createSingle($dto);
+
+        $this->assertSame('Mobile', $contract->getServiceName());
+    }
+
+    public function testCreateBatchThrowsWhenServiceDoesNotMatchThePackagesActualCategory(): void
+    {
+        $dto = new CreateCommunicationContractBatchDto(
+            communicationPackageId: 1,
+            environmentId: 5,
+            price: 8.0,
+            currency: 'USD',
+            service: ['name' => 'Utilities', 'subservice' => ['name' => 'INTERNET']],
+        );
+        $package = $this->packageInCategory(1, 'Mobile', 'AIRTIME');
+
+        $this->em->method('getRepository')->with(CommunicationPackage::class)
+            ->willReturn($this->repoReturning($package));
+
+        $this->em->expects($this->never())->method('flush');
+
+        try {
+            $this->service->createBatch($dto);
+            $this->fail('Se esperaba MyCurrentException');
+        } catch (MyCurrentException $e) {
+            $this->assertSame('COMMUNICATION_CONTRACT_SERVICE_MISMATCH', $e->getCodeWork());
+        }
+    }
+
+    /**
+     * La regresión central de la Fase 3: dos paquetes que comparten tupla
+     * monto/moneda pero pertenecen a categorías DISTINTAS producen DOS
+     * contratos separados — no uno solo mezclado. upsertContract() pasa
+     * el serviceKey de cada paquete a findOpenContract(); acá se verifica
+     * que ese serviceKey efectivamente llega distinto para cada paquete.
+     */
+    public function testCreateSingleForTwoPackagesOfDifferentCategoriesButSameTupleCreatesTwoContracts(): void
+    {
+        $mobile = $this->packageInCategory(1, 'Mobile', 'AIRTIME');
+        $utilities = $this->packageInCategory(2, 'Utilities', 'INTERNET');
+
+        $packageRepo = $this->createMock(EntityRepository::class);
+        $packageRepo->method('find')->willReturnCallback(
+            static fn (int $id) => match ($id) {
+                1 => $mobile,
+                2 => $utilities,
+                default => null,
+            }
+        );
+        $this->em->method('getRepository')->with(CommunicationPackage::class)->willReturn($packageRepo);
+        $this->em->method('persist')->willReturnCallback(fn ($e) => $this->assignId($e, random_int(1000, 999999)));
+
+        // findOpenContract() nunca encuentra nada existente para NINGUNA de
+        // las dos categorías — cada una crea la suya.
+        $this->contractRepository->expects($this->exactly(2))->method('findOpenContract')
+            ->with($this->anything(), 500.0, 'CUP', $this->logicalOr('Mobile|AIRTIME', 'Utilities|INTERNET'))
+            ->willReturn(null);
+
+        $dtoMobile = new CreateCommunicationContractDto(
+            communicationPackageId: 1, price: 8.0, currency: 'USD',
+            service: ['name' => 'Mobile', 'subservice' => ['name' => 'AIRTIME']],
+        );
+        $dtoUtilities = new CreateCommunicationContractDto(
+            communicationPackageId: 2, price: 5.0, currency: 'USD',
+            service: ['name' => 'Utilities', 'subservice' => ['name' => 'INTERNET']],
+        );
+
+        $contractMobile = $this->service->createSingle($dtoMobile);
+        $contractUtilities = $this->service->createSingle($dtoUtilities);
+
+        $this->assertNotSame($contractMobile, $contractUtilities);
+        $this->assertSame('Mobile', $contractMobile->getServiceName());
+        $this->assertSame('Utilities', $contractUtilities->getServiceName());
+    }
+
     public function testCreateBatchWithEmptyClientsAppliesToAllAccountsFromTargetResolver(): void
     {
         $dto = new CreateCommunicationContractBatchDto(
@@ -382,9 +505,9 @@ class CommunicationContractServiceTest extends TestCase
         $p200 = $this->package(3);
 
         $this->packageRepository->method('findByDestination')->willReturnMap([
-            [100.0, 'CUP', $p100],
-            [150.0, 'CUP', $p150],
-            [200.0, 'CUP', $p200],
+            [100.0, 'CUP', '|', $p100],
+            [150.0, 'CUP', '|', $p150],
+            [200.0, 'CUP', '|', $p200],
         ]);
         $this->contractRepository->method('findOpenContract')->willReturn(null);
 
@@ -533,6 +656,35 @@ class CommunicationContractServiceTest extends TestCase
 
         $this->assertSame(1, $result->created);
         $this->assertSame(12.5, $persisted[0]->getPrice());
+    }
+
+    public function testCreateByRangeFiltersPackagesByTheRequestedCategory(): void
+    {
+        // A diferencia de createSingle/createBatch (donde `service` se
+        // valida contra un paquete ya elegido), acá `service` es la ÚNICA
+        // forma de decidir la categoría — se pasa como filtro directo a
+        // findByDestination().
+        $dto = new CreateCommunicationContractRangeDto(
+            fromAmount: 500.0,
+            toAmount: 500.0,
+            step: 50.0,
+            destinationCurrency: 'CUP',
+            priceFrom: 10.0,
+            priceTo: 10.0,
+            currency: 'USD',
+            service: ['name' => 'Utilities', 'subservice' => ['name' => 'INTERNET']],
+        );
+
+        $package = $this->packageInCategory(1, 'Utilities', 'INTERNET');
+        $this->packageRepository->expects($this->once())->method('findByDestination')
+            ->with(500.0, 'CUP', 'Utilities|INTERNET')
+            ->willReturn($package);
+        $this->contractRepository->method('findOpenContract')->willReturn(null);
+        $this->em->method('persist')->willReturnCallback(fn ($e) => $this->assignId($e, 1));
+
+        $result = $this->service->createByRange($dto);
+
+        $this->assertSame(1, $result->created);
     }
 
     public function testUpdateOnlyTouchesProvidedFields(): void
@@ -735,7 +887,7 @@ class CommunicationContractServiceTest extends TestCase
         $promoPackage = $this->package(1);
         $regularPackage = $this->package(2);
         $this->packageRepository->method('findByDestination')
-            ->with(500.0, 'CUP')
+            ->with(500.0, 'CUP', '|')
             ->willReturn($regularPackage);
 
         $tenantA = $this->createMock(Account::class);
@@ -776,6 +928,32 @@ class CommunicationContractServiceTest extends TestCase
 
         $this->assertSame(0, $linked);
         $this->assertCount(2, $contract->getPackages());
+    }
+
+    public function testLinkTenantContractsFiltersTheRegularEquivalentByThePromoPackagesOwnCategory(): void
+    {
+        // Fase 3: cierra la fuga donde un paquete de promoción se
+        // enganchaba al contrato de OTRA categoría que casualmente
+        // compartía tupla monto/moneda — findByDestination() se filtra por
+        // la categoría del propio paquete de promoción, sin asumir que
+        // coincide con la de "cualquier" paquete regular en esa tupla.
+        $promoPackage = $this->packageInCategory(1, 'Utilities', 'INTERNET');
+        $regularPackage = $this->packageInCategory(2, 'Utilities', 'INTERNET');
+
+        $this->packageRepository->expects($this->once())->method('findByDestination')
+            ->with(500.0, 'CUP', 'Utilities|INTERNET')
+            ->willReturn($regularPackage);
+
+        $tenant = $this->createMock(Account::class);
+        $contract = $this->contract($regularPackage)->setTenant($tenant)->setServiceCategory('Utilities', 'INTERNET');
+
+        $this->contractRepository->method('findActiveTenantContractsForPackage')->willReturn([$contract]);
+        $this->em->expects($this->once())->method('flush');
+
+        $linked = $this->service->linkTenantContractsToPromotionPackages([$promoPackage]);
+
+        $this->assertSame(1, $linked);
+        $this->assertTrue($contract->getPackages()->contains($promoPackage));
     }
 
     public function testLinkTenantContractsForPromotionDelegatesUsingThePromotionsOwnPackages(): void

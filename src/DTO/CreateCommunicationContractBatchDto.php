@@ -2,13 +2,18 @@
 
 namespace App\DTO;
 
+use App\OpenApi\Attribute\OAProperty;
 use Symfony\Component\Validator\Constraints as Assert;
+use Symfony\Component\Validator\Context\ExecutionContextInterface;
 
 /**
  * Alta en lote de CommunicationContract (V2) — mismo precio para varios
  * clientes a la vez. Reutiliza TargetAccountResolver tal cual: `clients`
  * vacío/ausente = todas las cuentas activas de `environmentId` (mismo
  * criterio que CreateRateContractDto/promociones).
+ *
+ * `service` (Fase 3) obligatorio, validado contra la categoría real de
+ * `communicationPackageId` — ver docblock de CreateCommunicationContractDto.
  */
 class CreateCommunicationContractBatchDto implements IInput
 {
@@ -35,6 +40,18 @@ class CreateCommunicationContractBatchDto implements IInput
 
     protected ?string $endAt;
 
+    #[Assert\NotNull]
+    #[OAProperty(schema: [
+        'type' => 'object',
+        'properties' => [
+            'name'       => ['type' => 'string', 'enum' => ['Mobile', 'uSIM', 'Devices', 'Utilities']],
+            'subservice' => ['type' => 'object', 'properties' => [
+                'name' => ['type' => 'string', 'enum' => ['AIRTIME', 'BUNDLE', 'DATA', 'SMS', 'INTERNET', 'LANDLINE', 'uSIM']],
+            ]],
+        ],
+    ])]
+    protected ?array $service;
+
     public function __construct(
         ?int $communicationPackageId = null,
         ?int $environmentId = null,
@@ -43,6 +60,7 @@ class CreateCommunicationContractBatchDto implements IInput
         ?string $currency = null,
         ?string $startAt = null,
         ?string $endAt = null,
+        ?array $service = null,
     ) {
         $this->communicationPackageId = $communicationPackageId;
         $this->environmentId = $environmentId;
@@ -51,6 +69,15 @@ class CreateCommunicationContractBatchDto implements IInput
         $this->currency = $currency;
         $this->startAt = $startAt;
         $this->endAt = $endAt;
+        $this->service = $service;
+    }
+
+    #[Assert\Callback]
+    public function validateService(ExecutionContextInterface $context): void
+    {
+        if (empty($this->service['name'] ?? null)) {
+            $context->buildViolation('service.name es requerido')->atPath('service')->addViolation();
+        }
     }
 
     public function getCommunicationPackageId(): ?int { return $this->communicationPackageId; }
@@ -75,4 +102,7 @@ class CreateCommunicationContractBatchDto implements IInput
 
     public function getEndAt(): ?string { return $this->endAt; }
     public function setEndAt(?string $v): void { $this->endAt = $v; }
+
+    public function getService(): ?array { return $this->service; }
+    public function setService(?array $v): void { $this->service = $v; }
 }

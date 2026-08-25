@@ -2,9 +2,6 @@
 
 namespace App\Entity;
 
-use ApiPlatform\Doctrine\Orm\Filter\DateFilter;
-use ApiPlatform\Doctrine\Orm\Filter\OrderFilter;
-use ApiPlatform\Metadata\ApiFilter;
 use ApiPlatform\Metadata\ApiProperty;
 use ApiPlatform\Metadata\ApiResource;
 use ApiPlatform\Metadata\Get;
@@ -20,6 +17,18 @@ use Doctrine\ORM\Mapping as ORM;
 use Symfony\Component\Serializer\Attribute\Groups;
 use Symfony\Component\Validator\Constraints as Assert;
 
+/**
+ * Fase 4 de la deprecación de V1: las 3 operaciones de este `#[ApiResource]`
+ * (`/communication/packages`, `/communication/packages/{id}`,
+ * `/communication/packages/upcoming`) mantienen la URI histórica por
+ * compatibilidad con la app móvil ya publicada, pero sus providers
+ * (CommunicationClientPackageProvider/ItemProvider/UpcomingPackagesProvider)
+ * ya solo devuelven CommunicationPackage (V2) — nunca leen esta tabla. El
+ * `#[ApiFilter(OrderFilter)]` sobre `priceClientPackage.amount` se retiró
+ * junto con esto: ya no hay ningún provider Doctrine estándar corriendo
+ * sobre esta clase que pudiera aplicarlo (el reemplazo V2, `orderBy[price]`,
+ * ya lo resuelve CommunicationPackageCatalogProvider a mano).
+ */
 #[ORM\Entity(repositoryClass: CommunicationClientPackageRepository::class)]
 #[ORM\HasLifecycleCallbacks]
 #[ApiResource(
@@ -50,10 +59,6 @@ use Symfony\Component\Validator\Constraints as Assert;
     security: "is_granted('ROLE_COM_API_USER')",
     paginationMaximumItemsPerPage: 100,
 )]
-#[ApiFilter(OrderFilter::class, properties: [
-    'id',
-    'priceClientPackage.amount',
-], arguments: ['orderParameterName' => 'orderBy'])]
 class CommunicationClientPackage
 {
     #[ORM\Id]
@@ -170,7 +175,7 @@ class CommunicationClientPackage
             'type' => 'array',
             'items' => [
                 'type' => 'string',
-                'enum' => ['AIRTIME', 'BUNDLE', 'DATA', 'SMS', 'INTERNET'],
+                'enum' => ['AIRTIME', 'BUNDLE', 'DATA', 'SMS', 'INTERNET', 'LANDLINE', 'UNLIMITED'],
             ],
         ]
     )]
@@ -184,14 +189,14 @@ class CommunicationClientPackage
             'properties' => [
                 'name' => [
                     'type' => 'string',
-                    'enum' => ['Mobile', 'uSIM', 'Devices'],
+                    'enum' => ['Mobile', 'uSIM', 'Devices', 'Utilities'],
                 ],
                 'subservice' => [
                     'type' => 'object',
                     'properties' => [
                         'name' => [
                             'type' => 'string',
-                            'enum' => ['AIRTIME', 'BUNDLE', 'DATA', 'SMS', 'INTERNET', 'uSIM'],
+                            'enum' => ['AIRTIME', 'BUNDLE', 'DATA', 'SMS', 'INTERNET', 'LANDLINE', 'uSIM'],
                         ],
                     ],
                 ],

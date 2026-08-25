@@ -5,9 +5,7 @@ namespace App\Tests\Service;
 use App\DTO\AccountBalanceDto;
 use App\Entity\Account;
 use App\Entity\Client;
-use App\Entity\CommunicationClientPackage;
 use App\Entity\CommunicationPackage;
-use App\Entity\CommunicationProduct;
 use App\Entity\CommunicationSaleRecharge;
 use App\Entity\Environment;
 use App\Enums\CommunicationStateEnum;
@@ -19,19 +17,16 @@ use App\Provider\ProviderDispatchResolver;
 use App\Provider\ProviderRegistry;
 use App\Provider\ProviderResolver;
 use App\Repository\ClientProviderRoutingRepository;
-use App\Repository\CommunicationClientPackageRepository;
 use App\Repository\CommunicationSaleRechargeRepository;
 use App\Repository\EnvironmentRepository;
 use App\Repository\SysConfigRepository;
 use App\Service\BalanceService;
-use App\Service\Catalog\CatalogVersionResolver;
 use App\Service\CommunicationSaleService;
 use App\Service\ConfigureSequenceService;
 use App\Service\HistoricalSaleService;
 use App\Service\NotificationCenterService;
 use App\Service\Pricing\PackageCatalogResolver;
 use App\Service\Pricing\PackageOfferSourceEnum;
-use App\Service\Pricing\PackageSalePriceResolver;
 use App\Service\Pricing\ResolvedPackageOffer;
 use App\Service\Provider\ProviderAvailabilityService;
 use Doctrine\DBAL\Connection;
@@ -52,13 +47,12 @@ use Symfony\Component\Serializer\SerializerInterface;
 /**
  * @covers \App\Service\CommunicationSaleService::invokeRechargeCommunication
  *
- * V2 Fase 4 — el despacho asíncrono de una venta V2 (catalogPackage/
- * dispatchProduct/dispatchExternalRef ya persistidos en admit()) NUNCA debe
- * consultar CommunicationClientPackageRepository ni PackageSalePriceResolver
- * (esa es la rama legacy) — usa PackageCatalogResolver::offerFor() para el
- * recheck de saldo y el snapshot ya persistido para el producto/destino.
+ * El despacho asíncrono de una venta (catalogPackage/dispatchProduct/
+ * dispatchExternalRef ya persistidos en admitV2()) usa
+ * PackageCatalogResolver::offerFor() para el recheck de saldo y el snapshot
+ * ya persistido para el producto/destino — nunca vuelve a resolver nada.
  * Mismo escenario real de CommunicationSaleServiceCsqCompletedDispatchTest
- * (CSQ síncrono, payload real capturado en vivo) pero con una venta V2.
+ * (CSQ síncrono, payload real capturado en vivo).
  */
 class CommunicationSaleServiceV2AsyncDispatchTest extends TestCase
 {
@@ -98,10 +92,6 @@ class CommunicationSaleServiceV2AsyncDispatchTest extends TestCase
         $this->availabilityService = $this->createMock(ProviderAvailabilityService::class);
         $configureSequence = $this->createMock(ConfigureSequenceService::class);
 
-        // La rama V2 nunca debe llamar a esto — ver testNeverTouchesLegacyPricingOrRepository.
-        $salePriceResolver = $this->createMock(PackageSalePriceResolver::class);
-        $salePriceResolver->expects($this->never())->method('resolve');
-
         $this->packageCatalogResolver = $this->createMock(PackageCatalogResolver::class);
         $dispatchResolver = $this->createMock(ProviderDispatchResolver::class);
 
@@ -132,8 +122,6 @@ class CommunicationSaleServiceV2AsyncDispatchTest extends TestCase
             $this->balanceService,
             $notificationCenter,
             $this->availabilityService,
-            $salePriceResolver,
-            new CatalogVersionResolver($sysConfigRepo),
             $this->packageCatalogResolver,
             $dispatchResolver,
             $this->createMock(\App\Provider\PromotionProviderDispatchResolver::class),
@@ -192,12 +180,7 @@ class CommunicationSaleServiceV2AsyncDispatchTest extends TestCase
         $environmentRepo = $this->createMock(EnvironmentRepository::class);
         $environmentRepo->method('find')->with(10)->willReturn($environment);
 
-        // La rama V2 nunca debe consultar el repo legacy.
-        $legacyPackageRepo = $this->createMock(CommunicationClientPackageRepository::class);
-        $legacyPackageRepo->expects($this->never())->method('getPackageById');
-
         $this->em->method('getRepository')->willReturnMap([
-            [CommunicationClientPackage::class, $legacyPackageRepo],
             [CommunicationSaleRecharge::class, $saleRepo],
             [Environment::class, $environmentRepo],
         ]);

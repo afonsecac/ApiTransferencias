@@ -10,6 +10,7 @@ use ApiPlatform\OpenApi\Model\Operation as OpenApiOperation;
 use ApiPlatform\OpenApi\Model\Parameter as OpenApiParameter;
 use App\Repository\CommunicationPackageRepository;
 use App\Service\Pricing\ResolvedPackageOffer;
+use App\Service\Pricing\ServiceCategoryKey;
 use App\State\CommunicationPackageCatalogItemProvider;
 use App\State\CommunicationPackageCatalogProvider;
 use Doctrine\Common\Collections\ArrayCollection;
@@ -37,13 +38,14 @@ use Symfony\Component\Serializer\Attribute\Groups;
  * visibles, no solo su precio), así que CurrentUserExtension no llega a
  * intervenir en esta operación en absoluto.
  *
- * Desde el switch por cliente (ver CatalogVersionResolver), esta misma
- * entidad también se sirve bajo `/communication/packages` (la URI histórica
- * de CommunicationClientPackage/V1) para las cuentas marcadas V2 —
- * CommunicationClientPackageProvider/ItemProvider/UpcomingPackagesProvider
- * delegan aquí cuando corresponde. El grupo `comPackage:read` se mantiene
- * deliberadamente con el mismo shape que V1 (ver getPromotions() más abajo)
- * para que ambas URLs devuelvan JSON compatible.
+ * Fase 4 de la deprecación de V1: esta misma entidad también se sirve bajo
+ * `/communication/packages` (la URI histórica de CommunicationClientPackage)
+ * — CommunicationClientPackageProvider/ItemProvider/UpcomingPackagesProvider
+ * delegan aquí SIEMPRE, sin bifurcación por CatalogVersionResolver::isV2()
+ * (todas las cuentas ya resuelven V2). El grupo `comPackage:read` se
+ * mantiene deliberadamente con el mismo shape que V1 (ver getPromotions()
+ * más abajo, y CommunicationPackageShapeParityTest) para que ambas URLs
+ * devuelvan JSON compatible — la app móvil no necesita migrar de URL.
  */
 #[ORM\Entity(repositoryClass: CommunicationPackageRepository::class)]
 #[ORM\HasLifecycleCallbacks]
@@ -186,7 +188,7 @@ class CommunicationPackage
             'type' => 'array',
             'items' => [
                 'type' => 'string',
-                'enum' => ['AIRTIME', 'BUNDLE', 'DATA', 'SMS', 'INTERNET'],
+                'enum' => ['AIRTIME', 'BUNDLE', 'DATA', 'SMS', 'INTERNET', 'LANDLINE', 'UNLIMITED'],
             ],
         ]
     )]
@@ -203,14 +205,14 @@ class CommunicationPackage
             'properties' => [
                 'name' => [
                     'type' => 'string',
-                    'enum' => ['Mobile', 'uSIM', 'Devices'],
+                    'enum' => ['Mobile', 'uSIM', 'Devices', 'Utilities'],
                 ],
                 'subservice' => [
                     'type' => 'object',
                     'properties' => [
                         'name' => [
                             'type' => 'string',
-                            'enum' => ['AIRTIME', 'BUNDLE', 'DATA', 'SMS', 'INTERNET', 'uSIM'],
+                            'enum' => ['AIRTIME', 'BUNDLE', 'DATA', 'SMS', 'INTERNET', 'LANDLINE', 'uSIM'],
                         ],
                     ],
                 ],
@@ -219,6 +221,21 @@ class CommunicationPackage
     )]
     #[Groups(['comPackage:read'])]
     private array $service = [];
+
+    /**
+     * Derivada de `$service` (nombre+subservicio) por ServiceCategoryKey —
+     * SE DERIVA EN setService(), nunca en un lifecycle callback (Doctrine ya
+     * calculó el changeset cuando corre preUpdate; ver mismo razonamiento
+     * en CommunicationContract::$serviceKey). Fase 1 del rediseño de
+     * contratos por categoría (agosto 2026) — permite filtrar/indexar por
+     * categoría en SQL sin queries JSON (sin precedente en este repo).
+     * Default `'|'`, NO `''` — debe coincidir con lo que produce
+     * `ServiceCategoryKey::of(null, null)` para un `service=[]` recién
+     * construido (el separador siempre está presente); un default `''`
+     * aquí divergería de la clave real que setService() derivaría.
+     */
+    #[ORM\Column(length: 191)]
+    private string $serviceKey = '|';
 
     /**
      * @var array{quantity?: int, unit?: string}|null
@@ -318,7 +335,10 @@ class CommunicationPackage
     {
         $this->benefits = [];
         $this->tags = [];
-        $this->service = [];
+        // Vía setService(), no asignación directa — es el único punto que
+        // deriva $serviceKey; el default de la propiedad ('|') es un
+        // resguardo, no la fuente de verdad.
+        $this->setService([]);
         $this->activeStartAt = new \DateTimeImmutable();
         $this->contracts = new ArrayCollection();
     }
@@ -404,8 +424,14 @@ class CommunicationPackage
     public function setService(array $service): static
     {
         $this->service = $service;
+        $this->serviceKey = ServiceCategoryKey::fromService($service);
 
         return $this;
+    }
+
+    public function getServiceKey(): string
+    {
+        return $this->serviceKey;
     }
 
     public function getValidity(): ?array
