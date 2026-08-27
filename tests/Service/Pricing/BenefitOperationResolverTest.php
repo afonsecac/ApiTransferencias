@@ -44,6 +44,32 @@ class BenefitOperationResolverTest extends TestCase
         $this->assertSame(3000, $benefit['amount']['promotion_bonus']);
         $this->assertSame(3600, $benefit['amount']['total_excluding_tax']);
         $this->assertSame(3600, $benefit['amount']['total_including_tax']);
+        $this->assertSame('3600 CUP', $benefit['additional_information']);
+    }
+
+    public function testAddForACreditsCurrencyBenefitAlsoUpdatesAdditionalInformationToTheResultingTotal(): void
+    {
+        $package = $this->package(600.0, 'CUP')->setBenefits([[
+            'type' => 'CREDITS', 'unit' => 'CUP', 'unit_type' => 'CURRENCY',
+            'operation' => 'ADD', 'value' => 50, 'additional_information' => '600 CUP',
+        ]]);
+
+        $benefit = $this->resolver->resolve($package)[0];
+
+        $this->assertSame('650 CUP', $benefit['additional_information']);
+    }
+
+    public function testDoesNotTouchAdditionalInformationForANonCurrencyBenefit(): void
+    {
+        $package = $this->package(600.0, 'CUP')->setBenefits([[
+            'type' => 'DATA', 'unit' => 'GB', 'unit_type' => 'DATA',
+            'operation' => 'ADD', 'value' => 20, 'additional_information' => 'Datos extra',
+        ]]);
+        $this->packageRepository->method('findByDestination')->willReturn(null);
+
+        $benefit = $this->resolver->resolve($package)[0];
+
+        $this->assertSame('Datos extra', $benefit['additional_information']);
     }
 
     public function testAddForANonCurrencyBenefitUsesTheRegularEquivalentPackagesBenefitAsBaseline(): void
