@@ -284,6 +284,27 @@ Ninguna funcionalidad backend administrable (credenciales, parámetros, catálog
 
 ---
 
+### 12. Toda funcionalidad nueva se desarrolla con TDD
+
+A partir de 2026-08-27, cualquier funcionalidad nueva (endpoint, DTO, servicio, regla de negocio) se implementa con TDD, no "código primero y test después":
+
+1. Escribir el test (unitario y/o funcional) que describe el comportamiento esperado — debe fallar (rojo) antes de tocar la implementación.
+2. Implementar lo mínimo necesario para que pase (verde).
+3. Refactorizar manteniendo los tests en verde.
+
+```bash
+# Ejemplo de ciclo con PHPUnit
+vendor/bin/phpunit --filter testNombreDelCaso tests/Service/Pricing/MiServicioTest.php   # 1. rojo
+# ... implementar ...
+vendor/bin/phpunit --filter testNombreDelCaso tests/Service/Pricing/MiServicioTest.php   # 2. verde
+```
+
+**Por qué:** un bug real (2026-08-27) mostró exactamente el costo de no hacerlo — los formularios de edición de paquetes y de promociones en `dashboard-cm` perdían u ocultaban silenciosamente campos (`operation`/`value`/`schedule` de beneficios; `clients`/`products`/`currency`/`amountFrom`/`amountTo`/`amountStep` de promociones, que `UpdatePromotionDto` nunca aceptó) porque ningún test cubría el round-trip completo (cargar → editar → guardar → volver a cargar). Escribir el test primero obliga a definir ese round-trip antes de que el código "parezca funcionar" en la UI.
+
+**Cómo aplica aquí:** ver la regla 11 arriba (tests + pantalla propia siguen siendo obligatorios para dar una funcionalidad por terminada) — TDD es *cómo* se llega a esos tests, no un requisito adicional distinto. No es retroactivo: no reescribas tests de código existente que no estás tocando solo por adoptar esta práctica.
+
+---
+
 ## Archivos de referencia
 
 | Propósito | Archivo |
