@@ -81,10 +81,32 @@ class BenefitOperationResolver
                 'total_excluding_tax' => self::normalizeNumber($totalExcludingTax),
                 'total_including_tax' => self::normalizeNumber($totalExcludingTax),
             ];
+
+            // El texto debe reflejar el resultado de la operación (ej.
+            // "sextuplica" 800 CUP → "4800 CUP"), no el destinationAmount
+            // original que dejó fijo applyCreditBenefitDefaults() al crear.
+            if (($benefit['type'] ?? null) === 'CREDITS' && $isCurrency) {
+                $benefit['additional_information'] = sprintf(
+                    '%s %s',
+                    self::formatAmount($totalExcludingTax),
+                    (string) ($benefit['unit'] ?? ''),
+                );
+            }
         }
         unset($benefit);
 
         return $benefits;
+    }
+
+    /**
+     * "1250" para montos enteros, "275.5" para fraccionarios — sin ceros de
+     * relleno (igual que CommunicationPackageAdminService::formatAmount()).
+     */
+    private static function formatAmount(float $amount): string
+    {
+        return $amount == floor($amount)
+            ? (string) (int) $amount
+            : rtrim(rtrim(number_format($amount, 2, '.', ''), '0'), '.');
     }
 
     /**
