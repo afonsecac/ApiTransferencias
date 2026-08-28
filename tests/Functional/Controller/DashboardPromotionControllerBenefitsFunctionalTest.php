@@ -191,4 +191,87 @@ class DashboardPromotionControllerBenefitsFunctionalTest extends ProviderFunctio
         $this->assertSame('ADD', $packages[0]->getBenefits()[0]['operation']);
         $this->assertSame(50, $packages[0]->getBenefits()[0]['value']);
     }
+
+    /**
+     * Mismo bug de fondo que benefits/terms: CommunicationPromotions::
+     * $validityInfo es una columna V1 (solo la lee
+     * createPackagesForPromotion()/CommunicationClientPackage::getValidity()
+     * — ninguno de los dos aplica a V2) que createV2() nunca escribe. La
+     * vigencia real de una promoción V2 vive en CommunicationPackage::
+     * $validity (idéntico shape {quantity, unit}), poblado por
+     * CreatePromotionV2Dto::$validity al crear el batch.
+     */
+    public function testShowExposesPackageValidityInsteadOfThePromotionsOwnColumnForAV2Promotion(): void
+    {
+        $environment = $this->createEnvironment();
+
+        /** @var CommunicationPromotionService $promotionService */
+        $promotionService = self::getContainer()->get(CommunicationPromotionService::class);
+        $result = $promotionService->createV2(new CreatePromotionV2Dto(
+            name: 'Con vigencia',
+            description: 'Con vigencia',
+            packageNameTemplate: 'Promo {monto}',
+            packageDescriptionTemplate: 'Promo {monto}',
+            startAt: (new \DateTimeImmutable('-1 day'))->format('c'),
+            endAt: (new \DateTimeImmutable('+5 days'))->format('c'),
+            environmentId: $environment->getId(),
+            destinationCurrency: 'CUP',
+            amountFrom: 100.0,
+            amountTo: 100.0,
+            amountStep: 1.0,
+            validity: ['quantity' => 330, 'unit' => 'DAYS'],
+        ));
+        $this->em->clear();
+
+        $response = $this->controller()->show($result->promotion->getId());
+        $data = json_decode($response->getContent(), true);
+
+        $this->assertSame(['quantity' => 330, 'unit' => 'DAYS'], $data['validityInfo']);
+    }
+
+    public function testUpdatePropagatesValidityToEveryPackageForAV2Promotion(): void
+    {
+        $environment = $this->createEnvironment();
+
+        /** @var CommunicationPromotionService $promotionService */
+        $promotionService = self::getContainer()->get(CommunicationPromotionService::class);
+        $result = $promotionService->createV2(new CreatePromotionV2Dto(
+            name: 'Cambia vigencia',
+            description: 'Cambia vigencia',
+            packageNameTemplate: 'Promo {monto}',
+            packageDescriptionTemplate: 'Promo {monto}',
+            startAt: (new \DateTimeImmutable('-1 day'))->format('c'),
+            endAt: (new \DateTimeImmutable('+5 days'))->format('c'),
+            environmentId: $environment->getId(),
+            destinationCurrency: 'CUP',
+            amountFrom: 100.0,
+            amountTo: 200.0,
+            amountStep: 100.0,
+            validity: ['quantity' => 330, 'unit' => 'DAYS'],
+        ));
+        $promotionId = $result->promotion->getId();
+        $this->em->clear();
+
+        $response = $this->controller()->update($promotionId, new UpdatePromotionDto(
+            validityInfo: ['quantity' => 15, 'unit' => 'DAYS'],
+        ));
+        $data = json_decode($response->getContent(), true);
+
+        $this->assertSame(200, $response->getStatusCode());
+        $this->assertSame(['quantity' => 15, 'unit' => 'DAYS'], $data['validityInfo']);
+
+        $this->em->clear();
+        /** @var CommunicationPackageRepository $packageRepository */
+        $packageRepository = self::getContainer()->get(CommunicationPackageRepository::class);
+        $packages = $packageRepository->createQueryBuilder('p')
+            ->andWhere('p.promotion = :promo')
+            ->setParameter('promo', $promotionId)
+            ->getQuery()
+            ->getResult();
+
+        $this->assertCount(2, $packages);
+        foreach ($packages as $package) {
+            $this->assertSame(['quantity' => 15, 'unit' => 'DAYS'], $package->getValidity());
+        }
+    }
 }
