@@ -22,6 +22,11 @@ use App\Service\Pricing\PackageOfferSourceEnum;
  * encontrado" — mismo criterio que CommunicationPackageCatalogProvider
  * aplica al listado, para no mostrar en el detalle algo que no aparece en
  * la colección.
+ *
+ * Mismo criterio para ClientServiceProviderCoverageResolver: un cliente que
+ * ya tiene routing configurado (ClientProviderRouting) solo ve paquetes de
+ * los service/subservice que tiene explícitamente cubiertos — ver docblock
+ * de esa clase.
  */
 class CatalogPackageVisibilityResolver
 {
@@ -29,6 +34,7 @@ class CatalogPackageVisibilityResolver
         private readonly PackageCatalogResolver $catalogResolver,
         private readonly CommunicationPackageProviderProductRepository $bindingRepo,
         private readonly BenefitOperationResolver $benefitResolver,
+        private readonly ClientServiceProviderCoverageResolver $coverageResolver,
     ) {
     }
 
@@ -46,6 +52,10 @@ class CatalogPackageVisibilityResolver
         }
 
         if ($this->bindingRepo->findAllForPackage($package) === []) {
+            return null;
+        }
+
+        if (!$this->coverageResolver->isCoveredFor($tenant, $package)) {
             return null;
         }
 

@@ -7,6 +7,7 @@ use App\Entity\CommunicationPackage;
 use App\Entity\CommunicationPackageProviderProduct;
 use App\Repository\CommunicationPackageProviderProductRepository;
 use App\Service\Catalog\CatalogPackageVisibilityResolver;
+use App\Service\Catalog\ClientServiceProviderCoverageResolver;
 use App\Service\Pricing\BenefitOperationResolver;
 use App\Service\Pricing\PackageCatalogResolver;
 use App\Service\Pricing\PackageOfferSourceEnum;
@@ -22,6 +23,7 @@ class CatalogPackageVisibilityResolverTest extends TestCase
     private PackageCatalogResolver&MockObject $catalogResolver;
     private CommunicationPackageProviderProductRepository&MockObject $bindingRepo;
     private BenefitOperationResolver&MockObject $benefitResolver;
+    private ClientServiceProviderCoverageResolver&MockObject $coverageResolver;
     private CatalogPackageVisibilityResolver $resolver;
 
     protected function setUp(): void
@@ -31,8 +33,10 @@ class CatalogPackageVisibilityResolverTest extends TestCase
         $this->bindingRepo->method('findAllForPackage')->willReturn([$this->createMock(CommunicationPackageProviderProduct::class)]);
         $this->benefitResolver = $this->createMock(BenefitOperationResolver::class);
         $this->benefitResolver->method('resolve')->willReturnCallback(static fn (CommunicationPackage $p) => $p->getBenefits());
+        $this->coverageResolver = $this->createMock(ClientServiceProviderCoverageResolver::class);
+        $this->coverageResolver->method('isCoveredFor')->willReturn(true);
 
-        $this->resolver = new CatalogPackageVisibilityResolver($this->catalogResolver, $this->bindingRepo, $this->benefitResolver);
+        $this->resolver = new CatalogPackageVisibilityResolver($this->catalogResolver, $this->bindingRepo, $this->benefitResolver, $this->coverageResolver);
     }
 
     private function package(): CommunicationPackage
@@ -75,7 +79,7 @@ class CatalogPackageVisibilityResolverTest extends TestCase
         );
         $this->bindingRepo = $this->createMock(CommunicationPackageProviderProductRepository::class);
         $this->bindingRepo->method('findAllForPackage')->willReturn([]);
-        $this->resolver = new CatalogPackageVisibilityResolver($this->catalogResolver, $this->bindingRepo, $this->benefitResolver);
+        $this->resolver = new CatalogPackageVisibilityResolver($this->catalogResolver, $this->bindingRepo, $this->benefitResolver, $this->coverageResolver);
 
         $this->assertNull($this->resolver->visibleFor($package, $account));
     }
@@ -89,6 +93,21 @@ class CatalogPackageVisibilityResolverTest extends TestCase
         $this->catalogResolver->expects($this->never())->method('offerFor');
 
         $this->assertNull($this->resolver->visibleFor($package, $account, $now));
+    }
+
+    public function testReturnsNullWhenPackageIsNotCoveredByAnyClientProviderRouting(): void
+    {
+        $package = $this->package();
+        $account = $this->createMock(Account::class);
+
+        $this->catalogResolver->method('offerFor')->willReturn(
+            new ResolvedPackageOffer($package, 25.69, 'USD', PackageOfferSourceEnum::PRODUCT_MAX)
+        );
+        $this->coverageResolver = $this->createMock(ClientServiceProviderCoverageResolver::class);
+        $this->coverageResolver->method('isCoveredFor')->willReturn(false);
+        $this->resolver = new CatalogPackageVisibilityResolver($this->catalogResolver, $this->bindingRepo, $this->benefitResolver, $this->coverageResolver);
+
+        $this->assertNull($this->resolver->visibleFor($package, $account));
     }
 
     public function testReturnsThePackageWhenOfferIsResolvedAndWithinWindow(): void

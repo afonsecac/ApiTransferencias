@@ -8,6 +8,7 @@ use ApiPlatform\State\ProviderInterface;
 use App\Entity\Account;
 use App\Entity\CommunicationPackage;
 use App\Repository\CommunicationPackageProviderProductRepository;
+use App\Service\Catalog\ClientServiceProviderCoverageResolver;
 use App\Service\Pricing\BenefitOperationResolver;
 use App\Service\Pricing\PackageCatalogResolver;
 use App\Service\Pricing\ResolvedPackageOffer;
@@ -34,6 +35,11 @@ use Symfony\Component\HttpFoundation\Request;
  * dashboard (preview(), coverage()) sigue usando PackageCatalogResolver sin
  * este recorte, porque ahí el admin necesita ver el paquete PARA vincularlo.
  *
+ * Mismo criterio para ClientServiceProviderCoverageResolver: un cliente que
+ * ya tiene routing configurado (ClientProviderRouting) solo ve paquetes de
+ * los service/subservice que tiene explícitamente cubiertos — ver docblock
+ * de esa clase.
+ *
  * Tampoco se muestra un paquete fuera de su propia ventana activa
  * (CommunicationPackage::isActiveAt()) — PackageCatalogResolver::
  * offersFromContracts() no filtra por esto (solo mira si el CONTRATO está
@@ -50,6 +56,7 @@ final class CommunicationPackageCatalogProvider implements ProviderInterface
         private readonly CommunicationPackageProviderProductRepository $bindingRepo,
         private readonly Security $security,
         private readonly BenefitOperationResolver $benefitResolver,
+        private readonly ClientServiceProviderCoverageResolver $coverageResolver,
     ) {
     }
 
@@ -76,7 +83,9 @@ final class CommunicationPackageCatalogProvider implements ProviderInterface
 
         $visible = array_values(array_filter(
             $packages,
-            static fn (CommunicationPackage $p) => in_array($p->getId(), $boundIds, true) && $p->isActiveAt($now)
+            fn (CommunicationPackage $p) => in_array($p->getId(), $boundIds, true)
+                && $p->isActiveAt($now)
+                && $this->coverageResolver->isCoveredFor($tenant, $p)
         ));
 
         // Resuelve `operation` (MULTIPLY/ADD/SET) en vivo contra el estado
