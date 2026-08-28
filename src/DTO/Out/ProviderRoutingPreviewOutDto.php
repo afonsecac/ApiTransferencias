@@ -25,4 +25,7 @@ final class ProviderRoutingPreviewOutDto
 
     #[OAProperty(description: 'Reservado para la Fase 3: paquetes del cliente que quedarían sin proveedor equivalente. null = no calculable todavía')]
     public ?int $affectedPackagesCount = null;
+
+    #[OAProperty(description: 'Paquetes del catálogo, hoy visibles para este cliente, que dejarían de verse si se guarda este enrutado — ver ClientCatalogVisibilityImpactResolver')]
+    public int $newlyHiddenPackagesCount = 0;
 }

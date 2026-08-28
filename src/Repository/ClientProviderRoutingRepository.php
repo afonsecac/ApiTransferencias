@@ -104,16 +104,26 @@ class ClientProviderRoutingRepository extends ServiceEntityRepository
     }
 
     /**
-     * Lista PLANA (sin distinguir environment/saleType) de las filas activas
-     * de un cliente, en orden de prioridad — lo que consultará
-     * ProviderDispatchResolver (V2 Fase 2) para probar proveedores en orden
-     * hasta que uno acepte la venta. Desempate por id ASC cuando dos filas
-     * comparten priority (p. ej. ambas en el valor DEFAULT tras el backfill
-     * de Version20260810120200), para que el orden sea determinista.
+     * Proyección ESCALAR (no entidades) de las filas activas de un cliente,
+     * en orden de prioridad — lo que consulta ProviderDispatchResolver para
+     * probar proveedores en orden hasta que uno acepte la venta. Escalar a
+     * propósito: el resultado se guarda en caché serializado, y una entidad
+     * Doctrine deserializada queda detached — leer una relación lazy
+     * (environment) sobre ella revienta con LazyInitializationException.
+     * Desempate por id ASC cuando dos filas comparten priority (p. ej.
+     * ambas en el valor DEFAULT tras el backfill de Version20260810120200),
+     * para que el orden sea determinista.
      *
-     * @return list<ClientProviderRouting>
+     * Lista PLANA a propósito (sin filtrar por environment/saleType/categoría
+     * aquí): ProviderDispatchResolver::candidateProviders() hace ese
+     * filtrado en PHP sobre este mismo resultado cacheado, para no explotar
+     * la clave de caché con una dimensión más por combinación de scope.
+     *
+     * @return list<array{id:int, provider:?string, fallbackProvider:?string,
+     *   environmentId:?int, saleType:?string, serviceName:?string,
+     *   subserviceName:?string, priority:int}>
      */
-    public function findActiveProvidersOrderedForClient(int $clientId): array
+    public function findActiveRouteScopesForClient(int $clientId): array
     {
         $key = sprintf('cpr_priority_%d', $clientId);
 
@@ -121,6 +131,16 @@ class ClientProviderRoutingRepository extends ServiceEntityRepository
             $item->tag([self::CACHE_TAG]);
 
             return $this->createQueryBuilder('cpr')
+                ->select(
+                    'cpr.id AS id',
+                    'cpr.provider AS provider',
+                    'cpr.fallbackProvider AS fallbackProvider',
+                    'IDENTITY(cpr.environment) AS environmentId',
+                    'cpr.saleType AS saleType',
+                    'cpr.serviceName AS serviceName',
+                    'cpr.subserviceName AS subserviceName',
+                    'cpr.priority AS priority',
+                )
                 ->andWhere('cpr.client = :clientId')
                 ->andWhere('cpr.isActive = :active')
                 ->setParameter('clientId', $clientId)
@@ -128,7 +148,7 @@ class ClientProviderRoutingRepository extends ServiceEntityRepository
                 ->orderBy('cpr.priority', 'ASC')
                 ->addOrderBy('cpr.id', 'ASC')
                 ->getQuery()
-                ->getResult();
+                ->getArrayResult();
         });
     }
 

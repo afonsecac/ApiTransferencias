@@ -16,6 +16,7 @@ use App\Exception\MyCurrentException;
 use App\Provider\ProviderCredentialsResolver;
 use App\Provider\ProviderResolver;
 use App\Repository\ClientProviderRoutingRepository;
+use App\Service\Pricing\ServiceCategoryKey;
 use App\Service\Provider\ClientCatalogImportService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\SecurityBundle\Security;
@@ -46,8 +47,9 @@ class ProviderRoutingAdminService
         }
 
         $environment = $this->resolveEnvironmentOrFail($dto->getEnvironmentId());
+        $serviceKey = ServiceCategoryKey::of($dto->getServiceName(), $dto->getSubserviceName());
 
-        $this->assertScopeIsFree($client->getId(), $dto->getEnvironmentId(), $dto->getSaleType());
+        $this->assertScopeIsFree($client->getId(), $dto->getEnvironmentId(), $dto->getSaleType(), $serviceKey);
         $this->assertProviderIsEnabled($dto->getProvider(), $environment?->getType());
 
         $routing = new ClientProviderRouting();
@@ -56,6 +58,7 @@ class ProviderRoutingAdminService
         $routing->setSaleType($dto->getSaleType());
         $routing->setProvider($dto->getProvider());
         $routing->setFallbackProvider($dto->getFallbackProvider());
+        $routing->setServiceCategory($dto->getServiceName(), $dto->getSubserviceName());
         $routing->setNotes($dto->getNotes());
 
         $user = $this->security->getUser();
@@ -77,7 +80,8 @@ class ProviderRoutingAdminService
     public function update(ClientProviderRouting $routing, UpdateProviderRoutingDto $dto): ClientProviderRouting
     {
         $providerChanged = $dto->getProvider() !== null && $dto->getProvider() !== $routing->getProvider();
-        $scopeTouched = $dto->getEnvironmentId() !== null || $dto->getSaleType() !== null;
+        $scopeTouched = $dto->getEnvironmentId() !== null || $dto->getSaleType() !== null
+            || $dto->getServiceName() !== null || $dto->getSubserviceName() !== null;
 
         $effectiveEnvironment = $routing->getEnvironment();
 
@@ -86,16 +90,33 @@ class ProviderRoutingAdminService
                 ? $this->resolveEnvironmentOrFail($dto->getEnvironmentId())
                 : $routing->getEnvironment();
             $saleType = $dto->getSaleType() ?? $routing->getSaleType();
+            // Convención del DTO: null = no tocar, '' = limpiar a comodín —
+            // ver docblock de UpdateProviderRoutingDto.
+            $serviceName = $dto->getServiceName() !== null
+                ? ($dto->getServiceName() === '' ? null : $dto->getServiceName())
+                : $routing->getServiceName();
+            $subserviceName = $dto->getSubserviceName() !== null
+                ? ($dto->getSubserviceName() === '' ? null : $dto->getSubserviceName())
+                : $routing->getSubserviceName();
+
+            // Limpiar serviceName a comodín sin tocar subserviceName
+            // dejaría un subservicio "huérfano" (sin servicio) — mismo
+            // requisito que exige el DTO de entrada para altas nuevas.
+            if ($serviceName === null) {
+                $subserviceName = null;
+            }
 
             $this->assertScopeIsFree(
                 $routing->getClient()->getId(),
                 $environment?->getId(),
                 $saleType,
+                ServiceCategoryKey::of($serviceName, $subserviceName),
                 excludeId: $routing->getId(),
             );
 
             $routing->setEnvironment($environment);
             $routing->setSaleType($saleType);
+            $routing->setServiceCategory($serviceName, $subserviceName);
             $effectiveEnvironment = $environment;
         }
 
@@ -149,6 +170,12 @@ class ProviderRoutingAdminService
      * en null hasta la Fase 3 (communication_product.provider aún no
      * existe, así que hoy no hay forma de saber a qué proveedor pertenece
      * cada CommunicationProduct).
+     *
+     * NO es category-aware: sigue usando ProviderResolver::resolveEffectiveFor()
+     * (admisión, no despacho), que no filtra por servicio/subservicio.
+     * Fuera de alcance de la extensión por categoría — currentEffectiveProvider
+     * puede no reflejar exactamente lo que ProviderDispatchResolver elegiría
+     * para un paquete de una categoría específica.
      */
     public function preview(int $clientId, ?int $environmentId, ?string $saleType, string $proposedProvider): ProviderRoutingPreviewOutDto
     {
@@ -188,12 +215,14 @@ class ProviderRoutingAdminService
      * la garantía final, pero validar aquí antes de intentar el flush da un
      * error 409 legible en vez de una excepción de Doctrine sin traducir.
      */
-    private function assertScopeIsFree(int $clientId, ?int $environmentId, ?string $saleType, ?int $excludeId = null): void
+    private function assertScopeIsFree(int $clientId, ?int $environmentId, ?string $saleType, string $serviceKey, ?int $excludeId = null): void
     {
         $qb = $this->em->getRepository(ClientProviderRouting::class)->createQueryBuilder('cpr')
             ->andWhere('cpr.client = :clientId')
             ->andWhere('cpr.isActive = true')
-            ->setParameter('clientId', $clientId);
+            ->andWhere('cpr.serviceKey = :serviceKey')
+            ->setParameter('clientId', $clientId)
+            ->setParameter('serviceKey', $serviceKey);
 
         $qb->andWhere($environmentId !== null ? 'cpr.environment = :environmentId' : 'cpr.environment IS NULL');
         if ($environmentId !== null) {
@@ -213,7 +242,7 @@ class ProviderRoutingAdminService
         if ($existing !== null) {
             throw new MyCurrentException(
                 'PROVIDER_ROUTING_DUPLICATE',
-                'Ya existe un enrutado activo para este cliente/entorno/tipo de venta.',
+                'Ya existe un enrutado activo para este cliente/entorno/tipo de venta/categoría.',
                 Response::HTTP_CONFLICT,
             );
         }
@@ -271,6 +300,7 @@ class ProviderRoutingAdminService
                 $routing->getClient()->getId(),
                 $routing->getEnvironment()?->getId(),
                 $routing->getSaleType(),
+                $routing->getServiceKey(),
                 excludeId: $routing->getId(),
             );
         }

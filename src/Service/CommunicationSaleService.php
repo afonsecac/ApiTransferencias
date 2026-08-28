@@ -37,6 +37,7 @@ use App\Provider\ProviderDispatchResolver;
 use App\Provider\ProviderRegistry;
 use App\Provider\ProviderResolver;
 use App\Provider\PromotionProviderDispatchResolver;
+use App\Service\Provider\SaleProviderFailoverService;
 use App\Provider\TransactionStatus;
 use App\Repository\BalanceOperationRepository;
 use App\Repository\EnvironmentRepository;
@@ -97,6 +98,7 @@ class CommunicationSaleService extends CommonService
         private readonly PackageCatalogResolver $packageCatalogResolver,
         private readonly ProviderDispatchResolver $dispatchResolver,
         private readonly PromotionProviderDispatchResolver $promotionDispatchResolver,
+        private readonly SaleProviderFailoverService $failoverService,
     ) {
         parent::__construct(
             $em,
@@ -523,11 +525,28 @@ class CommunicationSaleService extends CommonService
                 );
 
                 $dispatchResult = $adapter->recharge($context, $request);
-                $dispatchEnvelope = TransactionStatus::fromDispatch($dispatchResult, $provider->value, ['request' => $body]);
+                // carryRetryBlock() preserva el marcador de un failover
+                // previo (o el contador de GATEWAY_MISSING) — fromDispatch()
+                // arma un sobre nuevo desde cero y lo perdería.
+                $dispatchEnvelope = TransactionStatus::carryRetryBlock(
+                    $saleRecharge->getTransactionStatus(),
+                    TransactionStatus::fromDispatch($dispatchResult, $provider->value, ['request' => $body]),
+                );
                 $saleRecharge->setTransactionStatus($dispatchEnvelope);
                 $saleRecharge->setStateProcess(CommunicationStateEnum::PENDING->value);
 
                 if ($dispatchResult->outcome === ProviderOutcomeEnum::REJECTED) {
+                    // Rechazo determinista del proveedor (no un timeout/error
+                    // de transporte, que ya llega como UNKNOWN) — único punto
+                    // seguro para intentar el proveedor secundario, ver
+                    // SaleProviderFailoverService.
+                    if ($this->failoverService->promoteToFallback($saleRecharge, 'Provider rejected the recharge: ' . ($dispatchResult->message ?? ''))) {
+                        $this->em->flush();
+                        $this->dispatchOrDefer($saleRecharge, fn () => new SaleRechargeMessage($saleRecharge->getId()));
+
+                        return;
+                    }
+
                     $saleRecharge->setState(CommunicationStateEnum::REJECTED);
                     $this->historicalSaleService->createHistoricalCommunication(
                         $saleRecharge->getId(),
@@ -789,9 +808,23 @@ class CommunicationSaleService extends CommonService
             if ($dispatchResult->outcome === ProviderOutcomeEnum::ACCEPTED) {
                 $sale->setState(CommunicationStateEnum::PENDING);
             } elseif ($dispatchResult->outcome === ProviderOutcomeEnum::FAILED) {
+                // Rechazo determinista del proveedor (no un timeout/error de
+                // transporte, que ya llega como UNKNOWN) — único punto
+                // seguro para intentar el proveedor secundario, ver
+                // SaleProviderFailoverService.
+                if ($this->failoverService->promoteToFallback($sale, 'Provider failed the sale: ' . ($dispatchResult->message ?? ''))) {
+                    $this->em->flush();
+                    $this->dispatchOrDefer($sale, fn () => new SalePackageMessage($sale->getId()));
+
+                    return;
+                }
+
                 $sale->setState(CommunicationStateEnum::FAILED);
             }
-            $sale->setTransactionStatus(TransactionStatus::fromDispatch($dispatchResult, $provider->value));
+            $sale->setTransactionStatus(TransactionStatus::carryRetryBlock(
+                $sale->getTransactionStatus(),
+                TransactionStatus::fromDispatch($dispatchResult, $provider->value),
+            ));
             $sale->setStateProcess(CommunicationStateEnum::PENDING->value);
 
             if ($dispatchResult->outcome === ProviderOutcomeEnum::UNKNOWN) {
@@ -1078,7 +1111,10 @@ class CommunicationSaleService extends CommonService
                 return;
             }
 
-            $statusEnvelope = TransactionStatus::fromStatus($statusResult, $provider->value);
+            $statusEnvelope = TransactionStatus::carryRetryBlock(
+                $sale->getTransactionStatus(),
+                TransactionStatus::fromStatus($statusResult, $provider->value),
+            );
             $sale->setTransactionStatus($statusEnvelope);
 
             if ($statusResult->outcome === ProviderOutcomeEnum::COMPLETED) {
@@ -1108,6 +1144,19 @@ class CommunicationSaleService extends CommonService
                     $statusEnvelope
                 );
             } elseif ($statusResult->outcome === ProviderOutcomeEnum::REJECTED) {
+                // Camino habitual de ETECSA: solo devuelve ACCEPTED en el
+                // dispatch y confirma el rechazo aquí — mismo failover que
+                // el rechazo síncrono de CSQ/DTOne en invokeRechargeCommunication()/
+                // executeNewSaleInfo(), ver SaleProviderFailoverService.
+                if ($this->failoverService->promoteToFallback($sale, 'Provider confirmed rejection on status check: ' . ($statusResult->message ?? ''))) {
+                    $this->em->flush();
+                    $isRecharge
+                        ? $this->dispatchOrDefer($sale, fn () => new SaleRechargeMessage($sale->getId()))
+                        : $this->dispatchOrDefer($sale, fn () => new SalePackageMessage($sale->getId()));
+
+                    return;
+                }
+
                 $sale->setState(CommunicationStateEnum::REJECTED);
                 $sale->setStateProcess(CommunicationStateEnum::REJECTED->value);
                 if ($statusResult->recordHistory) {

@@ -8,6 +8,7 @@ use App\Entity\Account;
 use App\Entity\CommunicationPackage;
 use App\Entity\User;
 use App\Repository\CommunicationPackageProviderProductRepository;
+use App\Service\Catalog\ClientServiceProviderCoverageResolver;
 use App\Service\Pricing\BenefitOperationResolver;
 use App\Service\Pricing\PackageCatalogResolver;
 use App\Service\Pricing\PackageOfferSourceEnum;
@@ -27,6 +28,7 @@ class CommunicationPackageCatalogProviderTest extends TestCase
     private CommunicationPackageProviderProductRepository&MockObject $bindingRepo;
     private Security&MockObject $security;
     private BenefitOperationResolver&MockObject $benefitResolver;
+    private ClientServiceProviderCoverageResolver&MockObject $coverageResolver;
     private CommunicationPackageCatalogProvider $provider;
 
     protected function setUp(): void
@@ -36,8 +38,10 @@ class CommunicationPackageCatalogProviderTest extends TestCase
         $this->security = $this->createMock(Security::class);
         $this->benefitResolver = $this->createMock(BenefitOperationResolver::class);
         $this->benefitResolver->method('resolve')->willReturnCallback(static fn (CommunicationPackage $p) => $p->getBenefits());
+        $this->coverageResolver = $this->createMock(ClientServiceProviderCoverageResolver::class);
+        $this->coverageResolver->method('isCoveredFor')->willReturn(true);
 
-        $this->provider = new CommunicationPackageCatalogProvider($this->catalogResolver, $this->bindingRepo, $this->security, $this->benefitResolver);
+        $this->provider = new CommunicationPackageCatalogProvider($this->catalogResolver, $this->bindingRepo, $this->security, $this->benefitResolver, $this->coverageResolver);
     }
 
     private function packageWithId(int $id, string $name): CommunicationPackage
@@ -148,6 +152,30 @@ class CommunicationPackageCatalogProviderTest extends TestCase
         $result = $this->provider->provide(new GetCollection());
 
         $this->assertSame([$active], $result);
+    }
+
+    public function testExcludesPackagesNotCoveredByAnyClientProviderRouting(): void
+    {
+        $account = $this->createMock(Account::class);
+        $this->security->method('getUser')->willReturn($account);
+
+        $covered = $this->packageWithId(1, 'Covered');
+        $notCovered = $this->packageWithId(2, 'NotCovered');
+
+        $this->catalogResolver->method('catalogFor')->willReturn([
+            new ResolvedPackageOffer($covered, 10.0, 'USD', PackageOfferSourceEnum::PRODUCT_MAX),
+            new ResolvedPackageOffer($notCovered, 20.0, 'USD', PackageOfferSourceEnum::PRODUCT_MAX),
+        ]);
+        $this->bindingRepo->method('findPackageIdsWithBindings')->willReturn([1, 2]);
+        $this->coverageResolver = $this->createMock(ClientServiceProviderCoverageResolver::class);
+        $this->coverageResolver->method('isCoveredFor')->willReturnCallback(
+            static fn (Account $a, CommunicationPackage $p) => $p->getId() === 1
+        );
+        $this->provider = new CommunicationPackageCatalogProvider($this->catalogResolver, $this->bindingRepo, $this->security, $this->benefitResolver, $this->coverageResolver);
+
+        $result = $this->provider->provide(new GetCollection());
+
+        $this->assertSame([$covered], $result);
     }
 
     public function testWithoutRequestInContextReturnsAPlainArraySortedById(): void

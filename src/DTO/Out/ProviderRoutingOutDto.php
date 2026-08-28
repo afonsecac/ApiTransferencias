@@ -19,6 +19,12 @@ final class ProviderRoutingOutDto
     #[OAProperty(schema: ['type' => 'string', 'enum' => ['ETECSA', 'DTONE'], 'nullable' => true])]
     public ?string $fallbackProvider = null;
 
+    #[OAProperty(schema: ['type' => 'string', 'enum' => ['Mobile', 'uSIM', 'Devices', 'Utilities'], 'nullable' => true])]
+    public ?string $serviceName = null;
+
+    #[OAProperty(schema: ['type' => 'string', 'enum' => ['AIRTIME', 'BUNDLE', 'DATA', 'SMS', 'INTERNET', 'LANDLINE', 'uSIM'], 'nullable' => true])]
+    public ?string $subserviceName = null;
+
     public bool $isActive = true;
     public ?string $notes = null;
     public ?string $createdAt = null;

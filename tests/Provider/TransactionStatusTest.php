@@ -175,6 +175,85 @@ class TransactionStatusTest extends TestCase
         $this->assertSame(['count' => 1], $envelope['retry']);
     }
 
+    // ---- carryRetryBlock / failoverFromOf ----
+
+    /**
+     * fromDispatch()/fromStatus() arman un sobre nuevo desde cero — sin
+     * carryRetryBlock(), un segundo intento de despacho perdería el
+     * marcador de failover del intento anterior y el "un solo salto por
+     * venta" de SaleProviderFailoverService dejaría de cumplirse.
+     */
+    public function testCarryRetryBlockPreservesThePreviousRetryBlockWhenTheNewEnvelopeHasNone(): void
+    {
+        $previous = TransactionStatus::withRetry(
+            TransactionStatus::fromDispatch(new ProviderDispatchResult(outcome: ProviderOutcomeEnum::REJECTED), 'CSQ'),
+            ProviderOutcomeEnum::RETRYABLE,
+            'INTERNAL_PROVIDER_FAILOVER',
+            'Provider rejected',
+            ['failoverFrom' => 'CSQ', 'failoverTo' => 'DTONE'],
+        );
+
+        $new = TransactionStatus::fromDispatch(new ProviderDispatchResult(outcome: ProviderOutcomeEnum::REJECTED), 'DTONE');
+        $carried = TransactionStatus::carryRetryBlock($previous, $new);
+
+        $this->assertSame(['failoverFrom' => 'CSQ', 'failoverTo' => 'DTONE'], $carried['retry']);
+        // El resto del sobre nuevo (provider, outcome) no se toca.
+        $this->assertSame('DTONE', $carried['provider']);
+    }
+
+    public function testCarryRetryBlockDoesNotOverwriteARetryBlockAlreadyPresentInTheNewEnvelope(): void
+    {
+        $previous = TransactionStatus::withRetry(
+            TransactionStatus::fromDispatch(new ProviderDispatchResult(outcome: ProviderOutcomeEnum::REJECTED), 'CSQ'),
+            ProviderOutcomeEnum::RETRYABLE,
+            'INTERNAL_PROVIDER_FAILOVER',
+            'Provider rejected',
+            ['failoverFrom' => 'CSQ', 'failoverTo' => 'DTONE'],
+        );
+
+        $new = TransactionStatus::withRetry(
+            TransactionStatus::fromDispatch(new ProviderDispatchResult(outcome: ProviderOutcomeEnum::RETRYABLE), 'DTONE'),
+            ProviderOutcomeEnum::RETRYABLE,
+            'INTERNAL_GATEWAY_NOT_FOUND_RETRY',
+            null,
+            ['count' => 1],
+        );
+
+        $carried = TransactionStatus::carryRetryBlock($previous, $new);
+
+        $this->assertSame(['count' => 1], $carried['retry']);
+    }
+
+    public function testCarryRetryBlockIsANoOpWhenNeitherEnvelopeHasARetryBlock(): void
+    {
+        $previous = TransactionStatus::fromDispatch(new ProviderDispatchResult(outcome: ProviderOutcomeEnum::ACCEPTED), 'CSQ');
+        $new = TransactionStatus::fromDispatch(new ProviderDispatchResult(outcome: ProviderOutcomeEnum::ACCEPTED), 'CSQ');
+
+        $carried = TransactionStatus::carryRetryBlock($previous, $new);
+
+        $this->assertArrayNotHasKey('retry', $carried);
+    }
+
+    public function testFailoverFromOfReturnsNullWithoutARetryBlock(): void
+    {
+        $status = TransactionStatus::fromDispatch(new ProviderDispatchResult(outcome: ProviderOutcomeEnum::ACCEPTED), 'CSQ');
+
+        $this->assertNull(TransactionStatus::failoverFromOf($status));
+    }
+
+    public function testFailoverFromOfReadsTheMarker(): void
+    {
+        $status = TransactionStatus::withRetry(
+            TransactionStatus::fromDispatch(new ProviderDispatchResult(outcome: ProviderOutcomeEnum::REJECTED), 'CSQ'),
+            ProviderOutcomeEnum::RETRYABLE,
+            'INTERNAL_PROVIDER_FAILOVER',
+            'Provider rejected',
+            ['failoverFrom' => 'CSQ', 'failoverTo' => 'DTONE'],
+        );
+
+        $this->assertSame('CSQ', TransactionStatus::failoverFromOf($status));
+    }
+
     // ---- lectura: isV2 / rawOf / outcomeOf ----
 
     public function testIsV2IsFalseForEmptyArray(): void

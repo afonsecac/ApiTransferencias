@@ -69,12 +69,23 @@ class PromotionProviderDispatchResolverTest extends TestCase
         return $account;
     }
 
-    private function routing(string $provider): ClientProviderRouting&MockObject
+    /**
+     * @return array{id:int, provider:?string, fallbackProvider:?string,
+     *   environmentId:?int, saleType:?string, serviceName:?string,
+     *   subserviceName:?string, priority:int}
+     */
+    private function routing(string $provider): array
     {
-        $routing = $this->createMock(ClientProviderRouting::class);
-        $routing->method('getProvider')->willReturn($provider);
-
-        return $routing;
+        return [
+            'id' => 1,
+            'provider' => $provider,
+            'fallbackProvider' => null,
+            'environmentId' => null,
+            'saleType' => null,
+            'serviceName' => null,
+            'subserviceName' => null,
+            'priority' => 100,
+        ];
     }
 
     private function promotion(?CommunicationProduct $defaultProduct): CommunicationPromotions&MockObject
@@ -103,7 +114,7 @@ class PromotionProviderDispatchResolverTest extends TestCase
         $binding->method('getProduct')->willReturn($bound);
         $promotion = $this->promotion(null);
 
-        $this->routingRepo->method('findActiveProvidersOrderedForClient')->willReturn([$this->routing('CSQ')]);
+        $this->routingRepo->method('findActiveRouteScopesForClient')->willReturn([$this->routing('CSQ')]);
         $this->availabilityService->method('canDispatchTo')->willReturn(true);
         $this->promotionBindingRepo = $this->createMock(CommunicationPromotionProviderProductRepository::class);
         $this->promotionBindingRepo->method('findForPromotionAndProvider')
@@ -130,7 +141,7 @@ class PromotionProviderDispatchResolverTest extends TestCase
         $default = $this->product('ETECSA', 'ref-default');
         $promotion = $this->promotion($default);
 
-        $this->routingRepo->method('findActiveProvidersOrderedForClient')->willReturn([$this->routing('ETECSA')]);
+        $this->routingRepo->method('findActiveRouteScopesForClient')->willReturn([$this->routing('ETECSA')]);
         $this->availabilityService->method('canDispatchTo')->willReturn(true);
 
         $selected = $this->resolver->select($account, $promotion);
@@ -147,7 +158,7 @@ class PromotionProviderDispatchResolverTest extends TestCase
 
         // El único candidato es CSQ, pero el producto "de origen" es de
         // ETECSA — sin vínculo explícito, CSQ no tiene nada que ofrecer.
-        $this->routingRepo->method('findActiveProvidersOrderedForClient')->willReturn([$this->routing('CSQ')]);
+        $this->routingRepo->method('findActiveRouteScopesForClient')->willReturn([$this->routing('CSQ')]);
         $this->availabilityService->method('canDispatchTo')->willReturn(true);
 
         $this->expectException(MyCurrentException::class);
@@ -163,7 +174,7 @@ class PromotionProviderDispatchResolverTest extends TestCase
         $binding->method('getProduct')->willReturn($bound);
         $promotion = $this->promotion(null);
 
-        $this->routingRepo->method('findActiveProvidersOrderedForClient')
+        $this->routingRepo->method('findActiveRouteScopesForClient')
             ->willReturn([$this->routing('CSQ'), $this->routing('DTONE')]);
         $this->availabilityService->method('canDispatchTo')
             ->willReturnCallback(fn ($provider) => $provider !== 'CSQ');
@@ -190,7 +201,7 @@ class PromotionProviderDispatchResolverTest extends TestCase
         $binding->method('getProduct')->willReturn($bound);
         $promotion = $this->promotion(null);
 
-        $this->routingRepo->method('findActiveProvidersOrderedForClient')
+        $this->routingRepo->method('findActiveRouteScopesForClient')
             ->willReturn([$this->routing('CSQ'), $this->routing('DTONE')]);
         $this->availabilityService->method('canDispatchTo')->willReturn(true);
         $this->promotionBindingRepo = $this->createMock(CommunicationPromotionProviderProductRepository::class);
@@ -216,7 +227,7 @@ class PromotionProviderDispatchResolverTest extends TestCase
         $binding->method('getProduct')->willReturn($bound);
         $promotion = $this->promotion(null);
 
-        $this->routingRepo->method('findActiveProvidersOrderedForClient')->willReturn([$this->routing('CSQ')]);
+        $this->routingRepo->method('findActiveRouteScopesForClient')->willReturn([$this->routing('CSQ')]);
         $this->availabilityService->method('canDispatchTo')->willReturn(true);
         $this->promotionBindingRepo = $this->createMock(CommunicationPromotionProviderProductRepository::class);
         $this->promotionBindingRepo->method('findForPromotionAndProvider')->willReturn($binding);
@@ -237,7 +248,7 @@ class PromotionProviderDispatchResolverTest extends TestCase
         $account = $this->account(1);
         $promotion = $this->promotion(null);
 
-        $this->routingRepo->method('findActiveProvidersOrderedForClient')->willReturn([$this->routing('CSQ')]);
+        $this->routingRepo->method('findActiveRouteScopesForClient')->willReturn([$this->routing('CSQ')]);
         $this->availabilityService->method('canDispatchTo')->willReturn(false);
 
         try {
@@ -265,7 +276,7 @@ class PromotionProviderDispatchResolverTest extends TestCase
             $this->sysConfigRepo,
         );
 
-        $this->routingRepo->expects($this->never())->method('findActiveProvidersOrderedForClient');
+        $this->routingRepo->expects($this->never())->method('findActiveRouteScopesForClient');
         $this->availabilityService->method('canDispatchTo')->willReturn(true);
 
         $selected = $this->resolver->select($account, $promotion);

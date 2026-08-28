@@ -23,6 +23,7 @@ use App\Provider\ProviderResolver;
 use App\Repository\ClientProviderRoutingRepository;
 use App\Repository\CurrencyExchangeRateRepository;
 use App\Repository\SysConfigRepository;
+use App\Service\Catalog\ClientCatalogVisibilityImpactResolver;
 use App\Service\Provider\CurrencyExchangeRateSyncService;
 use App\Service\Provider\ProviderAvailabilityService;
 use App\Service\Provider\ProviderConnectionTestService;
@@ -67,6 +68,7 @@ class DashboardProviderRoutingController extends AbstractController
         private readonly ProviderConnectionTestService $connectionTestService,
         private readonly ProviderAvailabilityService $availabilityService,
         private readonly ProviderCredentialsResolver $credentialsResolver,
+        private readonly ClientCatalogVisibilityImpactResolver $catalogImpactResolver,
     ) {
     }
 
@@ -292,6 +294,12 @@ class DashboardProviderRoutingController extends AbstractController
         $environmentId = $request->query->has('environmentId') ? (int) $request->query->get('environmentId') : null;
         $saleType = $request->query->get('saleType');
         $provider = (string) $request->query->get('provider');
+        $serviceName = $request->query->get('serviceName') ?: null;
+        $subserviceName = $request->query->get('subserviceName') ?: null;
+        $routingId = $request->query->has('routingId') ? (int) $request->query->get('routingId') : null;
+        $isActive = $request->query->has('isActive')
+            ? filter_var($request->query->get('isActive'), FILTER_VALIDATE_BOOLEAN)
+            : true;
 
         if ($clientId <= 0 || $provider === '') {
             return $this->json(['error' => ['message' => 'clientId y provider son obligatorios']], Response::HTTP_BAD_REQUEST);
@@ -305,6 +313,14 @@ class DashboardProviderRoutingController extends AbstractController
 
         $preview->proposedProviderUnregistered = CommunicationProviderEnum::tryFrom($provider) === null
             || !$this->providerRegistry->has(CommunicationProviderEnum::from($provider));
+
+        $preview->newlyHiddenPackagesCount = $this->catalogImpactResolver->countNewlyHiddenPackages(
+            $clientId,
+            $routingId,
+            $serviceName,
+            $subserviceName,
+            $isActive,
+        );
 
         return $this->json((array) $preview);
     }
@@ -409,6 +425,8 @@ class DashboardProviderRoutingController extends AbstractController
             'saleType'         => $routing->getSaleType(),
             'provider'         => $routing->getProvider(),
             'fallbackProvider' => $routing->getFallbackProvider(),
+            'serviceName'      => $routing->getServiceName(),
+            'subserviceName'   => $routing->getSubserviceName(),
             'isActive'         => $routing->isActive(),
             'notes'            => $routing->getNotes(),
             'createdAt'        => $routing->getCreatedAt()?->format('c'),

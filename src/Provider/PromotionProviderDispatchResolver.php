@@ -80,14 +80,19 @@ class PromotionProviderDispatchResolver
             return [$this->defaultProvider()];
         }
 
-        $rows = $this->routingRepo->findActiveProvidersOrderedForClient($client->getId());
+        // findActiveRouteScopesForClient() devuelve una proyección escalar
+        // (ver su docblock) — este resolver, a diferencia de
+        // ProviderDispatchResolver, NO filtra por scope ni expande
+        // fallbackProvider: las promociones no tienen categoría
+        // servicio/subservicio propia, fuera de alcance de esta extensión.
+        $rows = $this->routingRepo->findActiveRouteScopesForClient($client->getId());
         if ($rows === []) {
             return [$this->defaultProvider()];
         }
 
         $providers = [];
         foreach ($rows as $row) {
-            $provider = CommunicationProviderEnum::tryFrom($row->getProvider() ?? '');
+            $provider = CommunicationProviderEnum::tryFrom($row['provider'] ?? '');
             if ($provider !== null) {
                 $providers[] = $provider;
             }
