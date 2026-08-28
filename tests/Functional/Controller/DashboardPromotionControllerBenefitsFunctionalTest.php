@@ -79,6 +79,12 @@ class DashboardPromotionControllerBenefitsFunctionalTest extends ProviderFunctio
 
         $this->assertSame('MULTIPLY', $data['benefits'][0]['operation']);
         $this->assertSame(6, $data['benefits'][0]['value']);
+        // Symfony serializa isV2() como "v2" por convención (strip "is" +
+        // lowercase primera letra) salvo que se fuerce el nombre — el
+        // frontend depende de la clave EXACTA "isV2" (promotion-list y
+        // promotion-form la leen así) para decidir qué UI mostrar.
+        $this->assertArrayHasKey('isV2', $data, 'isV2 debe serializarse bajo esa clave exacta, no "v2"');
+        $this->assertTrue($data['isV2']);
     }
 
     public function testUpdatePropagatesNewBenefitsToEveryPackageAndRecalculatesEachOwnAmount(): void

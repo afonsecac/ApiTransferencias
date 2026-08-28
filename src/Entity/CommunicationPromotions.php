@@ -260,8 +260,19 @@ class CommunicationPromotions
      * ver createV2()). false = legacy (V1). Expuesto en el listado para
      * que el dashboard sepa qué acciones mostrar (bindings legacy vs.
      * equivalencias V2).
+     *
+     * Sin #[SerializedName], Symfony serializa un getter `isV2()` como
+     * "v2" (le quita el prefijo "is" y baja la primera letra de lo que
+     * queda) — el frontend siempre leía `promo.isV2` (undefined, nunca
+     * "v2"), así que tanto el badge de bindings/equivalencias del listado
+     * como la pestaña Beneficios/Condiciones del formulario de edición
+     * quedaban permanentemente en su rama V1, sin importar si la
+     * promoción era V2 de verdad. Bug real detectado en producción
+     * 2026-08-28 (ver DashboardPromotionControllerBenefitsFunctionalTest
+     * ::testShowExposesTheBenefitsOfALinkedPackageForAV2Promotion).
      */
     #[Groups(['comProm:read', 'promotion:list', 'promotion:detail'])]
+    #[SerializedName('isV2')]
     public function isV2(): bool
     {
         return $this->product === null;
