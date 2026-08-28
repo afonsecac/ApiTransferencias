@@ -335,6 +335,13 @@ class CommunicationPromotionService extends CommonService
         }
         if ($dto->getValidityInfo() !== null) {
             $promotion->setValidityInfo($dto->getValidityInfo());
+            // Para V2 la vigencia real vive en los CommunicationPackage
+            // generados, no en esta columna (ver getPackageValidity()) —
+            // se sigue guardando arriba por compatibilidad/auditoría, pero
+            // lo que el dashboard realmente lee es lo que se propaga acá.
+            if ($promotion->isV2()) {
+                $this->updatePackageValidity($promotion, $dto->getValidityInfo());
+            }
         }
         if ($dto->getStartAt() !== null) {
             try {
@@ -427,6 +434,40 @@ class CommunicationPromotionService extends CommonService
         $packages = $this->packageRepository->findByPromotion($promotion);
         foreach ($packages as $package) {
             $this->packageAdminService->update($package, new UpdateCommunicationPackageDto(benefits: $benefits));
+        }
+
+        return count($packages);
+    }
+
+    /**
+     * Vigencia "plantilla" de una promoción V2 — igual que getPackageBenefits(),
+     * mismo bug de fondo: CommunicationPromotions::$validityInfo es una
+     * columna V1 (solo la lee createPackagesForPromotion()/
+     * CommunicationClientPackage::getValidity(), ninguno aplica a V2) que
+     * createV2() nunca escribe — la vigencia real vive en
+     * CommunicationPackage::$validity (mismo shape {quantity, unit}).
+     */
+    public function getPackageValidity(CommunicationPromotions $promotion): ?array
+    {
+        $package = $this->packageRepository->findByPromotion($promotion)[0] ?? null;
+
+        return $package?->getValidity();
+    }
+
+    /**
+     * Propaga {quantity, unit} a TODOS los CommunicationPackage vinculados a
+     * esta promoción — a diferencia de los beneficios, la vigencia no
+     * depende del destinationAmount de cada paquete, así que se copia tal
+     * cual (mismo criterio que CreatePromotionV2Dto::$validity al crear el
+     * batch original).
+     *
+     * @return int cantidad de paquetes actualizados
+     */
+    public function updatePackageValidity(CommunicationPromotions $promotion, ?array $validity): int
+    {
+        $packages = $this->packageRepository->findByPromotion($promotion);
+        foreach ($packages as $package) {
+            $this->packageAdminService->update($package, new UpdateCommunicationPackageDto(validity: $validity));
         }
 
         return count($packages);
