@@ -307,6 +307,13 @@ class DashboardPromotionController extends AbstractController
 
         if ($promotion->isV2()) {
             $data['benefits'] = $this->promotionService->getPackageBenefits($promotion);
+            // Mismo motivo que `benefits`: validityInfo (columna propia de
+            // CommunicationPromotions) es un concepto V1 — la vigencia real
+            // de una V2 vive en cada CommunicationPackage generado.
+            $packageValidity = $this->promotionService->getPackageValidity($promotion);
+            if ($packageValidity !== null) {
+                $data['validityInfo'] = $packageValidity;
+            }
         }
 
         return $data;
