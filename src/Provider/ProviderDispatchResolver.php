@@ -19,14 +19,27 @@ use Symfony\Component\HttpFoundation\Response;
  * Elige QUÉ proveedor despacha de verdad la venta de un CommunicationPackage
  * (V2) — reemplaza al rol de CommunicationSaleService::resolveAndGuardProvider(),
  * que decidía por el proveedor "dueño" del producto. Aquí es al revés: se
- * recorre la lista de PRIORIDAD del cliente (ClientProviderRouting::$priority)
- * y se busca, para cada proveedor en orden, un producto que cubra la tupla
- * de destino del paquete — el primero que sirve, gana.
+ * recorre la lista de candidatos del cliente (ClientProviderRouting) y se
+ * busca, para cada proveedor en orden, un producto que cubra la tupla de
+ * destino del paquete — el primero que sirve, gana.
+ *
+ * La lista de candidatos se construye en tres pasos, ver candidateProviders():
+ *   1. Se descartan las filas cuyo entorno/tipo de venta/servicio/subservicio
+ *      no aplican a esta venta (null en la fila = comodín, aplica siempre).
+ *   2. Las filas aplicables se ordenan por ESPECIFICIDAD (cuántas
+ *      dimensiones fija, no comodín) de mayor a menor — a igual
+ *      especificidad manda ClientProviderRouting::$priority/id, en el
+ *      mismo orden que ya trae el repositorio (usort() es estable en
+ *      PHP 8).
+ *   3. Cada fila aporta su `provider` y, si tiene, su `fallbackProvider` a
+ *      continuación — ver selectExcluding() para cómo se usa esto en un
+ *      failover tras rechazo (tanto en la selección inicial como al
+ *      reintentar).
  *
  * Mismo kill switch y fallback a proveedor único que
  * ProviderResolver::allowedForClient() usa hoy (comunications.provider.routing.enabled
- * + communications.provider.default) — sin filas de routing activas para el
- * cliente, o con el switch apagado, se prueba solo el proveedor por
+ * + communications.provider.default) — sin filas de routing aplicables para
+ * el cliente, o con el switch apagado, se prueba solo el proveedor por
  * defecto.
  *
  * Excepción al fallback: un paquete generado por una promoción
@@ -35,7 +48,7 @@ use Symfony\Component\HttpFoundation\Response;
  * de "nunca despachar en silencio con el producto equivocado": si el admin
  * (o el poblado automático por proveedor) no dejó una equivalencia para
  * este tramo, ese proveedor simplemente no participa, se prueba el
- * siguiente candidato de prioridad.
+ * siguiente candidato.
  */
 class ProviderDispatchResolver
 {
@@ -51,17 +64,9 @@ class ProviderDispatchResolver
 
     public function select(Account $account, CommunicationPackage $package, ?string $saleType = null): SelectedDispatch
     {
-        $environmentType = $account->getEnvironment()?->getType();
-
-        foreach ($this->candidateProviders($account) as $provider) {
-            if (!$this->availabilityService->canDispatchTo($provider->value, $environmentType)) {
-                continue;
-            }
-
-            $product = $this->findDispatchableProduct($account, $package, $provider->value, $saleType);
-            if ($product !== null) {
-                return new SelectedDispatch($provider, $product, $product->getExternalRef());
-            }
+        $selected = $this->selectExcluding($account, $package, $saleType, []);
+        if ($selected !== null) {
+            return $selected;
         }
 
         throw new MyCurrentException(
@@ -72,29 +77,109 @@ class ProviderDispatchResolver
     }
 
     /**
+     * Igual que select(), salvo que (a) salta cualquier proveedor en
+     * $excludeProviders (ya intentado por SaleProviderFailoverService) y
+     * (b) devuelve null en vez de lanzar cuando nadie puede despachar —
+     * quien llama decide qué hacer con "no hay a quién más intentarle".
+     *
+     * @param list<CommunicationProviderEnum> $excludeProviders
+     */
+    public function selectExcluding(Account $account, CommunicationPackage $package, ?string $saleType, array $excludeProviders): ?SelectedDispatch
+    {
+        $environmentType = $account->getEnvironment()?->getType();
+
+        foreach ($this->candidateProviders($account, $package, $saleType) as $provider) {
+            if (in_array($provider, $excludeProviders, true)) {
+                continue;
+            }
+
+            if (!$this->availabilityService->canDispatchTo($provider->value, $environmentType)) {
+                continue;
+            }
+
+            $product = $this->findDispatchableProduct($account, $package, $provider->value, $saleType);
+            if ($product !== null) {
+                return new SelectedDispatch($provider, $product, $product->getExternalRef());
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * @return list<CommunicationProviderEnum>
      */
-    private function candidateProviders(Account $account): array
+    private function candidateProviders(Account $account, CommunicationPackage $package, ?string $saleType): array
     {
         $client = $account->getClient();
         if ($client === null || !$this->routingEnabled()) {
             return [$this->defaultProvider()];
         }
 
-        $rows = $this->routingRepo->findActiveProvidersOrderedForClient($client->getId());
+        $rows = $this->routingRepo->findActiveRouteScopesForClient($client->getId());
         if ($rows === []) {
             return [$this->defaultProvider()];
         }
 
+        $environmentId = $account->getEnvironment()?->getId();
+        $service = $package->getService();
+        $packageServiceName = $service['name'] ?? null;
+        $packageSubserviceName = $service['subservice']['name'] ?? null;
+
+        $applicable = array_values(array_filter(
+            $rows,
+            fn (array $row) => $this->rowApplies($row, $environmentId, $saleType, $packageServiceName, $packageSubserviceName),
+        ));
+
+        if ($applicable === []) {
+            return [$this->defaultProvider()];
+        }
+
+        usort($applicable, fn (array $a, array $b) => $this->specificity($b) <=> $this->specificity($a));
+
         $providers = [];
-        foreach ($rows as $row) {
-            $provider = CommunicationProviderEnum::tryFrom($row->getProvider() ?? '');
-            if ($provider !== null) {
-                $providers[] = $provider;
+        foreach ($applicable as $row) {
+            foreach ([$row['provider'], $row['fallbackProvider']] as $code) {
+                $provider = CommunicationProviderEnum::tryFrom($code ?? '');
+                if ($provider !== null && !in_array($provider, $providers, true)) {
+                    $providers[] = $provider;
+                }
             }
         }
 
         return $providers === [] ? [$this->defaultProvider()] : $providers;
+    }
+
+    /**
+     * @param array{environmentId:?int, saleType:?string, serviceName:?string, subserviceName:?string} $row
+     */
+    private function rowApplies(array $row, ?int $environmentId, ?string $saleType, ?string $packageServiceName, ?string $packageSubserviceName): bool
+    {
+        if ($row['environmentId'] !== null && $row['environmentId'] !== $environmentId) {
+            return false;
+        }
+        if ($row['saleType'] !== null && $row['saleType'] !== $saleType) {
+            return false;
+        }
+        if ($row['serviceName'] !== null && trim($row['serviceName']) !== trim($packageServiceName ?? '')) {
+            return false;
+        }
+        if ($row['subserviceName'] !== null && trim($row['subserviceName']) !== trim($packageSubserviceName ?? '')) {
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * @param array{environmentId:?int, saleType:?string, serviceName:?string, subserviceName:?string} $row
+     */
+    private function specificity(array $row): int
+    {
+        return ($row['environmentId'] !== null ? 8 : 0)
+            + ($row['saleType'] !== null ? 4 : 0)
+            + ($row['serviceName'] !== null ? 2 : 0)
+            + ($row['subserviceName'] !== null ? 1 : 0);
     }
 
     /**

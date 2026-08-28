@@ -228,6 +228,20 @@ class DashboardProviderRoutingControllerTest extends TestCase
         $this->assertSame('DTONE', $data['provider']);
     }
 
+    public function testShowSerializesServiceCategory(): void
+    {
+        $routing = $this->routingMock(1, 'DTONE');
+        $routing->method('getServiceName')->willReturn('Mobile');
+        $routing->method('getSubserviceName')->willReturn('AIRTIME');
+        $this->routingRepo->method('find')->with(1)->willReturn($routing);
+
+        $response = $this->controller->show(1);
+        $data = json_decode($response->getContent(), true);
+
+        $this->assertSame('Mobile', $data['serviceName']);
+        $this->assertSame('AIRTIME', $data['subserviceName']);
+    }
+
     // ---- create ----
 
     public function testCreateReturnsCreatedRouting(): void

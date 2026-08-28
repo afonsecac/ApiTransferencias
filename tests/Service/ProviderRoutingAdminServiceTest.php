@@ -239,6 +239,48 @@ class ProviderRoutingAdminServiceTest extends TestCase
         $this->assertSame('AWS Malta a DTOne', $routing->getNotes());
     }
 
+    public function testCreatePersistsTheServiceCategoryAndDerivesServiceKey(): void
+    {
+        $client = $this->createMock(Client::class);
+        $client->method('getId')->willReturn(1);
+        $this->stubClientAndFreeScope($client);
+        $this->security->method('getUser')->willReturn(null);
+
+        $routing = $this->service->create(new CreateProviderRoutingDto(
+            clientId: 1,
+            provider: 'DTONE',
+            serviceName: 'Mobile',
+            subserviceName: 'AIRTIME',
+        ));
+
+        $this->assertSame('Mobile', $routing->getServiceName());
+        $this->assertSame('AIRTIME', $routing->getSubserviceName());
+        $this->assertSame('Mobile|AIRTIME', $routing->getServiceKey());
+    }
+
+    /**
+     * Dos filas activas del mismo cliente/entorno/tipo de venta pueden
+     * coexistir si son de categorías distintas — assertScopeIsFree() ahora
+     * filtra también por serviceKey, así que la query de "¿existe otra
+     * fila?" con una categoría distinta debe volver vacía.
+     */
+    public function testCreateAllowsTwoActiveRowsForTheSameScopeWithDifferentCategories(): void
+    {
+        $client = $this->createMock(Client::class);
+        $client->method('getId')->willReturn(1);
+        $this->stubClientAndFreeScope($client);
+        $this->security->method('getUser')->willReturn(null);
+
+        $routing = $this->service->create(new CreateProviderRoutingDto(
+            clientId: 1,
+            provider: 'DTONE',
+            serviceName: 'Utilities',
+            subserviceName: 'INTERNET',
+        ));
+
+        $this->assertSame('Utilities|INTERNET', $routing->getServiceKey());
+    }
+
     // ---- gate de habilitación (assertProviderIsEnabled) ----
 
     /**
@@ -518,6 +560,67 @@ class ProviderRoutingAdminServiceTest extends TestCase
         $this->expectExceptionMessage('Ya existe un enrutado activo');
 
         $this->service->update($routing, new UpdateProviderRoutingDto(saleType: 'recharge'));
+    }
+
+    public function testUpdateChangesTheServiceCategoryAndRevalidatesScope(): void
+    {
+        $client = $this->createMock(Client::class);
+        $client->method('getId')->willReturn(1);
+
+        $routing = new ClientProviderRouting();
+        $routing->setClient($client);
+        $routing->setProvider('ETECSA');
+
+        $this->stubScopeQuery(null);
+
+        $updated = $this->service->update($routing, new UpdateProviderRoutingDto(serviceName: 'Mobile', subserviceName: 'AIRTIME'));
+
+        $this->assertSame('Mobile', $updated->getServiceName());
+        $this->assertSame('AIRTIME', $updated->getSubserviceName());
+        $this->assertSame('Mobile|AIRTIME', $updated->getServiceKey());
+    }
+
+    /**
+     * '' es la convención de "volver a comodín" (null = no tocar) — ver
+     * docblock de UpdateProviderRoutingDto.
+     */
+    public function testUpdateWithEmptyStringClearsTheServiceCategoryBackToWildcard(): void
+    {
+        $client = $this->createMock(Client::class);
+        $client->method('getId')->willReturn(1);
+
+        $routing = new ClientProviderRouting();
+        $routing->setClient($client);
+        $routing->setProvider('ETECSA');
+        $routing->setServiceCategory('Mobile', 'AIRTIME');
+
+        $this->stubScopeQuery(null);
+
+        $updated = $this->service->update($routing, new UpdateProviderRoutingDto(serviceName: ''));
+
+        $this->assertNull($updated->getServiceName());
+        $this->assertNull($updated->getSubserviceName());
+        $this->assertSame('|', $updated->getServiceKey());
+    }
+
+    public function testUpdateWithoutTouchingCategoryPreservesTheExistingOne(): void
+    {
+        $client = $this->createMock(Client::class);
+        $client->method('getId')->willReturn(1);
+
+        $routing = new ClientProviderRouting();
+        $routing->setClient($client);
+        $routing->setProvider('ETECSA');
+        $routing->setServiceCategory('Mobile', 'AIRTIME');
+
+        $this->stubScopeQuery(null);
+
+        // scopeTouched se activa por saleType, no por categoría — la
+        // categoría existente debe sobrevivir intacta.
+        $updated = $this->service->update($routing, new UpdateProviderRoutingDto(saleType: 'recharge'));
+
+        $this->assertSame('Mobile', $updated->getServiceName());
+        $this->assertSame('AIRTIME', $updated->getSubserviceName());
     }
 
     // ---- toggle ----
