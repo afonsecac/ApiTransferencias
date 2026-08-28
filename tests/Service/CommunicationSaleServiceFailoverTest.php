@@ -2,15 +2,17 @@
 
 namespace App\Tests\Service;
 
+use App\DTO\AccountBalanceDto;
 use App\Entity\Account;
 use App\Entity\Client;
 use App\Entity\CommunicationPackage;
 use App\Entity\CommunicationSaleRecharge;
 use App\Entity\Environment;
 use App\Enums\CommunicationStateEnum;
-use App\Provider\DTOne\DTOneCommunicationProvider;
-use App\Provider\DTOne\DTOneHttpClient;
-use App\Provider\DTOne\DTOneStatusMapper;
+use App\Message\SaleRechargeMessage;
+use App\Provider\Csq\CsqCommunicationProvider;
+use App\Provider\Csq\CsqHttpClient;
+use App\Provider\Csq\CsqStatusMapper;
 use App\Provider\ProviderContextFactory;
 use App\Provider\ProviderRegistry;
 use App\Provider\ProviderResolver;
@@ -27,7 +29,7 @@ use App\Service\Pricing\PackageCatalogResolver;
 use App\Service\Pricing\PackageOfferSourceEnum;
 use App\Service\Pricing\ResolvedPackageOffer;
 use App\Service\Provider\ProviderAvailabilityService;
-use App\DTO\AccountBalanceDto;
+use App\Service\Provider\SaleProviderFailoverService;
 use Doctrine\DBAL\Connection;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\Mapping\ClassMetadata;
@@ -38,6 +40,7 @@ use Psr\Log\NullLogger;
 use Symfony\Bundle\SecurityBundle\Security;
 use Symfony\Component\DependencyInjection\ParameterBag\ParameterBagInterface;
 use Symfony\Component\Mailer\MailerInterface;
+use Symfony\Component\Messenger\Envelope;
 use Symfony\Component\Messenger\MessageBusInterface;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 use Symfony\Component\Serializer\SerializerInterface;
@@ -45,20 +48,23 @@ use Symfony\Component\Serializer\SerializerInterface;
 /**
  * @covers \App\Service\CommunicationSaleService::invokeRechargeCommunication
  *
- * Documentado por DTOne (https://developers.dtone.com/reference/sandbox):
- * su sandbox simula el resultado según los ÚLTIMOS 3 DÍGITOS del número de
- * destino ("100"/"200"/"300" = COMPLETED sin PIN), no un número dummy fijo
- * como ETECSA/CSQ — por eso aquí se reemplaza solo el sufijo, conservando
- * el resto del número real del cliente.
+ * Cuando el proveedor rechaza una recarga (REJECTED, no UNKNOWN — ver
+ * ProviderOutcomeEnum), CommunicationSaleService intenta el proveedor
+ * secundario vía SaleProviderFailoverService ANTES de resolver la venta
+ * como REJECTED — mismo escenario de CommunicationSaleServiceCsqCompletedDispatchTest::testDoesNotCreateBalanceWhenCsqRejectsTheAmount(),
+ * pero con el failover activado.
  */
-class CommunicationSaleServiceDTOnePhoneSwapTest extends TestCase
+class CommunicationSaleServiceFailoverTest extends TestCase
 {
     private EntityManagerInterface&MockObject $em;
     private Connection&MockObject $connection;
     private BalanceService&MockObject $balanceService;
+    private HistoricalSaleService&MockObject $historicalSaleService;
     private ProviderAvailabilityService&MockObject $availabilityService;
-    private DTOneHttpClient&MockObject $dtoneClient;
+    private CsqHttpClient&MockObject $csqClient;
     private PackageCatalogResolver&MockObject $packageCatalogResolver;
+    private SaleProviderFailoverService&MockObject $failoverService;
+    private MessageBusInterface&MockObject $messageBus;
     private CommunicationSaleService $service;
     private CommunicationSaleRecharge $saleRecharge;
 
@@ -74,17 +80,22 @@ class CommunicationSaleServiceDTOnePhoneSwapTest extends TestCase
 
         $security = $this->createMock(Security::class);
         $parameters = $this->createMock(ParameterBagInterface::class);
+        $parameters->method('get')->willReturnMap([
+            ['app.csqPhoneNumber', '53500000'],
+        ]);
         $mailer = $this->createMock(MailerInterface::class);
         $logger = $this->createMock(LoggerInterface::class);
         $passwordHasher = $this->createMock(UserPasswordHasherInterface::class);
+        $environmentRepository = $this->createMock(EnvironmentRepository::class);
         $sysConfigRepo = $this->createMock(SysConfigRepository::class);
         $serializer = $this->createMock(SerializerInterface::class);
-        $messageBus = $this->createMock(MessageBusInterface::class);
-        $historicalSaleService = $this->createMock(HistoricalSaleService::class);
+        $this->messageBus = $this->createMock(MessageBusInterface::class);
+        $this->historicalSaleService = $this->createMock(HistoricalSaleService::class);
         $this->balanceService = $this->createMock(BalanceService::class);
         $notificationCenter = $this->createMock(NotificationCenterService::class);
         $this->availabilityService = $this->createMock(ProviderAvailabilityService::class);
         $configureSequence = $this->createMock(ConfigureSequenceService::class);
+        $this->failoverService = $this->createMock(SaleProviderFailoverService::class);
 
         $this->packageCatalogResolver = $this->createMock(PackageCatalogResolver::class);
 
@@ -92,9 +103,9 @@ class CommunicationSaleServiceDTOnePhoneSwapTest extends TestCase
         $providerResolver = new ProviderResolver($sysConfigRepo, $routingRepo, new NullLogger());
         $providerContextFactory = new ProviderContextFactory($providerResolver);
 
-        $this->dtoneClient = $this->createMock(DTOneHttpClient::class);
-        $dtoneProvider = new DTOneCommunicationProvider($this->dtoneClient, new DTOneStatusMapper(), new NullLogger());
-        $providerRegistry = new ProviderRegistry([$dtoneProvider]);
+        $this->csqClient = $this->createMock(CsqHttpClient::class);
+        $csqProvider = new CsqCommunicationProvider($this->csqClient, new CsqStatusMapper(), new NullLogger());
+        $providerRegistry = new ProviderRegistry([$csqProvider]);
 
         $this->service = new CommunicationSaleService(
             $this->em,
@@ -103,24 +114,25 @@ class CommunicationSaleServiceDTOnePhoneSwapTest extends TestCase
             $mailer,
             $logger,
             $passwordHasher,
-            $this->createMock(EnvironmentRepository::class),
+            $environmentRepository,
             $sysConfigRepo,
             $serializer,
             $providerRegistry,
             $providerResolver,
             $providerContextFactory,
             $configureSequence,
-            $messageBus,
-            $historicalSaleService,
+            $this->messageBus,
+            $this->historicalSaleService,
             $this->balanceService,
             $notificationCenter,
             $this->availabilityService,
             $this->packageCatalogResolver,
             $this->createMock(\App\Provider\ProviderDispatchResolver::class),
             $this->createMock(\App\Provider\PromotionProviderDispatchResolver::class),
-            $this->createMock(\App\Service\Provider\SaleProviderFailoverService::class),
+            $this->failoverService,
         );
 
+        $this->saleRecharge = $this->buildPendingCsqRecharge();
     }
 
     private function assignId(object $entity, int $id): void
@@ -130,7 +142,7 @@ class CommunicationSaleServiceDTOnePhoneSwapTest extends TestCase
         $property->setValue($entity, $id);
     }
 
-    private function buildPendingDtoneRecharge(string $phoneNumber): CommunicationSaleRecharge
+    private function buildPendingCsqRecharge(): CommunicationSaleRecharge
     {
         $client = $this->createMock(Client::class);
         $client->method('getId')->willReturn(1);
@@ -154,13 +166,13 @@ class CommunicationSaleServiceDTOnePhoneSwapTest extends TestCase
         $recharge = new CommunicationSaleRecharge();
         $recharge->setPackageId(1);
         $recharge->setTenant($account);
-        $recharge->setProvider('DTONE');
+        $recharge->setProvider('CSQ');
         $recharge->setCatalogPackage($catalogPackage);
-        $recharge->setDispatchExternalRef('35718');
-        $recharge->setDestinationAmount(250.0);
+        $recharge->setDispatchExternalRef('7951-2200');
+        $recharge->setDestinationAmount(2200.0);
         $recharge->setDestinationCurrency('CUP');
-        $recharge->setTransactionId('2608110100042');
-        $recharge->setPhoneNumber($phoneNumber);
+        $recharge->setTransactionId('2608100100042');
+        $recharge->setPhoneNumber('53500000');
         $recharge->setState(CommunicationStateEnum::PENDING);
         $recharge->setStateProcess('SENDING');
         $this->assignId($recharge, 555);
@@ -179,49 +191,62 @@ class CommunicationSaleServiceDTOnePhoneSwapTest extends TestCase
         return $recharge;
     }
 
-    private function acceptedDtoneResponse(): array
+    private function stubCsqRejection(): void
     {
-        return [
-            'id' => 999888,
-            'status' => ['class' => ['id' => 1, 'message' => 'ACCEPTED'], 'id' => 10001, 'message' => 'ACCEPTED'],
-        ];
+        // Mismo payload de rechazo real que CommunicationSaleServiceCsqCompletedDispatchTest::testDoesNotCreateBalanceWhenCsqRejectsTheAmount().
+        $this->csqClient->method('purchase')->willReturn([
+            'rc' => -1,
+            'items' => [[
+                'finalstatus' => -1,
+                'resultcode' => '927',
+                'resultmessage' => 'Importe incorrecto para la ruta 993',
+            ]],
+        ]);
+
+        $balance = new AccountBalanceDto('USD', 1000.0);
+        $this->balanceService->method('balance')->willReturn($balance);
+        $this->connection->method('executeStatement')->willReturn(1);
     }
 
-    public function testReplacesOnlyTheLastThreeDigitsWithDTOneCompletedSuffixWhenPhoneEndsInSixty(): void
+    public function testPromotesToTheFallbackProviderAndReenqueuesInsteadOfRejecting(): void
     {
-        $this->saleRecharge = $this->buildPendingDtoneRecharge('5356085160');
         $this->availabilityService->method('canDispatchTo')->willReturn(true);
-        $this->balanceService->method('balance')->willReturn(new AccountBalanceDto('USD', 1000.0));
-        $this->connection->method('executeStatement')->willReturn(1);
+        $this->stubCsqRejection();
 
-        $this->dtoneClient->expects($this->once())
-            ->method('createTransaction')
-            ->with(
-                $this->anything(),
-                $this->anything(),
-                $this->callback(fn (array $body) => ($body['credit_party_identifier']['mobile_number'] ?? null) === '+5356085100'),
-            )
-            ->willReturn($this->acceptedDtoneResponse());
+        // El failover service muta la venta él mismo (comportamiento real
+        // documentado en su propio test suite) — aquí solo se verifica que
+        // CommunicationSaleService reacciona a `true` reencolando en vez de
+        // marcar REJECTED.
+        $this->failoverService->method('promoteToFallback')
+            ->willReturnCallback(function ($sale) {
+                $sale->setProvider('DTONE');
+
+                return true;
+            });
+
+        $this->messageBus->expects($this->once())
+            ->method('dispatch')
+            ->with($this->callback(fn ($message) => $message instanceof SaleRechargeMessage))
+            ->willReturn(new Envelope(new SaleRechargeMessage(555)));
 
         $this->service->invokeRechargeCommunication(555);
+
+        $this->assertNotSame(CommunicationStateEnum::REJECTED, $this->saleRecharge->getState());
+        $this->assertSame('DTONE', $this->saleRecharge->getProvider());
     }
 
-    public function testKeepsTheRealPhoneNumberWhenItDoesNotEndInSixty(): void
+    public function testFallsBackToRejectedWhenNoFallbackCandidateIsAvailable(): void
     {
-        $this->saleRecharge = $this->buildPendingDtoneRecharge('5356085136');
         $this->availabilityService->method('canDispatchTo')->willReturn(true);
-        $this->balanceService->method('balance')->willReturn(new AccountBalanceDto('USD', 1000.0));
-        $this->connection->method('executeStatement')->willReturn(1);
+        $this->stubCsqRejection();
 
-        $this->dtoneClient->expects($this->once())
-            ->method('createTransaction')
-            ->with(
-                $this->anything(),
-                $this->anything(),
-                $this->callback(fn (array $body) => ($body['credit_party_identifier']['mobile_number'] ?? null) === '+5356085136'),
-            )
-            ->willReturn($this->acceptedDtoneResponse());
+        $this->failoverService->method('promoteToFallback')->willReturn(false);
+
+        $this->messageBus->expects($this->never())->method('dispatch');
 
         $this->service->invokeRechargeCommunication(555);
+
+        $this->assertSame(CommunicationStateEnum::REJECTED, $this->saleRecharge->getState());
+        $this->assertSame('CSQ', $this->saleRecharge->getProvider());
     }
 }

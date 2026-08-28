@@ -3,15 +3,21 @@
 namespace App\Entity;
 
 use App\Repository\ClientProviderRoutingRepository;
+use App\Service\Pricing\ServiceCategoryKey;
 use Doctrine\ORM\Mapping as ORM;
 
 /**
  * Enrutado de proveedor por cliente (Fase 2 del enrutado multi-proveedor).
- * Es control de ADMISIÓN, no de despacho: decide qué proveedores puede
- * consumir un cliente (ver App\Provider\ProviderResolver::allowedForClient())
- * y cuál es el default para altas nuevas (resolveForAccount()). El
- * despacho/consulta de una venta ya creada lee el snapshot de
- * CommunicationSaleInfo::provider, nunca esta tabla.
+ * Además de admisión (qué proveedores puede consumir un cliente, ver
+ * App\Provider\ProviderResolver::allowedForClient()), desde la extensión
+ * por categoría (agosto 2026) también es control de DESPACHO: cada fila
+ * puede acotarse por entorno, tipo de venta y servicio/subservicio
+ * (serviceKey), y App\Provider\ProviderDispatchResolver recorre las filas
+ * activas de más a menos específica probando primero `provider` y luego
+ * `fallbackProvider` — ver el docblock de ese resolver para el algoritmo
+ * completo. Una vez admitida una venta, el snapshot de
+ * CommunicationSaleInfo::provider es la fuente de verdad para esa venta en
+ * particular; esta tabla solo decide qué proveedor se intenta primero.
  */
 #[ORM\Entity(repositoryClass: ClientProviderRoutingRepository::class)]
 class ClientProviderRouting
@@ -35,8 +41,34 @@ class ClientProviderRouting
     #[ORM\Column(length: 20)]
     private ?string $provider = null;
 
+    /**
+     * Proveedor de respaldo: si `provider` no puede despachar (no
+     * disponible, o rechaza explícitamente el envío) ProviderDispatchResolver
+     * prueba este a continuación — ver SaleProviderFailoverService para el
+     * único salto que se hace tras un rechazo ya en ejecución.
+     */
     #[ORM\Column(length: 20, nullable: true)]
     private ?string $fallbackProvider = null;
+
+    /**
+     * Clasificación (mismo shape de nombre/subservicio que
+     * CommunicationPackage::$service / CommunicationContract::$serviceName)
+     * — se setean juntos vía setServiceCategory(), nunca $serviceKey sola.
+     */
+    #[ORM\Column(length: 255, nullable: true)]
+    private ?string $serviceName = null;
+
+    #[ORM\Column(length: 255, nullable: true)]
+    private ?string $subserviceName = null;
+
+    /**
+     * Derivada de $serviceName/$subserviceName vía ServiceCategoryKey — SE
+     * DERIVA EN EL SETTER (ver setServiceCategory()), nunca en un lifecycle
+     * callback (mismo razonamiento que CommunicationContract::$serviceKey).
+     * Default '|' como resguardo, coincide con ServiceCategoryKey::of(null, null).
+     */
+    #[ORM\Column(length: 191)]
+    private string $serviceKey = '|';
 
     /**
      * Orden en que ProviderDispatchResolver (V2 Fase 2) prueba los
@@ -68,6 +100,10 @@ class ClientProviderRouting
     {
         $this->createdAt = new \DateTimeImmutable('now');
         $this->updatedAt = new \DateTimeImmutable('now');
+        // Vía setServiceCategory(), no asignación directa — mismo criterio
+        // que CommunicationContract::__construct(): un único punto deriva
+        // $serviceKey, el default de la propiedad es solo un resguardo.
+        $this->setServiceCategory(null, null);
     }
 
     public function getId(): ?int
@@ -131,6 +167,35 @@ class ClientProviderRouting
     public function setFallbackProvider(?string $fallbackProvider): static
     {
         $this->fallbackProvider = $fallbackProvider;
+
+        return $this;
+    }
+
+    public function getServiceName(): ?string
+    {
+        return $this->serviceName;
+    }
+
+    public function getSubserviceName(): ?string
+    {
+        return $this->subserviceName;
+    }
+
+    public function getServiceKey(): string
+    {
+        return $this->serviceKey;
+    }
+
+    /**
+     * Única forma de establecer la categoría — deriva $serviceKey en el
+     * mismo paso, no hay setServiceKey() independiente (ver docblock de la
+     * propiedad).
+     */
+    public function setServiceCategory(?string $serviceName, ?string $subserviceName): static
+    {
+        $this->serviceName = $serviceName;
+        $this->subserviceName = $subserviceName;
+        $this->serviceKey = ServiceCategoryKey::of($serviceName, $subserviceName);
 
         return $this;
     }

@@ -409,6 +409,8 @@ class DashboardProviderRoutingController extends AbstractController
             'saleType'         => $routing->getSaleType(),
             'provider'         => $routing->getProvider(),
             'fallbackProvider' => $routing->getFallbackProvider(),
+            'serviceName'      => $routing->getServiceName(),
+            'subserviceName'   => $routing->getSubserviceName(),
             'isActive'         => $routing->isActive(),
             'notes'            => $routing->getNotes(),
             'createdAt'        => $routing->getCreatedAt()?->format('c'),

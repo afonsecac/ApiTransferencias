@@ -279,4 +279,41 @@ final class TransactionStatus
     {
         return $status['retry']['lastAttemptAt'] ?? $status['lastRetryAt'] ?? null;
     }
+
+    /**
+     * Código del proveedor original si esta venta ya hizo un failover
+     * (SaleProviderFailoverService::promoteToFallback()), null si no.
+     *
+     * @param array<string, mixed> $status
+     */
+    public static function failoverFromOf(array $status): ?string
+    {
+        return $status['retry']['failoverFrom'] ?? null;
+    }
+
+    /**
+     * Reinyecta el bloque `retry` de un sobre PREVIO en uno RECIÉN
+     * construido con fromDispatch()/fromStatus() — esos dos siempre arman
+     * un envelope desde cero, así que perderían cualquier `retry` puesto
+     * por una llamada anterior de withRetry() (p. ej. el marcador
+     * `failoverFrom` de un failover ya hecho, o el contador de
+     * GATEWAY_MISSING). Sin esto, un segundo rechazo del proveedor
+     * secundario no vería que ya hubo un failover y podría rebotar de
+     * vuelta al proveedor original indefinidamente. No-op si $new ya trae
+     * su propio `retry` (p. ej. viene de withRetry()) o si $previous no
+     * tenía ninguno.
+     *
+     * @param array<string, mixed> $previous
+     * @param Envelope $new
+     * @return Envelope
+     */
+    public static function carryRetryBlock(array $previous, array $new): array
+    {
+        if (!isset($new['retry']) && isset($previous['retry'])) {
+            $new['retry'] = $previous['retry'];
+        }
+
+        /** @var Envelope $new */
+        return $new;
+    }
 }
