@@ -145,6 +145,44 @@ class DashboardCommunicationPackagesControllerListTest extends ProviderFunctiona
         $this->assertSame($recent->getId(), $data['results'][0]['id']);
     }
 
+    public function testFiltersByServiceOnlyMatchesAnySubserviceOfThatService(): void
+    {
+        $mobileAirtime = $this->communicationPackage('Mobile Airtime');
+        $mobileAirtime->setService(['name' => 'Mobile', 'subservice' => ['name' => 'AIRTIME']]);
+        $mobileData = $this->communicationPackage('Mobile Data');
+        $mobileData->setService(['name' => 'Mobile', 'subservice' => ['name' => 'DATA']]);
+        $utilities = $this->communicationPackage('Nauta WiFi');
+        $utilities->setService(['name' => 'Utilities', 'subservice' => ['name' => 'INTERNET']]);
+        $this->em->flush();
+        $this->em->clear();
+
+        $data = json_decode($this->controller()->list(new Request(['service' => 'Mobile']))->getContent(), true);
+
+        $this->assertCount(2, $data['results']);
+        $this->assertEqualsCanonicalizing(
+            [$mobileAirtime->getId(), $mobileData->getId()],
+            array_column($data['results'], 'id')
+        );
+    }
+
+    public function testFiltersByServiceAndSubserviceMatchesTheExactCategoryOnly(): void
+    {
+        $mobileAirtime = $this->communicationPackage('Mobile Airtime');
+        $mobileAirtime->setService(['name' => 'Mobile', 'subservice' => ['name' => 'AIRTIME']]);
+        $mobileData = $this->communicationPackage('Mobile Data');
+        $mobileData->setService(['name' => 'Mobile', 'subservice' => ['name' => 'DATA']]);
+        $this->em->flush();
+        $this->em->clear();
+
+        $data = json_decode(
+            $this->controller()->list(new Request(['service' => 'Mobile', 'subservice' => 'AIRTIME']))->getContent(),
+            true
+        );
+
+        $this->assertCount(1, $data['results']);
+        $this->assertSame($mobileAirtime->getId(), $data['results'][0]['id']);
+    }
+
     public function testSortsByCreatedAtAscendingAndDescending(): void
     {
         $first = $this->communicationPackage('Primero creado');

@@ -24,6 +24,7 @@ use App\Repository\CommunicationPackageProviderProductRepository;
 use App\Service\Pricing\CommunicationPackageAdminService;
 use App\Service\Pricing\CommunicationPackageBindingService;
 use App\Service\Pricing\PackageCatalogResolver;
+use App\Service\Pricing\ServiceCategoryKey;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\QueryBuilder;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -330,6 +331,21 @@ class DashboardCommunicationPackagesController extends AbstractController
         }
         if ($createdTo = $request->query->get('createdTo')) {
             $qb->andWhere('p.createdAt <= :createdTo')->setParameter('createdTo', new \DateTimeImmutable($createdTo . ' 23:59:59'));
+        }
+        if ($service = $request->query->get('service')) {
+            $subservice = $request->query->get('subservice');
+            if ($subservice) {
+                // Categoría exacta (service+subservice) — serviceKey es una
+                // columna plana ("{name}|{subserviceName}", ver
+                // ServiceCategoryKey), a diferencia de tags no necesita SQL
+                // crudo para comparar.
+                $qb->andWhere('p.serviceKey = :serviceKey')
+                    ->setParameter('serviceKey', ServiceCategoryKey::of($service, $subservice));
+            } else {
+                // Solo service — cualquier subservicio de esa categoría.
+                $qb->andWhere('p.serviceKey LIKE :serviceKeyPrefix')
+                    ->setParameter('serviceKeyPrefix', addcslashes($service, '%_\\') . '|%');
+            }
         }
     }
 
