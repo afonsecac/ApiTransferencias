@@ -4,8 +4,10 @@ namespace App\Service;
 
 use App\DTO\CreateCommunicationPackageBatchDto;
 use App\DTO\CreatePromotionV2Dto;
+use App\DTO\UpdateCommunicationPackageDto;
 use App\DTO\UpdatePromotionDto;
 use App\Entity\CommunicationClientPackage;
+use App\Entity\CommunicationPackage;
 use App\Entity\CommunicationPrice;
 use App\Entity\CommunicationPricePackage;
 use App\Entity\CommunicationProduct;
@@ -15,6 +17,7 @@ use App\Entity\User;
 use App\Enums\JobPositionAreaEnum;
 use App\Exception\MyCurrentException;
 use App\Message\PromotionCreatedMessage;
+use App\Repository\CommunicationPackageRepository;
 use App\Repository\EnvironmentRepository;
 use App\Repository\SysConfigRepository;
 use App\Service\Pricing\CommunicationContractService;
@@ -47,6 +50,7 @@ class CommunicationPromotionService extends CommonService
         private readonly CommunicationPackageAdminService $packageAdminService,
         private readonly CommunicationContractService $contractService,
         private readonly CommunicationPromotionEquivalenceService $equivalenceService,
+        private readonly CommunicationPackageRepository $packageRepository,
     ) {
         parent::__construct($em, $security, $parameters, $mailer, $logger, $passwordHasher, $environmentRepository, $sysConfigRepo, $serializer);
     }
@@ -303,6 +307,17 @@ class CommunicationPromotionService extends CommonService
      */
     public function update(CommunicationPromotions $promotion, UpdatePromotionDto $dto): CommunicationPromotions
     {
+        // Falla ANTES de mutar nada — evita el caso raro de mandar
+        // productId+benefits en la misma petición, donde setProduct() más
+        // abajo cambiaría isV2() a mitad del método.
+        if ($dto->getBenefits() !== null && !$promotion->isV2()) {
+            throw new MyCurrentException(
+                'PROMOTION_BENEFITS_NOT_APPLICABLE',
+                'Esta promoción no es V2 — los beneficios se editan con terms, no benefits',
+                400,
+            );
+        }
+
         if ($dto->getName() !== null) {
             $promotion->setName($dto->getName());
         }
@@ -361,7 +376,60 @@ class CommunicationPromotionService extends CommonService
 
         $this->em->flush();
 
+        if ($dto->getBenefits() !== null) {
+            $this->updatePackageBenefits($promotion, $dto->getBenefits());
+        }
+
         return $promotion;
+    }
+
+    /**
+     * Beneficios "plantilla" de una promoción V2 — se toman de un
+     * CommunicationPackage cualquiera vinculado (todos comparten el mismo
+     * array salvo lo que CommunicationPackageAdminService::
+     * applyCreditBenefitDefaults() recalcula por paquete, ver
+     * updatePackageBenefits()). Vacío si la promoción todavía no tiene
+     * paquetes vinculados, o si es V1 (esa usa getTerms(), no esto).
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function getPackageBenefits(CommunicationPromotions $promotion): array
+    {
+        $package = $this->packageRepository->findByPromotion($promotion)[0] ?? null;
+
+        return $package?->getBenefits() ?? [];
+    }
+
+    /**
+     * Propaga un array de beneficios "plantilla" a TODOS los
+     * CommunicationPackage vinculados a esta promoción (promotion_id) —
+     * reutiliza CommunicationPackageAdminService::update() por paquete para
+     * que applyCreditBenefitDefaults() recalcule additional_information/
+     * amount.base contra el destinationAmount propio de cada uno, igual que
+     * al crear el batch original (createV2()): un mismo array "plantilla"
+     * produce el texto/monto correcto en cada paquete pese a tener montos
+     * de destino distintos.
+     *
+     * @return int cantidad de paquetes actualizados
+     *
+     * @throws MyCurrentException si la promoción no es V2
+     */
+    public function updatePackageBenefits(CommunicationPromotions $promotion, array $benefits): int
+    {
+        if (!$promotion->isV2()) {
+            throw new MyCurrentException(
+                'PROMOTION_BENEFITS_NOT_APPLICABLE',
+                'Esta promoción no es V2 — los beneficios se editan con terms, no benefits',
+                400,
+            );
+        }
+
+        $packages = $this->packageRepository->findByPromotion($promotion);
+        foreach ($packages as $package) {
+            $this->packageAdminService->update($package, new UpdateCommunicationPackageDto(benefits: $benefits));
+        }
+
+        return count($packages);
     }
 
     /**

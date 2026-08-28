@@ -4,9 +4,12 @@ namespace App\Tests\Service;
 
 use App\DTO\CreateCommunicationPackageBatchDto;
 use App\DTO\CreatePromotionV2Dto;
+use App\DTO\UpdateCommunicationPackageDto;
 use App\Entity\CommunicationPackage;
+use App\Entity\CommunicationPromotions;
 use App\Entity\Environment;
 use App\Exception\MyCurrentException;
+use App\Repository\CommunicationPackageRepository;
 use App\Repository\EnvironmentRepository;
 use App\Repository\SysConfigRepository;
 use App\Service\CommunicationPromotionService;
@@ -40,6 +43,7 @@ class CommunicationPromotionServiceV2Test extends TestCase
     private CommunicationPackageAdminService&MockObject $packageAdminService;
     private CommunicationContractService&MockObject $contractService;
     private CommunicationPromotionEquivalenceService&MockObject $equivalenceService;
+    private CommunicationPackageRepository&MockObject $packageRepository;
     private CommunicationPromotionService $service;
 
     protected function setUp(): void
@@ -48,6 +52,7 @@ class CommunicationPromotionServiceV2Test extends TestCase
         $this->packageAdminService = $this->createMock(CommunicationPackageAdminService::class);
         $this->contractService = $this->createMock(CommunicationContractService::class);
         $this->equivalenceService = $this->createMock(CommunicationPromotionEquivalenceService::class);
+        $this->packageRepository = $this->createMock(CommunicationPackageRepository::class);
 
         $this->service = new CommunicationPromotionService(
             $this->em,
@@ -64,6 +69,7 @@ class CommunicationPromotionServiceV2Test extends TestCase
             $this->packageAdminService,
             $this->contractService,
             $this->equivalenceService,
+            $this->packageRepository,
         );
     }
 
@@ -220,5 +226,71 @@ class CommunicationPromotionServiceV2Test extends TestCase
         $result = $this->service->createV2($this->dto());
 
         $this->assertNull($result->promotion->getInfoDescription());
+    }
+
+    /**
+     * @covers \App\Service\CommunicationPromotionService::getPackageBenefits
+     * @covers \App\Service\CommunicationPromotionService::updatePackageBenefits
+     */
+    public function testGetPackageBenefitsReturnsTheBenefitsOfTheFirstLinkedPackage(): void
+    {
+        $promotion = $this->v2Promotion();
+        $package = (new CommunicationPackage())->setBenefits([['type' => 'CREDITS', 'unit' => 'CUP', 'unit_type' => 'CURRENCY']]);
+        $this->packageRepository->method('findByPromotion')->with($promotion)->willReturn([$package]);
+
+        $this->assertSame([['type' => 'CREDITS', 'unit' => 'CUP', 'unit_type' => 'CURRENCY']], $this->service->getPackageBenefits($promotion));
+    }
+
+    public function testGetPackageBenefitsReturnsEmptyArrayWhenNoPackagesLinkedYet(): void
+    {
+        $promotion = $this->v2Promotion();
+        $this->packageRepository->method('findByPromotion')->with($promotion)->willReturn([]);
+
+        $this->assertSame([], $this->service->getPackageBenefits($promotion));
+    }
+
+    public function testUpdatePackageBenefitsPropagatesToEveryLinkedPackage(): void
+    {
+        $promotion = $this->v2Promotion();
+        $packages = [new CommunicationPackage(), new CommunicationPackage(), new CommunicationPackage()];
+        $this->packageRepository->method('findByPromotion')->with($promotion)->willReturn($packages);
+
+        $newBenefits = [['type' => 'DATA', 'unit' => 'ILIM', 'unit_type' => 'DATA', 'operation' => 'ADD', 'value' => 20]];
+
+        $this->packageAdminService->expects($this->exactly(3))
+            ->method('update')
+            ->with(
+                $this->isInstanceOf(CommunicationPackage::class),
+                $this->callback(fn (UpdateCommunicationPackageDto $dto) => $dto->getBenefits() === $newBenefits)
+            );
+
+        $count = $this->service->updatePackageBenefits($promotion, $newBenefits);
+
+        $this->assertSame(3, $count);
+    }
+
+    public function testUpdatePackageBenefitsThrowsForAV1Promotion(): void
+    {
+        // Una promoción V1 tiene product != null (isV2() = product === null)
+        // — createV2()/dto() de este test solo generan V2, así que se
+        // construye directo con reflection en vez de un DTO legacy.
+        $promotion = new CommunicationPromotions();
+        $reflection = new \ReflectionProperty(CommunicationPromotions::class, 'product');
+        $reflection->setAccessible(true);
+        $reflection->setValue($promotion, $this->createMock(\App\Entity\CommunicationProduct::class));
+
+        $this->packageAdminService->expects($this->never())->method('update');
+
+        $this->expectException(MyCurrentException::class);
+        $this->expectExceptionMessage('Esta promoción no es V2 — los beneficios se editan con terms, no benefits');
+
+        $this->service->updatePackageBenefits($promotion, [['type' => 'CREDITS']]);
+    }
+
+    private function v2Promotion(): CommunicationPromotions
+    {
+        // isV2() === true cuando $product es null — estado por defecto de una
+        // promoción recién construida, sin necesidad de reflection aquí.
+        return new CommunicationPromotions();
     }
 }
