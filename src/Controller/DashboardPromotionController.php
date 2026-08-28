@@ -285,9 +285,18 @@ class DashboardPromotionController extends AbstractController
         ];
     }
 
+    /**
+     * `benefits` (V2) no es una propiedad de CommunicationPromotions — a
+     * diferencia de `terms` (V1, columna propia), los beneficios reales de
+     * una promoción V2 viven en cada CommunicationPackage generado, así que
+     * se resuelven aparte vía CommunicationPromotionService::
+     * getPackageBenefits() y se mezclan acá en vez de con un grupo de
+     * serialización (necesita ir a repositorio, un getter en la entidad no
+     * debería hacerlo).
+     */
     private function normalizeDetail(CommunicationPromotions $promotion): array
     {
-        return $this->serializer->normalize(
+        $data = $this->serializer->normalize(
             $promotion,
             'json',
             [
@@ -295,5 +304,11 @@ class DashboardPromotionController extends AbstractController
                 AbstractObjectNormalizer::SKIP_NULL_VALUES => true,
             ]
         );
+
+        if ($promotion->isV2()) {
+            $data['benefits'] = $this->promotionService->getPackageBenefits($promotion);
+        }
+
+        return $data;
     }
 }
