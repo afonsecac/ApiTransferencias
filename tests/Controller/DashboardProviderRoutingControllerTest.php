@@ -24,6 +24,7 @@ use App\Service\Provider\CurrencyExchangeRateSyncService;
 use App\Service\Provider\ProviderAvailabilityService;
 use App\Service\Provider\ProviderConnectionTestService;
 use App\Provider\ProviderCredentialsResolver;
+use App\Service\Catalog\ClientCatalogVisibilityImpactResolver;
 use App\Service\Provider\ProviderCredentialsAdminService;
 use App\Service\ProviderRoutingAdminService;
 use Doctrine\ORM\Query;
@@ -47,6 +48,7 @@ class DashboardProviderRoutingControllerTest extends TestCase
     private ProviderCredentialsAdminService&MockObject $credentialsAdminService;
     private ProviderConnectionTestService&MockObject $connectionTestService;
     private ProviderAvailabilityService&MockObject $availabilityService;
+    private ClientCatalogVisibilityImpactResolver&MockObject $catalogImpactResolver;
     private DashboardProviderRoutingController $controller;
 
     protected function setUp(): void
@@ -59,6 +61,7 @@ class DashboardProviderRoutingControllerTest extends TestCase
         $this->credentialsAdminService = $this->createMock(ProviderCredentialsAdminService::class);
         $this->connectionTestService = $this->createMock(ProviderConnectionTestService::class);
         $this->availabilityService = $this->createMock(ProviderAvailabilityService::class);
+        $this->catalogImpactResolver = $this->createMock(ClientCatalogVisibilityImpactResolver::class);
 
         $etecsa = $this->createMock(CommunicationProviderInterface::class);
         $etecsa->method('getCode')->willReturn(CommunicationProviderEnum::ETECSA);
@@ -79,6 +82,7 @@ class DashboardProviderRoutingControllerTest extends TestCase
             $this->connectionTestService,
             $this->availabilityService,
             $credentialsResolver,
+            $this->catalogImpactResolver,
         );
 
         $container = $this->createMock(ContainerInterface::class);
@@ -149,6 +153,7 @@ class DashboardProviderRoutingControllerTest extends TestCase
             $this->connectionTestService,
             $this->availabilityService,
             $credentialsResolver,
+            $this->catalogImpactResolver,
         );
         $container = $this->createMock(ContainerInterface::class);
         $container->method('has')->willReturn(false);
@@ -409,6 +414,48 @@ class DashboardProviderRoutingControllerTest extends TestCase
         $response = $this->controller->preview($request);
 
         $this->assertSame(Response::HTTP_NOT_FOUND, $response->getStatusCode());
+    }
+
+    public function testPreviewIncludesNewlyHiddenPackagesCountFromTheImpactResolver(): void
+    {
+        $preview = new ProviderRoutingPreviewOutDto();
+        $preview->currentEffectiveProvider = 'ETECSA';
+        $preview->proposedEffectiveProvider = 'ETECSA';
+        $this->adminService->method('preview')->willReturn($preview);
+
+        $this->catalogImpactResolver->expects($this->once())
+            ->method('countNewlyHiddenPackages')
+            ->with(1, 42, 'Mobile', 'Recharge', false)
+            ->willReturn(7);
+
+        $request = new Request([
+            'clientId' => '1',
+            'provider' => 'ETECSA',
+            'serviceName' => 'Mobile',
+            'subserviceName' => 'Recharge',
+            'routingId' => '42',
+            'isActive' => 'false',
+        ]);
+        $response = $this->controller->preview($request);
+        $data = json_decode($response->getContent(), true);
+
+        $this->assertSame(7, $data['newlyHiddenPackagesCount']);
+    }
+
+    public function testPreviewDefaultsIsActiveToTrueAndRoutingIdToNullWhenNotGiven(): void
+    {
+        $preview = new ProviderRoutingPreviewOutDto();
+        $preview->currentEffectiveProvider = 'ETECSA';
+        $preview->proposedEffectiveProvider = 'ETECSA';
+        $this->adminService->method('preview')->willReturn($preview);
+
+        $this->catalogImpactResolver->expects($this->once())
+            ->method('countNewlyHiddenPackages')
+            ->with(1, null, null, null, true)
+            ->willReturn(0);
+
+        $request = new Request(['clientId' => '1', 'provider' => 'ETECSA']);
+        $this->controller->preview($request);
     }
 
     public function testSyncExchangeRatesReturnsResult(): void

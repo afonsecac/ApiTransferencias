@@ -40,6 +40,21 @@ class ClientServiceProviderCoverageResolver
         }
 
         $rows = $this->routingRepo->findActiveRouteScopesForClient($client->getId());
+
+        return $this->isCoveredByRows($rows, $package);
+    }
+
+    /**
+     * Misma lógica que isCoveredFor(), pero sobre un array de filas dado en
+     * vez de consultar el repositorio — permite a
+     * ClientCatalogVisibilityImpactResolver simular un escenario "antes" y
+     * "después" (con una fila propuesta añadida/editada, sin persistir)
+     * reutilizando exactamente el mismo criterio de comodín.
+     *
+     * @param list<array{serviceName:?string, subserviceName:?string}> $rows
+     */
+    public function isCoveredByRows(array $rows, CommunicationPackage $package): bool
+    {
         if ($rows === []) {
             return true;
         }

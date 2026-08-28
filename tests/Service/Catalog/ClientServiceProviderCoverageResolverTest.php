@@ -123,4 +123,25 @@ class ClientServiceProviderCoverageResolverTest extends TestCase
 
         $this->assertFalse($this->resolver->isCoveredFor($this->accountFor(1), $this->packageFor('Mobile')));
     }
+
+    // ---- isCoveredByRows() — lógica pura reutilizada por ClientCatalogVisibilityImpactResolver para simular escenarios sin tocar el repositorio ----
+
+    public function testIsCoveredByRowsReturnsTrueWithoutAnyRows(): void
+    {
+        $this->assertTrue($this->resolver->isCoveredByRows([], $this->packageFor('Mobile', 'Recharge')));
+    }
+
+    public function testIsCoveredByRowsReturnsFalseWhenNoRowMatchesTheService(): void
+    {
+        $rows = [['serviceName' => 'Utilities', 'subserviceName' => null]];
+
+        $this->assertFalse($this->resolver->isCoveredByRows($rows, $this->packageFor('Mobile', 'Recharge')));
+    }
+
+    public function testIsCoveredByRowsReturnsTrueWithAWildcardSubserviceRow(): void
+    {
+        $rows = [['serviceName' => 'Mobile', 'subserviceName' => null]];
+
+        $this->assertTrue($this->resolver->isCoveredByRows($rows, $this->packageFor('Mobile', 'Data')));
+    }
 }
