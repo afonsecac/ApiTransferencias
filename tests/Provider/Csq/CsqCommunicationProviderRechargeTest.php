@@ -70,6 +70,33 @@ class CsqCommunicationProviderRechargeTest extends TestCase
         $this->assertSame('X1', $result->providerReference);
     }
 
+    /**
+     * Nauta CUP (7855) exige la cuenta Nauta ("Nauta email"), no un número
+     * de teléfono — confirmado contra el sandbox real de CSQ el 2026-08-31
+     * (GET /pre-paid/recharge/parameters). CommunicationSaleService solo
+     * puebla accountIdentifier cuando el producto lo exige (ver
+     * CommunicationProduct::$requiredIdentifierFields), así que aquí basta
+     * con preferirlo sobre phoneNumber cuando venga presente.
+     */
+    public function testRechargeSendsAccountIdentifierAsAccountWhenPresent(): void
+    {
+        $this->client->expects($this->once())
+            ->method('purchase')
+            ->with($this->anything(), 7855, $this->anything(), 'usuario@nauta.com.cu', $this->anything())
+            ->willReturn(['rc' => 0, 'items' => [['resultcode' => '10', 'resultmessage' => 'OK', 'supplierreference' => 'X2']]]);
+
+        $request = new RechargeRequest(
+            transactionId: '2608100100043',
+            phoneNumber: null,
+            productExternalId: '7855-1000',
+            destinationAmount: 1000.0,
+            destinationUnit: 'CUP',
+            accountIdentifier: 'usuario@nauta.com.cu',
+        );
+
+        $this->provider->recharge($this->context(), $request);
+    }
+
     public function testRechargeReturnsRejectedWithClearMessageOnMalformedExternalRef(): void
     {
         $this->client->expects($this->never())->method('purchase');

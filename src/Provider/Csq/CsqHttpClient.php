@@ -163,6 +163,28 @@ class CsqHttpClient
         return $this->request($context, 'GET', '/external-point-of-sale/by-file/balances');
     }
 
+    /**
+     * GET /pre-paid/recharge/parameters/{terminalId}/{operatorId} —
+     * describe el/los parámetro(s) de destino que Purchase espera para ESE
+     * artículo. `field` es siempre "account" (nunca cambia — ver purchase()),
+     * pero `labels` sí revela la semántica real: confirmado en vivo el
+     * 2026-08-31, Nauta CUP (7855) trae `{"en": "Nauta email"}` mientras
+     * Cubacel (7854) trae `{"en": "Phone Number"}` — es la única señal que
+     * CSQ da para distinguir "cuenta" de "número de teléfono" (ver
+     * CsqCommunicationProvider::resolveRequiredIdentifierFields()). OJO:
+     * `dynamic` de esta respuesta NO describe fielmente qué exige Purchase
+     * (ver docblock de purchase()) — este método solo se usa para los
+     * `labels`, no para decidir dynamicProductId/receiverEmail/documentNumber.
+     *
+     * @return array<string, mixed>
+     */
+    public function getParameters(ProviderContext $context, int $articleId): array
+    {
+        $terminal = $this->requireTerminal($context);
+
+        return $this->request($context, 'GET', "/pre-paid/recharge/parameters/{$terminal}/{$articleId}");
+    }
+
     private function requireTerminal(ProviderContext $context): int
     {
         $credentials = $this->credentialsResolver->get(CommunicationProviderEnum::CSQ, $context->environmentType);

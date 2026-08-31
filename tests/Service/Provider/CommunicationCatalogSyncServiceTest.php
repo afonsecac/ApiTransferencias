@@ -42,7 +42,7 @@ class CommunicationCatalogSyncServiceTest extends TestCase
         return new CommunicationCatalogSyncService($this->em, $registry);
     }
 
-    private function fakeProduct(string $externalId, string $name = 'Combo', float $price = 10.0, bool $enabled = true): ProviderProductDto
+    private function fakeProduct(string $externalId, string $name = 'Combo', float $price = 10.0, bool $enabled = true, array $requiredIdentifierFields = []): ProviderProductDto
     {
         return new ProviderProductDto(
             externalId: $externalId,
@@ -62,6 +62,7 @@ class CommunicationCatalogSyncServiceTest extends TestCase
             raw: [],
             isMobileOrInternetService: true,
             service: ['name' => 'MOBILE', 'subservice' => ['name' => 'AIRTIME']],
+            requiredIdentifierFields: $requiredIdentifierFields,
         );
     }
 
@@ -183,6 +184,38 @@ class CommunicationCatalogSyncServiceTest extends TestCase
         $this->assertSame(12.5, $persisted->getPrice());
         $this->assertTrue($persisted->isEnabled());
         $this->assertSame($environment, $persisted->getEnvironment());
+    }
+
+    /**
+     * requiredIdentifierFields viaja tal cual del ProviderProductDto al
+     * CommunicationProduct persistido — es lo que
+     * CommunicationSaleService usa para saber qué identificador(es) de
+     * destino exigir en el momento de la venta (ver
+     * DTOneCommunicationProviderTest para cómo cada adaptador lo deriva
+     * del proveedor real).
+     */
+    public function testPersistsRequiredIdentifierFieldsFromDto(): void
+    {
+        $environment = $this->createMock(Environment::class);
+        $environment->method('getType')->willReturn('PROD');
+        $environment->method('getId')->willReturn(4);
+
+        $this->productRepo->method('findOneBy')->willReturn(null);
+
+        /** @var CommunicationProduct|null $persisted */
+        $persisted = null;
+        $this->em->method('persist')->willReturnCallback(function ($entity) use (&$persisted) {
+            $persisted = $entity;
+        });
+
+        $adapter = $this->etecsaAdapterReturning([
+            $this->fakeProduct('100', requiredIdentifierFields: [['accountIdentifier']]),
+        ]);
+        $service = $this->serviceWithAdapter($adapter);
+
+        $service->syncProducts(CommunicationProviderEnum::ETECSA, $environment);
+
+        $this->assertSame([['accountIdentifier']], $persisted->getRequiredIdentifierFields());
     }
 
     public function testNonNumericExternalIdFallsBackToZeroPackageId(): void

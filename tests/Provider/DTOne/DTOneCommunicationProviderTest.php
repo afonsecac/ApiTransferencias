@@ -79,6 +79,68 @@ class DTOneCommunicationProviderTest extends TestCase
     }
 
     /**
+     * Nauta WIFI Recharge exige `account_number` (cuenta Nauta), no un
+     * número de teléfono (confirmado contra el sandbox real el 2026-08-31)
+     * — se manda tal cual, sin pasar por toE164Cuba() (eso es solo para
+     * mobile_number).
+     */
+    public function testRechargeSendsAccountNumberWhenOnlyAccountIdentifierIsSet(): void
+    {
+        $this->client->expects($this->once())
+            ->method('createTransaction')
+            ->with(
+                $this->anything(),
+                'TX-nauta-wifi',
+                ['external_id' => 'TX-nauta-wifi', 'product_id' => 35835, 'auto_confirm' => true, 'credit_party_identifier' => ['account_number' => 'usuario@nauta.com.cu']],
+            )
+            ->willReturn(['id' => 'dtone-ref', 'status' => ['id' => 20000, 'message' => 'submitted', 'class' => ['id' => 5, 'message' => 'SUBMITTED']]]);
+
+        $request = new RechargeRequest(
+            transactionId: 'TX-nauta-wifi',
+            phoneNumber: null,
+            productExternalId: '35835',
+            destinationAmount: 250.0,
+            destinationUnit: 'CUP',
+            accountIdentifier: 'usuario@nauta.com.cu',
+        );
+
+        $this->provider->recharge($this->context(), $request);
+    }
+
+    /**
+     * Nauta Hogar Plus exige mobile_number Y account_number a la vez
+     * (confirmado contra el sandbox real el 2026-08-31, articleId 59021 y
+     * otros) — ambos deben viajar juntos en el mismo credit_party_identifier.
+     */
+    public function testRechargeSendsBothMobileNumberAndAccountNumberWhenBothAreSet(): void
+    {
+        $this->client->expects($this->once())
+            ->method('createTransaction')
+            ->with(
+                $this->anything(),
+                'TX-nauta-hogar',
+                [
+                    'external_id' => 'TX-nauta-hogar',
+                    'product_id' => 59021,
+                    'auto_confirm' => true,
+                    'credit_party_identifier' => ['mobile_number' => '+5355501234', 'account_number' => 'usuario@nauta.com.cu'],
+                ],
+            )
+            ->willReturn(['id' => 'dtone-ref', 'status' => ['id' => 20000, 'message' => 'submitted', 'class' => ['id' => 5, 'message' => 'SUBMITTED']]]);
+
+        $request = new RechargeRequest(
+            transactionId: 'TX-nauta-hogar',
+            phoneNumber: '55501234',
+            productExternalId: '59021',
+            destinationAmount: 480.0,
+            destinationUnit: 'CUP',
+            accountIdentifier: 'usuario@nauta.com.cu',
+        );
+
+        $this->provider->recharge($this->context(), $request);
+    }
+
+    /**
      * @dataProvider phoneNumberFormatProvider
      */
     public function testRechargeConvertsPhoneNumberToE164Cuba(string $inputPhoneNumber, string $expectedMobileNumber): void
@@ -291,6 +353,73 @@ class DTOneCommunicationProviderTest extends TestCase
         $products = iterator_to_array($this->provider->fetchProducts($this->context()));
 
         $this->assertSame($expected, $products[0]->isMobileOrInternetService);
+    }
+
+    /**
+     * Confirmado contra el sandbox real de DTOne el 2026-08-31:
+     * `required_credit_party_identifier_fields` es una lista de OPCIONES
+     * alternativas (OR), cada una una lista de campos que deben venir TODOS
+     * juntos (AND). Nauta WIFI Recharge (35835, Utilities/Internet) exige
+     * SOLO `account_number`; Nauta PLUS (57055/57056, el MISMO
+     * service/subservice) exige SOLO `mobile_number`; Nauta Hogar Plus
+     * (59021 y otros, Utilities/Landline) exige AMBOS a la vez — por eso
+     * service/subservice no sirve para derivar esto, hay que leer el campo
+     * real de DTOne y traducirlo al vocabulario neutral de
+     * CommunicationSaleRecharge (mobile_number->phoneNumber,
+     * account_number->accountIdentifier).
+     *
+     * @dataProvider requiredCreditPartyIdentifierFieldsProvider
+     */
+    public function testFetchProductsTranslatesRequiredCreditPartyIdentifierFields(
+        ?array $rawRequiredFields,
+        array $expectedNeutralFields
+    ): void {
+        $item = [
+            'id' => 35835,
+            'name' => 'Nauta Cuba 250 CUP',
+            'type' => 'FIXED_VALUE_RECHARGE',
+            'destination' => ['amount' => 250, 'unit' => 'CUP'],
+            'prices' => ['wholesale' => ['amount' => 9.97, 'unit' => 'EUR']],
+        ];
+        if ($rawRequiredFields !== null) {
+            $item['required_credit_party_identifier_fields'] = $rawRequiredFields;
+        }
+
+        $this->client->method('iterateProducts')->willReturn((function () use ($item) {
+            yield $item;
+        })());
+
+        $products = iterator_to_array($this->provider->fetchProducts($this->context()));
+
+        $this->assertSame($expectedNeutralFields, $products[0]->requiredIdentifierFields);
+    }
+
+    /**
+     * @return iterable<string, array{?array, list<list<string>>}>
+     */
+    public static function requiredCreditPartyIdentifierFieldsProvider(): iterable
+    {
+        yield 'Nauta WIFI Recharge: solo account_number -> accountIdentifier' => [
+            [['account_number']],
+            [['accountIdentifier']],
+        ];
+        yield 'Nauta PLUS: solo mobile_number -> phoneNumber' => [
+            [['mobile_number']],
+            [['phoneNumber']],
+        ];
+        yield 'Nauta Hogar Plus: ambos juntos en la misma opción' => [
+            [['mobile_number', 'account_number']],
+            [['phoneNumber', 'accountIdentifier']],
+        ];
+        yield 'Cubacel (control): solo mobile_number' => [
+            [['mobile_number']],
+            [['phoneNumber']],
+        ];
+        yield 'sin el campo en absoluto (gift cards, etc.)' => [null, []];
+        yield 'campo desconocido de DTOne se descarta, no se inventa' => [
+            [['iban']],
+            [],
+        ];
     }
 
     public function testFetchProductsPreservesServiceShapeForClientPackageCreation(): void

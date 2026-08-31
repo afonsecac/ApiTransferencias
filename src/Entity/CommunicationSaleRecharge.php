@@ -39,20 +39,44 @@ class CommunicationSaleRecharge extends CommunicationSaleInfo
         required: true,
         example: 'XXXXXXXXXX'
     )]
-    #[Assert\NotBlank]
     #[Assert\Length(min: 8, max: 10)]
     #[Groups(['comSales:read', 'comSales:create', 'sale:list', 'sale:detail'])]
-    private string $phoneNumber;
+    private ?string $phoneNumber = null;
 
+    /**
+     * Identificador de destino tipo cuenta (no un número de teléfono) —
+     * p.ej. la cuenta Nauta ("usuario@nauta.com.cu") para Nauta WIFI
+     * Recharge. Cuál de los dos (o ambos) exige el producto elegido lo
+     * valida CommunicationSaleService::assertRecipientIdentifierSatisfied()
+     * contra CommunicationProduct::$requiredIdentifierFields al admitir la
+     * venta — ninguno de los dos es #[Assert\NotBlank] aquí porque cuál es
+     * obligatorio depende del producto, no es una regla fija del DTO.
+     */
+    #[ORM\Column(length: 255, nullable: true)]
+    #[Assert\Length(max: 255)]
+    #[Groups(['comSales:read', 'comSales:create', 'sale:list', 'sale:detail'])]
+    private ?string $accountIdentifier = null;
 
-    public function getPhoneNumber(): string
+    public function getPhoneNumber(): ?string
     {
         return $this->phoneNumber;
     }
 
-    public function setPhoneNumber(string $phoneNumber): static
+    public function setPhoneNumber(?string $phoneNumber): static
     {
         $this->phoneNumber = $phoneNumber;
+
+        return $this;
+    }
+
+    public function getAccountIdentifier(): ?string
+    {
+        return $this->accountIdentifier;
+    }
+
+    public function setAccountIdentifier(?string $accountIdentifier): static
+    {
+        $this->accountIdentifier = $accountIdentifier;
 
         return $this;
     }

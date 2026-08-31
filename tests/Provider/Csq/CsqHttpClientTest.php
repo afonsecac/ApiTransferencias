@@ -290,4 +290,47 @@ class CsqHttpClientTest extends TestCase
 
         $client->purchase($this->context(), 7951, 100042, '53500000', 220000);
     }
+
+    // ---- getParameters ----
+
+    /**
+     * GET /pre-paid/recharge/parameters/{terminal}/{articleId} — confirmado
+     * en vivo el 2026-08-31: la respuesta trae `parameters[].labels` con la
+     * semántica real del campo "account" (siempre el mismo nombre de
+     * campo, ver purchase()) — p.ej. "Nauta email" para Nauta CUP (7855) vs
+     * "Phone Number" para Cubacel (7854). Es la única señal que CSQ da para
+     * distinguirlos, ver CsqCommunicationProvider::resolveRequiredIdentifierFields().
+     */
+    public function testGetParametersSendsDocumentedRequestAndDecodesBody(): void
+    {
+        $requestedUrl = null;
+        $payload = ['rc' => 0, 'message' => 'OK', 'dynamic' => false, 'dynamicField' => 'account', 'parameters' => [
+            ['field' => 'account', 'labels' => ['en' => 'Nauta email', 'es' => 'Correo electronico de Nauta']],
+        ]];
+
+        $httpClient = new MockHttpClient(function (string $method, string $url) use (&$requestedUrl, $payload) {
+            $requestedUrl = $url;
+            $this->assertSame('GET', $method);
+
+            return new MockResponse(json_encode($payload), ['http_code' => 200]);
+        });
+
+        $client = new CsqHttpClient($httpClient, $this->credentialsResolver(), new NullLogger());
+        $result = $client->getParameters($this->context(), 7855);
+
+        $this->assertSame('https://evsb.csqworld.com/pre-paid/recharge/parameters/173103/7855', $requestedUrl);
+        $this->assertSame($payload, $result);
+    }
+
+    public function testGetParametersWrapsTransportErrors(): void
+    {
+        $httpClient = new MockHttpClient(function () {
+            return new MockResponse('', ['http_code' => 503]);
+        });
+        $client = new CsqHttpClient($httpClient, $this->credentialsResolver(), new NullLogger());
+
+        $this->expectException(MyCurrentException::class);
+
+        $client->getParameters($this->context(), 7855);
+    }
 }
