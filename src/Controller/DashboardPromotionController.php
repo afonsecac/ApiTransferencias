@@ -282,6 +282,7 @@ class DashboardPromotionController extends AbstractController
             'description' => $product->getDescription(),
             'wholesalePrice' => $product->getPrice() ?? 0.0,
             'priceCurrency' => $product->getPriceCurrency(),
+            'requiredIdentifierFields' => $product->getRequiredIdentifierFields(),
         ];
     }
 

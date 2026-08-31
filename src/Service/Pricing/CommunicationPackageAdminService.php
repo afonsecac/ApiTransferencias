@@ -313,7 +313,7 @@ class CommunicationPackageAdminService
      * costo mayorista — evita publicar un paquete indespachable (ver
      * DashboardCommunicationPackagesController::coverage()).
      *
-     * @return list<array{provider: string, productId: int, externalRef: string, description: ?string, wholesalePrice: float, priceCurrency: ?string}>
+     * @return list<array{provider: string, productId: int, externalRef: string, description: ?string, wholesalePrice: float, priceCurrency: ?string, requiredIdentifierFields: list<list<string>>}>
      */
     public function coverage(CommunicationPackage $package, ?Environment $environment): array
     {
@@ -330,6 +330,7 @@ class CommunicationPackageAdminService
             'description' => $product->getDescription(),
             'wholesalePrice' => $product->getPrice() ?? 0.0,
             'priceCurrency' => $product->getPriceCurrency(),
+            'requiredIdentifierFields' => $product->getRequiredIdentifierFields(),
         ], $products);
     }
 }

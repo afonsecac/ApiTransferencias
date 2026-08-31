@@ -51,6 +51,23 @@ final readonly class ProviderProductDto
          * @var array{name?: string, subservice?: array{name?: string}}
          */
         public array $service,
+        /**
+         * Identificador(es) de destino que el proveedor exige para
+         * despachar ESTE producto — no siempre es un número de teléfono
+         * (ver docs/dtone-product-types.md y CommunicationSaleService::
+         * assertRecipientIdentifierSatisfied()). Lista de opciones
+         * alternativas (OR), cada una una lista de campos que deben venir
+         * TODOS juntos (AND), usando el vocabulario neutral de
+         * CommunicationSaleRecharge: 'phoneNumber' | 'accountIdentifier'.
+         * `[]` significa "el proveedor no lo declara" — se interpreta como
+         * el comportamiento histórico (exigir solo phoneNumber). Cada
+         * adaptador traduce el vocabulario propio del proveedor aquí
+         * (DTOne: mobile_number/account_number — ver
+         * DTOneCommunicationProvider::mapRequiredIdentifierFields()).
+         *
+         * @var list<list<string>>
+         */
+        public array $requiredIdentifierFields = [],
     ) {
     }
 }

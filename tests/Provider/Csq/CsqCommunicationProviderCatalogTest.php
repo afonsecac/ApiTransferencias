@@ -279,6 +279,130 @@ class CsqCommunicationProviderCatalogTest extends TestCase
         $this->assertSame(str_repeat('a', 255), $products[0]->description);
     }
 
+    /**
+     * Confirmado contra el sandbox real de CSQ el 2026-08-31: `/pre-paid/
+     * recharge/parameters/{terminal}/{articleId}` es la única señal que da
+     * CSQ para distinguir un destino tipo cuenta de uno tipo teléfono — el
+     * campo siempre se llama "account" (nunca cambia), pero `labels.en` sí
+     * revela la semántica real ("Nauta email" vs "Phone Number"). A
+     * diferencia de DTOne, no hay heurística de service/subservice posible
+     * aquí tampoco: hay que leer el campo real por artículo.
+     *
+     * @dataProvider parametersLabelProvider
+     */
+    public function testFetchProductsTranslatesParametersLabelToNeutralField(array $labels, array $expected): void
+    {
+        $this->client->method('getPortfolio')->willReturn($this->portfolio([
+            [
+                'articleId' => 7855,
+                'name' => 'Nauta CUP',
+                'countryId' => 192,
+                'topupType' => 'Data',
+                'amountType' => 'by_list',
+                'saleAmount' => ['from' => null, 'to' => null, 'step' => null, 'list' => [1000]],
+                'exchangeRate' => 22.0,
+                'saleCurrency' => 'USD',
+                'destinationCurrency' => 'CUP',
+            ],
+        ]));
+        $this->client->method('getParameters')->with($this->anything(), 7855)->willReturn([
+            'rc' => 0,
+            'parameters' => [['field' => 'account', 'labels' => $labels]],
+        ]);
+
+        $products = iterator_to_array($this->provider->fetchProducts($this->context()));
+
+        $this->assertCount(1, $products);
+        $this->assertSame($expected, $products[0]->requiredIdentifierFields);
+    }
+
+    /**
+     * @return iterable<string, array{array, list<list<string>>}>
+     */
+    public static function parametersLabelProvider(): iterable
+    {
+        yield 'Nauta email -> accountIdentifier' => [
+            ['en' => 'Nauta email', 'es' => 'Correo electronico de Nauta'],
+            [['accountIdentifier']],
+        ];
+        yield 'Phone Number -> phoneNumber' => [
+            ['en' => 'Phone Number', 'es' => 'Numero de telefono'],
+            [['phoneNumber']],
+        ];
+        yield 'label desconocida no se inventa' => [
+            ['en' => 'Something else entirely'],
+            [],
+        ];
+        yield 'sin labels en absoluto' => [
+            [],
+            [],
+        ];
+    }
+
+    /**
+     * Best-effort (mismo criterio que exchangeRate inválido u otros campos
+     * de catálogo): si /pre-paid/recharge/parameters falla, el producto NO
+     * se omite del catálogo — se sincroniza igual, sin requiredIdentifierFields
+     * declarado (comportamiento histórico: exigir solo phoneNumber). Un
+     * proveedor caído en ESE endpoint puntual no debe tumbar todo el sync.
+     */
+    public function testFetchProductsFallsBackToLegacyWhenGetParametersFails(): void
+    {
+        $this->client->method('getPortfolio')->willReturn($this->portfolio([
+            [
+                'articleId' => 7855,
+                'name' => 'Nauta CUP',
+                'countryId' => 192,
+                'topupType' => 'Data',
+                'amountType' => 'by_list',
+                'saleAmount' => ['from' => null, 'to' => null, 'step' => null, 'list' => [1000]],
+                'exchangeRate' => 22.0,
+                'saleCurrency' => 'USD',
+                'destinationCurrency' => 'CUP',
+            ],
+        ]));
+        $this->client->method('getParameters')->willThrowException(
+            new \App\Exception\MyCurrentException('CSQ_REQUEST_FAILED', 'timeout', 502),
+        );
+
+        $products = iterator_to_array($this->provider->fetchProducts($this->context()));
+
+        $this->assertCount(1, $products);
+        $this->assertSame([], $products[0]->requiredIdentifierFields);
+    }
+
+    /**
+     * getParameters() se consulta UNA vez por articleId, no una vez por
+     * denominación generada — evita N llamadas redundantes cuando un
+     * articleId by_range se expande a decenas de CommunicationProduct.
+     */
+    public function testFetchProductsCallsGetParametersOncePerArticleIdNotPerDenomination(): void
+    {
+        $this->client->method('getPortfolio')->willReturn($this->portfolio([
+            [
+                'articleId' => 7951,
+                'name' => 'Cubacel Pack Combos',
+                'countryId' => 192,
+                'topupType' => 'Bundles',
+                'amountType' => 'by_list',
+                'saleAmount' => ['from' => null, 'to' => null, 'step' => null, 'list' => [2200, 3300, 4400]],
+                'exchangeRate' => 22.0,
+                'saleCurrency' => 'USD',
+                'destinationCurrency' => 'CUP',
+            ],
+        ]));
+        $this->client->expects($this->once())->method('getParameters')->willReturn([
+            'rc' => 0,
+            'parameters' => [['field' => 'account', 'labels' => ['en' => 'Phone Number']]],
+        ]);
+
+        $products = iterator_to_array($this->provider->fetchProducts($this->context()));
+
+        $this->assertCount(3, $products);
+        $this->assertSame([['phoneNumber']], $products[0]->requiredIdentifierFields);
+        $this->assertSame([['phoneNumber']], $products[2]->requiredIdentifierFields);
+    }
+
     public function testEmptyPortfolioYieldsNoProducts(): void
     {
         $this->client->method('getPortfolio')->willReturn([]);

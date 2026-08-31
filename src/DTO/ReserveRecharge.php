@@ -29,10 +29,9 @@ final class ReserveRecharge
             required: true,
             default: '5350499847'
         )]
-        #[Assert\NotBlank]
         #[Assert\Length(min: 8, max: 10)]
         #[Groups(['comSales:create'])]
-        readonly string $phoneNumber,
+        readonly ?string $phoneNumber,
         #[ApiProperty(
             description: 'The promotion id in current system, take the information from /communication/promotions',
             required: true
@@ -55,15 +54,31 @@ final class ReserveRecharge
         )]
         #[Groups(['comSales:read', 'comSales:create'])]
         #[Assert\NotBlank]
-        readonly string $clientTransactionId
+        readonly string $clientTransactionId,
+        /**
+         * Identificador de destino tipo cuenta (no un número de teléfono) —
+         * p.ej. la cuenta Nauta para Nauta WIFI Recharge. Ninguno de los dos
+         * (este ni phoneNumber) es #[Assert\NotBlank]: cuál es obligatorio
+         * depende del producto, se valida en CommunicationSaleService::
+         * assertRecipientIdentifierSatisfied() al admitir la reserva.
+         */
+        #[ApiProperty(description: 'Account-type recipient identifier (e.g. Nauta account) for products that require it instead of, or in addition to, phoneNumber')]
+        #[Assert\Length(max: 255)]
+        #[Groups(['comSales:create'])]
+        readonly ?string $accountIdentifier = null,
     )
     {
 
     }
 
-    public function getPhoneNumber(): string
+    public function getPhoneNumber(): ?string
     {
         return $this->phoneNumber;
+    }
+
+    public function getAccountIdentifier(): ?string
+    {
+        return $this->accountIdentifier;
     }
 
     public function getPromotionId(): int
