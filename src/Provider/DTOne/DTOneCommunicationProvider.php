@@ -94,6 +94,20 @@ final class DTOneCommunicationProvider implements
      */
     private const COUNTRY_CALLING_CODE = '53';
 
+    /**
+     * Traduce el vocabulario de `credit_party_identifier` de DTOne al
+     * vocabulario neutral de CommunicationSaleRecharge/RechargeRequest.
+     * Confirmado contra el sandbox real el 2026-08-31: `account_number` es
+     * la cuenta Nauta (no un número de teléfono) para Nauta WIFI Recharge —
+     * ver docs/dtone-product-types.md. Cualquier campo de DTOne que no esté
+     * aquí (p.ej. `email`, `iban`, otros no vistos todavía) se descarta en
+     * mapRequiredIdentifierFields() en vez de inventar un mapeo.
+     */
+    private const IDENTIFIER_FIELD_MAP = [
+        'mobile_number' => 'phoneNumber',
+        'account_number' => 'accountIdentifier',
+    ];
+
     public function __construct(
         private readonly DTOneHttpClient $client,
         private readonly DTOneStatusMapper $statusMapper,
@@ -134,7 +148,7 @@ final class DTOneCommunicationProvider implements
 
     public function recharge(ProviderContext $context, RechargeRequest $request): ProviderDispatchResult
     {
-        $body = $this->buildTransactionBody($request->transactionId, $request->productExternalId, $request->phoneNumber);
+        $body = $this->buildTransactionBody($request->transactionId, $request->productExternalId, $request->phoneNumber, $request->accountIdentifier);
 
         try {
             $raw = $this->client->createTransaction($context, $request->transactionId, $body);
@@ -152,7 +166,11 @@ final class DTOneCommunicationProvider implements
 
     public function sellPackage(ProviderContext $context, PackageSaleRequest $request): ProviderDispatchResult
     {
-        $body = $this->buildTransactionBody($request->transactionId, $request->productExternalId, $request->phoneNumber);
+        // PackageSaleRequest no lleva accountIdentifier: los productos que
+        // hoy pasan por sellPackage() (PIN_PURCHASE, gift cards) nunca
+        // exigen cuenta Nauta — ver el docblock de la clase. Si algún día
+        // hace falta, se añade igual que en RechargeRequest.
+        $body = $this->buildTransactionBody($request->transactionId, $request->productExternalId, $request->phoneNumber, null);
 
         try {
             $raw = $this->client->createTransaction($context, $request->transactionId, $body);
@@ -310,8 +328,48 @@ final class DTOneCommunicationProvider implements
                     'name' => $service,
                     'subservice' => $subservice !== null ? ['name' => $subservice] : null,
                 ], static fn ($v) => $v !== null),
+                requiredIdentifierFields: $this->mapRequiredIdentifierFields($item['required_credit_party_identifier_fields'] ?? null),
             );
         }
+    }
+
+    /**
+     * required_credit_party_identifier_fields de DTOne es una lista de
+     * opciones alternativas (OR), cada una una lista de campos que deben
+     * venir todos juntos (AND) — confirmado contra el sandbox real el
+     * 2026-08-31 con Nauta Hogar Plus (`[["mobile_number","account_number"]]`,
+     * ambos a la vez). Se traduce cada campo con IDENTIFIER_FIELD_MAP; un
+     * campo no reconocido se descarta (nunca se inventa un mapeo), y si eso
+     * deja una opción vacía, la opción entera se descarta.
+     *
+     * @param mixed $raw
+     * @return list<list<string>>
+     */
+    private function mapRequiredIdentifierFields(mixed $raw): array
+    {
+        if (!is_array($raw)) {
+            return [];
+        }
+
+        $options = [];
+        foreach ($raw as $option) {
+            if (!is_array($option)) {
+                continue;
+            }
+
+            $mapped = [];
+            foreach ($option as $field) {
+                if (is_string($field) && isset(self::IDENTIFIER_FIELD_MAP[$field])) {
+                    $mapped[] = self::IDENTIFIER_FIELD_MAP[$field];
+                }
+            }
+
+            if ($mapped !== []) {
+                $options[] = $mapped;
+            }
+        }
+
+        return $options;
     }
 
     /**
@@ -393,7 +451,7 @@ final class DTOneCommunicationProvider implements
     /**
      * @return array<string, mixed>
      */
-    private function buildTransactionBody(string $transactionId, string $productExternalId, ?string $phoneNumber): array
+    private function buildTransactionBody(string $transactionId, string $productExternalId, ?string $phoneNumber, ?string $accountIdentifier): array
     {
         $body = [
             'external_id' => $transactionId,
@@ -401,8 +459,21 @@ final class DTOneCommunicationProvider implements
             'auto_confirm' => true,
         ];
 
+        // Se manda cualquiera de los dos que venga informado — cuál(es)
+        // hacía falta ya lo decidió CommunicationSaleService contra
+        // CommunicationProduct::$requiredIdentifierFields antes de admitir
+        // la venta (ver assertRecipientIdentifierSatisfied()); aquí solo se
+        // traduce al vocabulario de DTOne. Nauta Hogar Plus exige ambos a
+        // la vez — confirmado contra el sandbox real el 2026-08-31.
+        $identifier = [];
         if ($phoneNumber !== null) {
-            $body['credit_party_identifier'] = ['mobile_number' => $this->toE164Cuba($phoneNumber)];
+            $identifier['mobile_number'] = $this->toE164Cuba($phoneNumber);
+        }
+        if ($accountIdentifier !== null) {
+            $identifier['account_number'] = $accountIdentifier;
+        }
+        if ($identifier !== []) {
+            $body['credit_party_identifier'] = $identifier;
         }
 
         return $body;

@@ -10,6 +10,7 @@ use App\Entity\BalanceOperation;
 use App\Entity\CommunicationNationality;
 use App\Entity\CommunicationOffice;
 use App\Entity\CommunicationPackage;
+use App\Entity\CommunicationProduct;
 use App\Entity\CommunicationPromotions;
 use App\Entity\CommunicationSaleHistory;
 use App\Entity\CommunicationSaleInfo;
@@ -213,6 +214,7 @@ class CommunicationSaleService extends CommonService
         // promoción→producto (ver PromotionProviderDispatchResolver) y se
         // congela ANTES de construir la venta.
         $admission = $this->admitV2ForReserve($user, $catalogPackage, $promotion);
+        $this->assertRecipientIdentifierSatisfied($admission->dispatchProduct, $reserveDto->getPhoneNumber(), $reserveDto->getAccountIdentifier());
 
         $recharge = new CommunicationSaleRecharge();
         $recharge->setTenant($user);
@@ -222,6 +224,7 @@ class CommunicationSaleService extends CommonService
         $recharge->setPromotionId($reserveDto->getPromotionId());
         $recharge->setPackageId($reserveDto->getPackageId());
         $recharge->setPhoneNumber($reserveDto->getPhoneNumber());
+        $recharge->setAccountIdentifier($reserveDto->getAccountIdentifier());
         $recharge->setClientTransactionId($reserveDto->getClientTransactionId());
         $this->applyAdmission($recharge, $admission);
         $recharge->setPromotion($promotion);
@@ -294,6 +297,7 @@ class CommunicationSaleService extends CommonService
         // El proveedor es propiedad del producto, no de la cuenta — se
         // valida y se congela ANTES de construir la venta (ver admitV2()).
         $admission = $this->admitV2($user, $recharge->getPackageId(), 'recharge');
+        $this->assertRecipientIdentifierSatisfied($admission->dispatchProduct, $recharge->getPhoneNumber(), $recharge->getAccountIdentifier());
 
         $recharge->setTransactionId($transactionId);
         $this->applyAdmission($recharge, $admission);
@@ -470,10 +474,18 @@ class CommunicationSaleService extends CommonService
                 // cuenta de DTOne).
                 $provider = $this->providerResolver->resolveForSale($saleRecharge);
 
-                $phoneLength = strlen($saleRecharge->getPhoneNumber());
-                $checkPhone = substr($saleRecharge->getPhoneNumber(), $phoneLength - 2, $phoneLength);
+                // Productos tipo cuenta (Nauta WIFI Recharge exige SOLO
+                // accountIdentifier, no un número — ver
+                // CommunicationProduct::$requiredIdentifierFields) pueden
+                // no traer phoneNumber en absoluto: las sustituciones de
+                // sandbox de abajo son todas convenciones sobre el número
+                // de teléfono, así que se saltan por completo cuando no hay
+                // ninguno.
                 $phoneNumber = $saleRecharge->getPhoneNumber();
-                if ($environment->getType() === 'TEST' && $provider === CommunicationProviderEnum::ETECSA) {
+                $checkPhone = $phoneNumber !== null ? substr($phoneNumber, -2) : null;
+                if ($phoneNumber === null) {
+                    // nada que sustituir
+                } elseif ($environment->getType() === 'TEST' && $provider === CommunicationProviderEnum::ETECSA) {
                     $phoneNumber = $checkPhone === "60" ? $this->parameters->get(
                         'app.phoneNumber'
                     ) : $saleRecharge->getPhoneNumber();
@@ -508,6 +520,7 @@ class CommunicationSaleService extends CommonService
 
                 $body = [
                     'phoneNumber' => $phoneNumber,
+                    'accountIdentifier' => $saleRecharge->getAccountIdentifier(),
                     'productCode' => $productCode,
                     'productPrice' => round($destination->amount, 2),
                     'transactionId' => $saleRecharge->getTransactionId(),
@@ -522,6 +535,7 @@ class CommunicationSaleService extends CommonService
                     productExternalId: (string) $productCode,
                     destinationAmount: (float) $destination->amount,
                     destinationUnit: $saleRecharge->getCurrency() ?? 'CUP',
+                    accountIdentifier: $saleRecharge->getAccountIdentifier(),
                 );
 
                 $dispatchResult = $adapter->recharge($context, $request);
@@ -945,6 +959,56 @@ class CommunicationSaleService extends CommonService
             dispatchExternalRef: $dispatch->externalRef,
             destinationAmount: $package->getDestinationAmount(),
             destinationCurrency: $package->getDestinationCurrency(),
+        );
+    }
+
+    /**
+     * Rechaza de forma síncrona (en admisión, antes de persistir la venta)
+     * una recarga que no trae el/los identificador(es) de destino que el
+     * producto resuelto exige — ver CommunicationProduct::$requiredIdentifierFields.
+     * Confirmado contra el sandbox real de DTOne el 2026-08-31: Nauta WIFI
+     * Recharge exige SOLO accountIdentifier (cuenta Nauta, no un número de
+     * teléfono), Nauta PLUS exige SOLO phoneNumber, y Nauta Hogar Plus
+     * exige AMBOS a la vez — los tres con el MISMO service/subservice, así
+     * que no hay atajo de catálogo posible, hay que leer el campo real.
+     *
+     * `$product === null` o `requiredIdentifierFields === []` (producto sin
+     * declarar, todo el catálogo histórico) cae al comportamiento anterior
+     * a este fix: se exige solo phoneNumber.
+     *
+     * @throws MyCurrentException
+     */
+    private function assertRecipientIdentifierSatisfied(?CommunicationProduct $product, ?string $phoneNumber, ?string $accountIdentifier): void
+    {
+        $required = $product?->getRequiredIdentifierFields() ?? [];
+
+        if ($required === []) {
+            if ($phoneNumber === null || $phoneNumber === '') {
+                throw new MyCurrentException('COM_MISSING_RECIPIENT_IDENTIFIER', 'phoneNumber is required for this product', 400);
+            }
+
+            return;
+        }
+
+        $provided = [];
+        if ($phoneNumber !== null && $phoneNumber !== '') {
+            $provided['phoneNumber'] = true;
+        }
+        if ($accountIdentifier !== null && $accountIdentifier !== '') {
+            $provided['accountIdentifier'] = true;
+        }
+
+        foreach ($required as $option) {
+            if (array_diff($option, array_keys($provided)) === []) {
+                return;
+            }
+        }
+
+        $optionsDescription = implode(' OR ', array_map(static fn (array $option) => implode('+', $option), $required));
+        throw new MyCurrentException(
+            'COM_MISSING_RECIPIENT_IDENTIFIER',
+            "Missing required recipient identifier(s) for this product: {$optionsDescription}",
+            400,
         );
     }
 

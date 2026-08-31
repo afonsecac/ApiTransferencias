@@ -252,6 +252,8 @@ final class CsqCommunicationProvider implements
                 continue;
             }
 
+            $requiredIdentifierFields = $this->resolveRequiredIdentifierFields($context, (int) $item['articleId']);
+
             $topupType = isset($item['topupType']) ? (string) $item['topupType'] : null;
             $serviceMap = self::TOPUP_TYPE_SERVICE_MAP[$topupType] ?? null;
             $destinationUnit = isset($item['destinationCurrency']) ? (string) $item['destinationCurrency'] : null;
@@ -291,6 +293,7 @@ final class CsqCommunicationProvider implements
                         'name' => $serviceMap['service'],
                         'subservice' => ['name' => $serviceMap['subservice']],
                     ] : [],
+                    requiredIdentifierFields: $requiredIdentifierFields,
                 );
             }
         }
@@ -309,6 +312,68 @@ final class CsqCommunicationProvider implements
     public function fetchPromotionProducts(ProviderContext $context, PromotionCatalogQuery $query): iterable
     {
         return $this->fetchProducts($context);
+    }
+
+    /**
+     * GET /pre-paid/recharge/parameters/{terminal}/{articleId} es la única
+     * señal que CSQ da para distinguir un destino tipo cuenta de uno tipo
+     * teléfono — confirmado en vivo el 2026-08-31: el campo siempre se
+     * llama "account" (nunca cambia), pero `parameters[].labels.en` sí
+     * revela la semántica real ("Nauta email" para 7855 vs "Phone Number"
+     * para 7854 Cubacel). No hay heurística de topupType posible: Nauta CUP
+     * y Cubacel comparten el mismo `field`. Se consulta UNA vez por
+     * articleId (antes de expandir a N CommunicationProduct por
+     * denominación) — best-effort: un fallo de este endpoint puntual (o una
+     * label no reconocida) no debe tumbar el sync completo, solo deja el
+     * producto sin requiredIdentifierFields declarado (comportamiento
+     * histórico: exigir solo phoneNumber).
+     *
+     * @return list<list<string>>
+     */
+    private function resolveRequiredIdentifierFields(ProviderContext $context, int $articleId): array
+    {
+        try {
+            $response = $this->client->getParameters($context, $articleId);
+        } catch (MyCurrentException $e) {
+            $this->csqLogger->warning('CSQ catálogo: no se pudo consultar /pre-paid/recharge/parameters, se usa el comportamiento histórico (phoneNumber).', [
+                'articleId' => $articleId,
+                'environmentId' => $context->environmentId,
+                'error' => $e->getMessage(),
+            ]);
+
+            return [];
+        }
+
+        $fields = [];
+        foreach ((array) ($response['parameters'] ?? []) as $parameter) {
+            $field = $this->mapParameterLabelToNeutralField(is_array($parameter) ? $parameter : []);
+            if ($field !== null) {
+                $fields[] = $field;
+            }
+        }
+
+        return $fields === [] ? [] : [$fields];
+    }
+
+    /**
+     * @param array<string, mixed> $parameter
+     */
+    private function mapParameterLabelToNeutralField(array $parameter): ?string
+    {
+        $label = strtolower((string) ($parameter['labels']['en'] ?? ''));
+        if ($label === '') {
+            return null;
+        }
+
+        if (str_contains($label, 'email') || str_contains($label, 'account')) {
+            return 'accountIdentifier';
+        }
+
+        if (str_contains($label, 'phone') || str_contains($label, 'mobile') || str_contains($label, 'number')) {
+            return 'phoneNumber';
+        }
+
+        return null;
     }
 
     /**
@@ -402,7 +467,15 @@ final class CsqCommunicationProvider implements
                 $context,
                 $articleId,
                 $this->deriveLocalReference($request->transactionId),
-                $request->phoneNumber,
+                // El campo "account" de CSQ es el mismo nombre para ambos
+                // casos (nunca cambia — ver CsqHttpClient::purchase()), pero
+                // su contenido esperado sí varía por producto: cuenta Nauta
+                // para Nauta CUP, número de teléfono para Cubacel/etc. —
+                // CommunicationSaleService solo puebla accountIdentifier
+                // cuando el producto lo exige (ver
+                // CommunicationProduct::$requiredIdentifierFields), así que
+                // basta con preferirlo sobre phoneNumber cuando venga.
+                $request->accountIdentifier ?? $request->phoneNumber,
                 (int) round($destinationAmount * 100),
             );
         } catch (MyCurrentException $e) {

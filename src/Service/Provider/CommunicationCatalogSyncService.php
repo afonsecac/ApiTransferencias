@@ -76,6 +76,7 @@ class CommunicationCatalogSyncService
             $entity->setIsMobileOrInternetService($item->isMobileOrInternetService);
             $entity->setBenefits($item->benefits);
             $entity->setService($item->service);
+            $entity->setRequiredIdentifierFields($item->requiredIdentifierFields);
             $entity->setPrice($item->wholesalePrice);
             $entity->setPriceCurrency($item->priceCurrency);
             $entity->setDestinationAmount($item->destinationAmount);

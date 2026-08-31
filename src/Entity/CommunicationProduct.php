@@ -133,6 +133,18 @@ class CommunicationProduct
     #[Groups(['product:read'])]
     private array $service = [];
 
+    /**
+     * Identificador(es) de destino que el proveedor exige para despachar
+     * este producto — viene de ProviderProductDto::$requiredIdentifierFields
+     * (ver su docblock para el formato y el porqué). `[]` = sin declarar,
+     * comportamiento histórico (solo phoneNumber).
+     *
+     * @var list<list<string>>
+     */
+    #[ORM\Column(type: Types::JSON)]
+    #[Groups(['product:read'])]
+    private array $requiredIdentifierFields = [];
+
     public function __construct()
     {
         $this->createdAt = new \DateTimeImmutable('now');
@@ -369,6 +381,24 @@ class CommunicationProduct
     public function setPriceCurrency(?string $priceCurrency): static
     {
         $this->priceCurrency = $priceCurrency;
+
+        return $this;
+    }
+
+    /**
+     * @return list<list<string>>
+     */
+    public function getRequiredIdentifierFields(): array
+    {
+        return $this->requiredIdentifierFields;
+    }
+
+    /**
+     * @param list<list<string>> $requiredIdentifierFields
+     */
+    public function setRequiredIdentifierFields(array $requiredIdentifierFields): static
+    {
+        $this->requiredIdentifierFields = $requiredIdentifierFields;
 
         return $this;
     }

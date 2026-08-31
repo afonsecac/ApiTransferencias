@@ -260,6 +260,7 @@ class DashboardCommunicationPackagesControllerTest extends TestCase
         $product->method('getExternalRef')->willReturn('x');
         $product->method('getPrice')->willReturn(10.0);
         $product->method('getPriceCurrency')->willReturn('USD');
+        $product->method('getRequiredIdentifierFields')->willReturn([['accountIdentifier']]);
 
         return $product;
     }
@@ -295,6 +296,12 @@ class DashboardCommunicationPackagesControllerTest extends TestCase
         $this->assertCount(1, $data[1]['candidates']);
         $this->assertTrue($data[0]['autoMatched']);
         $this->assertFalse($data[1]['autoMatched']);
+        // requiredIdentifierFields (ver App\Entity\CommunicationProduct) viaja
+        // en la serialización — el admin necesita verlo al elegir el vínculo
+        // paquete->producto (ej. Nauta WIFI exige accountIdentifier, no un
+        // número de teléfono).
+        $this->assertSame([['accountIdentifier']], $data[0]['boundProduct']['requiredIdentifierFields']);
+        $this->assertSame([['accountIdentifier']], $data[1]['candidates'][0]['requiredIdentifierFields']);
     }
 
     public function testSetBindingReturnsNotFoundWhenPackageDoesNotExist(): void

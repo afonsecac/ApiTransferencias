@@ -309,6 +309,7 @@ class CommunicationPackageAdminServiceTest extends TestCase
         $product->method('getDescription')->willReturn('Cubacel');
         $product->method('getPrice')->willReturn(11.36);
         $product->method('getPriceCurrency')->willReturn('USD');
+        $product->method('getRequiredIdentifierFields')->willReturn([['phoneNumber', 'accountIdentifier']]);
 
         $environment = $this->createMock(Environment::class);
         $this->productRepository->expects($this->once())
@@ -325,6 +326,7 @@ class CommunicationPackageAdminServiceTest extends TestCase
             'description' => 'Cubacel',
             'wholesalePrice' => 11.36,
             'priceCurrency' => 'USD',
+            'requiredIdentifierFields' => [['phoneNumber', 'accountIdentifier']],
         ]], $coverage);
     }
 }

@@ -73,6 +73,7 @@ class DashboardPromotionControllerTest extends TestCase
         $product->method('getProvider')->willReturn('CSQ');
         $product->method('getId')->willReturn(1);
         $product->method('getExternalRef')->willReturn('ref-1');
+        $product->method('getRequiredIdentifierFields')->willReturn([['accountIdentifier']]);
 
         return $product;
     }
@@ -117,6 +118,11 @@ class DashboardPromotionControllerTest extends TestCase
         $this->assertSame('CSQ', $data[1]['provider']);
         $this->assertNull($data[1]['boundProduct']);
         $this->assertCount(1, $data[1]['candidates']);
+        // requiredIdentifierFields (ver App\Entity\CommunicationProduct) —
+        // mismo criterio que catalog/packages/{id}/bindings: el admin
+        // necesita ver qué identificador exige el producto al vincularlo.
+        $this->assertSame([['accountIdentifier']], $data[0]['boundProduct']['requiredIdentifierFields']);
+        $this->assertSame([['accountIdentifier']], $data[1]['candidates'][0]['requiredIdentifierFields']);
     }
 
     public function testSetBindingReturnsNotFoundWhenPromotionDoesNotExist(): void

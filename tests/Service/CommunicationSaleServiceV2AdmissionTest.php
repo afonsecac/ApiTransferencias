@@ -184,6 +184,7 @@ class CommunicationSaleServiceV2AdmissionTest extends TestCase
 
         $recharge = new CommunicationSaleRecharge();
         $recharge->setPackageId(42);
+        $recharge->setPhoneNumber('5550001234');
 
         $result = $this->service->processRecharge($recharge);
 
