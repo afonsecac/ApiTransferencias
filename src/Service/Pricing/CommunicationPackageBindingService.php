@@ -5,10 +5,12 @@ namespace App\Service\Pricing;
 use App\Entity\CommunicationPackage;
 use App\Entity\CommunicationPackageProviderProduct;
 use App\Entity\CommunicationProduct;
+use App\Entity\CommunicationPromotions;
 use App\Entity\Environment;
 use App\Exception\MyCurrentException;
 use App\Provider\ProviderRegistry;
 use App\Repository\CommunicationPackageProviderProductRepository;
+use App\Repository\CommunicationPackageRepository;
 use App\Repository\CommunicationProductRepository;
 use Doctrine\ORM\EntityManagerInterface;
 
@@ -26,6 +28,7 @@ class CommunicationPackageBindingService
         private readonly EntityManagerInterface $em,
         private readonly CommunicationPackageProviderProductRepository $bindingRepo,
         private readonly CommunicationProductRepository $productRepository,
+        private readonly CommunicationPackageRepository $packageRepository,
         private readonly ProviderRegistry $providerRegistry,
     ) {
     }
@@ -70,6 +73,40 @@ class CommunicationPackageBindingService
                 'boundProduct' => $bindingsByProvider[$provider] ?? null,
                 'candidates' => $candidates,
                 'autoMatched' => $autoMatched,
+            ];
+        }
+
+        return $rows;
+    }
+
+    /**
+     * Cobertura por proveedor de todos los paquetes generados por una
+     * promoción V2 — el tab "Proveedores" del flujo de promociones se apoya
+     * en esto para mostrar de una vez qué paquetes quedan sin despachar por
+     * qué proveedor (ver ProviderDispatchResolver::findDispatchableProduct(),
+     * que nunca hace auto-match para un paquete de promoción). No incluye
+     * candidatos — esta lista es de resumen; los candidatos por paquete se
+     * piden bajo demanda con listBindings().
+     *
+     * @return list<array{package: CommunicationPackage, bindings: list<array{provider: string, product: CommunicationProduct}>, missingProviders: list<string>}>
+     */
+    public function listPromotionPackageBindings(CommunicationPromotions $promotion): array
+    {
+        $registeredProviders = array_map(static fn ($p) => $p->value, $this->providerRegistry->registered());
+
+        $rows = [];
+        foreach ($this->packageRepository->findByPromotion($promotion) as $package) {
+            $bindings = [];
+            $boundProviders = [];
+            foreach ($this->bindingRepo->findAllForPackage($package) as $binding) {
+                $bindings[] = ['provider' => $binding->getProvider(), 'product' => $binding->getProduct()];
+                $boundProviders[] = $binding->getProvider();
+            }
+
+            $rows[] = [
+                'package' => $package,
+                'bindings' => $bindings,
+                'missingProviders' => array_values(array_diff($registeredProviders, $boundProviders)),
             ];
         }
 

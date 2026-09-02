@@ -15,6 +15,7 @@ use App\OpenApi\Attribute\DashboardEndpoint;
 use App\Repository\CommunicationPromotionsRepository;
 use App\Service\CommunicationPromotionService;
 use App\Service\Pricing\CommunicationContractService;
+use App\Service\Pricing\CommunicationPackageBindingService;
 use App\Service\Pricing\CommunicationPromotionBindingService;
 use App\Service\Pricing\CommunicationPromotionEquivalenceService;
 use App\Service\Pricing\PromotionEquivalenceResult;
@@ -36,6 +37,7 @@ class DashboardPromotionController extends AbstractController
         private readonly NormalizerInterface $serializer,
         private readonly CommunicationPromotionService $promotionService,
         private readonly CommunicationPromotionBindingService $bindingService,
+        private readonly CommunicationPackageBindingService $packageBindingService,
         private readonly CommunicationPromotionEquivalenceService $equivalenceService,
         private readonly CommunicationContractService $contractService,
     ) {
@@ -200,6 +202,32 @@ class DashboardPromotionController extends AbstractController
         $this->em->flush();
 
         return $this->json(['deleted' => true]);
+    }
+
+    #[Route('/{id}/packages', name: 'dashboard_promotions_packages_list', methods: ['GET'])]
+    #[DashboardEndpoint(summary: 'Paquetes generados por una promoción V2 con su cobertura por proveedor', tag: 'Promotions')]
+    public function listPackages(int $id): JsonResponse
+    {
+        $promotion = $this->repository->find($id);
+        if ($promotion === null) {
+            return $this->json(['error' => ['message' => 'Promotion not found']], Response::HTTP_NOT_FOUND);
+        }
+
+        $rows = $this->packageBindingService->listPromotionPackageBindings($promotion);
+
+        return $this->json(array_map(fn (array $row) => [
+            'packageId' => $row['package']->getId(),
+            'name' => $row['package']->getName(),
+            'destinationAmount' => $row['package']->getDestinationAmount(),
+            'destinationCurrency' => $row['package']->getDestinationCurrency(),
+            'bindings' => array_map(fn (array $b) => [
+                'provider' => $b['provider'],
+                'productId' => $b['product']->getId(),
+                'externalRef' => $b['product']->getExternalRef(),
+                'description' => $b['product']->getDescription(),
+            ], $row['bindings']),
+            'missingProviders' => $row['missingProviders'],
+        ], $rows));
     }
 
     #[Route('/{id}/bindings', name: 'dashboard_promotions_bindings_list', methods: ['GET'])]

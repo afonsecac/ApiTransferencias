@@ -75,6 +75,39 @@ class UpdatePromotionDto implements IInput
 
     protected ?string $priority;
 
+    /**
+     * Solo V2 — mismo "{monto}" que CreatePromotionV2Dto::$packageNameTemplate,
+     * renderizado por CommunicationPromotionService::updatePackageMetadata()
+     * contra el destinationAmount propio de cada paquete generado.
+     */
+    #[Assert\Length(max: 255)]
+    protected ?string $packageNameTemplate;
+
+    #[Assert\Length(max: 255)]
+    protected ?string $packageDescriptionTemplate;
+
+    protected ?array $tags;
+
+    protected ?array $service;
+
+    #[Assert\PositiveOrZero]
+    protected ?int $displayOrder;
+
+    /**
+     * El rango de una promoción V2 (montos, salto, moneda) define QUÉ
+     * paquetes existen — cambiarlo después de creada invalidaría los
+     * vínculos por proveedor ya hechos sobre los paquetes actuales. No son
+     * editables: si llegan, update() rechaza explícitamente en vez de
+     * ignorarlos en silencio (ver PROMOTION_V2_RANGE_IMMUTABLE).
+     */
+    protected ?float $amountFrom;
+
+    protected ?float $amountTo;
+
+    protected ?float $amountStep;
+
+    protected ?string $destinationCurrency;
+
     public function __construct(
         ?string $name = null,
         ?string $description = null,
@@ -88,6 +121,15 @@ class UpdatePromotionDto implements IInput
         ?int $productId = null,
         ?int $environmentId = null,
         ?string $priority = null,
+        ?string $packageNameTemplate = null,
+        ?string $packageDescriptionTemplate = null,
+        ?array $tags = null,
+        ?array $service = null,
+        ?int $displayOrder = null,
+        ?float $amountFrom = null,
+        ?float $amountTo = null,
+        ?float $amountStep = null,
+        ?string $destinationCurrency = null,
     ) {
         $this->name = $name;
         $this->description = $description;
@@ -101,6 +143,15 @@ class UpdatePromotionDto implements IInput
         $this->productId = $productId;
         $this->environmentId = $environmentId;
         $this->priority = $priority;
+        $this->packageNameTemplate = $packageNameTemplate;
+        $this->packageDescriptionTemplate = $packageDescriptionTemplate;
+        $this->tags = $tags;
+        $this->service = $service;
+        $this->displayOrder = $displayOrder;
+        $this->amountFrom = $amountFrom;
+        $this->amountTo = $amountTo;
+        $this->amountStep = $amountStep;
+        $this->destinationCurrency = $destinationCurrency;
     }
 
     #[Assert\Callback]
@@ -150,4 +201,31 @@ class UpdatePromotionDto implements IInput
 
     public function getPriority(): ?string { return $this->priority; }
     public function setPriority(?string $v): void { $this->priority = $v; }
+
+    public function getPackageNameTemplate(): ?string { return $this->packageNameTemplate; }
+    public function setPackageNameTemplate(?string $v): void { $this->packageNameTemplate = $v; }
+
+    public function getPackageDescriptionTemplate(): ?string { return $this->packageDescriptionTemplate; }
+    public function setPackageDescriptionTemplate(?string $v): void { $this->packageDescriptionTemplate = $v; }
+
+    public function getTags(): ?array { return $this->tags; }
+    public function setTags(?array $v): void { $this->tags = $v; }
+
+    public function getService(): ?array { return $this->service; }
+    public function setService(?array $v): void { $this->service = $v; }
+
+    public function getDisplayOrder(): ?int { return $this->displayOrder; }
+    public function setDisplayOrder(?int $v): void { $this->displayOrder = $v; }
+
+    public function getAmountFrom(): ?float { return $this->amountFrom; }
+    public function setAmountFrom(?float $v): void { $this->amountFrom = $v; }
+
+    public function getAmountTo(): ?float { return $this->amountTo; }
+    public function setAmountTo(?float $v): void { $this->amountTo = $v; }
+
+    public function getAmountStep(): ?float { return $this->amountStep; }
+    public function setAmountStep(?float $v): void { $this->amountStep = $v; }
+
+    public function getDestinationCurrency(): ?string { return $this->destinationCurrency; }
+    public function setDestinationCurrency(?string $v): void { $this->destinationCurrency = $v; }
 }

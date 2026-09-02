@@ -15,6 +15,7 @@ use App\Repository\CommunicationPromotionsRepository;
 use App\Service\CommunicationPromotionService;
 use App\Service\CreatePromotionV2Result;
 use App\Service\Pricing\CommunicationContractService;
+use App\Service\Pricing\CommunicationPackageBindingService;
 use App\Service\Pricing\CommunicationPromotionBindingService;
 use App\Service\Pricing\CommunicationPromotionEquivalenceService;
 use App\Service\Pricing\PromotionEquivalenceResult;
@@ -36,6 +37,7 @@ class DashboardPromotionControllerTest extends TestCase
 {
     private CommunicationPromotionsRepository&MockObject $repository;
     private CommunicationPromotionBindingService&MockObject $bindingService;
+    private CommunicationPackageBindingService&MockObject $packageBindingService;
     private CommunicationPromotionService&MockObject $promotionService;
     private CommunicationPromotionEquivalenceService&MockObject $equivalenceService;
     private CommunicationContractService&MockObject $contractService;
@@ -46,6 +48,7 @@ class DashboardPromotionControllerTest extends TestCase
     {
         $this->repository = $this->createMock(CommunicationPromotionsRepository::class);
         $this->bindingService = $this->createMock(CommunicationPromotionBindingService::class);
+        $this->packageBindingService = $this->createMock(CommunicationPackageBindingService::class);
         $this->promotionService = $this->createMock(CommunicationPromotionService::class);
         $this->equivalenceService = $this->createMock(CommunicationPromotionEquivalenceService::class);
         $this->contractService = $this->createMock(CommunicationContractService::class);
@@ -58,6 +61,7 @@ class DashboardPromotionControllerTest extends TestCase
             $this->serializer,
             $this->promotionService,
             $this->bindingService,
+            $this->packageBindingService,
             $this->equivalenceService,
             $this->contractService,
         );
@@ -182,6 +186,60 @@ class DashboardPromotionControllerTest extends TestCase
 
         $data = json_decode($response->getContent(), true);
         $this->assertTrue($data['deleted']);
+    }
+
+    public function testListPackagesReturnsNotFoundWhenPromotionDoesNotExist(): void
+    {
+        $this->repository->method('find')->willReturn(null);
+
+        $response = $this->controller->listPackages(999);
+
+        $this->assertSame(Response::HTTP_NOT_FOUND, $response->getStatusCode());
+    }
+
+    public function testListPackagesReturnsOneRowPerPackageWithMissingProviders(): void
+    {
+        $promotion = new CommunicationPromotions();
+        $this->repository->method('find')->willReturn($promotion);
+
+        $package = $this->createMock(CommunicationPackage::class);
+        $package->method('getId')->willReturn(42);
+        $package->method('getName')->willReturn('Cubacel 500 CUP');
+        $package->method('getDestinationAmount')->willReturn(500.0);
+        $package->method('getDestinationCurrency')->willReturn('CUP');
+
+        $this->packageBindingService->method('listPromotionPackageBindings')->with($promotion)->willReturn([
+            [
+                'package' => $package,
+                'bindings' => [['provider' => 'CSQ', 'product' => $this->product()]],
+                'missingProviders' => ['DTONE', 'ETECSA'],
+            ],
+        ]);
+
+        $response = $this->controller->listPackages(1);
+
+        $data = json_decode($response->getContent(), true);
+        $this->assertCount(1, $data);
+        $this->assertSame(42, $data[0]['packageId']);
+        $this->assertSame('Cubacel 500 CUP', $data[0]['name']);
+        $this->assertEquals(500.0, $data[0]['destinationAmount']);
+        $this->assertSame('CUP', $data[0]['destinationCurrency']);
+        $this->assertCount(1, $data[0]['bindings']);
+        $this->assertSame('CSQ', $data[0]['bindings'][0]['provider']);
+        $this->assertSame(1, $data[0]['bindings'][0]['productId']);
+        $this->assertSame('ref-1', $data[0]['bindings'][0]['externalRef']);
+        $this->assertSame(['DTONE', 'ETECSA'], $data[0]['missingProviders']);
+    }
+
+    public function testListPackagesReturnsEmptyArrayWhenPromotionHasNoPackages(): void
+    {
+        $promotion = new CommunicationPromotions();
+        $this->repository->method('find')->willReturn($promotion);
+        $this->packageBindingService->method('listPromotionPackageBindings')->willReturn([]);
+
+        $response = $this->controller->listPackages(1);
+
+        $this->assertSame([], json_decode($response->getContent(), true));
     }
 
     private function v2Dto(): CreatePromotionV2Dto
