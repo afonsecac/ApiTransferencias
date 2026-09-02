@@ -269,22 +269,124 @@ class CommunicationPromotionServiceV2Test extends TestCase
         $this->assertSame(3, $count);
     }
 
-    public function testUpdatePackageBenefitsThrowsForAV1Promotion(): void
+    /**
+     * El dashboard ya no distingue "V1"/"V2" al editar — una promoción sin
+     * ningún CommunicationPackage vinculado (ej. una promoción legacy,
+     * product != null) simplemente no tiene nada que actualizar: no-op
+     * seguro, nunca un error.
+     */
+    public function testUpdatePackageBenefitsIsANoOpForAPromotionWithoutLinkedPackages(): void
     {
-        // Una promoción V1 tiene product != null (isV2() = product === null)
-        // — createV2()/dto() de este test solo generan V2, así que se
-        // construye directo con reflection en vez de un DTO legacy.
         $promotion = new CommunicationPromotions();
         $reflection = new \ReflectionProperty(CommunicationPromotions::class, 'product');
         $reflection->setAccessible(true);
         $reflection->setValue($promotion, $this->createMock(\App\Entity\CommunicationProduct::class));
+        $this->packageRepository->method('findByPromotion')->with($promotion)->willReturn([]);
 
         $this->packageAdminService->expects($this->never())->method('update');
 
-        $this->expectException(MyCurrentException::class);
-        $this->expectExceptionMessage('Esta promoción no es V2 — los beneficios se editan con terms, no benefits');
+        $count = $this->service->updatePackageBenefits($promotion, [['type' => 'CREDITS']]);
 
-        $this->service->updatePackageBenefits($promotion, [['type' => 'CREDITS']]);
+        $this->assertSame(0, $count);
+    }
+
+    /**
+     * Round-trip de los campos V2 de UpdatePromotionDto (cargar → editar →
+     * volver a leer) — el test que faltaba en el bug de 2026-08-27 (ver
+     * CLAUDE.md regla 12): packageNameTemplate/packageDescriptionTemplate
+     * se renderizan por paquete contra su propio destinationAmount, igual
+     * que al crear el batch original.
+     */
+    public function testUpdatePropagatesNameAndDescriptionTemplatesRenderedPerPackage(): void
+    {
+        $promotion = $this->v2Promotion();
+        $package500 = (new CommunicationPackage())->setDestinationAmount(500.0);
+        $package1000 = (new CommunicationPackage())->setDestinationAmount(1000.0);
+        $this->packageRepository->method('findByPromotion')->with($promotion)->willReturn([$package500, $package1000]);
+        $this->packageAdminService->method('renderTemplate')
+            ->willReturnCallback(fn (string $template, float $amount) => str_replace('{monto}', (string) (int) $amount, $template));
+
+        $calls = [];
+        $this->packageAdminService->expects($this->exactly(2))
+            ->method('update')
+            ->willReturnCallback(function ($package, UpdateCommunicationPackageDto $dto) use (&$calls) {
+                $calls[] = [$dto->getName(), $dto->getDescription()];
+
+                return $package;
+            });
+
+        $dto = new \App\DTO\UpdatePromotionDto(packageNameTemplate: 'Cubacel {monto} CUP', packageDescriptionTemplate: 'Recarga {monto} CUP');
+        $this->service->update($promotion, $dto);
+
+        $this->assertSame([
+            ['Cubacel 500 CUP', 'Recarga 500 CUP'],
+            ['Cubacel 1000 CUP', 'Recarga 1000 CUP'],
+        ], $calls);
+    }
+
+    public function testUpdatePropagatesTagsServiceAndDisplayOrderToEveryLinkedPackage(): void
+    {
+        $promotion = $this->v2Promotion();
+        $packages = [new CommunicationPackage(), new CommunicationPackage()];
+        $this->packageRepository->method('findByPromotion')->with($promotion)->willReturn($packages);
+
+        $this->packageAdminService->expects($this->exactly(2))
+            ->method('update')
+            ->with(
+                $this->isInstanceOf(CommunicationPackage::class),
+                $this->callback(fn (UpdateCommunicationPackageDto $dto) => $dto->getTags() === ['DATA']
+                    && $dto->getService() === ['name' => 'Mobile', 'subservice' => ['name' => 'DATA']]
+                    && $dto->getDisplayOrder() === 5)
+            );
+
+        $dto = new \App\DTO\UpdatePromotionDto(
+            tags: ['DATA'],
+            service: ['name' => 'Mobile', 'subservice' => ['name' => 'DATA']],
+            displayOrder: 5,
+        );
+        $this->service->update($promotion, $dto);
+    }
+
+    public function testUpdateMetadataFieldsIsANoOpForAPromotionWithoutLinkedPackages(): void
+    {
+        $promotion = new CommunicationPromotions();
+        $reflection = new \ReflectionProperty(CommunicationPromotions::class, 'product');
+        $reflection->setAccessible(true);
+        $reflection->setValue($promotion, $this->createMock(\App\Entity\CommunicationProduct::class));
+        $this->packageRepository->method('findByPromotion')->with($promotion)->willReturn([]);
+
+        $this->packageAdminService->expects($this->never())->method('update');
+
+        $result = $this->service->update($promotion, new \App\DTO\UpdatePromotionDto(tags: ['DATA']));
+
+        $this->assertSame($promotion, $result);
+    }
+
+    /**
+     * El rango [amountFrom, amountTo, amountStep] + destinationCurrency
+     * define qué paquetes existen — cambiarlo tras crear la promoción
+     * invalidaría los vínculos por proveedor ya hechos. No se ignora en
+     * silencio (ese es justo el patrón de pérdida de datos que motivó la
+     * regla de TDD, ver CLAUDE.md): se rechaza con 400 explícito.
+     */
+    public function testUpdateRejectsRangeFieldsAsImmutable(): void
+    {
+        $promotion = $this->v2Promotion();
+        $this->em->expects($this->never())->method('flush');
+
+        $this->expectException(MyCurrentException::class);
+        $this->expectExceptionMessage('rango');
+
+        $this->service->update($promotion, new \App\DTO\UpdatePromotionDto(amountFrom: 600.0));
+    }
+
+    public function testUpdateRejectsDestinationCurrencyAsImmutable(): void
+    {
+        $promotion = $this->v2Promotion();
+
+        $this->expectException(MyCurrentException::class);
+
+        $this->service->update($promotion, new \App\DTO\UpdatePromotionDto(destinationCurrency: 'USD'));
     }
 
     private function v2Promotion(): CommunicationPromotions

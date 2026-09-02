@@ -9,6 +9,7 @@ use App\Repository\CommunicationPackageRepository;
 use App\Repository\CommunicationPromotionsRepository;
 use App\Service\CommunicationPromotionService;
 use App\Service\Pricing\CommunicationContractService;
+use App\Service\Pricing\CommunicationPackageBindingService;
 use App\Service\Pricing\CommunicationPromotionBindingService;
 use App\Service\Pricing\CommunicationPromotionEquivalenceService;
 use App\Tests\Functional\Provider\ProviderFunctionalTestCase;
@@ -38,6 +39,7 @@ class DashboardPromotionControllerBenefitsFunctionalTest extends ProviderFunctio
             self::getContainer()->get(NormalizerInterface::class),
             self::getContainer()->get(CommunicationPromotionService::class),
             self::getContainer()->get(CommunicationPromotionBindingService::class),
+            self::getContainer()->get(CommunicationPackageBindingService::class),
             self::getContainer()->get(CommunicationPromotionEquivalenceService::class),
             self::getContainer()->get(CommunicationContractService::class),
         );
@@ -272,6 +274,76 @@ class DashboardPromotionControllerBenefitsFunctionalTest extends ProviderFunctio
         $this->assertCount(2, $packages);
         foreach ($packages as $package) {
             $this->assertSame(['quantity' => 15, 'unit' => 'DAYS'], $package->getValidity());
+        }
+    }
+
+    /**
+     * Round-trip completo del tab "Proveedores": crear promoción V2 (3
+     * paquetes) → editar packageNameTemplate/tags/displayOrder → releer con
+     * GET /promotions/{id}/packages y confirmar que cada paquete se
+     * renombró contra SU PROPIO destinationAmount (no un valor fijo) y que,
+     * sin ningún vínculo por proveedor todavía, missingProviders lista
+     * TODOS los proveedores registrados.
+     */
+    public function testListPackagesReflectsRenamedPackagesAndAllProvidersMissingBeforeAnyBinding(): void
+    {
+        $environment = $this->createEnvironment();
+
+        /** @var CommunicationPromotionService $promotionService */
+        $promotionService = self::getContainer()->get(CommunicationPromotionService::class);
+        $result = $promotionService->createV2(new CreatePromotionV2Dto(
+            name: 'Tab proveedores',
+            description: 'Tab proveedores',
+            packageNameTemplate: 'Promo {monto}',
+            packageDescriptionTemplate: 'Promo {monto}',
+            startAt: (new \DateTimeImmutable('-1 day'))->format('c'),
+            endAt: (new \DateTimeImmutable('+5 days'))->format('c'),
+            environmentId: $environment->getId(),
+            destinationCurrency: 'CUP',
+            // 3 paquetes: 100, 200, 300 CUP.
+            amountFrom: 100.0,
+            amountTo: 300.0,
+            amountStep: 100.0,
+        ));
+        $promotionId = $result->promotion->getId();
+        $this->em->clear();
+
+        $updateResponse = $this->controller()->update($promotionId, new UpdatePromotionDto(
+            packageNameTemplate: 'Cubacel {monto} CUP',
+            tags: ['BUNDLE'],
+            displayOrder: 3,
+        ));
+        $this->assertSame(200, $updateResponse->getStatusCode());
+        $this->em->clear();
+
+        $response = $this->controller()->listPackages($promotionId);
+        $this->assertSame(200, $response->getStatusCode());
+        $data = json_decode($response->getContent(), true);
+
+        $this->assertCount(3, $data);
+        usort($data, fn ($a, $b) => $a['destinationAmount'] <=> $b['destinationAmount']);
+        $this->assertSame(['Cubacel 100 CUP', 'Cubacel 200 CUP', 'Cubacel 300 CUP'], array_column($data, 'name'));
+
+        $registeredProviders = array_map(
+            static fn ($p) => $p->value,
+            self::getContainer()->get(\App\Provider\ProviderRegistry::class)->registered(),
+        );
+        foreach ($data as $row) {
+            $this->assertSame([], $row['bindings']);
+            $this->assertEqualsCanonicalizing($registeredProviders, $row['missingProviders']);
+        }
+
+        $this->em->clear();
+        /** @var CommunicationPackageRepository $packageRepository */
+        $packageRepository = self::getContainer()->get(CommunicationPackageRepository::class);
+        $packages = $packageRepository->createQueryBuilder('p')
+            ->andWhere('p.promotion = :promo')
+            ->setParameter('promo', $promotionId)
+            ->getQuery()
+            ->getResult();
+        foreach ($packages as $package) {
+            $this->assertSame(['BUNDLE'], $package->getTags());
+            $this->assertSame(3, $package->getDisplayOrder());
         }
     }
 }

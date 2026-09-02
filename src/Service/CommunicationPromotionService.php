@@ -307,16 +307,27 @@ class CommunicationPromotionService extends CommonService
      */
     public function update(CommunicationPromotions $promotion, UpdatePromotionDto $dto): CommunicationPromotions
     {
-        // Falla ANTES de mutar nada — evita el caso raro de mandar
-        // productId+benefits en la misma petición, donde setProduct() más
-        // abajo cambiaría isV2() a mitad del método.
-        if ($dto->getBenefits() !== null && !$promotion->isV2()) {
-            throw new MyCurrentException(
-                'PROMOTION_BENEFITS_NOT_APPLICABLE',
-                'Esta promoción no es V2 — los beneficios se editan con terms, no benefits',
-                400,
-            );
+        // El rango [amountFrom, amountTo, amountStep] + destinationCurrency
+        // define qué CommunicationPackage existen — cambiarlo después de
+        // crear la promoción invalidaría los vínculos por proveedor ya
+        // hechos sobre los paquetes actuales. Se rechaza explícito en vez
+        // de ignorarlo en silencio.
+        foreach (['amountFrom', 'amountTo', 'amountStep', 'destinationCurrency'] as $field) {
+            $getter = 'get' . ucfirst($field);
+            if ($dto->$getter() !== null) {
+                throw new MyCurrentException(
+                    'PROMOTION_V2_RANGE_IMMUTABLE',
+                    "El rango de una promoción V2 no es editable ({$field})",
+                    400,
+                );
+            }
         }
+
+        $hasPackageMetadata = $dto->getPackageNameTemplate() !== null
+            || $dto->getPackageDescriptionTemplate() !== null
+            || $dto->getTags() !== null
+            || $dto->getService() !== null
+            || $dto->getDisplayOrder() !== null;
 
         if ($dto->getName() !== null) {
             $promotion->setName($dto->getName());
@@ -387,16 +398,64 @@ class CommunicationPromotionService extends CommonService
             $this->updatePackageBenefits($promotion, $dto->getBenefits());
         }
 
+        if ($hasPackageMetadata) {
+            $this->updatePackageMetadata(
+                $promotion,
+                $dto->getPackageNameTemplate(),
+                $dto->getPackageDescriptionTemplate(),
+                $dto->getTags(),
+                $dto->getService(),
+                $dto->getDisplayOrder(),
+            );
+        }
+
         return $promotion;
     }
 
     /**
-     * Beneficios "plantilla" de una promoción V2 — se toman de un
+     * Propaga name/description (renderizados por monto vía
+     * packageNameTemplate/packageDescriptionTemplate, mismo "{monto}" que
+     * CreatePromotionV2Dto), tags, service y displayOrder a TODOS los
+     * CommunicationPackage vinculados a esta promoción — reutiliza
+     * CommunicationPackageAdminService::update() por paquete, así que
+     * incluye su misma guarda de categoría bloqueada
+     * (COMMUNICATION_PACKAGE_CATEGORY_LOCKED) al tocar `service`.
+     *
+     * @return int cantidad de paquetes actualizados
+     */
+    public function updatePackageMetadata(
+        CommunicationPromotions $promotion,
+        ?string $nameTemplate,
+        ?string $descriptionTemplate,
+        ?array $tags,
+        ?array $service,
+        ?int $displayOrder,
+    ): int {
+        $packages = $this->packageRepository->findByPromotion($promotion);
+        foreach ($packages as $package) {
+            $amount = (float) $package->getDestinationAmount();
+            $this->packageAdminService->update($package, new UpdateCommunicationPackageDto(
+                name: $nameTemplate !== null ? $this->packageAdminService->renderTemplate($nameTemplate, $amount) : null,
+                description: $descriptionTemplate !== null ? $this->packageAdminService->renderTemplate($descriptionTemplate, $amount) : null,
+                displayOrder: $displayOrder,
+                tags: $tags,
+                service: $service,
+            ));
+        }
+
+        return count($packages);
+    }
+
+    /**
+     * Beneficios "plantilla" de una promoción — se toman de un
      * CommunicationPackage cualquiera vinculado (todos comparten el mismo
      * array salvo lo que CommunicationPackageAdminService::
      * applyCreditBenefitDefaults() recalcula por paquete, ver
      * updatePackageBenefits()). Vacío si la promoción todavía no tiene
-     * paquetes vinculados, o si es V1 (esa usa getTerms(), no esto).
+     * ningún CommunicationPackage vinculado — el dashboard ya no distingue
+     * "V1"/"V2" al editar: toda promoción usa esta misma pestaña de
+     * beneficios, y una promoción sin paquetes generados simplemente no
+     * tiene nada que mostrar acá.
      *
      * @return list<array<string, mixed>>
      */
@@ -415,22 +474,14 @@ class CommunicationPromotionService extends CommonService
      * amount.base contra el destinationAmount propio de cada uno, igual que
      * al crear el batch original (createV2()): un mismo array "plantilla"
      * produce el texto/monto correcto en cada paquete pese a tener montos
-     * de destino distintos.
+     * de destino distintos. No-op seguro (0 paquetes actualizados) para una
+     * promoción sin ningún CommunicationPackage vinculado — el dashboard ya
+     * no distingue "V1"/"V2" al editar, así que esto nunca debe fallar.
      *
      * @return int cantidad de paquetes actualizados
-     *
-     * @throws MyCurrentException si la promoción no es V2
      */
     public function updatePackageBenefits(CommunicationPromotions $promotion, array $benefits): int
     {
-        if (!$promotion->isV2()) {
-            throw new MyCurrentException(
-                'PROMOTION_BENEFITS_NOT_APPLICABLE',
-                'Esta promoción no es V2 — los beneficios se editan con terms, no benefits',
-                400,
-            );
-        }
-
         $packages = $this->packageRepository->findByPromotion($promotion);
         foreach ($packages as $package) {
             $this->packageAdminService->update($package, new UpdateCommunicationPackageDto(benefits: $benefits));

@@ -5,11 +5,13 @@ namespace App\Tests\Service\Pricing;
 use App\Entity\CommunicationPackage;
 use App\Entity\CommunicationPackageProviderProduct;
 use App\Entity\CommunicationProduct;
+use App\Entity\CommunicationPromotions;
 use App\Enums\CommunicationProviderEnum;
 use App\Exception\MyCurrentException;
 use App\Provider\Contract\CommunicationProviderInterface;
 use App\Provider\ProviderRegistry;
 use App\Repository\CommunicationPackageProviderProductRepository;
+use App\Repository\CommunicationPackageRepository;
 use App\Repository\CommunicationProductRepository;
 use App\Service\Pricing\CommunicationPackageBindingService;
 use Doctrine\ORM\EntityManagerInterface;
@@ -29,6 +31,7 @@ class CommunicationPackageBindingServiceTest extends TestCase
     private EntityManagerInterface&MockObject $em;
     private CommunicationPackageProviderProductRepository&MockObject $bindingRepo;
     private CommunicationProductRepository&MockObject $productRepository;
+    private CommunicationPackageRepository&MockObject $packageRepository;
     private CommunicationPackageBindingService $service;
 
     protected function setUp(): void
@@ -36,11 +39,13 @@ class CommunicationPackageBindingServiceTest extends TestCase
         $this->em = $this->createMock(EntityManagerInterface::class);
         $this->bindingRepo = $this->createMock(CommunicationPackageProviderProductRepository::class);
         $this->productRepository = $this->createMock(CommunicationProductRepository::class);
+        $this->packageRepository = $this->createMock(CommunicationPackageRepository::class);
 
         $this->service = new CommunicationPackageBindingService(
             $this->em,
             $this->bindingRepo,
             $this->productRepository,
+            $this->packageRepository,
             $this->providerRegistry([CommunicationProviderEnum::ETECSA, CommunicationProviderEnum::CSQ]),
         );
     }
@@ -202,5 +207,49 @@ class CommunicationPackageBindingServiceTest extends TestCase
         $this->em->expects($this->never())->method('flush');
 
         $this->service->removeBinding($package, 'CSQ');
+    }
+
+    public function testListPromotionPackageBindingsReturnsOneRowPerPackageWithMissingProviders(): void
+    {
+        $promotion = $this->createMock(CommunicationPromotions::class);
+        $package = $this->package();
+        $this->packageRepository->method('findByPromotion')->with($promotion)->willReturn([$package]);
+
+        $product = $this->createMock(CommunicationProduct::class);
+        $binding = $this->createMock(CommunicationPackageProviderProduct::class);
+        $binding->method('getProvider')->willReturn('CSQ');
+        $binding->method('getProduct')->willReturn($product);
+        $this->bindingRepo->method('findAllForPackage')->with($package)->willReturn([$binding]);
+
+        $rows = $this->service->listPromotionPackageBindings($promotion);
+
+        $this->assertCount(1, $rows);
+        $this->assertSame($package, $rows[0]['package']);
+        $this->assertSame([['provider' => 'CSQ', 'product' => $product]], $rows[0]['bindings']);
+        // El registro de setUp() tiene ETECSA y CSQ — solo CSQ está vinculado.
+        $this->assertSame(['ETECSA'], $rows[0]['missingProviders']);
+    }
+
+    public function testListPromotionPackageBindingsMarksAllProvidersMissingWhenPackageHasNoBindings(): void
+    {
+        $promotion = $this->createMock(CommunicationPromotions::class);
+        $package = $this->package();
+        $this->packageRepository->method('findByPromotion')->willReturn([$package]);
+        $this->bindingRepo->method('findAllForPackage')->willReturn([]);
+
+        $rows = $this->service->listPromotionPackageBindings($promotion);
+
+        $this->assertSame([], $rows[0]['bindings']);
+        $this->assertSame(['ETECSA', 'CSQ'], $rows[0]['missingProviders']);
+    }
+
+    public function testListPromotionPackageBindingsReturnsEmptyArrayWhenPromotionHasNoPackages(): void
+    {
+        $promotion = $this->createMock(CommunicationPromotions::class);
+        $this->packageRepository->method('findByPromotion')->willReturn([]);
+
+        $rows = $this->service->listPromotionPackageBindings($promotion);
+
+        $this->assertSame([], $rows);
     }
 }
