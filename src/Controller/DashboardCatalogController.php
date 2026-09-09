@@ -3,6 +3,7 @@
 namespace App\Controller;
 
 use App\DTO\CreateCommunicationProductDto;
+use App\DTO\CreateManualProductDto;
 use App\DTO\SyncProductsDto;
 use App\DTO\UpdateProductDto;
 use App\DTO\Out\CommunicationProductOutDto;
@@ -14,12 +15,15 @@ use App\Entity\Client;
 use App\Entity\CommunicationProduct;
 use App\Entity\Environment;
 use App\Entity\User;
+use App\Enums\CommunicationProviderEnum;
 use App\Exception\MyCurrentException;
 use App\OpenApi\Attribute\DashboardEndpoint;
 use App\Provider\Contract\ProviderCatalogInterface;
 use App\Provider\ProviderRegistry;
 use App\Service\CommunicationProductService;
 use App\Service\Provider\CommunicationCatalogSyncService;
+use App\Service\Provider\Manual\ManualProductBuilderRegistry;
+use App\Service\Provider\Manual\ManualProductService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -37,6 +41,8 @@ class DashboardCatalogController extends AbstractController
         private readonly ProviderRegistry $providerRegistry,
         private readonly CommunicationCatalogSyncService $catalogSyncService,
         private readonly CommunicationProductService $productService,
+        private readonly ManualProductBuilderRegistry $manualProductBuilderRegistry,
+        private readonly ManualProductService $manualProductService,
     ) {
     }
 
@@ -187,6 +193,81 @@ class DashboardCatalogController extends AbstractController
         }
 
         return $this->json(CommunicationProductOutDto::fromEntity($product), Response::HTTP_CREATED);
+    }
+
+    /**
+     * Formulario que debe dibujar el dashboard para el alta manual de
+     * productos de UN proveedor concreto — ver
+     * ManualProductBuilderInterface::getFormSchema(). No todo proveedor
+     * tiene alta manual implementada (hoy DTOne no).
+     */
+    #[Route('/products/manual/schema', name: 'dashboard_products_manual_schema', methods: ['GET'])]
+    #[DashboardEndpoint(summary: 'Formulario de alta manual de productos por proveedor', tag: 'Catalog')]
+    #[IsGranted('ROLE_SUPER_ADMIN')]
+    public function manualProductSchema(Request $request): JsonResponse
+    {
+        $providerCode = CommunicationProviderEnum::tryFrom((string) $request->query->get('provider'));
+        if ($providerCode === null) {
+            return $this->json(['error' => ['message' => 'Provider not found', 'code' => 'PROVIDER_NOT_REGISTERED']], Response::HTTP_NOT_FOUND);
+        }
+
+        try {
+            $builder = $this->manualProductBuilderRegistry->get($providerCode);
+        } catch (MyCurrentException $e) {
+            return $this->json(['error' => ['message' => $e->getMessage(), 'code' => $e->getCodeWork()]], $e->getCode());
+        }
+
+        return $this->json([
+            'provider' => $providerCode->value,
+            'fields' => array_map(fn ($field) => [
+                'key' => $field->key,
+                'label' => $field->label,
+                'type' => $field->type,
+                'required' => $field->required,
+                'options' => $field->options,
+                'default' => $field->default,
+                'help' => $field->help,
+            ], $builder->getFormSchema()),
+        ]);
+    }
+
+    /**
+     * Da de alta uno o varios CommunicationProduct a partir de un
+     * identificador del proveedor (ManualProductBuilderInterface), sin
+     * llamar a su API — para catálogo/promociones que el proveedor anuncia
+     * pero nunca publica en su endpoint de sincronización. Idempotente: la
+     * clave de upsert es (environment, provider, externalRef), la misma que
+     * usa el sync automático, así que reejecutar un alta con datos
+     * solapados actualiza en vez de duplicar.
+     */
+    #[Route('/products/manual', name: 'dashboard_products_manual_create', methods: ['POST'])]
+    #[DashboardEndpoint(
+        summary: 'Alta manual de producto(s) por identificador de proveedor',
+        description: 'Da de alta CommunicationProduct(s) sin llamar a la API del proveedor. Requiere ROLE_SUPER_ADMIN.',
+        tag: 'Catalog',
+        requestDto: CreateManualProductDto::class,
+        responseDto: CommunicationProductOutDto::class,
+        responseIsArray: true,
+        responseStatusCode: 201,
+    )]
+    #[IsGranted('ROLE_SUPER_ADMIN')]
+    public function createManualProduct(CreateManualProductDto $dto): JsonResponse
+    {
+        try {
+            $result = $this->manualProductService->create($dto);
+        } catch (MyCurrentException $e) {
+            return $this->json(['error' => ['message' => $e->getMessage(), 'code' => $e->getCodeWork()]], $e->getCode());
+        }
+
+        return $this->json([
+            'created' => $result->created,
+            'updated' => $result->updated,
+            'skipped' => $result->skipped,
+            'products' => array_map(
+                fn (CommunicationProduct $p) => CommunicationProductOutDto::fromEntity($p),
+                $result->products,
+            ),
+        ], Response::HTTP_CREATED);
     }
 
     #[Route('/products/{id}', name: 'dashboard_products_update', methods: ['PATCH'], requirements: ['id' => '\d+'])]

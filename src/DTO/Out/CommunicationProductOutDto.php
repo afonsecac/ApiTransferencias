@@ -35,6 +35,21 @@ class CommunicationProductOutDto
     #[OAProperty(description: 'Referencia compacta al environment (id, type)')]
     public ?EnvironmentRefOutDto $environment = null;
 
+    #[OAProperty(description: 'Código del proveedor dueño de este producto')]
+    public ?string $provider = null;
+
+    #[OAProperty(description: 'Id del producto en el sistema del proveedor (clave canónica de upsert del catálogo)')]
+    public ?string $externalRef = null;
+
+    #[OAProperty(description: 'Monto acreditado al beneficiario (no el costo mayorista)')]
+    public ?float $destinationAmount = null;
+
+    #[OAProperty(description: 'Unidad/moneda de destinationAmount')]
+    public ?string $destinationUnit = null;
+
+    #[OAProperty(description: 'Moneda del costo mayorista (price)')]
+    public ?string $priceCurrency = null;
+
     public static function fromEntity(CommunicationProduct $product): self
     {
         $dto = new self();
@@ -47,6 +62,11 @@ class CommunicationProductOutDto
         $dto->enabled     = $product->isEnabled();
         $dto->initialDate = $product->getInitialDate()?->format(\DateTimeInterface::ATOM);
         $dto->endDateAt   = $product->getEndDateAt()?->format(\DateTimeInterface::ATOM);
+        $dto->provider           = $product->getProvider();
+        $dto->externalRef        = $product->getExternalRef();
+        $dto->destinationAmount  = $product->getDestinationAmount();
+        $dto->destinationUnit    = $product->getDestinationUnit();
+        $dto->priceCurrency      = $product->getPriceCurrency();
 
         $env = $product->getEnvironment();
         if ($env !== null) {

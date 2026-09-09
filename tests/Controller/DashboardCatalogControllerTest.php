@@ -11,6 +11,8 @@ use App\Provider\ProviderRegistry;
 use App\Service\CommunicationProductService;
 use App\Service\Etecsa\SyncResult;
 use App\Service\Provider\CommunicationCatalogSyncService;
+use App\Service\Provider\Manual\ManualProductBuilderRegistry;
+use App\Service\Provider\Manual\ManualProductService;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\EntityRepository;
 use PHPUnit\Framework\MockObject\MockObject;
@@ -49,6 +51,10 @@ class DashboardCatalogControllerTest extends TestCase
             new ProviderRegistry($providers),
             $this->catalogSyncService,
             $this->createMock(CommunicationProductService::class),
+            // final — igual que ProviderRegistry arriba, se instancia real
+            // en vez de mockearla.
+            new ManualProductBuilderRegistry([]),
+            $this->createMock(ManualProductService::class),
         );
 
         $container = $this->createMock(ContainerInterface::class);

@@ -38,12 +38,26 @@ class CommunicationCatalogSyncService
             environmentId: $environment->getId(),
         );
 
+        return $this->upsertProducts($adapter->fetchProducts($context), $providerCode, $environment);
+    }
+
+    /**
+     * Cuerpo del upsert de syncProducts(), extraído para que también lo use
+     * el alta manual de productos (ManualProductService) — así un producto
+     * dado de alta a mano por identificador (sin llamar a la API del
+     * proveedor) queda indistinguible de uno sincronizado: misma clave de
+     * upsert (environment, provider, externalRef), mismos campos.
+     *
+     * @param iterable<\App\Provider\Contract\ProviderProductDto> $items
+     */
+    public function upsertProducts(iterable $items, CommunicationProviderEnum $providerCode, Environment $environment): SyncResult
+    {
         $created = 0;
         $updated = 0;
         $skipped = 0;
         $repo = $this->em->getRepository(CommunicationProduct::class);
 
-        foreach ($adapter->fetchProducts($context) as $item) {
+        foreach ($items as $item) {
             if ($item->externalId === '') {
                 ++$skipped;
                 continue;

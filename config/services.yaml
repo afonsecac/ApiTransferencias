@@ -48,6 +48,8 @@ services:
     _instanceof:
         App\Provider\Contract\CommunicationProviderInterface:
             tags: ['app.communication_provider']
+        App\Provider\Contract\ManualProductBuilderInterface:
+            tags: ['app.manual_product_builder']
     'App\Doctrine\CurrentUserExtension':
         tags:
             - { name: 'api_platform.doctrine.orm.query_extension.collection' }
