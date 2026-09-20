@@ -340,14 +340,116 @@ class CommunicationSaleServiceV2AdmissionTest extends TestCase
         $this->assertNull($result->getPackage());
     }
 
-    public function testProcessReserveUsesAdmitV2ForReserveWhenPackageIsFuture(): void
+    /**
+     * Incidente prod 2026-09-20 (promo 99): el alta de promociones vincula
+     * productos POR PAQUETE (CommunicationPackageProviderProduct), pero la
+     * reserva solo miraba el vínculo a nivel de promoción → toda promoción
+     * nueva era irreservable (PROMOTION_NOT_DISPATCHABLE) aunque sus paquetes
+     * estuvieran bien vinculados. La reserva debe resolver con el mismo
+     * vínculo que usará la venta cuando la promoción esté vigente.
+     */
+    public function testProcessReserveResolvesDispatchFromThePackageBinding(): void
     {
         $account = $this->account(1);
         $this->security->method('getUser')->willReturn($account);
 
         $promotion = $this->createMock(CommunicationPromotions::class);
         $package = $this->catalogPackage()->setPromotion($promotion);
+        $this->stubFutureReservePackage($package);
 
+        $product = $this->createMock(CommunicationProduct::class);
+
+        $this->packageCatalogResolver->expects($this->once())
+            ->method('offerForSale')
+            ->with($package, $account)
+            ->willReturn(new ResolvedPackageOffer($package, 8.5, 'USD', PackageOfferSourceEnum::PRODUCT_MAX));
+        $this->dispatchResolver->expects($this->once())
+            ->method('selectExcluding')
+            ->with($account, $package, 'recharge', [])
+            ->willReturn(new SelectedDispatch(CommunicationProviderEnum::ETECSA, $product, '187'));
+        // Con vínculo por paquete resuelto, el nivel de promoción ni se consulta.
+        $this->promotionDispatchResolver->expects($this->never())->method('select');
+
+        $this->balanceService->method('hasAvailableBalance')->willReturn(true);
+
+        $reserve = new ReserveRecharge('5550001234', 93, 42, 'reserve-ctx-v2-future');
+
+        $result = $this->service->processReserve($reserve);
+
+        $this->assertSame('ETECSA', $result->getProvider());
+        $this->assertSame($package, $result->getCatalogPackage());
+        $this->assertSame($product, $result->getDispatchProduct());
+        $this->assertSame(8.5, $result->getAmount());
+        $this->assertSame('USD', $result->getCurrency());
+        $this->assertSame('187', $result->getDispatchExternalRef());
+        $this->assertSame(500.0, $result->getDestinationAmount());
+        $this->assertSame('CUP', $result->getDestinationCurrency());
+    }
+
+    /**
+     * Promociones anteriores al vínculo por paquete (o con solo el producto
+     * "de origen") siguen reservándose igual que antes.
+     */
+    public function testProcessReserveFallsBackToThePromotionBindingWhenThePackageHasNone(): void
+    {
+        $account = $this->account(1);
+        $this->security->method('getUser')->willReturn($account);
+
+        $promotion = $this->createMock(CommunicationPromotions::class);
+        $package = $this->catalogPackage()->setPromotion($promotion);
+        $this->stubFutureReservePackage($package);
+
+        $product = $this->createMock(CommunicationProduct::class);
+
+        $this->packageCatalogResolver->method('offerForSale')
+            ->willReturn(new ResolvedPackageOffer($package, 8.5, 'USD', PackageOfferSourceEnum::PRODUCT_MAX));
+        $this->dispatchResolver->expects($this->once())
+            ->method('selectExcluding')
+            ->with($account, $package, 'recharge', [])
+            ->willReturn(null);
+        $this->promotionDispatchResolver->expects($this->once())
+            ->method('select')
+            ->with($account, $promotion)
+            ->willReturn(new SelectedDispatch(CommunicationProviderEnum::CSQ, $product, '7854-250'));
+
+        $this->balanceService->method('hasAvailableBalance')->willReturn(true);
+
+        $reserve = new ReserveRecharge('5550001234', 93, 42, 'reserve-ctx-v2-promo-binding');
+
+        $result = $this->service->processReserve($reserve);
+
+        $this->assertSame('CSQ', $result->getProvider());
+        $this->assertSame($product, $result->getDispatchProduct());
+        $this->assertSame('7854-250', $result->getDispatchExternalRef());
+    }
+
+    public function testProcessReservePropagatesPromotionNotDispatchableWhenNoLevelResolves(): void
+    {
+        $account = $this->account(1);
+        $this->security->method('getUser')->willReturn($account);
+
+        $promotion = $this->createMock(CommunicationPromotions::class);
+        $package = $this->catalogPackage()->setPromotion($promotion);
+        $this->stubFutureReservePackage($package);
+
+        $this->packageCatalogResolver->method('offerForSale')
+            ->willReturn(new ResolvedPackageOffer($package, 8.5, 'USD', PackageOfferSourceEnum::PRODUCT_MAX));
+        $this->dispatchResolver->method('selectExcluding')->willReturn(null);
+        $this->promotionDispatchResolver->method('select')
+            ->willThrowException(new MyCurrentException('PROMOTION_NOT_DISPATCHABLE', 'Ningún proveedor disponible puede despachar esta promoción', 409));
+
+        $this->em->expects($this->never())->method('persist');
+
+        try {
+            $this->service->processReserve(new ReserveRecharge('5550001234', 93, 42, 'reserve-ctx-v2-none'));
+            $this->fail('Se esperaba PROMOTION_NOT_DISPATCHABLE');
+        } catch (MyCurrentException $e) {
+            $this->assertSame('PROMOTION_NOT_DISPATCHABLE', $e->getCodeWork());
+        }
+    }
+
+    private function stubFutureReservePackage(CommunicationPackage $package): void
+    {
         $catalogPackageRepo = $this->createMock(CommunicationPackageRepository::class);
         $catalogPackageRepo->expects($this->once())
             ->method('findFutureForReserve')
@@ -357,35 +459,6 @@ class CommunicationSaleServiceV2AdmissionTest extends TestCase
         $this->em->method('getRepository')->willReturnMap([
             [CommunicationPackage::class, $catalogPackageRepo],
         ]);
-
-        $product = $this->createMock(CommunicationProduct::class);
-
-        $this->packageCatalogResolver->expects($this->once())
-            ->method('offerForSale')
-            ->with($package, $account)
-            ->willReturn(new ResolvedPackageOffer($package, 8.5, 'USD', PackageOfferSourceEnum::PRODUCT_MAX));
-        $this->promotionDispatchResolver->expects($this->once())
-            ->method('select')
-            ->with($account, $promotion)
-            ->willReturn(new SelectedDispatch(CommunicationProviderEnum::CSQ, $product, '7854-250'));
-        // Reserve resuelve el proveedor a nivel de PROMOCIÓN — el dispatch
-        // por paquete (usado en la compra directa, admitV2()) nunca se toca
-        // aquí.
-        $this->dispatchResolver->expects($this->never())->method('select');
-
-        $this->balanceService->method('hasAvailableBalance')->willReturn(true);
-
-        $reserve = new ReserveRecharge('5550001234', 93, 42, 'reserve-ctx-v2-future');
-
-        $result = $this->service->processReserve($reserve);
-
-        $this->assertSame('CSQ', $result->getProvider());
-        $this->assertSame($package, $result->getCatalogPackage());
-        $this->assertSame(8.5, $result->getAmount());
-        $this->assertSame('USD', $result->getCurrency());
-        $this->assertSame('7854-250', $result->getDispatchExternalRef());
-        $this->assertSame(500.0, $result->getDestinationAmount());
-        $this->assertSame('CUP', $result->getDestinationCurrency());
     }
 
     public function testProcessReserveThrowsCom007WhenNoFuturePromotionPackageIsFound(): void

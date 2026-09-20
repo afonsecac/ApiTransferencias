@@ -448,6 +448,137 @@ class ProviderDispatchResolverTest extends TestCase
         $this->assertSame('ref-bound', $selected->externalRef);
     }
 
+    // ---- Paquete de promoción vinculado a VARIOS proveedores ----
+    // Mismo llamado que hace la reserva (CommunicationSaleService::admitV2ForReserve()):
+    // selectExcluding($account, $package, 'recharge', []). Escenarios calcados
+    // de prod 2026-09-20: promo 97 (cada tramo vinculado a CSQ+DTONE+ETECSA),
+    // promo 99 (solo ETECSA), cliente 2 con ruta CSQ→fallback ETECSA acotada
+    // a env/recharge/Mobile/AIRTIME, y Comremit sin ninguna fila de routing.
+
+    /**
+     * @param array<string, string> $externalRefByProvider proveedor => externalRef del producto vinculado
+     */
+    private function resolverWithPackageBindings(array $externalRefByProvider): ProviderDispatchResolver
+    {
+        $bindings = [];
+        foreach ($externalRefByProvider as $provider => $externalRef) {
+            $product = $this->createMock(CommunicationProduct::class);
+            $product->method('getExternalRef')->willReturn($externalRef);
+            $product->method('isEnabled')->willReturn(true);
+            $product->method('getEnvironment')->willReturn(null);
+            $binding = $this->createMock(CommunicationPackageProviderProduct::class);
+            $binding->method('getProduct')->willReturn($product);
+            $bindings[$provider] = $binding;
+        }
+
+        $this->packageBindingRepo = $this->createMock(CommunicationPackageProviderProductRepository::class);
+        $this->packageBindingRepo->method('findForPackageAndProvider')
+            ->willReturnCallback(fn ($pkg, $provider) => $bindings[$provider] ?? null);
+        // Un tramo de promoción jamás se resuelve por tupla, con uno o con N vínculos.
+        $this->productRepository->expects($this->never())->method('findMatchingDestination');
+
+        return new ProviderDispatchResolver(
+            $this->routingRepo,
+            $this->productRepository,
+            $this->packageBindingRepo,
+            $this->availabilityService,
+            new ProductSaleTypeMatcher(),
+            $this->sysConfigRepo,
+        );
+    }
+
+    private function promotionalAirtimePackage(): CommunicationPackage
+    {
+        return $this->packageWithService('Mobile', 'AIRTIME')
+            ->setPromotion($this->createMock(CommunicationPromotions::class));
+    }
+
+    public function testPromotionalPackageBoundToSeveralProvidersUsesTheBindingOfTheClientsFirstProvider(): void
+    {
+        $account = $this->account(2, environmentId: 4);
+        $resolver = $this->resolverWithPackageBindings(['CSQ' => 'ref-csq', 'DTONE' => 'ref-dtone', 'ETECSA' => 'ref-etecsa']);
+
+        $this->routingRepo->method('findActiveRouteScopesForClient')->willReturn([
+            $this->routeScope('CSQ', fallbackProvider: 'ETECSA', environmentId: 4, saleType: 'recharge', serviceName: 'Mobile', subserviceName: 'AIRTIME'),
+        ]);
+        $this->availabilityService->method('canDispatchTo')->willReturn(true);
+
+        $selected = $resolver->selectExcluding($account, $this->promotionalAirtimePackage(), 'recharge', []);
+
+        $this->assertSame(CommunicationProviderEnum::CSQ, $selected?->provider);
+        $this->assertSame('ref-csq', $selected->externalRef);
+    }
+
+    public function testPromotionalPackageBoundToSeveralProvidersSkipsAnUnavailableOneAndUsesTheFallbacksOwnBinding(): void
+    {
+        $account = $this->account(2, environmentId: 4);
+        $resolver = $this->resolverWithPackageBindings(['CSQ' => 'ref-csq', 'DTONE' => 'ref-dtone', 'ETECSA' => 'ref-etecsa']);
+
+        $this->routingRepo->method('findActiveRouteScopesForClient')->willReturn([
+            $this->routeScope('CSQ', fallbackProvider: 'ETECSA', environmentId: 4, saleType: 'recharge', serviceName: 'Mobile', subserviceName: 'AIRTIME'),
+        ]);
+        $this->availabilityService->method('canDispatchTo')
+            ->willReturnCallback(fn (?string $provider) => $provider !== 'CSQ');
+
+        $selected = $resolver->selectExcluding($account, $this->promotionalAirtimePackage(), 'recharge', []);
+
+        // Nunca el producto de CSQ enviado a ETECSA: proveedor y producto van juntos.
+        $this->assertSame(CommunicationProviderEnum::ETECSA, $selected?->provider);
+        $this->assertSame('ref-etecsa', $selected->externalRef);
+    }
+
+    public function testPromotionalPackageBoundOnlyToTheFallbackProviderIsStillReservable(): void
+    {
+        // Promo 99 para el cliente 2: su primer proveedor (CSQ) no tiene
+        // vínculo, el fallback (ETECSA) sí.
+        $account = $this->account(2, environmentId: 4);
+        $resolver = $this->resolverWithPackageBindings(['ETECSA' => 'ref-etecsa']);
+
+        $this->routingRepo->method('findActiveRouteScopesForClient')->willReturn([
+            $this->routeScope('CSQ', fallbackProvider: 'ETECSA', environmentId: 4, saleType: 'recharge', serviceName: 'Mobile', subserviceName: 'AIRTIME'),
+        ]);
+        $this->availabilityService->method('canDispatchTo')->willReturn(true);
+
+        $selected = $resolver->selectExcluding($account, $this->promotionalAirtimePackage(), 'recharge', []);
+
+        $this->assertSame(CommunicationProviderEnum::ETECSA, $selected?->provider);
+        $this->assertSame('ref-etecsa', $selected->externalRef);
+    }
+
+    public function testPromotionalPackageBoundToSeveralProvidersUsesTheDefaultProviderForAClientWithoutRouting(): void
+    {
+        // Comremit: sin filas de routing → solo el proveedor por defecto
+        // (ETECSA), aunque el tramo también esté vinculado a CSQ y DTONE.
+        $account = $this->account(1, environmentId: 4);
+        $resolver = $this->resolverWithPackageBindings(['CSQ' => 'ref-csq', 'DTONE' => 'ref-dtone', 'ETECSA' => 'ref-etecsa']);
+
+        $this->routingRepo->method('findActiveRouteScopesForClient')->willReturn([]);
+        $this->availabilityService->method('canDispatchTo')->willReturn(true);
+
+        $selected = $resolver->selectExcluding($account, $this->promotionalAirtimePackage(), 'recharge', []);
+
+        $this->assertSame(CommunicationProviderEnum::ETECSA, $selected?->provider);
+        $this->assertSame('ref-etecsa', $selected->externalRef);
+    }
+
+    public function testFailoverOfAPromotionalPackageMovesToTheNextBoundProviderWithItsOwnProduct(): void
+    {
+        // Lo que hace SaleProviderFailoverService tras un REJECTED de CSQ
+        // sobre una reserva ya activada.
+        $account = $this->account(2, environmentId: 4);
+        $resolver = $this->resolverWithPackageBindings(['CSQ' => 'ref-csq', 'DTONE' => 'ref-dtone', 'ETECSA' => 'ref-etecsa']);
+
+        $this->routingRepo->method('findActiveRouteScopesForClient')->willReturn([
+            $this->routeScope('CSQ', fallbackProvider: 'ETECSA', environmentId: 4, saleType: 'recharge', serviceName: 'Mobile', subserviceName: 'AIRTIME'),
+        ]);
+        $this->availabilityService->method('canDispatchTo')->willReturn(true);
+
+        $selected = $resolver->selectExcluding($account, $this->promotionalAirtimePackage(), 'recharge', [CommunicationProviderEnum::CSQ]);
+
+        $this->assertSame(CommunicationProviderEnum::ETECSA, $selected?->provider);
+        $this->assertSame('ref-etecsa', $selected->externalRef);
+    }
+
     // ---- Fase de categoría/scope (nuevo) ----
 
     public function testDiscardsARowScopedToAnotherEnvironment(): void
