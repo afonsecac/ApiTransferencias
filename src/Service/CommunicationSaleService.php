@@ -938,17 +938,27 @@ class CommunicationSaleService extends CommonService
      * todavía no está vigente por diseño, es justo lo que se está
      * reservando. El precio se resuelve igual (offerForSale() solo mira el
      * contrato, nunca la ventana activa del paquete — ver el docblock de
-     * PackageCatalogResolver), y el proveedor se resuelve a nivel de
-     * PROMOCIÓN (no de paquete) con el mismo mecanismo que ya usa el
-     * reserve legacy — PromotionProviderDispatchResolver es agnóstico de
-     * V1/V2.
+     * PackageCatalogResolver).
+     *
+     * El proveedor se resuelve PRIMERO con el vínculo por paquete
+     * (ProviderDispatchResolver, el mismo que usará admitV2() cuando la
+     * promoción ya esté vigente): es el que puebla el alta de promociones
+     * V2, y al ser un paquete de promoción ese resolver nunca cae al
+     * matching automático — solo devuelve un producto vinculado a
+     * propósito. Solo si ningún proveedor tiene vínculo para este paquete
+     * se cae al nivel de PROMOCIÓN (PromotionProviderDispatchResolver,
+     * mecanismo del reserve legacy), para que las promociones que solo
+     * tienen ese vínculo o el producto "de origen" sigan reservándose.
+     * Incidente prod 2026-09-20: mirar solo el nivel de promoción dejaba
+     * irreservable toda promoción nueva (PROMOTION_NOT_DISPATCHABLE).
      *
      * @throws MyCurrentException
      */
     private function admitV2ForReserve(Account $user, CommunicationPackage $package, CommunicationPromotions $promotion): CommunicationSaleAdmission
     {
         $offer = $this->packageCatalogResolver->offerForSale($package, $user);
-        $dispatch = $this->promotionDispatchResolver->select($user, $promotion);
+        $dispatch = $this->dispatchResolver->selectExcluding($user, $package, 'recharge', [])
+            ?? $this->promotionDispatchResolver->select($user, $promotion);
 
         return new CommunicationSaleAdmission(
             provider: $dispatch->provider->value,
