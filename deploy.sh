@@ -11,6 +11,13 @@ set -euo pipefail
 #   ./deploy.sh prod --migrate      Despliegue + migraciones
 #   ./deploy.sh prod --backup       Backup de la DB
 # ===========================================
+# Ninguna accion ejecuta `cache:clear` tras levantar contenedores, a proposito:
+# la imagen ya trae var/cache/prod horneado (cache:warmup en
+# docker/php-fpm/Dockerfile) y todas las acciones reconstruyen la imagen antes
+# del `up`, asi que el contenedor arranca siempre con cache fresca. Ejecutarlo
+# en caliente abortaba el deploy por una carrera con el trafico en vivo — ver
+# el comentario en .github/workflows/deploy-prod.yaml.
+# ===========================================
 
 PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$PROJECT_DIR"
@@ -197,9 +204,6 @@ setup() {
     log "Ejecutando migraciones..."
     $COMPOSE_CMD exec php-fpm php bin/console doctrine:migrations:migrate --no-interaction
 
-    log "Limpiando cache..."
-    $COMPOSE_CMD exec php-fpm php bin/console cache:clear
-
     log "Verificando health check..."
     sleep 5
     if $COMPOSE_CMD exec -T php-fpm php bin/console debug:router | grep -q health_live; then
@@ -272,9 +276,6 @@ deploy() {
     log "Desplegando..."
     $COMPOSE_CMD up -d --remove-orphans --force-recreate
 
-    log "Limpiando cache de Symfony..."
-    $COMPOSE_CMD exec php-fpm php bin/console cache:clear
-
     log "Limpiando imagenes Docker sin usar..."
     docker image prune -f
 
@@ -316,9 +317,6 @@ deploy_with_migrate() {
 
     log "Desplegando aplicacion..."
     $COMPOSE_CMD up -d --remove-orphans --force-recreate
-
-    log "Limpiando cache..."
-    $COMPOSE_CMD exec php-fpm php bin/console cache:clear
 
     docker image prune -f
 
@@ -415,9 +413,6 @@ rollback() {
 
     log "Redesplegando..."
     $COMPOSE_CMD up -d --remove-orphans
-
-    log "Limpiando cache..."
-    $COMPOSE_CMD exec php-fpm php bin/console cache:clear
 
     log "=== Rollback en $ENV completado ==="
     warn "El repositorio esta en detached HEAD. Para volver: git checkout $GIT_BRANCH"

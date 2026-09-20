@@ -94,13 +94,13 @@ Variables que **hay que generar**, no dejar con el valor de ejemplo:
 #    coincidir con PG_DATA_VOLUME o el default `apitransferencias_database_data`)
 docker volume create apitransferencias_database_data
 
-# 3. Instalación completa: build + up + migraciones + cache + healthcheck
+# 3. Instalación completa: build + up + migraciones + healthcheck
 ./deploy.sh staging --setup     # o: ./deploy.sh prod --setup
 ```
 
 `--setup` hace, en orden: `build` → `up -d` → espera a que Postgres esté listo
 (`pg_isready`, hasta 30 intentos) → `doctrine:migrations:migrate` →
-`cache:clear` → verifica que la ruta `health_live` esté registrada, y termina
+verifica que la ruta `health_live` esté registrada, y termina
 imprimiendo las URLs del entorno (API, docs, health, Traefik, RabbitMQ,
 mailcatcher en staging).
 
@@ -121,8 +121,17 @@ workflow correspondiente, que por SSH:
    los servicios del stack, incluido Traefik, aunque no hayan cambiado — ver
    [§8.2](#82-un-cambio-que-no-toca-traefik-lo-recrea-igual)).
 6. En staging, las migraciones corren *después* del `up` (con
-   `--allow-no-migration`, para no fallar si no hay ninguna pendiente);
-   `cache:clear`.
+   `--allow-no-migration`, para no fallar si no hay ninguna pendiente).
+   **No se ejecuta `cache:clear`** en ningún entorno: la imagen ya trae
+   `var/cache/prod` horneado (`cache:warmup` en `docker/php-fpm/Dockerfile`)
+   y no es un volumen, así que el contenedor recién recreado arranca con
+   caché fresca. Ejecutarlo en caliente abortaba el deploy de producción
+   (`Failed to remove directory "var/cache/prod": Directory not empty`,
+   2026-09-02 y 2026-09-20): sobre overlayfs Symfony no puede renombrar el
+   directorio y cae a un borrado no atómico que compite con `php-fpm`
+   escribiendo en `var/cache/prod/pools` con tráfico en vivo. El fallo
+   ocurría *después* de cambiar los contenedores, así que el código quedaba
+   desplegado pero se saltaban los pasos 7–9 y el release.
 7. `docker image prune -f` y, en prod, purga de backups más allá de los 30
    últimos.
 8. Health check: `curl -sf http://localhost/health/ready` — **ver la
@@ -147,7 +156,8 @@ cd /opt/api-transferencias
 
 `deploy` (sin acción) hace `git pull` → `build` → backup (solo prod) → migra
 → detiene los workers con gracia (`stop --timeout 60`) → `up -d
---force-recreate` → `cache:clear` → `docker image prune`.
+--force-recreate` → `docker image prune` (sin `cache:clear`, ver el paso 6 de
+[§4.1](#41-automático-recomendado)).
 
 `--migrate` es igual pero adelanta las migraciones antes de recrear la app
 (mismo orden que el workflow de producción) — usarlo cuando la migración

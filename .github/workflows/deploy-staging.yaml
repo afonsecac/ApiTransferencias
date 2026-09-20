@@ -69,9 +69,10 @@ jobs:
           docker compose -f docker-compose.vps.yaml -f docker-compose.vps.staging.yaml \
             --env-file .env.vps exec -T php-fpm php bin/console doctrine:migrations:migrate --no-interaction --allow-no-migration
 
-          echo "=== Clearing cache ==="
-          docker compose -f docker-compose.vps.yaml -f docker-compose.vps.staging.yaml \
-            --env-file .env.vps exec -T php-fpm php bin/console cache:clear
+          # SIN cache:clear a propósito: la imagen ya trae var/cache/prod
+          # horneado y el contenedor recién recreado arranca con caché fresca.
+          # Ver el comentario equivalente en deploy-prod.yaml (allí el paso
+          # abortaba el deploy por una carrera con el tráfico en vivo).
 
           echo "=== Cleanup ==="
           docker image prune -f

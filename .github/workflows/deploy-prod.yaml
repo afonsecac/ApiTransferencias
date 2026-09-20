@@ -71,9 +71,17 @@ jobs:
               php-fpm nginx worker-notifications worker-clients worker-packages \
               worker-check-status worker-balance worker-scheduler
 
-            echo "=== Clearing cache ==="
-            docker compose -f docker-compose.vps.yaml -f docker-compose.vps.prod.yaml \
-              --env-file .env.vps exec -T php-fpm php bin/console cache:clear --env=prod
+            # SIN cache:clear a propósito. La imagen ya trae var/cache/prod
+            # horneado (cache:warmup en docker/php-fpm/Dockerfile) y no es un
+            # volumen, así que un contenedor recién recreado arranca siempre
+            # con caché fresca — pools de cache.app incluidos. Ejecutarlo aquí
+            # no solo era redundante: al estar el directorio en la capa de la
+            # imagen (overlayfs), Symfony no puede renombrarlo y cae a un
+            # borrado recursivo no atómico, que compite con php-fpm ya
+            # sirviendo tráfico y escribiendo en var/cache/prod/pools →
+            # "Failed to remove directory ... Directory not empty". Eso abortó
+            # los deploys del 2026-09-02 y 2026-09-20 DESPUÉS de cambiar los
+            # contenedores, saltándose cleanup, health check y el release.
 
             echo "=== Cleanup ==="
             docker image prune -f
