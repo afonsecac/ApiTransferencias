@@ -92,6 +92,19 @@ services:
         arguments:
             $streamInterval: '%app.notifications.stream_interval%'
 
+    # Respaldo de POST de recargas/ventas: request.{env}.{YYYY-MM-DD}.log, una
+    # línea JSON por petición, rotación diaria y 15 ficheros máximo (los más
+    # antiguos se borran solos al rotar).
+    app.monolog.request_log_handler:
+        class: Monolog\Handler\RotatingFileHandler
+        arguments:
+            $filename: '%kernel.logs_dir%/request.%kernel.environment%.log'
+            $maxFiles: 15
+            $level: info
+        calls:
+            - [setFilenameFormat, ['{filename}.{date}', 'Y-m-d']]
+            - [setFormatter, ['@monolog.formatter.json']]
+
     # add more service definitions when explicit configuration is needed
     # please note that last definitions always *replace* previous ones
 
