@@ -41,7 +41,6 @@ class ClientCatalogVisibilityImpactResolverTest extends TestCase
     {
         $package = (new CommunicationPackage())->setName('P')->setDescription('P')->setDestinationAmount(1.0)->setDestinationCurrency('CUP');
         $property = new \ReflectionProperty($package, 'id');
-        $property->setAccessible(true);
         $property->setValue($package, $id);
 
         return $package;

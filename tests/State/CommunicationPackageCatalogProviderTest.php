@@ -48,7 +48,6 @@ class CommunicationPackageCatalogProviderTest extends TestCase
     {
         $package = (new CommunicationPackage())->setName($name)->setDescription($name)->setDestinationAmount(1.0)->setDestinationCurrency('CUP');
         $property = new \ReflectionProperty($package, 'id');
-        $property->setAccessible(true);
         $property->setValue($package, $id);
 
         return $package;

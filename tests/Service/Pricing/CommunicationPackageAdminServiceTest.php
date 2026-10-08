@@ -51,7 +51,6 @@ class CommunicationPackageAdminServiceTest extends TestCase
     private function addContractTo(CommunicationPackage $package, CommunicationContract $contract): void
     {
         $property = new \ReflectionProperty($package, 'contracts');
-        $property->setAccessible(true);
         $property->getValue($package)->add($contract);
     }
 
