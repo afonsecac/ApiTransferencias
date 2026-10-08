@@ -90,7 +90,13 @@ jobs:
 
             echo "=== Health check ==="
             sleep 5
-            curl -sf http://localhost/health/ready || exit 1
+            # NO http://localhost/...: Traefik responde 301 (HTTP→HTTPS) a toda
+            # petición HTTP y `curl -sf` lo daba por bueno, así que el paso
+            # pasaba con la app caída. Se llama por HTTPS con el dominio real
+            # resuelto a este mismo VPS, y se exige 200 con "status":"ok"
+            # (ver scripts/health-check.sh).
+            DOMAIN=$(grep '^DOMAIN=' .env.vps | cut -d= -f2)
+            ./scripts/health-check.sh "https://${DOMAIN}/health/ready" "${DOMAIN}:443:127.0.0.1"
 
             echo "=== Production deploy complete ==="
 
