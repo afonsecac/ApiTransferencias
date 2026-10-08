@@ -92,14 +92,16 @@ services:
         arguments:
             $streamInterval: '%app.notifications.stream_interval%'
 
-    # Respaldo de POST de recargas/ventas: request.{env}.{YYYY-MM-DD}.log, una
-    # línea JSON por petición, rotación diaria y 15 ficheros máximo (los más
-    # antiguos se borran solos al rotar).
+    # Respaldo de POST de recargas/ventas: requests/request.{env}.{YYYY-MM-DD}.log,
+    # una línea JSON por petición, un fichero por día. Se borran por antigüedad
+    # (más de 15 días) al abrir el fichero de un día nuevo. El directorio es un
+    # volumen en docker-compose.vps.yaml: sin él, cada despliegue (recreate del
+    # contenedor) borraría el respaldo.
     app.monolog.request_log_handler:
-        class: Monolog\Handler\RotatingFileHandler
+        class: App\Logging\AgeLimitedRotatingFileHandler
         arguments:
-            $filename: '%kernel.logs_dir%/request.%kernel.environment%.log'
-            $maxFiles: 15
+            $filename: '%kernel.logs_dir%/requests/request.%kernel.environment%.log'
+            $maxAgeDays: 15
             $level: info
         calls:
             - [setFilenameFormat, ['{filename}.{date}', 'Y-m-d']]

@@ -101,7 +101,7 @@ class ClientRequestLogFileTest extends ProviderFunctionalTestCase
 
     private function logFile(): string
     {
-        return self::$kernel->getLogDir() . '/request.' . self::$kernel->getEnvironment() . '.' . date('Y-m-d') . '.log';
+        return self::$kernel->getLogDir() . '/requests/request.' . self::$kernel->getEnvironment() . '.' . date('Y-m-d') . '.log';
     }
 
     /** @return list<array<string, mixed>> */
