@@ -145,3 +145,9 @@ services:
         limits:
           cpus: "0.25"
           memory: 128M
+
+  # Puerto de Postgres publicado SOLO en localhost del VPS,
+  # para acceso via tunel SSH (DataGrip) sin depender de la IP interna de Docker
+  database:
+    ports:
+      - "127.0.0.1:5433:5432"
