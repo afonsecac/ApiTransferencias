@@ -5,6 +5,10 @@ namespace App\Tests\EventListener;
 use App\EventListener\ExceptionListener;
 use App\Exception\MyCurrentException;
 use PHPUnit\Framework\TestCase;
+use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
+use Symfony\Component\Security\Core\Exception\AccessDeniedException as SecurityAccessDeniedException;
+use Symfony\Component\Security\Core\Exception\InsufficientAuthenticationException;
+use ApiPlatform\Metadata\Exception\AccessDeniedException as ApiPlatformAccessDeniedException;
 use Symfony\Component\Serializer\Exception\ExtraAttributesException;
 use Symfony\Component\Serializer\Exception\MissingConstructorArgumentsException;
 use Symfony\Component\Serializer\Exception\NotEncodableValueException;
@@ -162,6 +166,49 @@ class ExceptionListenerTest extends TestCase
         $this->logger->expects($this->once())->method('error');
 
         $event = $this->makeEvent(new SerializerUnexpectedValueException('The input data is misformatted.'), Request::create('/', 'GET'));
+        ($this->listener)($event);
+
+        $this->assertSame(Response::HTTP_INTERNAL_SERVER_ERROR, $event->getResponse()->getStatusCode());
+    }
+
+    /** @return iterable<string, array{\Throwable}> */
+    public static function accessDeniedExceptions(): iterable
+    {
+        // El firewall de Symfony convierte AccessDeniedException en esta, con código 0.
+        yield 'AccessDeniedHttpException' => [new AccessDeniedHttpException('Access Denied.')];
+        yield 'Security AccessDeniedException' => [new SecurityAccessDeniedException('Access Denied.')];
+        yield 'API Platform AccessDeniedException' => [new ApiPlatformAccessDeniedException('Access Denied.')];
+    }
+
+    /** @dataProvider accessDeniedExceptions */
+    public function testAccessDeniedReturns403WithTheMessage(\Throwable $exception): void
+    {
+        $this->logger->expects($this->never())->method('error');
+
+        $event = $this->makeEvent($exception);
+        ($this->listener)($event);
+
+        $this->assertSame(Response::HTTP_FORBIDDEN, $event->getResponse()->getStatusCode());
+        $body = json_decode($event->getResponse()->getContent(), true);
+        $this->assertSame('Access Denied.', $body['error']['message']);
+    }
+
+    public function testInsufficientAuthenticationReturns401(): void
+    {
+        $event = $this->makeEvent(new InsufficientAuthenticationException('Full authentication is required to access this resource.'));
+        ($this->listener)($event);
+
+        $this->assertSame(Response::HTTP_UNAUTHORIZED, $event->getResponse()->getStatusCode());
+        $body = json_decode($event->getResponse()->getContent(), true);
+        $this->assertSame('Full authentication is required to access this resource.', $body['error']['message']);
+    }
+
+    public function testFinderAccessDeniedIsNotTreatedAsAnAuthorizationError(): void
+    {
+        // La AccessDeniedException de Finder es de ficheros del sistema, no de autorización.
+        $this->logger->expects($this->once())->method('error');
+
+        $event = $this->makeEvent(new \Symfony\Component\Finder\Exception\AccessDeniedException('/etc/shadow'));
         ($this->listener)($event);
 
         $this->assertSame(Response::HTTP_INTERNAL_SERVER_ERROR, $event->getResponse()->getStatusCode());

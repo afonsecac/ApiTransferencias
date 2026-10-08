@@ -10,13 +10,13 @@ use MiladRahimi\Jwt\Exceptions\SigningException;
 use MiladRahimi\Jwt\Exceptions\ValidationException;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\EventDispatcher\Attribute\AsEventListener;
-use Symfony\Component\Finder\Exception\AccessDeniedException;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Event\ExceptionEvent;
 use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
+use Symfony\Component\Security\Core\Exception\AccessDeniedException;
 use Symfony\Component\Security\Core\Exception\InsufficientAuthenticationException;
 use Symfony\Component\Serializer\Exception\ExtraAttributesException;
 use Symfony\Component\Serializer\Exception\MissingConstructorArgumentsException;
@@ -72,12 +72,20 @@ class ExceptionListener
                     'message' => $exception->getMessage()
                 ]
             ], Response::HTTP_UNAUTHORIZED);
-        } elseif ($exception instanceof AccessDeniedException || $exception instanceof InsufficientAuthenticationException || $exception instanceof AccessDeniedHttpException) {
+        } elseif ($exception instanceof AccessDeniedException || $exception instanceof AccessDeniedHttpException) {
+            // Estado fijo: el firewall convierte AccessDeniedException en AccessDeniedHttpException
+            // con código 0, y getCode() no es un estado HTTP válido.
             $response = new JsonResponse([
                 'error' => [
                     'message' => $exception->getMessage()
                 ]
-            ], $exception->getCode());
+            ], Response::HTTP_FORBIDDEN);
+        } elseif ($exception instanceof InsufficientAuthenticationException) {
+            $response = new JsonResponse([
+                'error' => [
+                    'message' => $exception->getMessage()
+                ]
+            ], Response::HTTP_UNAUTHORIZED);
         } elseif ($this->isClientBodyError($exception, $event->getRequest())) {
             $response = $this->clientBodyErrorResponse($exception);
         } elseif ($exception instanceof HttpExceptionInterface || $exception instanceof \ApiPlatform\Metadata\Exception\HttpExceptionInterface) {
