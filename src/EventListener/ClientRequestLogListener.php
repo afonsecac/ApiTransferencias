@@ -12,7 +12,7 @@ use Symfony\Component\HttpKernel\Event\RequestEvent;
 use Symfony\Component\HttpKernel\KernelEvents;
 
 /**
- * Respaldo en fichero (canal "request" → var/log/request.{env}.{fecha}.log,
+ * Respaldo en fichero (canal "client_request" → var/log/request.{env}.{fecha}.log,
  * 15 días de rotación, ver config/packages/monolog.yaml) de cada POST de
  * recarga/venta del cliente: hora (la del registro), endpoint y body de
  * entrada. Se escribe antes de validar/procesar, así que también quedan las
@@ -22,7 +22,7 @@ use Symfony\Component\HttpKernel\KernelEvents;
  * Nunca debe romper la petición: cualquier fallo de escritura se ignora.
  */
 #[AsEventListener(event: KernelEvents::REQUEST, priority: 7)]
-#[WithMonologChannel('request')]
+#[WithMonologChannel('client_request')]
 class ClientRequestLogListener
 {
     private const LOGGED_PATH = '#^/api/communication/sale/(recharge|recharge/reserve|package)/?$#';
@@ -48,7 +48,8 @@ class ClientRequestLogListener
             $this->logger->info('Client request', [
                 'method' => $request->getMethod(),
                 'endpoint' => $request->getPathInfo(),
-                'account' => $user instanceof Account ? $user->getUserIdentifier() : null,
+                // El id, no getUserIdentifier(): en Account ese método devuelve el accessToken (X-AUTH-TOKEN).
+                'account' => $user instanceof Account ? $user->getId() : null,
                 'ip' => $request->getClientIp(),
                 'payload' => $request->getContent(),
             ]);
