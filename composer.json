@@ -10,7 +10,7 @@
         "ext-amqp": "*",
         "ext-ctype": "*",
         "ext-iconv": "*",
-        "api-platform/core": "^4.3",
+        "api-platform/core": "~4.3.12",
         "chillerlan/php-qrcode": "^5.0",
         "doctrine/dbal": "^4",
         "doctrine/doctrine-bundle": "^3.0",
