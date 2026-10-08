@@ -65,6 +65,7 @@ RUN printf '%s\n' \
 RUN composer dump-autoload --optimize \
     && php bin/console assets:install public --env=prod \
     && php bin/console cache:warmup --env=prod \
+    && mkdir -p var/log/requests \
     && chown -R www-data:www-data var/
 
 USER www-data
