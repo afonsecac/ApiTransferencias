@@ -70,6 +70,13 @@ services:
       COMREMIT_DASHBOARD_URL: ${COMREMIT_DASHBOARD_URL}
       SENDMUNDO_DASHBOARD_URL: ${SENDMUNDO_DASHBOARD_URL}
       SYS_CONFIG_ENCRYPTION_KEY: ${SYS_CONFIG_ENCRYPTION_KEY}
+    # Respaldo de los POST de venta (App\Logging\AgeLimitedRotatingFileHandler,
+    # 15 días). Volumen con nombre y solo este directorio: cada despliegue
+    # recrea el contenedor y borraría el respaldo; y no todo var/log, porque
+    # info/security no rotan y crecerían sin límite. Se inicializa con el
+    # propietario (www-data) del directorio de la imagen.
+    volumes:
+      - request_logs:/var/www/var/log/requests
     depends_on:
       database:
         condition: service_healthy
@@ -144,6 +151,7 @@ services:
       - app
 
 volumes:
+  request_logs:
   traefik_letsencrypt:
   database_data:
     external: true

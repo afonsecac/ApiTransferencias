@@ -55,7 +55,6 @@ class CommunicationContractServiceTest extends TestCase
     private function assignId(object $entity, int $id): void
     {
         $property = new \ReflectionProperty($entity, 'id');
-        $property->setAccessible(true);
         $property->setValue($entity, $id);
     }
 

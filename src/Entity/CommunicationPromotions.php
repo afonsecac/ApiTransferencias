@@ -2,8 +2,8 @@
 
 namespace App\Entity;
 
-use ApiPlatform\Doctrine\Orm\Filter\OrderFilter;
-use ApiPlatform\Metadata\ApiFilter;
+use ApiPlatform\Metadata\QueryParameter;
+use ApiPlatform\Doctrine\Orm\Filter\SortFilter;
 use ApiPlatform\Metadata\ApiProperty;
 use ApiPlatform\Metadata\ApiResource;
 use ApiPlatform\Metadata\GetCollection;
@@ -26,16 +26,15 @@ use Symfony\Component\Validator\Constraints as Assert;
             uriTemplate: '/communication/promotions',
             order: ['id' => 'DESC'],
             provider: CommunicationPromotionProvider::class,
+            parameters: [
+                'orderBy[:property]' => new QueryParameter(filter: new SortFilter(), properties: ['id', 'priority'], constraints: []),
+            ],
         ),
     ],
     normalizationContext: ['groups' => ['comProm:read']],
     denormalizationContext: ['groups' => ['comProm:create', 'comProm:update']],
     security: "is_granted('ROLE_COM_API_USER')"
 )]
-#[ApiFilter(OrderFilter::class, properties: [
-    'id',
-    'priority',
-], arguments: ['orderParameterName' => 'orderBy'])]
 #[Orm\HasLifecycleCallbacks]
 class CommunicationPromotions
 {

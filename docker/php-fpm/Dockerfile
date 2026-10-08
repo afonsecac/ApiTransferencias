@@ -9,8 +9,8 @@ COPY composer.json composer.lock ./
 # Only ignore that extension; let composer enforce the php>=8.4 requirement.
 RUN composer install --no-scripts --no-autoloader --prefer-dist --no-progress --ignore-platform-req=ext-amqp
 
-# Stage 2: PHP base (used for development) — requires PHP 8.4+
-FROM php:8.4-fpm-alpine AS php-base
+# Stage 2: PHP base (used for development) — requires PHP 8.5+
+FROM php:8.5-fpm-alpine AS php-base
 
 # Use mlocati/docker-php-extension-installer for pre-built binaries (~30s vs ~9min from source)
 COPY --from=mlocati/php-extension-installer:latest /usr/bin/install-php-extensions /usr/local/bin/
@@ -65,6 +65,7 @@ RUN printf '%s\n' \
 RUN composer dump-autoload --optimize \
     && php bin/console assets:install public --env=prod \
     && php bin/console cache:warmup --env=prod \
+    && mkdir -p var/log/requests \
     && chown -R www-data:www-data var/
 
 USER www-data

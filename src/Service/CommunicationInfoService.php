@@ -2,7 +2,7 @@
 
 namespace App\Service;
 
-use ApiPlatform\Symfony\Security\Exception\AccessDeniedException;
+use ApiPlatform\Metadata\Exception\AccessDeniedException;
 use App\DTO\RequestInfo;
 use App\Entity\CommunicationSalePackage;
 use App\Entity\CommunicationSaleRecharge;

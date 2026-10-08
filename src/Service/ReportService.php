@@ -5,7 +5,7 @@ namespace App\Service;
 use App\DTO\PaginationResult;
 use App\Entity\ReportMarked;
 use App\Entity\User;
-use Symfony\Component\Finder\Exception\AccessDeniedException;
+use Symfony\Component\Security\Core\Exception\AccessDeniedException;
 
 class ReportService extends CommonService
 {

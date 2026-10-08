@@ -142,7 +142,6 @@ class CommunicationSaleServiceRecipientIdentifierValidationTest extends TestCase
             ->setDestinationCurrency('CUP');
 
         $property = new \ReflectionProperty($package, 'id');
-        $property->setAccessible(true);
         $property->setValue($package, 42);
 
         return $package;

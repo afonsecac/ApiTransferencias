@@ -5,6 +5,16 @@ monolog:
         - dtone
         - csq
         - provider
+        - client_request
+
+    handlers:
+        # Respaldo de POST de recargas/ventas: request.{env}.{YYYY-MM-DD}.log,
+        # canal propio: "request" es el canal interno de Symfony ("Matched route"...).
+        # rotación diaria y se conservan 15 ficheros (ver services.yaml).
+        request_log:
+            type: service
+            id: app.monolog.request_log_handler
+            channels: [client_request]
 
 when@dev:
     monolog:
@@ -12,6 +22,7 @@ when@dev:
             main:
                 type: stream
                 level: error
+                channels: ["!client_request"]
                 path: '%kernel.logs_dir%/debug.%kernel.environment%.log'
                 max_files: 10
             # uncomment to get logging in your browser
@@ -31,6 +42,7 @@ when@dev:
                 path: '%kernel.logs_dir%/debug.%kernel.environment%.log'
                 level: debug
                 max_files: 10
+                channels: ["!client_request"]
             etecsa_log:
                 type: stream
                 path: '%kernel.logs_dir%/etecsa.log'
@@ -75,7 +87,7 @@ when@prod:
                 action_level: error
                 handler: grouped
                 max_files: 10
-                channels: ["!console"]
+                channels: ["!console", "!client_request"]
             security:
                 type: stream
                 path: "%kernel.logs_dir%/security.%kernel.environment%.log"
@@ -87,6 +99,7 @@ when@prod:
                 path: "%kernel.logs_dir%/info.%kernel.environment%.log"
                 max_files: 10
                 level: info
+                channels: ["!client_request"]
             etecsa_log:
                 type: stream
                 path: '%kernel.logs_dir%/etecsa.log'
@@ -112,6 +125,7 @@ when@prod:
                 path: php://stderr
                 level: debug
                 formatter: monolog.formatter.json
+                channels: ["!client_request"]
             console:
                 type: console
                 process_psr_3_messages: false

@@ -48,6 +48,8 @@ services:
     _instanceof:
         App\Provider\Contract\CommunicationProviderInterface:
             tags: ['app.communication_provider']
+        App\Provider\Contract\ManualProductBuilderInterface:
+            tags: ['app.manual_product_builder']
     'App\Doctrine\CurrentUserExtension':
         tags:
             - { name: 'api_platform.doctrine.orm.query_extension.collection' }
@@ -89,6 +91,21 @@ services:
     App\Controller\DashboardNotificationsController:
         arguments:
             $streamInterval: '%app.notifications.stream_interval%'
+
+    # Respaldo de POST de recargas/ventas: requests/request.{env}.{YYYY-MM-DD}.log,
+    # una línea JSON por petición, un fichero por día. Se borran por antigüedad
+    # (más de 15 días) al abrir el fichero de un día nuevo. El directorio es un
+    # volumen en docker-compose.vps.yaml: sin él, cada despliegue (recreate del
+    # contenedor) borraría el respaldo.
+    app.monolog.request_log_handler:
+        class: App\Logging\AgeLimitedRotatingFileHandler
+        arguments:
+            $filename: '%kernel.logs_dir%/requests/request.%kernel.environment%.log'
+            $maxAgeDays: 15
+            $level: info
+        calls:
+            - [setFilenameFormat, ['{filename}.{date}', 'Y-m-d']]
+            - [setFormatter, ['@monolog.formatter.json']]
 
     # add more service definitions when explicit configuration is needed
     # please note that last definitions always *replace* previous ones

@@ -2,7 +2,7 @@
 
 namespace App\Tests\Service;
 
-use ApiPlatform\Symfony\Security\Exception\AccessDeniedException;
+use ApiPlatform\Metadata\Exception\AccessDeniedException;
 use App\DTO\RequestInfo;
 use App\Entity\Account;
 use App\Entity\CommunicationSalePackage;
@@ -123,7 +123,6 @@ class CommunicationInfoServiceTest extends TestCase
     private function assignId(object $entity, int $id): void
     {
         $property = new \ReflectionProperty($entity, 'id');
-        $property->setAccessible(true);
         $property->setValue($entity, $id);
     }
 

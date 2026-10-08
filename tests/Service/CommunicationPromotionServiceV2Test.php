@@ -279,7 +279,6 @@ class CommunicationPromotionServiceV2Test extends TestCase
     {
         $promotion = new CommunicationPromotions();
         $reflection = new \ReflectionProperty(CommunicationPromotions::class, 'product');
-        $reflection->setAccessible(true);
         $reflection->setValue($promotion, $this->createMock(\App\Entity\CommunicationProduct::class));
         $this->packageRepository->method('findByPromotion')->with($promotion)->willReturn([]);
 
@@ -351,7 +350,6 @@ class CommunicationPromotionServiceV2Test extends TestCase
     {
         $promotion = new CommunicationPromotions();
         $reflection = new \ReflectionProperty(CommunicationPromotions::class, 'product');
-        $reflection->setAccessible(true);
         $reflection->setValue($promotion, $this->createMock(\App\Entity\CommunicationProduct::class));
         $this->packageRepository->method('findByPromotion')->with($promotion)->willReturn([]);
 
