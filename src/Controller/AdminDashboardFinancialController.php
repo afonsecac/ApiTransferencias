@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Controller;
 
-use ApiPlatform\Symfony\Security\Exception\AccessDeniedException;
 use App\DTO\BudgetInfoDto;
 use App\Entity\User;
 use App\OpenApi\Attribute\DashboardEndpoint;
