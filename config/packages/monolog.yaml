@@ -5,6 +5,15 @@ monolog:
         - dtone
         - csq
         - provider
+        - request
+
+    handlers:
+        # Respaldo de POST de recargas/ventas: request.{env}.{YYYY-MM-DD}.log,
+        # rotación diaria y se conservan 15 ficheros (ver services.yaml).
+        request_log:
+            type: service
+            id: app.monolog.request_log_handler
+            channels: [request]
 
 when@dev:
     monolog:
@@ -12,6 +21,7 @@ when@dev:
             main:
                 type: stream
                 level: error
+                channels: ["!request"]
                 path: '%kernel.logs_dir%/debug.%kernel.environment%.log'
                 max_files: 10
             # uncomment to get logging in your browser
@@ -31,6 +41,7 @@ when@dev:
                 path: '%kernel.logs_dir%/debug.%kernel.environment%.log'
                 level: debug
                 max_files: 10
+                channels: ["!request"]
             etecsa_log:
                 type: stream
                 path: '%kernel.logs_dir%/etecsa.log'
@@ -75,7 +86,7 @@ when@prod:
                 action_level: error
                 handler: grouped
                 max_files: 10
-                channels: ["!console"]
+                channels: ["!console", "!request"]
             security:
                 type: stream
                 path: "%kernel.logs_dir%/security.%kernel.environment%.log"
@@ -87,6 +98,7 @@ when@prod:
                 path: "%kernel.logs_dir%/info.%kernel.environment%.log"
                 max_files: 10
                 level: info
+                channels: ["!request"]
             etecsa_log:
                 type: stream
                 path: '%kernel.logs_dir%/etecsa.log'
@@ -112,6 +124,7 @@ when@prod:
                 path: php://stderr
                 level: debug
                 formatter: monolog.formatter.json
+                channels: ["!request"]
             console:
                 type: console
                 process_psr_3_messages: false
