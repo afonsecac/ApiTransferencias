@@ -145,7 +145,6 @@ class CommunicationSaleServiceV2AdmissionTest extends TestCase
             ->setDestinationCurrency($currency);
 
         $property = new \ReflectionProperty($package, 'id');
-        $property->setAccessible(true);
         $property->setValue($package, $id);
 
         return $package;
