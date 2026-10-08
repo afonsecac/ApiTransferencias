@@ -2,7 +2,7 @@
 
 namespace App\Service;
 
-use ApiPlatform\Symfony\Security\Exception\AccessDeniedException;
+use ApiPlatform\Metadata\Exception\AccessDeniedException;
 use App\DTO\NotificationDraft;
 use App\DTO\ReserveRecharge;
 use App\Entity\Account;
@@ -195,7 +195,7 @@ class CommunicationSaleService extends CommonService
     {
         $user = $this->security->getUser();
         if (!$user instanceof Account) {
-            throw new AccessDeniedException();
+            throw new AccessDeniedException('Access Denied.');
         }
 
         /** @var \App\Repository\CommunicationPackageRepository $packageRepo */
@@ -283,7 +283,7 @@ class CommunicationSaleService extends CommonService
     {
         $user = $this->security->getUser();
         if (!$user instanceof Account) {
-            throw new AccessDeniedException();
+            throw new AccessDeniedException('Access Denied.');
         }
 
         $lastSequence = $this->configureSequence->getLastSequence(CommunicationSaleRecharge::class);
@@ -665,7 +665,7 @@ class CommunicationSaleService extends CommonService
     {
         $user = $this->security->getUser();
         if (!$user instanceof Account) {
-            throw new AccessDeniedException();
+            throw new AccessDeniedException('Access Denied.');
         }
 
         $lastSequence = $this->configureSequence->getLastSequence(CommunicationSalePackage::class);

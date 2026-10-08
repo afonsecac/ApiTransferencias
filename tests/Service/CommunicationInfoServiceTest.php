@@ -2,7 +2,7 @@
 
 namespace App\Tests\Service;
 
-use ApiPlatform\Symfony\Security\Exception\AccessDeniedException;
+use ApiPlatform\Metadata\Exception\AccessDeniedException;
 use App\DTO\RequestInfo;
 use App\Entity\Account;
 use App\Entity\CommunicationSalePackage;
