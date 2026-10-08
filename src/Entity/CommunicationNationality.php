@@ -2,8 +2,8 @@
 
 namespace App\Entity;
 
-use ApiPlatform\Doctrine\Orm\Filter\SearchFilter;
-use ApiPlatform\Metadata\ApiFilter;
+use ApiPlatform\Metadata\QueryParameter;
+use ApiPlatform\Doctrine\Orm\Filter\ExactFilter;
 use ApiPlatform\Metadata\ApiProperty;
 use ApiPlatform\Metadata\ApiResource;
 use ApiPlatform\Metadata\GetCollection;
@@ -15,13 +15,16 @@ use Symfony\Component\Serializer\Attribute\Groups;
 #[ApiResource(
     operations: [
         new GetCollection(
-            uriTemplate: '/communication/nationalities'
+            uriTemplate: '/communication/nationalities',
+            parameters: [
+                'codeAlpha3' => new QueryParameter(filter: new ExactFilter(), property: 'codeAlpha3'),
+                'name' => new QueryParameter(filter: new ExactFilter(), property: 'name'),
+            ],
         )
     ],
     normalizationContext: ['groups' => ['comNationality:read']],
     security: "is_granted('ROLE_COM_API_USER')",
 )]
-#[ApiFilter(SearchFilter::class, properties: ['codeAlpha3', 'name'])]
 class CommunicationNationality
 {
     #[ORM\Id]

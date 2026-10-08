@@ -2,11 +2,9 @@
 
 namespace App\Entity;
 
-use ApiPlatform\Doctrine\Common\Filter\SearchFilterInterface;
 use ApiPlatform\Doctrine\Orm\Filter\DateFilter;
-use ApiPlatform\Doctrine\Orm\Filter\OrderFilter;
-use ApiPlatform\Doctrine\Orm\Filter\SearchFilter;
-use ApiPlatform\Metadata\ApiFilter;
+use ApiPlatform\Metadata\QueryParameter;
+use ApiPlatform\Doctrine\Orm\Filter\SortFilter;
 use ApiPlatform\Metadata\ApiProperty;
 use ApiPlatform\Metadata\ApiResource;
 use ApiPlatform\Metadata\Get;
@@ -48,7 +46,11 @@ use Symfony\Component\Validator\Constraints as Assert;
         ),
         new GetCollection(
             uriTemplate: '/communication/sale',
-            order: ['id' => 'DESC']
+            order: ['id' => 'DESC'],
+            parameters: [
+                'createdAt' => new QueryParameter(filter: new DateFilter(), property: 'createdAt'),
+                'orderBy[:property]' => new QueryParameter(filter: new SortFilter(), properties: ['id'], constraints: []),
+            ],
         ),
         new Post(
             uriTemplate: '/communication/sale/recharge',
@@ -70,10 +72,6 @@ use Symfony\Component\Validator\Constraints as Assert;
     denormalizationContext: ['groups' => ['comSales:update', 'comSales:create']],
     security: "is_granted('ROLE_COM_API_USER')",
 )]
-#[ApiFilter(DateFilter::class, properties: ['createdAt'])]
-#[ApiFilter(OrderFilter::class, properties: [
-    'id',
-], arguments: ['orderParameterName' => 'orderBy'])]
 class CommunicationSaleInfo
 {
     #[ORM\Id]
@@ -194,7 +192,6 @@ class CommunicationSaleInfo
             'enum' => ['recharge', 'sale'],
         ]
     )]
-    #[ApiFilter(SearchFilter::class, strategy: SearchFilterInterface::STRATEGY_EXACT)]
     #[Groups(['comSales:read', 'balance:reading', 'sale:list', 'sale:detail'])]
     public string $type;
 
