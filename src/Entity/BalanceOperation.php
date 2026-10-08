@@ -3,8 +3,8 @@
 namespace App\Entity;
 
 use ApiPlatform\Doctrine\Orm\Filter\DateFilter;
-use ApiPlatform\Doctrine\Orm\Filter\OrderFilter;
-use ApiPlatform\Metadata\ApiFilter;
+use ApiPlatform\Metadata\QueryParameter;
+use ApiPlatform\Doctrine\Orm\Filter\SortFilter;
 use ApiPlatform\Metadata\ApiProperty;
 use ApiPlatform\Metadata\ApiResource;
 use ApiPlatform\Metadata\Get;
@@ -43,6 +43,10 @@ use Symfony\Component\Validator\Constraints as Assert;
             normalizationContext: [
                 'groups' => ['balance:read'],
             ],
+            parameters: [
+                'createdAt' => new QueryParameter(filter: new DateFilter(), property: 'createdAt'),
+                'orderBy[:property]' => new QueryParameter(filter: new SortFilter(), properties: ['id'], constraints: []),
+            ],
         ),
         new Post(
             uriTemplate: '/balance/operations',
@@ -58,10 +62,6 @@ use Symfony\Component\Validator\Constraints as Assert;
     security: "is_granted('ROLE_API_USER')",
     paginationMaximumItemsPerPage: 30,
 )]
-#[ApiFilter(DateFilter::class, properties: ['createdAt'])]
-#[ApiFilter(OrderFilter::class, properties: [
-    'id',
-], arguments: ['orderParameterName' => 'orderBy'])]
 #[ORM\HasLifecycleCallbacks]
 class BalanceOperation
 {

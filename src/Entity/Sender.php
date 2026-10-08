@@ -2,9 +2,10 @@
 
 namespace App\Entity;
 
-use ApiPlatform\Doctrine\Orm\Filter\OrderFilter;
-use ApiPlatform\Doctrine\Orm\Filter\SearchFilter;
-use ApiPlatform\Metadata\ApiFilter;
+use ApiPlatform\Metadata\QueryParameter;
+use ApiPlatform\Doctrine\Orm\Filter\SortFilter;
+use ApiPlatform\Doctrine\Orm\Filter\ExactFilter;
+use ApiPlatform\Doctrine\Orm\Filter\PartialSearchFilter;
 use ApiPlatform\Metadata\ApiProperty;
 use ApiPlatform\Metadata\ApiResource;
 use ApiPlatform\Metadata\Delete;
@@ -25,7 +26,14 @@ use Symfony\Component\Validator\Constraints as Assert;
 #[ApiResource(
     operations: [
         new Get(),
-        new GetCollection(),
+        new GetCollection(
+            parameters: [
+                'identification' => new QueryParameter(filter: new ExactFilter(), property: 'identification'),
+                'firstName' => new QueryParameter(filter: new PartialSearchFilter(caseSensitive: true), property: 'firstName'),
+                'lastName' => new QueryParameter(filter: new PartialSearchFilter(caseSensitive: true), property: 'lastName'),
+                'order[:property]' => new QueryParameter(filter: new SortFilter(), properties: ['firstName', 'lastName'], constraints: []),
+            ],
+        ),
         new Post(
             denormalizationContext: ['groups' => ['sender:create']],
             processor: CreateSenderProcessor::class
@@ -40,15 +48,6 @@ use Symfony\Component\Validator\Constraints as Assert;
     security: "is_granted('ROLE_REM_API_USER')",
     paginationMaximumItemsPerPage: 20,
 )]
-#[ApiFilter(SearchFilter::class, properties: [
-    'identification' => 'exact',
-    'firstName' => 'partial',
-    'lastName' => 'partial',
-])]
-#[ApiFilter(OrderFilter::class, properties: [
-    'firstName' => 'ASC',
-    'lastName' => 'ASC',
-])]
 #[ORM\Index(
     fields: ["identification"],
     name: "index_identification_sender"
