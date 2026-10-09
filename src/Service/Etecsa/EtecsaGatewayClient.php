@@ -256,6 +256,40 @@ class EtecsaGatewayClient extends CommonService
     }
 
     /**
+     * POST /sale/retry — reintento controlado de UNA recarga.
+     * mode=check consulta GetSaleRecharge a ETECSA y sincroniza el estado
+     * local (nunca reenvía). mode=resend vuelve a enviarla con el mismo
+     * transactionId, y solo si ETECSA confirma que es seguro (nunca le
+     * llegó la original, o confirma que no existe); si ya la tiene, la
+     * sincroniza y no reenvía. No lanza en 4xx/5xx (igual que ping()): el
+     * body de error de ETECSA trae un `message` explicando el motivo exacto
+     * (ej. "ya se alcanzó el máximo de reenvíos") que el llamador necesita
+     * mostrarle al admin, y una excepción genérica lo perdería.
+     *
+     * @return array{status: int, body: array<string, mixed>}
+     */
+    public function retrySale(
+        Environment $env,
+        string $transactionId,
+        string $mode,
+        string $reason,
+        ?string $expectedStatus = null,
+    ): array {
+        $body = [
+            'environment' => $env->getType(),
+            'transactionId' => $transactionId,
+            'mode' => $mode,
+            'reason' => $reason,
+        ];
+
+        if ($expectedStatus !== null) {
+            $body['expectedStatus'] = $expectedStatus;
+        }
+
+        return $this->postExpectingAnyStatus($env, '/sale/retry', $body);
+    }
+
+    /**
      * GET /ping — health-check documentado en
      * https://communications.comremit.com/api/doc#tag/ping. Sin body ni
      * query, solo X-Api-Key. A diferencia de post()/rawPost(), un 503 es una
@@ -318,6 +352,55 @@ class EtecsaGatewayClient extends CommonService
             return ['status' => $status, 'body' => $body];
         } catch (TransportExceptionInterface | DecodingExceptionInterface $e) {
             $this->etecsaLogger->error('ETECSA ping transport error', ['path' => $path, 'error' => $e->getMessage()]);
+            throw new MyCurrentException('ETECSA_GATEWAY_TIMEOUT', $e->getMessage(), 503);
+        }
+    }
+
+    /**
+     * POST que lee el body de la respuesta en CUALQUIER status (igual que
+     * rawGet()), a diferencia de rawPost()/post() que lanzan en 4xx/5xx.
+     * Para endpoints donde el cuerpo de error trae información que el
+     * llamador necesita (ej. /sale/retry).
+     *
+     * @param array<string, mixed> $body
+     * @return array{status: int, body: array<string, mixed>}
+     */
+    private function postExpectingAnyStatus(Environment $env, string $path, array $body): array
+    {
+        $credentials = $this->credentialsResolver->get(CommunicationProviderEnum::ETECSA, $env->getType());
+        $baseUrl = $credentials['base_url'] ?? $env->getBasePath();
+        $url = $baseUrl . $path;
+        $start = microtime(true);
+
+        $apiKey = $credentials['api_key']
+            ?? $this->sysConfigRepo->findCachedValue('api.' . strtolower($env->getType()) . '.communications.key', mustBeActive: true);
+        $headers = [
+            'Content-Type' => 'application/json',
+            'Accept'       => 'application/json',
+        ];
+        if ($apiKey !== null && $apiKey !== '') {
+            $headers['X-Api-Key'] = $apiKey;
+        }
+
+        try {
+            $response = $this->httpClient->request('POST', $url, [
+                'headers' => $headers,
+                'body' => $this->serializer->serialize($body, 'json'),
+            ]);
+
+            $status = $response->getStatusCode();
+            $responseBody = $response->toArray(false);
+
+            $this->etecsaLogger->info('ETECSA gateway call', [
+                'path' => $path,
+                'env' => $env->getType(),
+                'ms' => round((microtime(true) - $start) * 1000),
+                'status' => $status,
+            ]);
+
+            return ['status' => $status, 'body' => $responseBody];
+        } catch (TransportExceptionInterface | DecodingExceptionInterface $e) {
+            $this->etecsaLogger->error('ETECSA transport error', ['path' => $path, 'error' => $e->getMessage()]);
             throw new MyCurrentException('ETECSA_GATEWAY_TIMEOUT', $e->getMessage(), 503);
         }
     }

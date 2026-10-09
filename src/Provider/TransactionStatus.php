@@ -145,6 +145,38 @@ final class TransactionStatus
     }
 
     /**
+     * Respuesta de POST /sale/retry (o equivalente en otro proveedor):
+     * confirma qué pasó REALMENTE en el proveedor al reintentar (check o
+     * resend) una venta — a diferencia de retryCountOf()/withRetry(), que
+     * solo llevan la cuenta de los intentos hechos por nuestro propio lado,
+     * sin round-trip real.
+     *
+     * @param array<string, mixed> $raw
+     * @param array<string, mixed> $context
+     * @return Envelope
+     */
+    public static function fromRetryResult(
+        ProviderOutcomeEnum $outcome,
+        ?string $provider,
+        ?string $providerReference,
+        ?string $providerCode,
+        ?string $message,
+        array $raw,
+        array $context = [],
+    ): array {
+        return self::envelope(
+            source: self::SOURCE_PROVIDER,
+            outcome: $outcome,
+            provider: $provider,
+            providerReference: $providerReference,
+            providerCode: $providerCode,
+            message: $message,
+            raw: $raw,
+            context: $context,
+        );
+    }
+
+    /**
      * Añade/actualiza el bloque `retry` sin tocar el resto del sobre. Si
      * `$current` es v1 (legacy) o está vacío, lo envuelve en un sobre v2
      * nuevo con `raw` = `$current` tal cual.
