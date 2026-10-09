@@ -3,9 +3,12 @@
 namespace App\Controller;
 
 use App\Exception\MyCurrentException;
+use App\Service\RechargeReceiptPdfService;
 use App\Service\RechargeVerificationService;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
+use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
 
 /**
@@ -22,6 +25,7 @@ class RechargeVerificationController extends AbstractController
 {
     public function __construct(
         private readonly RechargeVerificationService $verificationService,
+        private readonly RechargeReceiptPdfService $receiptPdfService,
     ) {
     }
 
@@ -35,5 +39,26 @@ class RechargeVerificationController extends AbstractController
         }
 
         return $this->json($result);
+    }
+
+    /**
+     * Mismo dato que verify(), pero como PDF visual — es lo que abre el
+     * botón "Ver comprobante" del dashboard. La URL base para el enlace/QR
+     * se toma de la propia petición (esquema+host), así apunta siempre al
+     * dominio correcto (staging/prod) sin configuración extra.
+     */
+    #[Route('/{transactionId}/receipt', name: 'api_recharge_verify_receipt', methods: ['GET'])]
+    public function receipt(string $transactionId, Request $request): Response
+    {
+        try {
+            $pdf = $this->receiptPdfService->renderPdf($transactionId, $request->getSchemeAndHttpHost());
+        } catch (MyCurrentException $e) {
+            return $this->json(['error' => ['message' => $e->getMessage()]], $e->getCode());
+        }
+
+        return new Response($pdf, 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'inline; filename="comprobante-' . $transactionId . '.pdf"',
+        ]);
     }
 }

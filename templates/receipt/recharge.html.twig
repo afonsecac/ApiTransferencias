@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<style>
+    @page { margin: 28px 36px; }
+    body { font-family: "Helvetica", "Arial", sans-serif; color: #1a2420; font-size: 11px; }
+
+    .logo { width: 170px; }
+    .subtitle { color: #56635c; font-size: 11.5px; margin-top: 2px; }
+
+    .status {
+        float: right;
+        margin-top: 4px;
+        padding: 5px 12px;
+        border: 1px solid #1c7a4c;
+        border-radius: 12px;
+        background-color: #e1f5e9;
+        color: #1c7a4c;
+        font-size: 11px;
+        font-weight: bold;
+    }
+
+    .head-table { width: 100%; margin-bottom: 14px; }
+    .head-table td { vertical-align: top; }
+
+    hr { border: none; border-top: 1px solid #c7d0c9; margin: 10px 0 14px; }
+
+    table.fields { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
+    table.fields td { padding: 5px 0; border-bottom: 1px dashed #c7d0c9; font-size: 11px; }
+    table.fields td.label { color: #56635c; width: 55%; }
+    table.fields td.value { text-align: right; font-family: "Courier New", monospace; font-weight: bold; }
+
+    .section-title {
+        font-size: 10px;
+        letter-spacing: 1px;
+        text-transform: uppercase;
+        color: #56635c;
+        margin: 16px 0 4px;
+    }
+
+    .promo-box {
+        background-color: #f4f6f3;
+        border: 1px solid #c7d0c9;
+        border-radius: 4px;
+        padding: 10px 12px;
+        margin-bottom: 10px;
+    }
+    .promo-name { font-weight: bold; margin-bottom: 3px; }
+    .promo-desc { color: #33403a; font-size: 10.5px; }
+
+    table.history { width: 100%; border-collapse: collapse; }
+    table.history td { padding: 5px 0; border-top: 1px dashed #c7d0c9; font-size: 10.5px; }
+    table.history td.state { font-weight: bold; }
+    table.history td.state.completed { color: #1c7a4c; }
+    table.history td.state.pending { color: #8a5a00; }
+    table.history td.when { text-align: right; font-family: "Courier New", monospace; color: #56635c; }
+
+    .qr-block { text-align: center; padding-top: 6px; }
+    .qr-caption { font-size: 9.5px; color: #56635c; margin-top: 4px; }
+    .qr-code-text { font-size: 9px; font-family: "Courier New", monospace; color: #33403a; word-break: break-all; }
+
+    .foot {
+        margin-top: 22px;
+        padding-top: 10px;
+        border-top: 1px solid #c7d0c9;
+        font-size: 9px;
+        color: #56635c;
+        line-height: 1.5;
+    }
+</style>
+</head>
+<body>
+
+<table class="head-table">
+    <tr>
+        <td style="width: 65%;">
+            <img class="logo" src="{{ logoDataUri }}" alt="Comremit">
+            <div class="subtitle">Comprobante de recarga</div>
+        </td>
+        <td style="width: 35%;">
+            <div class="status">Completada</div>
+        </td>
+    </tr>
+</table>
+
+<hr>
+
+<table class="head-table">
+    <tr>
+        <td style="width: 60%;">
+            <div class="section-title">Detalle de la operación</div>
+            <table class="fields">
+                <tr>
+                    <td class="label">Fecha y hora de entrada (UTC)</td>
+                    <td class="value">{{ enteredAt }}</td>
+                </tr>
+                <tr>
+                    <td class="label">Destino</td>
+                    <td class="value">{{ phoneMasked }}</td>
+                </tr>
+                <tr>
+                    <td class="label">Paquete</td>
+                    <td class="value">{{ package }}</td>
+                </tr>
+                <tr>
+                    <td class="label">Monto destino</td>
+                    <td class="value">{{ destinationAmount }} {{ destinationCurrency }}</td>
+                </tr>
+            </table>
+
+            <div class="section-title">Identificadores</div>
+            <table class="fields">
+                <tr>
+                    <td class="label">ID de cliente</td>
+                    <td class="value">CLI-{{ clientId|number_format(0, '', '') }}</td>
+                </tr>
+                <tr>
+                    <td class="label">ID de plataforma</td>
+                    <td class="value">{{ transactionId }}</td>
+                </tr>
+                {% if etecsaOrderId %}
+                <tr>
+                    <td class="label">Order ID ETECSA</td>
+                    <td class="value">{{ etecsaOrderId }}</td>
+                </tr>
+                {% endif %}
+            </table>
+
+            {% if promotion %}
+            <div class="section-title">Promoción aplicada</div>
+            <div class="promo-box">
+                <div class="promo-name">{{ promotion.name }}</div>
+                {% if promotion.description %}
+                <div class="promo-desc">{{ promotion.description }}</div>
+                {% endif %}
+            </div>
+            {% endif %}
+        </td>
+        <td style="width: 40%;">
+            <div class="qr-block">
+                <img src="{{ qrDataUri }}" width="130" height="130" alt="QR">
+                <div class="qr-caption">Escanea para validar esta recarga</div>
+                <div class="qr-code-text">{{ verifyUrl }}</div>
+            </div>
+        </td>
+    </tr>
+</table>
+
+<div class="section-title">Últimos estados de esta operación</div>
+<table class="history">
+    {% for entry in history %}
+    <tr>
+        <td class="state {{ entry.state == 'Completed' ? 'completed' : (entry.state == 'Pending' ? 'pending' : '') }}">
+            {{ entry.stateLabel }}
+        </td>
+        <td class="when">{{ entry.occurredAt }}</td>
+    </tr>
+    {% endfor %}
+</table>
+
+<div class="foot">
+    <strong>Documento generado automáticamente.</strong> Sirve como respaldo de que la orden de recarga fue recibida y procesada por la plataforma en la fecha y hora indicadas (UTC). El código QR y el enlace permiten confirmar estos datos directamente contra el API.
+</div>
+
+</body>
+</html>
