@@ -38,7 +38,11 @@ RUN printf '%s\n' \
     && php bin/console assets:install public --env=prod
 
 # Nginx image with public/ including bundle assets
-FROM nginx:1.25-alpine
+# 1.25 quedó marcado EOL (pentest 2026-10-09, hallazgo 7) y sin los fixes de
+# CVE-2026-42533 (desbordamiento de buffer en map con regex), CVE-2026-60005
+# (fuga de memoria en ngx_http_slice_module) y CVE-2026-56434
+# (use-after-free en ngx_http_ssi_module) — todos corregidos en 1.30.4 stable.
+FROM nginx:1.30-alpine
 
 RUN rm /etc/nginx/conf.d/default.conf
 

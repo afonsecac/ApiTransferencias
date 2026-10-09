@@ -40,6 +40,14 @@ x-worker-base: &worker-base
     - app
 
 services:
+  # Fijada a la version que ya corria en el servidor el 2026-10-09 (pentest,
+  # hallazgo 8) — staging y prod habian divergido (3.7.9 vs 3.6.14) solo por
+  # haber tirado de :latest en momentos distintos. Se fija lo que ya estaba
+  # corriendo, no se salta a una version nueva (ver el gotcha de julio en
+  # memoria: re-pinear sin confirmar la version real tumbo staging una vez).
+  traefik:
+    image: traefik:3.6.14
+
   php-fpm:
     build:
       target: app
@@ -151,3 +159,9 @@ services:
   database:
     ports:
       - "127.0.0.1:5433:5432"
+
+  # Panel de gestion de RabbitMQ: solo accesible desde la IP autorizada en produccion
+  rabbitmq:
+    labels:
+      - traefik.http.middlewares.rabbitmq-allowlist.ipallowlist.sourcerange=${ADMIN_IP_ALLOWLIST}
+      - traefik.http.routers.rabbitmq.middlewares=rabbitmq-allowlist
