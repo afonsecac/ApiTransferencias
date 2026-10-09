@@ -58,18 +58,25 @@ class ApiLoginController extends AbstractController
             ], Response::HTTP_TOO_MANY_REQUESTS);
         }
 
+        // Rate limit por email del intento — se consume ANTES de depender de si
+        // #[CurrentUser] resolvió a alguien, porque resuelve null en CUALQUIER
+        // intento con contraseña incorrecta (el caso mas comun de fuerza bruta).
+        // Si se consumiera despues del is_null($user), un atacante probando
+        // contraseñas contra un email real nunca activaria este limite.
+        $attemptedEmail = $this->extractAttemptedEmail($request);
+        if ($attemptedEmail !== null) {
+            $userLimiter = $this->dashboardLoginLimiter->create('email_' . mb_strtolower($attemptedEmail));
+            if (!$userLimiter->consume()->isAccepted()) {
+                return $this->json([
+                    'error' => ['message' => 'Too many login attempts. Please try again later.'],
+                ], Response::HTTP_TOO_MANY_REQUESTS);
+            }
+        }
+
         if (is_null($user)) {
             return $this->json([
                 'error' => ['message' => 'Not valid credentials'],
             ], Response::HTTP_UNAUTHORIZED);
-        }
-
-        // Rate limit por usuario
-        $userLimiter = $this->dashboardLoginLimiter->create('user_' . $user->getId());
-        if (!$userLimiter->consume()->isAccepted()) {
-            return $this->json([
-                'error' => ['message' => 'Too many login attempts. Please try again later.'],
-            ], Response::HTTP_TOO_MANY_REQUESTS);
         }
 
         // Si el usuario requiere 2FA, devolver pending token en lugar del JWT.
@@ -103,6 +110,20 @@ class ApiLoginController extends AbstractController
         $response->headers->setCookie($this->refreshTokenService->createCookie($refreshToken));
 
         return $response;
+    }
+
+    /**
+     * Lee el mismo campo que usa json_login por defecto ('username') para no
+     * duplicar su parseo con una dependencia extra — si el body no es JSON
+     * valido o no trae ese campo, json_login tampoco habra podido autenticar
+     * y el limite por IP ya cubre ese caso.
+     */
+    private function extractAttemptedEmail(Request $request): ?string
+    {
+        $data = json_decode($request->getContent(), true);
+        $email = $data['username'] ?? null;
+
+        return is_string($email) && $email !== '' ? $email : null;
     }
 
     #[Route('/refresh', name: 'app_dashboard_refresh', methods: ['POST'])]
