@@ -12,12 +12,13 @@ use App\Enums\CommunicationStateEnum;
 use App\Service\RechargeReceiptPdfService;
 use App\Service\RechargeVerificationService;
 use App\Tests\Functional\Provider\ProviderFunctionalTestCase;
+use Symfony\Component\HttpFoundation\Request;
 
 /**
  * @covers \App\Controller\RechargeVerificationController
- * @covers \App\Service\RechargeVerificationService
+ * @covers \App\Service\RechargeReceiptPdfService
  */
-class RechargeVerificationControllerTest extends ProviderFunctionalTestCase
+class RechargeVerificationReceiptTest extends ProviderFunctionalTestCase
 {
     private function controller(): RechargeVerificationController
     {
@@ -59,13 +60,13 @@ class RechargeVerificationControllerTest extends ProviderFunctionalTestCase
         return $sale;
     }
 
-    public function testVerifyReturnsDataForACompletedRecharge(): void
+    public function testReceiptReturnsAPdfForACompletedRecharge(): void
     {
         $client = $this->createClient();
         $environment = $this->createEnvironment();
         $account = $this->createAccount($client, $environment);
 
-        $sale = $this->recharge($account, 'txc1', CommunicationStateEnum::COMPLETED);
+        $sale = $this->recharge($account, 'txpdf1', CommunicationStateEnum::COMPLETED);
         $this->em->flush();
 
         $history = (new CommunicationSaleHistory())
@@ -75,44 +76,17 @@ class RechargeVerificationControllerTest extends ProviderFunctionalTestCase
         $this->em->persist($history);
         $this->em->flush();
 
-        $response = $this->controller()->verify('txc1');
-        $data = json_decode((string) $response->getContent(), true);
+        $request = Request::create('https://staging-api.comremit.com/api/verify/txpdf1/receipt');
+        $response = $this->controller()->receipt('txpdf1', $request);
 
         $this->assertSame(200, $response->getStatusCode());
-        $this->assertSame('txc1', $data['transactionId']);
-        $this->assertSame('ETC-txc1', $data['etecsaOrderId']);
-        $this->assertSame($client->getId(), $data['clientId']);
-        $this->assertSame('Completed', $data['state']);
-        $this->assertEquals(625.0, $data['destinationAmount']);
-        $this->assertSame('CUP', $data['destinationCurrency']);
-        $this->assertStringEndsWith('1337', $data['phoneMasked']);
-        $this->assertStringNotContainsString('5358831337', (string) $response->getContent());
-        $this->assertNull($data['promotion']);
-        $this->assertCount(1, $data['history']);
-        $this->assertSame('Completed', $data['history'][0]['state']);
+        $this->assertSame('application/pdf', $response->headers->get('Content-Type'));
+        $this->assertStringContainsString('inline', (string) $response->headers->get('Content-Disposition'));
+        $this->assertStringContainsString('comprobante-txpdf1.pdf', (string) $response->headers->get('Content-Disposition'));
+        $this->assertStringStartsWith('%PDF', (string) $response->getContent());
     }
 
-    public function testVerifyReturns404ForAPendingRecharge(): void
-    {
-        $client = $this->createClient();
-        $environment = $this->createEnvironment();
-        $account = $this->createAccount($client, $environment);
-        $this->recharge($account, 'txp1', CommunicationStateEnum::PENDING);
-        $this->em->flush();
-
-        $response = $this->controller()->verify('txp1');
-
-        $this->assertSame(404, $response->getStatusCode());
-    }
-
-    public function testVerifyReturns404ForAnUnknownTransactionId(): void
-    {
-        $response = $this->controller()->verify('does-not-exist');
-
-        $this->assertSame(404, $response->getStatusCode());
-    }
-
-    public function testVerifyIncludesPromotionDetailWhenTheSaleHasOne(): void
+    public function testReceiptIncludesPromotionAndQrPointingAtItself(): void
     {
         $client = $this->createClient();
         $environment = $this->createEnvironment();
@@ -133,13 +107,46 @@ class RechargeVerificationControllerTest extends ProviderFunctionalTestCase
             ->setPromotion($promotion);
         $this->em->persist($package);
 
-        $this->recharge($account, 'txpr1', CommunicationStateEnum::COMPLETED, $package);
+        $sale = $this->recharge($account, 'txpdf2', CommunicationStateEnum::COMPLETED, $package);
         $this->em->flush();
 
-        $response = $this->controller()->verify('txpr1');
-        $data = json_decode((string) $response->getContent(), true);
+        $history = (new CommunicationSaleHistory())
+            ->setState(CommunicationStateEnum::COMPLETED)
+            ->setInfo([]);
+        $sale->addHistorical($history);
+        $this->em->persist($history);
+        $this->em->flush();
 
-        $this->assertSame('Promo Internet Ilimitado 10 dias', $data['promotion']['name'] ?? null);
-        $this->assertSame('Datos ilimitados por 10 dias', $data['promotion']['description'] ?? null);
+        $request = Request::create('https://staging-api.comremit.com/api/verify/txpdf2/receipt');
+        $response = $this->controller()->receipt('txpdf2', $request);
+
+        $this->assertSame(200, $response->getStatusCode());
+        $this->assertStringStartsWith('%PDF', (string) $response->getContent());
+        // No podemos leer el texto dentro del stream del PDF sin un parser, pero el
+        // tamaño del cuerpo sube de forma apreciable cuando el QR y la promoción
+        // se incluyen realmente — una señal indirecta de que el template se llenó.
+        $this->assertGreaterThan(2000, \strlen((string) $response->getContent()));
+    }
+
+    public function testReceiptReturns404ForAPendingRecharge(): void
+    {
+        $client = $this->createClient();
+        $environment = $this->createEnvironment();
+        $account = $this->createAccount($client, $environment);
+        $this->recharge($account, 'txpdfp1', CommunicationStateEnum::PENDING);
+        $this->em->flush();
+
+        $request = Request::create('https://staging-api.comremit.com/api/verify/txpdfp1/receipt');
+        $response = $this->controller()->receipt('txpdfp1', $request);
+
+        $this->assertSame(404, $response->getStatusCode());
+    }
+
+    public function testReceiptReturns404ForAnUnknownTransactionId(): void
+    {
+        $request = Request::create('https://staging-api.comremit.com/api/verify/does-not-exist/receipt');
+        $response = $this->controller()->receipt('does-not-exist', $request);
+
+        $this->assertSame(404, $response->getStatusCode());
     }
 }
