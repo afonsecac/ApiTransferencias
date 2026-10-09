@@ -151,3 +151,9 @@ services:
   database:
     ports:
       - "127.0.0.1:5433:5432"
+
+  # Panel de gestion de RabbitMQ: solo accesible desde la IP autorizada en produccion
+  rabbitmq:
+    labels:
+      - traefik.http.middlewares.rabbitmq-allowlist.ipallowlist.sourcerange=${ADMIN_IP_ALLOWLIST}
+      - traefik.http.routers.rabbitmq.middlewares=rabbitmq-allowlist
