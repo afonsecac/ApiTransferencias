@@ -8,15 +8,18 @@ use App\DTO\Out\SaleCheckStatusOutDto;
 use App\DTO\Out\SaleInfoDetailOutDto;
 use App\DTO\Out\SaleInfoListOutDto;
 use App\DTO\Out\SaleRetryOutDto;
+use App\DTO\RetrySaleDto;
 use App\Entity\CommunicationSaleInfo;
 use App\Entity\CommunicationSalePackage;
 use App\Entity\CommunicationSaleRecharge;
 use App\Entity\User;
+use App\Enums\CommunicationProviderEnum;
 use App\Enums\CommunicationStateEnum;
 use App\Message\CheckSaleMessage;
 use App\Message\SalePackageMessage;
 use App\OpenApi\Attribute\DashboardEndpoint;
 use App\Service\CommunicationSaleService;
+use App\Service\Etecsa\EtecsaRetryService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -46,6 +49,7 @@ class DashboardSalesController extends AbstractController
         private readonly NormalizerInterface $serializer,
         private readonly CommunicationSaleService $saleService,
         private readonly MessageBusInterface $messageBus,
+        private readonly EtecsaRetryService $etecsaRetryService,
     ) {
     }
 
@@ -228,9 +232,9 @@ class DashboardSalesController extends AbstractController
     }
 
     #[Route('/{id}/retry', name: 'dashboard_sales_retry', methods: ['POST'], requirements: ['id' => '\d+'])]
-    #[DashboardEndpoint(summary: 'Reintentar venta fallida', tag: 'Sales', responseDto: SaleRetryOutDto::class)]
+    #[DashboardEndpoint(summary: 'Reintentar venta fallida', tag: 'Sales', requestDto: RetrySaleDto::class, responseDto: SaleRetryOutDto::class)]
 #[IsGranted('ROLE_API_ADMIN')]
-    public function retry(int $id): JsonResponse
+    public function retry(int $id, RetrySaleDto $dto): JsonResponse
     {
         $sale = $this->em->getRepository(CommunicationSaleInfo::class)->find($id);
         if ($sale === null) {
@@ -242,6 +246,39 @@ class DashboardSalesController extends AbstractController
             return $this->json([
                 'error' => ['message' => 'Retry only allowed for Pending or Failed sales.'],
             ], Response::HTTP_BAD_REQUEST);
+        }
+
+        // Reintento SEGURO (check/resend vía /sale/retry): solo para
+        // recargas ETECSA, único proveedor con un endpoint de reintento
+        // documentado hoy. DTOne/CSQ y las ventas de paquetes siguen con el
+        // reenvío de siempre más abajo.
+        if ($sale instanceof CommunicationSaleRecharge && $sale->getProvider() === CommunicationProviderEnum::ETECSA->value) {
+            $reason = $dto->getReason();
+            if ($reason === null || mb_strlen($reason) < 5) {
+                return $this->json([
+                    'error' => ['message' => 'reason is required (min. 5 characters) to retry an ETECSA sale.'],
+                ], Response::HTTP_BAD_REQUEST);
+            }
+
+            $admin = $this->getUser();
+            $auditedReason = $admin instanceof User
+                ? sprintf('%s (solicitado por %s)', $reason, $admin->getEmail())
+                : $reason;
+
+            try {
+                $result = $this->etecsaRetryService->retry($id, $dto->getMode() ?? 'check', $auditedReason);
+            } catch (MyCurrentException $e) {
+                return $this->json(['error' => ['message' => $e->getMessage()]], $e->getCode() ?: 400);
+            }
+
+            return $this->json([
+                'id' => $sale->getId(),
+                'state' => $sale->getState()->value,
+                'retryDispatched' => true,
+                'action' => $result['action'],
+                'message' => $result['message'],
+                'previousStatus' => $result['previousStatus'],
+            ]);
         }
 
         if ($sale instanceof CommunicationSalePackage) {

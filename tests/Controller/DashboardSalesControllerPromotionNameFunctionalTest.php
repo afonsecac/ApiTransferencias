@@ -9,6 +9,7 @@ use App\Entity\CommunicationPromotions;
 use App\Entity\CommunicationSalePackage;
 use App\Enums\CommunicationStateEnum;
 use App\Service\CommunicationSaleService;
+use App\Service\Etecsa\EtecsaRetryService;
 use App\Tests\Functional\Provider\ProviderFunctionalTestCase;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Messenger\MessageBusInterface;
@@ -32,6 +33,7 @@ class DashboardSalesControllerPromotionNameFunctionalTest extends ProviderFuncti
             self::getContainer()->get(NormalizerInterface::class),
             self::getContainer()->get(CommunicationSaleService::class),
             self::getContainer()->get(MessageBusInterface::class),
+            self::getContainer()->get(EtecsaRetryService::class),
         );
         // list() llama a $this->getUser()/isGranted() (AbstractController) —
         // requiere un container real con el security context ya autenticado.

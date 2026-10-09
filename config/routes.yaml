@@ -5,6 +5,7 @@ controllers:
         exclude:
             - ../src/Controller/HealthCheckController.php
             - ../src/Controller/DTOneWebhookController.php
+            - ../src/Controller/RechargeVerificationController.php
     type: attribute
     prefix: /dashboard/api
 
@@ -14,4 +15,8 @@ health:
 
 dtone_webhook:
     resource: ../src/Controller/DTOneWebhookController.php
+    type: attribute
+
+recharge_verification:
+    resource: ../src/Controller/RechargeVerificationController.php
     type: attribute
