@@ -73,6 +73,11 @@ security:
         # DTOneWebhookController), no por el firewall. Debe ir ANTES de la
         # regla genérica de /api (gana la primera que matchea).
         - { path: '^/api/webhooks/dtone', roles: PUBLIC_ACCESS }
+        # Verificación pública de recargas (QR del comprobante): sin
+        # autenticación, la consulta cualquiera que escanee el código, no
+        # solo clientes con API key. Debe ir ANTES de la regla genérica de
+        # /api (gana la primera que matchea).
+        - { path: '^/api/verify', roles: PUBLIC_ACCESS }
         - { path: '^/api', roles: ROLE_API_USER }
         - { path: '^/dashboard/api', roles: ROLE_SYSTEM_USER }
         # - { path: ^/profile, roles: ROLE_USER }
