@@ -76,7 +76,7 @@ class RechargeVerificationReceiptTest extends ProviderFunctionalTestCase
         $this->em->persist($history);
         $this->em->flush();
 
-        $request = Request::create('https://staging-api.comremit.com/api/verify/txpdf1/receipt');
+        $request = Request::create('https://staging-api.comremit.com/api/verify/txpdf1/receipt?token=' . $sale->getAccessToken());
         $response = $this->controller()->receipt('txpdf1', $request);
 
         $this->assertSame(200, $response->getStatusCode());
@@ -84,6 +84,21 @@ class RechargeVerificationReceiptTest extends ProviderFunctionalTestCase
         $this->assertStringContainsString('inline', (string) $response->headers->get('Content-Disposition'));
         $this->assertStringContainsString('comprobante-txpdf1.pdf', (string) $response->headers->get('Content-Disposition'));
         $this->assertStringStartsWith('%PDF', (string) $response->getContent());
+    }
+
+    public function testReceiptReturns404WhenTokenDoesNotMatch(): void
+    {
+        $client = $this->createClient();
+        $environment = $this->createEnvironment();
+        $account = $this->createAccount($client, $environment);
+
+        $this->recharge($account, 'txpdfwrong1', CommunicationStateEnum::COMPLETED);
+        $this->em->flush();
+
+        $request = Request::create('https://staging-api.comremit.com/api/verify/txpdfwrong1/receipt?token=wrong-token');
+        $response = $this->controller()->receipt('txpdfwrong1', $request);
+
+        $this->assertSame(404, $response->getStatusCode());
     }
 
     public function testReceiptIncludesPromotionAndQrPointingAtItself(): void
@@ -117,7 +132,7 @@ class RechargeVerificationReceiptTest extends ProviderFunctionalTestCase
         $this->em->persist($history);
         $this->em->flush();
 
-        $request = Request::create('https://staging-api.comremit.com/api/verify/txpdf2/receipt');
+        $request = Request::create('https://staging-api.comremit.com/api/verify/txpdf2/receipt?token=' . $sale->getAccessToken());
         $response = $this->controller()->receipt('txpdf2', $request);
 
         $this->assertSame(200, $response->getStatusCode());
