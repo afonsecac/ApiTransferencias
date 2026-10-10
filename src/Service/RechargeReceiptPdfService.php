@@ -45,6 +45,7 @@ class RechargeReceiptPdfService
         $html = $this->twig->render('receipt/recharge.html.twig', [
             'transactionId' => $data->transactionId,
             'etecsaOrderId' => $data->etecsaOrderId,
+            'clientTransactionId' => $data->clientTransactionId,
             'clientName' => $data->clientName,
             'enteredAt' => $this->formatDate($data->enteredAt),
             'phone' => $data->phone,
