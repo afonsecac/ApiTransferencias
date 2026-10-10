@@ -30,6 +30,7 @@
     table.fields td { padding: 5px 0; border-bottom: 1px dashed #c7d0c9; font-size: 11px; }
     table.fields td.label { color: #56635c; width: 55%; }
     table.fields td.value { text-align: right; font-family: "Courier New", monospace; font-weight: bold; }
+    table.fields td.value .value-sub { font-weight: normal; font-size: 9.5px; color: #56635c; margin-top: 2px; }
 
     .section-title {
         font-size: 10px;
@@ -100,7 +101,12 @@
                 </tr>
                 <tr>
                     <td class="label">Paquete</td>
-                    <td class="value">{{ package }}</td>
+                    <td class="value">
+                        {{ package }}
+                        {% if packageDescription %}
+                        <div class="value-sub">{{ packageDescription }}</div>
+                        {% endif %}
+                    </td>
                 </tr>
                 <tr>
                     <td class="label">Monto destino</td>

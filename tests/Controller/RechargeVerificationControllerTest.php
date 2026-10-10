@@ -176,4 +176,27 @@ class RechargeVerificationControllerTest extends ProviderFunctionalTestCase
         $this->assertSame('Promo Internet Ilimitado 10 dias', $data['promotion']['name'] ?? null);
         $this->assertSame('Datos ilimitados por 10 dias', $data['promotion']['description'] ?? null);
     }
+
+    public function testVerifyIncludesThePackageDescriptionWhenTheSaleHasACatalogPackage(): void
+    {
+        $client = $this->createClient();
+        $environment = $this->createEnvironment();
+        $account = $this->createAccount($client, $environment);
+
+        $package = (new CommunicationPackage())
+            ->setName('25 GB + Datos ilimitados')
+            ->setDescription('Bonifica con 25GB + Internet Ilimitado + Gana Minutos y SMS')
+            ->setDestinationAmount(600.0)
+            ->setDestinationCurrency('CUP');
+        $this->em->persist($package);
+
+        $sale = $this->recharge($account, 'txpkgdesc1', CommunicationStateEnum::COMPLETED, $package);
+        $this->em->flush();
+
+        $response = $this->controller()->verify('txpkgdesc1', $this->requestWithToken($sale->getAccessToken()));
+        $data = json_decode((string) $response->getContent(), true);
+
+        $this->assertSame('25 GB + Datos ilimitados', $data['package']);
+        $this->assertSame('Bonifica con 25GB + Internet Ilimitado + Gana Minutos y SMS', $data['packageDescription']);
+    }
 }
