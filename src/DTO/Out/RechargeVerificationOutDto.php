@@ -6,6 +6,7 @@ final class RechargeVerificationOutDto
 {
     public string $transactionId;
     public ?string $etecsaOrderId = null;
+    public ?string $clientTransactionId = null;
     public ?string $clientName = null;
     public ?string $enteredAt = null;
     public string $state;
