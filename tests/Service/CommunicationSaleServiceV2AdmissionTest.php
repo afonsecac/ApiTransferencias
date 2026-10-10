@@ -120,6 +120,7 @@ class CommunicationSaleServiceV2AdmissionTest extends TestCase
             $this->dispatchResolver,
             $this->promotionDispatchResolver,
             $this->createMock(\App\Service\Provider\SaleProviderFailoverService::class),
+            $this->createMock(\App\Service\DispatchPauseLedger::class),
         );
     }
 
