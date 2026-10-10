@@ -33,18 +33,21 @@ use App\Provider\Contract\PackageSaleRequest;
 use App\Provider\Contract\ProviderStatusQuery;
 use App\Provider\Contract\RechargeProviderInterface;
 use App\Provider\Contract\RechargeRequest;
+use App\Provider\DeferredDispatch;
 use App\Provider\ProviderContextFactory;
 use App\Provider\ProviderDispatchResolver;
 use App\Provider\ProviderRegistry;
 use App\Provider\ProviderResolver;
 use App\Provider\PromotionProviderDispatchResolver;
 use App\Service\Provider\SaleProviderFailoverService;
+use App\Provider\SelectedDispatch;
 use App\Provider\TransactionStatus;
 use App\Repository\BalanceOperationRepository;
 use App\Repository\EnvironmentRepository;
 use App\Repository\SysConfigRepository;
 use App\Service\Pricing\PackageCatalogResolver;
 use App\Service\Pricing\PackageOfferSourceEnum;
+use App\Service\Pricing\ResolvedPackageOffer;
 use App\Service\Provider\ProviderAvailabilityService;
 use Doctrine\DBAL\Exception;
 use Doctrine\ORM\EntityManagerInterface;
@@ -127,6 +130,12 @@ class CommunicationSaleService extends CommonService
      */
     private function dispatchOrDefer(CommunicationSaleInfo $sale, \Closure $messageFactory): void
     {
+        if ($sale->getStateProcess() === CommunicationSaleInfo::STATE_PROCESS_AWAITING_PROVIDER) {
+            $this->logger->info("Sale {$sale->getId()} accepted without provider: awaiting an available provider before dispatch.");
+
+            return;
+        }
+
         $provider = $sale->getProvider() ?? CommunicationProviderEnum::ETECSA->value;
         $environmentType = $sale->getTenant()?->getEnvironment()?->getType();
 
@@ -165,6 +174,13 @@ class CommunicationSaleService extends CommonService
             }
 
             $sale->setState(CommunicationStateEnum::PENDING);
+            // Reserva aceptada sin proveedor (admitV2ForReserve()): al
+            // activarse sigue esperando uno en vez de despacharse con
+            // proveedor/producto vacíos. catalogPackage distingue estas
+            // ventas V2 de las reservas antiguas, que siempre fueron ETECSA.
+            if ($sale->getProvider() === null && $sale->getCatalogPackage() !== null) {
+                $sale->setStateProcess(CommunicationSaleInfo::STATE_PROCESS_AWAITING_PROVIDER);
+            }
 
             $history = new CommunicationSaleHistory();
             $history->setState(CommunicationStateEnum::PENDING);
@@ -183,6 +199,72 @@ class CommunicationSaleService extends CommonService
         }
 
         return $activated;
+    }
+
+    /**
+     * Resuelve proveedor+producto para las ventas aceptadas sin proveedor
+     * (state=PENDING, stateProcess=AWAITING_PROVIDER — ver admitV2()) cuyos
+     * candidatos ya estén despachables, y las devuelve al flujo normal de
+     * despacho (stateProcess=CREATED + mensaje). Las que siguen sin
+     * candidato disponible se quedan esperando, intactas. Idempotente: lo
+     * llaman el ping al recuperarse un proveedor y un cron periódico.
+     *
+     * @return int ventas a las que se les asignó proveedor
+     * @throws \Symfony\Component\Messenger\Exception\ExceptionInterface
+     */
+    public function dispatchAwaitingProviderSales(): int
+    {
+        /** @var \App\Repository\CommunicationSaleInfoRepository $repo */
+        $repo = $this->em->getRepository(CommunicationSaleInfo::class);
+        $toDispatch = [];
+        $failed = [];
+
+        foreach ($repo->findAwaitingProvider() as $sale) {
+            $account = $sale->getTenant();
+            $package = $sale->getCatalogPackage();
+            if ($account === null || $package === null) {
+                continue;
+            }
+
+            $isRecharge = $sale instanceof CommunicationSaleRecharge;
+            $selected = $this->dispatchResolver->selectExcluding($account, $package, $isRecharge ? 'recharge' : 'sale', []);
+            if ($selected === null && $isRecharge && $sale->getPromotion() !== null) {
+                $selected = $this->promotionDispatchResolver->trySelect($account, $sale->getPromotion());
+            }
+            if ($selected === null) {
+                continue;
+            }
+
+            if ($isRecharge) {
+                try {
+                    $this->assertRecipientIdentifierSatisfied($selected->product, $sale->getPhoneNumber(), $sale->getAccountIdentifier());
+                } catch (MyCurrentException $e) {
+                    $failed[] = [$sale, $e->getMessage()];
+                    continue;
+                }
+            }
+
+            $sale->setProvider($selected->provider->value);
+            $sale->setDispatchProduct($selected->product);
+            $sale->setDispatchExternalRef($selected->externalRef);
+            $sale->setStateProcess(CommunicationStateEnum::CREATED->value);
+            $toDispatch[] = $sale;
+        }
+
+        $this->em->flush();
+
+        foreach ($failed as [$sale, $reason]) {
+            $this->failSale($sale, $reason, 'INTERNAL_MISSING_RECIPIENT_IDENTIFIER');
+        }
+
+        foreach ($toDispatch as $sale) {
+            $this->logger->info("Sale {$sale->getId()} resolved provider {$sale->getProvider()} after awaiting an available provider.");
+            $this->dispatchOrDefer($sale, $sale instanceof CommunicationSaleRecharge
+                ? fn () => new SaleRechargeMessage($sale->getId())
+                : fn () => new SalePackageMessage($sale->getId()));
+        }
+
+        return count($toDispatch);
     }
 
     /**
@@ -214,7 +296,7 @@ class CommunicationSaleService extends CommonService
         // promoción→producto (ver PromotionProviderDispatchResolver) y se
         // congela ANTES de construir la venta.
         $admission = $this->admitV2ForReserve($user, $catalogPackage, $promotion);
-        $this->assertRecipientIdentifierSatisfied($admission->dispatchProduct, $reserveDto->getPhoneNumber(), $reserveDto->getAccountIdentifier());
+        $this->assertRecipientIdentifierForAdmission($admission, $reserveDto->getPhoneNumber(), $reserveDto->getAccountIdentifier());
 
         $recharge = new CommunicationSaleRecharge();
         $recharge->setTenant($user);
@@ -297,7 +379,7 @@ class CommunicationSaleService extends CommonService
         // El proveedor es propiedad del producto, no de la cuenta — se
         // valida y se congela ANTES de construir la venta (ver admitV2()).
         $admission = $this->admitV2($user, $recharge->getPackageId(), 'recharge');
-        $this->assertRecipientIdentifierSatisfied($admission->dispatchProduct, $recharge->getPhoneNumber(), $recharge->getAccountIdentifier());
+        $this->assertRecipientIdentifierForAdmission($admission, $recharge->getPhoneNumber(), $recharge->getAccountIdentifier());
 
         $recharge->setTransactionId($transactionId);
         $this->applyAdmission($recharge, $admission);
@@ -306,7 +388,7 @@ class CommunicationSaleService extends CommonService
         $recharge->setCurrency($admission->currency);
         $recharge->getCalculatePrice();
         $recharge->setState(CommunicationStateEnum::PENDING);
-        $recharge->setStateProcess(CommunicationStateEnum::CREATED->value);
+        $recharge->setStateProcess($this->initialStateProcess($admission));
         $recharge->setProvider($admission->provider);
 
         $this->em->beginTransaction();
@@ -353,6 +435,13 @@ class CommunicationSaleService extends CommonService
     {
         $recharge = $this->em->getRepository(CommunicationSaleRecharge::class)->find($saleId);
         if ($recharge === null) {
+            return;
+        }
+        // Sin proveedor/producto asignado no hay nada que reenviar: lo único
+        // que puede hacer un reintento es intentar resolverlos ahora.
+        if ($recharge->getStateProcess() === CommunicationSaleInfo::STATE_PROCESS_AWAITING_PROVIDER) {
+            $this->dispatchAwaitingProviderSales();
+
             return;
         }
         $recharge->setState(CommunicationStateEnum::PENDING);
@@ -686,7 +775,7 @@ class CommunicationSaleService extends CommonService
         $sale->setCurrency($admission->currency);
         $sale->getCalculatePrice();
         $sale->setState(CommunicationStateEnum::PENDING);
-        $sale->setStateProcess(CommunicationStateEnum::CREATED->value);
+        $sale->setStateProcess($this->initialStateProcess($admission));
         $sale->setProvider($admission->provider);
 
         $commercialOffice = $this->em->getRepository(CommunicationOffice::class)->findOneBy([
@@ -913,18 +1002,35 @@ class CommunicationSaleService extends CommonService
         // PackageCatalogResolver.
         $offer = $this->packageCatalogResolver->offerForSale($package, $user);
 
-        // select() ya lanza MyCurrentException (409 PACKAGE_NOT_DISPATCHABLE)
-        // si ningún proveedor disponible de la prioridad del cliente cubre
-        // la tupla — ver ProviderDispatchResolver.
-        $dispatch = $this->dispatchResolver->select($user, $package, $saleType);
+        // selectOrDefer() lanza MyCurrentException (409
+        // PACKAGE_NOT_DISPATCHABLE) solo si NINGÚN proveedor de la
+        // prioridad del cliente cubre la tupla (error de catálogo). Si
+        // alguno la cubre pero ahora mismo ninguno está disponible, la venta
+        // se acepta sin proveedor y se despacha cuando uno se recupere — ver
+        // ProviderDispatchResolver y dispatchAwaitingProviderSales().
+        $dispatch = $this->dispatchResolver->selectOrDefer($user, $package, $saleType);
+
+        return $this->buildAdmission($offer, $package, $dispatch);
+    }
+
+    private function initialStateProcess(CommunicationSaleAdmission $admission): string
+    {
+        return $admission->isAwaitingProvider()
+            ? CommunicationSaleInfo::STATE_PROCESS_AWAITING_PROVIDER
+            : CommunicationStateEnum::CREATED->value;
+    }
+
+    private function buildAdmission(ResolvedPackageOffer $offer, CommunicationPackage $package, SelectedDispatch|DeferredDispatch $dispatch): CommunicationSaleAdmission
+    {
+        $selected = $dispatch instanceof SelectedDispatch ? $dispatch : null;
 
         return new CommunicationSaleAdmission(
-            provider: $dispatch->provider->value,
+            provider: $selected?->provider->value,
             amount: $offer->price,
             currency: $offer->currency,
             catalogPackage: $package,
-            dispatchProduct: $dispatch->product,
-            dispatchExternalRef: $dispatch->externalRef,
+            dispatchProduct: $selected?->product,
+            dispatchExternalRef: $selected?->externalRef,
             destinationAmount: $package->getDestinationAmount(),
             destinationCurrency: $package->getDestinationCurrency(),
         );
@@ -957,19 +1063,23 @@ class CommunicationSaleService extends CommonService
     private function admitV2ForReserve(Account $user, CommunicationPackage $package, CommunicationPromotions $promotion): CommunicationSaleAdmission
     {
         $offer = $this->packageCatalogResolver->offerForSale($package, $user);
-        $dispatch = $this->dispatchResolver->selectExcluding($user, $package, 'recharge', [])
-            ?? $this->promotionDispatchResolver->select($user, $promotion);
+        $dispatch = $this->dispatchResolver->selectExcluding($user, $package, 'recharge', []);
+        if ($dispatch === null) {
+            try {
+                $dispatch = $this->promotionDispatchResolver->selectOrDefer($user, $promotion);
+            } catch (MyCurrentException $e) {
+                // Sin vínculo a nivel de promoción, pero el vínculo por
+                // paquete SÍ cubre el destino aunque ahora no esté
+                // disponible: se reserva esperando proveedor. Si tampoco
+                // cubre, es un error real de catálogo.
+                if (!$this->dispatchResolver->hasCoverage($user, $package, 'recharge')) {
+                    throw $e;
+                }
+                $dispatch = new DeferredDispatch();
+            }
+        }
 
-        return new CommunicationSaleAdmission(
-            provider: $dispatch->provider->value,
-            amount: $offer->price,
-            currency: $offer->currency,
-            catalogPackage: $package,
-            dispatchProduct: $dispatch->product,
-            dispatchExternalRef: $dispatch->externalRef,
-            destinationAmount: $package->getDestinationAmount(),
-            destinationCurrency: $package->getDestinationCurrency(),
-        );
+        return $this->buildAdmission($offer, $package, $dispatch);
     }
 
     /**
@@ -988,6 +1098,22 @@ class CommunicationSaleService extends CommonService
      *
      * @throws MyCurrentException
      */
+    private function assertRecipientIdentifierForAdmission(CommunicationSaleAdmission $admission, ?string $phoneNumber, ?string $accountIdentifier): void
+    {
+        if (!$admission->isAwaitingProvider()) {
+            $this->assertRecipientIdentifierSatisfied($admission->dispatchProduct, $phoneNumber, $accountIdentifier);
+
+            return;
+        }
+
+        // Sin producto todavía no se sabe qué identificador exige: basta con
+        // que venga alguno. dispatchAwaitingProviderSales() vuelve a
+        // validar contra el producto real cuando se resuelva el proveedor.
+        if (($phoneNumber === null || $phoneNumber === '') && ($accountIdentifier === null || $accountIdentifier === '')) {
+            throw new MyCurrentException('COM_MISSING_RECIPIENT_IDENTIFIER', 'phoneNumber or accountIdentifier is required', 400);
+        }
+    }
+
     private function assertRecipientIdentifierSatisfied(?CommunicationProduct $product, ?string $phoneNumber, ?string $accountIdentifier): void
     {
         $required = $product?->getRequiredIdentifierFields() ?? [];
@@ -1151,12 +1277,8 @@ class CommunicationSaleService extends CommonService
             return;
         }
         // No hacer check si la transacción aún no fue enviada a ETECSA
-        $stateProcess = $sale->getStateProcess();
-        if ($stateProcess === null
-            || $stateProcess === CommunicationStateEnum::CREATED->value
-            || $stateProcess === 'SENDING'
-        ) {
-            $this->logger->info("Check skipped for sale {$saleId}: not yet sent to provider (stateProcess={$stateProcess})");
+        if (!$sale->wasSentToProvider()) {
+            $this->logger->info("Check skipped for sale {$saleId}: not yet sent to provider (stateProcess={$sale->getStateProcess()})");
             return;
         }
         $tenant = $sale->getTenant();

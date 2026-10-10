@@ -10,11 +10,14 @@ use App\Entity\CommunicationOffice;
 use App\Entity\CommunicationPackage;
 use App\Entity\CommunicationProduct;
 use App\Entity\CommunicationPromotions;
+use App\Entity\CommunicationSaleInfo;
 use App\Entity\CommunicationSalePackage;
 use App\Entity\CommunicationSaleRecharge;
 use App\Entity\Environment;
 use App\Enums\CommunicationProviderEnum;
+use App\Enums\CommunicationStateEnum;
 use App\Exception\MyCurrentException;
+use App\Provider\DeferredDispatch;
 use App\Provider\ProviderContextFactory;
 use App\Provider\ProviderDispatchResolver;
 use App\Provider\ProviderRegistry;
@@ -175,7 +178,7 @@ class CommunicationSaleServiceV2AdmissionTest extends TestCase
             ->with($package, $account)
             ->willReturn(new ResolvedPackageOffer($package, 8.5, 'USD', PackageOfferSourceEnum::PRODUCT_MAX));
         $this->dispatchResolver->expects($this->once())
-            ->method('select')
+            ->method('selectOrDefer')
             ->with($account, $package, 'recharge')
             ->willReturn(new SelectedDispatch(CommunicationProviderEnum::CSQ, $product, '7854-250'));
 
@@ -279,7 +282,7 @@ class CommunicationSaleServiceV2AdmissionTest extends TestCase
 
         $this->packageCatalogResolver->method('offerForSale')
             ->willReturn(new ResolvedPackageOffer($package, 8.5, 'USD', PackageOfferSourceEnum::PRODUCT_MAX));
-        $this->dispatchResolver->method('select')
+        $this->dispatchResolver->method('selectOrDefer')
             ->willThrowException(new MyCurrentException('PACKAGE_NOT_DISPATCHABLE', 'Ningún proveedor disponible puede despachar este paquete', 409));
 
         $this->em->expects($this->never())->method('persist');
@@ -292,6 +295,135 @@ class CommunicationSaleServiceV2AdmissionTest extends TestCase
         } catch (MyCurrentException $e) {
             $this->assertSame('PACKAGE_NOT_DISPATCHABLE', $e->getCodeWork());
         }
+    }
+
+    /**
+     * Pedido del usuario (2026-10-10): si todos los proveedores candidatos
+     * están caídos en este momento pero alguno sí cubre el destino, la
+     * venta se ACEPTA y espera proveedor (AWAITING_PROVIDER) en vez de
+     * devolver 409 — se despacha sola cuando uno se recupere.
+     */
+    public function testProcessRechargeAcceptsTheSaleAwaitingProviderWhenEveryCandidateIsUnavailable(): void
+    {
+        $account = $this->account(1);
+        $this->security->method('getUser')->willReturn($account);
+
+        $package = $this->catalogPackage();
+        $this->stubCommunicationPackageRepo($package);
+
+        $this->packageCatalogResolver->method('offerForSale')
+            ->willReturn(new ResolvedPackageOffer($package, 8.5, 'USD', PackageOfferSourceEnum::PRODUCT_MAX));
+        $this->dispatchResolver->method('selectOrDefer')->willReturn(new DeferredDispatch());
+        $this->balanceService->method('hasAvailableBalance')->willReturn(true);
+
+        $this->em->expects($this->atLeastOnce())->method('persist');
+
+        $recharge = new CommunicationSaleRecharge();
+        $recharge->setPackageId(42);
+        $recharge->setPhoneNumber('5550001234');
+
+        $result = $this->service->processRecharge($recharge);
+
+        $this->assertSame(CommunicationStateEnum::PENDING, $result->getState());
+        $this->assertSame(CommunicationSaleInfo::STATE_PROCESS_AWAITING_PROVIDER, $result->getStateProcess());
+        $this->assertNull($result->getProvider());
+        $this->assertNull($result->getDispatchProduct());
+        $this->assertSame($package, $result->getCatalogPackage());
+        $this->assertSame(8.5, $result->getAmount());
+        $this->assertSame('USD', $result->getCurrency());
+    }
+
+    public function testAwaitingProviderSaleStillRequiresSomeRecipientIdentifier(): void
+    {
+        $account = $this->account(1);
+        $this->security->method('getUser')->willReturn($account);
+
+        $package = $this->catalogPackage();
+        $this->stubCommunicationPackageRepo($package);
+
+        $this->packageCatalogResolver->method('offerForSale')
+            ->willReturn(new ResolvedPackageOffer($package, 8.5, 'USD', PackageOfferSourceEnum::PRODUCT_MAX));
+        $this->dispatchResolver->method('selectOrDefer')->willReturn(new DeferredDispatch());
+
+        $this->em->expects($this->never())->method('persist');
+
+        $recharge = new CommunicationSaleRecharge();
+        $recharge->setPackageId(42);
+
+        try {
+            $this->service->processRecharge($recharge);
+            $this->fail('Se esperaba COM_MISSING_RECIPIENT_IDENTIFIER');
+        } catch (MyCurrentException $e) {
+            $this->assertSame('COM_MISSING_RECIPIENT_IDENTIFIER', $e->getCodeWork());
+        }
+    }
+
+    public function testAwaitingProviderSaleAcceptsAnAccountIdentifierWithoutPhone(): void
+    {
+        $account = $this->account(1);
+        $this->security->method('getUser')->willReturn($account);
+
+        $package = $this->catalogPackage();
+        $this->stubCommunicationPackageRepo($package);
+
+        $this->packageCatalogResolver->method('offerForSale')
+            ->willReturn(new ResolvedPackageOffer($package, 8.5, 'USD', PackageOfferSourceEnum::PRODUCT_MAX));
+        $this->dispatchResolver->method('selectOrDefer')->willReturn(new DeferredDispatch());
+        $this->balanceService->method('hasAvailableBalance')->willReturn(true);
+
+        $recharge = new CommunicationSaleRecharge();
+        $recharge->setPackageId(42);
+        $recharge->setAccountIdentifier('usuario@nauta.com.cu');
+
+        $result = $this->service->processRecharge($recharge);
+
+        $this->assertSame(CommunicationSaleInfo::STATE_PROCESS_AWAITING_PROVIDER, $result->getStateProcess());
+    }
+
+    public function testProcessReserveAcceptsTheReservationAwaitingProviderWhenEveryCandidateIsUnavailable(): void
+    {
+        $account = $this->account(1);
+        $this->security->method('getUser')->willReturn($account);
+
+        $promotion = $this->createMock(CommunicationPromotions::class);
+        $package = $this->catalogPackage()->setPromotion($promotion);
+        $this->stubFutureReservePackage($package);
+
+        $this->packageCatalogResolver->method('offerForSale')
+            ->willReturn(new ResolvedPackageOffer($package, 8.5, 'USD', PackageOfferSourceEnum::PRODUCT_MAX));
+        $this->dispatchResolver->method('selectExcluding')->willReturn(null);
+        $this->promotionDispatchResolver->method('selectOrDefer')->willReturn(new DeferredDispatch());
+        $this->balanceService->method('hasAvailableBalance')->willReturn(true);
+
+        $result = $this->service->processReserve(new ReserveRecharge('5550001234', 93, 42, 'reserve-ctx-awaiting'));
+
+        $this->assertSame(CommunicationStateEnum::RESERVED, $result->getState());
+        $this->assertNull($result->getProvider());
+        $this->assertNull($result->getDispatchProduct());
+        $this->assertSame($package, $result->getCatalogPackage());
+    }
+
+    public function testProcessReserveDefersWhenOnlyThePackageLevelCoversTheDestination(): void
+    {
+        $account = $this->account(1);
+        $this->security->method('getUser')->willReturn($account);
+
+        $promotion = $this->createMock(CommunicationPromotions::class);
+        $package = $this->catalogPackage()->setPromotion($promotion);
+        $this->stubFutureReservePackage($package);
+
+        $this->packageCatalogResolver->method('offerForSale')
+            ->willReturn(new ResolvedPackageOffer($package, 8.5, 'USD', PackageOfferSourceEnum::PRODUCT_MAX));
+        $this->dispatchResolver->method('selectExcluding')->willReturn(null);
+        $this->dispatchResolver->method('hasCoverage')->willReturn(true);
+        $this->promotionDispatchResolver->method('selectOrDefer')
+            ->willThrowException(new MyCurrentException('PROMOTION_NOT_DISPATCHABLE', 'sin vínculo de promoción', 409));
+        $this->balanceService->method('hasAvailableBalance')->willReturn(true);
+
+        $result = $this->service->processReserve(new ReserveRecharge('5550001234', 93, 42, 'reserve-ctx-pkg-cover'));
+
+        $this->assertNull($result->getProvider());
+        $this->assertSame(CommunicationStateEnum::RESERVED, $result->getState());
     }
 
     public function testExecuteSaleUsesV2Admission(): void
@@ -320,7 +452,7 @@ class CommunicationSaleServiceV2AdmissionTest extends TestCase
 
         $this->packageCatalogResolver->method('offerForSale')
             ->willReturn(new ResolvedPackageOffer($package, 15.0, 'USD', PackageOfferSourceEnum::PRODUCT_MAX));
-        $this->dispatchResolver->method('select')
+        $this->dispatchResolver->method('selectOrDefer')
             ->with($account, $package, 'sale')
             ->willReturn(new SelectedDispatch(CommunicationProviderEnum::DTONE, $product, '7951-2200'));
 
@@ -367,7 +499,7 @@ class CommunicationSaleServiceV2AdmissionTest extends TestCase
             ->with($account, $package, 'recharge', [])
             ->willReturn(new SelectedDispatch(CommunicationProviderEnum::ETECSA, $product, '187'));
         // Con vínculo por paquete resuelto, el nivel de promoción ni se consulta.
-        $this->promotionDispatchResolver->expects($this->never())->method('select');
+        $this->promotionDispatchResolver->expects($this->never())->method('selectOrDefer');
 
         $this->balanceService->method('hasAvailableBalance')->willReturn(true);
 
@@ -407,7 +539,7 @@ class CommunicationSaleServiceV2AdmissionTest extends TestCase
             ->with($account, $package, 'recharge', [])
             ->willReturn(null);
         $this->promotionDispatchResolver->expects($this->once())
-            ->method('select')
+            ->method('selectOrDefer')
             ->with($account, $promotion)
             ->willReturn(new SelectedDispatch(CommunicationProviderEnum::CSQ, $product, '7854-250'));
 
@@ -434,7 +566,7 @@ class CommunicationSaleServiceV2AdmissionTest extends TestCase
         $this->packageCatalogResolver->method('offerForSale')
             ->willReturn(new ResolvedPackageOffer($package, 8.5, 'USD', PackageOfferSourceEnum::PRODUCT_MAX));
         $this->dispatchResolver->method('selectExcluding')->willReturn(null);
-        $this->promotionDispatchResolver->method('select')
+        $this->promotionDispatchResolver->method('selectOrDefer')
             ->willThrowException(new MyCurrentException('PROMOTION_NOT_DISPATCHABLE', 'Ningún proveedor disponible puede despachar esta promoción', 409));
 
         $this->em->expects($this->never())->method('persist');

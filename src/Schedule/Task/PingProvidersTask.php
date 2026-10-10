@@ -4,6 +4,7 @@ namespace App\Schedule\Task;
 
 use App\Provider\ProviderCredentialsResolver;
 use App\Provider\ProviderRegistry;
+use App\Service\CommunicationSaleService;
 use App\Service\CommunicationsDispatchService;
 use App\Service\Provider\ProviderAvailabilityService;
 use App\Service\Provider\ProviderPingService;
@@ -34,6 +35,7 @@ class PingProvidersTask
         private readonly ProviderPingService $pingService,
         private readonly ProviderAvailabilityService $availabilityService,
         private readonly CommunicationsDispatchService $dispatchService,
+        private readonly CommunicationSaleService $saleService,
         #[Autowire('@monolog.logger.provider')] private readonly LoggerInterface $logger,
     ) {
     }
@@ -52,6 +54,7 @@ class PingProvidersTask
 
                     if ($justRecovered) {
                         $this->dispatchService->redispatchPendingFor($provider->value, $environmentType);
+                        $this->saleService->dispatchAwaitingProviderSales();
                     }
                 } catch (\Throwable $e) {
                     $this->logger->error('Ping de proveedor falló inesperadamente', [

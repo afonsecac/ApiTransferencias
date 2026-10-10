@@ -10,6 +10,7 @@ use App\Provider\ProviderCredentialsResolver;
 use App\Provider\ProviderRegistry;
 use App\Repository\SysConfigRepository;
 use App\Schedule\Task\PingProvidersTask;
+use App\Service\CommunicationSaleService;
 use App\Service\CommunicationsDispatchService;
 use App\Service\Provider\ProviderAvailabilityService;
 use App\Service\Provider\ProviderPingService;
@@ -75,12 +76,16 @@ class PingProvidersTaskTest extends TestCase
         $dispatchService = $this->createMock(CommunicationsDispatchService::class);
         $dispatchService->expects($this->never())->method('redispatchPendingFor');
 
+        $saleService = $this->createMock(CommunicationSaleService::class);
+        $saleService->expects($this->never())->method('dispatchAwaitingProviderSales');
+
         $task = new PingProvidersTask(
             $registry,
             $credentialsResolver,
             $pingService,
             $availabilityService,
             $dispatchService,
+            $saleService,
             new NullLogger(),
         );
 
@@ -104,7 +109,12 @@ class PingProvidersTaskTest extends TestCase
             ->method('redispatchPendingFor')
             ->with('CSQ', $this->isType('string'));
 
-        $task = new PingProvidersTask($registry, $credentialsResolver, $pingService, $availabilityService, $dispatchService, new NullLogger());
+        // Además de reencolar las ventas con proveedor ya fijado, la
+        // recuperación resuelve proveedor para las aceptadas sin ninguno.
+        $saleService = $this->createMock(CommunicationSaleService::class);
+        $saleService->expects($this->once())->method('dispatchAwaitingProviderSales');
+
+        $task = new PingProvidersTask($registry, $credentialsResolver, $pingService, $availabilityService, $dispatchService, $saleService, new NullLogger());
 
         $task();
     }
@@ -138,8 +148,9 @@ class PingProvidersTaskTest extends TestCase
         $availabilityService->expects($this->never())->method('recordPing');
 
         $dispatchService = $this->createMock(CommunicationsDispatchService::class);
+        $saleService = $this->createMock(CommunicationSaleService::class);
 
-        $task = new PingProvidersTask($registry, $credentialsResolver, $pingService, $availabilityService, $dispatchService, new NullLogger());
+        $task = new PingProvidersTask($registry, $credentialsResolver, $pingService, $availabilityService, $dispatchService, $saleService, new NullLogger());
 
         $task();
     }
