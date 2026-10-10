@@ -30,40 +30,65 @@ class CommunicationProductRepository extends ServiceEntityRepository
     }
 
     /**
-     * @param int $page
-     * @param int $limit
-     * @param string $env
-     * @param string|null $query
-     * @return \App\Util\IPaginationResponse
+     * Campos por los que el dashboard puede ordenar el listado de productos
+     * (alias de la consulta: p = producto, e = entorno). Lista blanca: el
+     * valor de orderBy llega del cliente.
+     */
+    private const SORTABLE_FIELDS = [
+        'id' => 'p.id',
+        'packageId' => 'p.packageId',
+        'description' => 'p.description',
+        'packageType' => 'p.packageType',
+        'productType' => 'p.productType',
+        'price' => 'p.price',
+        'enabled' => 'p.enabled',
+        'initialDate' => 'p.initialDate',
+        'endDateAt' => 'p.endDateAt',
+        'environment' => 'e.type',
+        'provider' => 'p.provider',
+    ];
+
+    /**
+     * @param string|null $environmentType PROD/TEST; null = todos los entornos
+     * @param string $orderBy "<campo> <ASC|DESC>" — un campo fuera de la lista blanca cae al orden por defecto
      */
     public function getProducts(
         int $page = 0,
         int $limit = 10,
-        string $env = 'TEST',
-        ?string $query = null
+        ?string $environmentType = null,
+        ?string $search = null,
+        ?string $provider = null,
+        string $orderBy = 'price ASC',
     ): IPaginationResponse {
         $currentDate = new \DateTimeImmutable();
         $dql = $this->createQueryBuilder('p')
-            ->select('p')
+            ->select('p', 'e')
             ->leftJoin('p.environment', 'e')
-            ->where('e.type = :env')
-            ->andWhere('p.endDateAt IS NULL OR p.endDateAt > :currentDate')
+            ->where('p.endDateAt IS NULL OR p.endDateAt > :currentDate')
             ->andWhere('p.enabled = :enabled')
             ->setParameter('enabled', true)
-            ->setParameter('currentDate', $currentDate)
-            ->setParameter('env', $env);
-        if (!is_null($query)) {
-            $dql->andWhere('p.description LIKE :query')
-                ->setParameter('query', str_replace('*', '%', $query));
+            ->setParameter('currentDate', $currentDate);
+        if (!empty($environmentType)) {
+            $dql->andWhere('e.type = :environmentType')->setParameter('environmentType', $environmentType);
         }
-        $dql->setMaxResults($limit)
-            ->setFirstResult($page * $limit)
-            ->orderBy('p.price')
-            ->addOrderBy('p.packageId')
-            ->getQuery();
+        if (!empty($search)) {
+            $dql->andWhere('p.description LIKE :search')
+                ->setParameter('search', '%' . str_replace('*', '%', $search) . '%');
+        }
+        if (!empty($provider)) {
+            $dql->andWhere('p.provider = :provider')->setParameter('provider', $provider);
+        }
+
+        $orderParts = explode(' ', trim($orderBy));
+        $field = self::SORTABLE_FIELDS[$orderParts[0]] ?? 'p.price';
+        $direction = strtoupper($orderParts[1] ?? 'ASC') === 'DESC' ? 'DESC' : 'ASC';
+        $dql->orderBy($field, $direction)->addOrderBy('p.id', 'ASC');
+
+        $dql->setMaxResults($limit)->setFirstResult($page * $limit);
         $paginator = new Paginator($dql, fetchJoinCollection: false);
         $total = count($paginator);
-        return new PaginatorResponse($page, $limit, $total, $paginator->getQuery()->getArrayResult());
+
+        return new PaginatorResponse($page, $limit, $total, iterator_to_array($paginator));
     }
 
     /**
