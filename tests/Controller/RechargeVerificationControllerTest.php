@@ -12,6 +12,7 @@ use App\Enums\CommunicationStateEnum;
 use App\Service\RechargeReceiptPdfService;
 use App\Service\RechargeVerificationService;
 use App\Tests\Functional\Provider\ProviderFunctionalTestCase;
+use Symfony\Component\HttpFoundation\Request;
 
 /**
  * @covers \App\Controller\RechargeVerificationController
@@ -28,6 +29,11 @@ class RechargeVerificationControllerTest extends ProviderFunctionalTestCase
         $controller->setContainer(self::getContainer());
 
         return $controller;
+    }
+
+    private function requestWithToken(?string $token): Request
+    {
+        return new Request($token !== null ? ['token' => $token] : []);
     }
 
     private function recharge(
@@ -75,7 +81,7 @@ class RechargeVerificationControllerTest extends ProviderFunctionalTestCase
         $this->em->persist($history);
         $this->em->flush();
 
-        $response = $this->controller()->verify('txc1');
+        $response = $this->controller()->verify('txc1', $this->requestWithToken($sale->getAccessToken()));
         $data = json_decode((string) $response->getContent(), true);
 
         $this->assertSame(200, $response->getStatusCode());
@@ -85,8 +91,7 @@ class RechargeVerificationControllerTest extends ProviderFunctionalTestCase
         $this->assertSame('Completed', $data['state']);
         $this->assertEquals(625.0, $data['destinationAmount']);
         $this->assertSame('CUP', $data['destinationCurrency']);
-        $this->assertStringEndsWith('1337', $data['phoneMasked']);
-        $this->assertStringNotContainsString('5358831337', (string) $response->getContent());
+        $this->assertSame('5358831337', $data['phone']);
         $this->assertNull($data['promotion']);
         $this->assertCount(1, $data['history']);
         $this->assertSame('Completed', $data['history'][0]['state']);
@@ -97,19 +102,47 @@ class RechargeVerificationControllerTest extends ProviderFunctionalTestCase
         $client = $this->createClient();
         $environment = $this->createEnvironment();
         $account = $this->createAccount($client, $environment);
-        $this->recharge($account, 'txp1', CommunicationStateEnum::PENDING);
+        $sale = $this->recharge($account, 'txp1', CommunicationStateEnum::PENDING);
         $this->em->flush();
 
-        $response = $this->controller()->verify('txp1');
+        $response = $this->controller()->verify('txp1', $this->requestWithToken($sale->getAccessToken()));
 
         $this->assertSame(404, $response->getStatusCode());
     }
 
     public function testVerifyReturns404ForAnUnknownTransactionId(): void
     {
-        $response = $this->controller()->verify('does-not-exist');
+        $response = $this->controller()->verify('does-not-exist', $this->requestWithToken('any-token'));
 
         $this->assertSame(404, $response->getStatusCode());
+    }
+
+    public function testVerifyReturns404WhenTokenIsMissing(): void
+    {
+        $client = $this->createClient();
+        $environment = $this->createEnvironment();
+        $account = $this->createAccount($client, $environment);
+        $this->recharge($account, 'txnotoken1', CommunicationStateEnum::COMPLETED);
+        $this->em->flush();
+
+        $response = $this->controller()->verify('txnotoken1', $this->requestWithToken(null));
+
+        $this->assertSame(404, $response->getStatusCode());
+        $this->assertStringNotContainsString('5358831337', (string) $response->getContent());
+    }
+
+    public function testVerifyReturns404WhenTokenDoesNotMatch(): void
+    {
+        $client = $this->createClient();
+        $environment = $this->createEnvironment();
+        $account = $this->createAccount($client, $environment);
+        $this->recharge($account, 'txwrongtk1', CommunicationStateEnum::COMPLETED);
+        $this->em->flush();
+
+        $response = $this->controller()->verify('txwrongtk1', $this->requestWithToken('wrong-token'));
+
+        $this->assertSame(404, $response->getStatusCode());
+        $this->assertStringNotContainsString('5358831337', (string) $response->getContent());
     }
 
     public function testVerifyIncludesPromotionDetailWhenTheSaleHasOne(): void
@@ -133,10 +166,10 @@ class RechargeVerificationControllerTest extends ProviderFunctionalTestCase
             ->setPromotion($promotion);
         $this->em->persist($package);
 
-        $this->recharge($account, 'txpr1', CommunicationStateEnum::COMPLETED, $package);
+        $sale = $this->recharge($account, 'txpr1', CommunicationStateEnum::COMPLETED, $package);
         $this->em->flush();
 
-        $response = $this->controller()->verify('txpr1');
+        $response = $this->controller()->verify('txpr1', $this->requestWithToken($sale->getAccessToken()));
         $data = json_decode((string) $response->getContent(), true);
 
         $this->assertSame('Promo Internet Ilimitado 10 dias', $data['promotion']['name'] ?? null);

@@ -15,14 +15,23 @@ class RechargeVerificationService
     ) {
     }
 
-    public function verify(string $transactionId): RechargeVerificationOutDto
+    /**
+     * @throws MyCurrentException con el mismo 404 genérico tanto si la venta
+     *     no existe, no está Completed, o el token no coincide — endpoint
+     *     público sin autenticación, no debe confirmar a un tercero ni que
+     *     el transactionId es válido ni que el token está cerca de ser
+     *     correcto (hash_equals evita timing attack en la comparación).
+     */
+    public function verify(string $transactionId, ?string $accessToken): RechargeVerificationOutDto
     {
         $sale = $this->saleRepository->findOneByTransactionId($transactionId);
 
-        // Mismo 404 exista o no la venta, o esté en cualquier estado
-        // distinto de Completed — endpoint público sin autenticación, no
-        // debe confirmar que un transactionId es válido pero aún no terminó.
-        if ($sale === null || $sale->getState() !== CommunicationStateEnum::COMPLETED) {
+        if ($sale === null
+            || $sale->getState() !== CommunicationStateEnum::COMPLETED
+            || $accessToken === null
+            || $sale->getAccessToken() === null
+            || !hash_equals($sale->getAccessToken(), $accessToken)
+        ) {
             throw new MyCurrentException('RECHARGE_NOT_FOUND', 'Recharge not found', 404);
         }
 
@@ -32,8 +41,8 @@ class RechargeVerificationService
         $dto->clientId = $sale->getTenant()?->getClient()?->getId();
         $dto->enteredAt = $sale->getCreatedAt()?->format('Y-m-d\TH:i:s\Z');
         $dto->state = $sale->getState()->value;
-        $dto->phoneMasked = $sale instanceof CommunicationSaleRecharge
-            ? $this->maskPhone($sale->getPhoneNumber())
+        $dto->phone = $sale instanceof CommunicationSaleRecharge
+            ? $sale->getPhoneNumber()
             : null;
         $dto->package = $sale->getCatalogPackage()?->getName() ?? $sale->getDispatchProduct()?->getDescription();
         $dto->destinationAmount = $sale->getDestinationAmount();
@@ -57,28 +66,5 @@ class RechargeVerificationService
         );
 
         return $dto;
-    }
-
-    /**
-     * Deja visibles los primeros 2 dígitos (código de país) y los últimos 4
-     * (lo mínimo para que el cliente reconozca que el comprobante es suyo),
-     * enmascara el resto — endpoint público sin autenticación.
-     */
-    private function maskPhone(?string $phone): ?string
-    {
-        if ($phone === null || $phone === '') {
-            return null;
-        }
-
-        $length = \strlen($phone);
-        if ($length <= 6) {
-            return str_repeat('*', $length);
-        }
-
-        $visibleStart = substr($phone, 0, 2);
-        $visibleEnd = substr($phone, -4);
-        $maskedLength = $length - \strlen($visibleStart) - \strlen($visibleEnd);
-
-        return $visibleStart . str_repeat('*', $maskedLength) . $visibleEnd;
     }
 }

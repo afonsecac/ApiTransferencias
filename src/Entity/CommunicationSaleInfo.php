@@ -35,6 +35,10 @@ use Symfony\Component\Validator\Constraints as Assert;
     fields: ['clientTransactionId', 'tenant'],
 
 )]
+#[ORM\UniqueConstraint(
+    name: 'unique_access_token',
+    fields: ['accessToken']
+)]
 #[ApiResource(
     uriTemplate: '/communication/sale',
     operations: [
@@ -248,9 +252,16 @@ class CommunicationSaleInfo
 
     /**
      * @var Collection<int, CommunicationSaleHistory>
+     *
+     * Desempate por 'id' DESC: dos transiciones de estado consecutivas
+     * (p.ej. Pending->Completed de un proveedor síncrono) pueden caer en el
+     * mismo segundo de reloj — updated_at es TIMESTAMP(0), sin fracción de
+     * segundo — y Postgres no garantiza orden estable entre filas con la
+     * misma updated_at. El id autoincremental sí refleja fielmente el orden
+     * real de inserción, así que resuelve el empate sin ambigüedad.
      */
     #[ORM\OneToMany(targetEntity: CommunicationSaleHistory::class, mappedBy: 'sale')]
-    #[ORM\OrderBy(['updatedAt' => 'DESC'])]
+    #[ORM\OrderBy(['updatedAt' => 'DESC', 'id' => 'DESC'])]
     #[ApiProperty]
     #[Groups(['comSales:read', 'sale:detail'])]
     private Collection $historical;
@@ -273,6 +284,22 @@ class CommunicationSaleInfo
     #[ORM\Column(length: 20)]
     #[Groups(['sale:list', 'sale:detail'])]
     private ?string $provider = null;
+
+    /**
+     * Secreto aleatorio único generado al crear la venta — autoriza el
+     * comprobante público (GET /api/verify/{transactionId}): sin este
+     * token exacto no se expone ningún dato, ni siquiera enmascarado.
+     * Deliberadamente fuera de 'comSales:read'/'sale:list'/'sale:detail':
+     * nunca debe salir en un listado ni en la API de clientes externos,
+     * solo RechargeVerificationService lo compara internamente. Expuesto
+     * SOLO en 'sale:detail' (vista autenticada del dashboard admin, para
+     * que el botón "Ver comprobante" pueda armar la URL con el token) —
+     * nunca en 'comSales:read'/'balance:reading'/'sale:list', que
+     * alimentan la API de clientes externos y el listado.
+     */
+    #[ORM\Column(length: 64, nullable: true)]
+    #[Groups(['sale:detail'])]
+    private ?string $accessToken = null;
 
     public function __construct() {
         $this->discount = 0;
@@ -449,6 +476,12 @@ class CommunicationSaleInfo
     {
         $this->createdAt = new \DateTimeImmutable('now');
         $this->stateProcess = CommunicationStateEnum::CREATED->value;
+        $this->accessToken ??= bin2hex(random_bytes(32));
+    }
+
+    public function getAccessToken(): ?string
+    {
+        return $this->accessToken;
     }
 
     public function getTransactionStatus(): array

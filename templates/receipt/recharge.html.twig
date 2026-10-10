@@ -58,7 +58,6 @@
 
     .qr-block { text-align: center; padding-top: 6px; }
     .qr-caption { font-size: 9.5px; color: #56635c; margin-top: 4px; }
-    .qr-code-text { font-size: 9px; font-family: "Courier New", monospace; color: #33403a; word-break: break-all; }
 
     .foot {
         margin-top: 22px;
@@ -97,7 +96,7 @@
                 </tr>
                 <tr>
                     <td class="label">Destino</td>
-                    <td class="value">{{ phoneMasked }}</td>
+                    <td class="value">{{ phone }}</td>
                 </tr>
                 <tr>
                     <td class="label">Paquete</td>
@@ -141,7 +140,6 @@
             <div class="qr-block">
                 <img src="{{ qrDataUri }}" width="130" height="130" alt="QR">
                 <div class="qr-caption">Escanea para validar esta recarga</div>
-                <div class="qr-code-text">{{ verifyUrl }}</div>
             </div>
         </td>
     </tr>
@@ -160,7 +158,7 @@
 </table>
 
 <div class="foot">
-    <strong>Documento generado automáticamente.</strong> Sirve como respaldo de que la orden de recarga fue recibida y procesada por la plataforma en la fecha y hora indicadas (UTC). El código QR y el enlace permiten confirmar estos datos directamente contra el API.
+    <strong>Documento generado automáticamente.</strong> Sirve como respaldo de que la orden de recarga fue recibida y procesada por la plataforma en la fecha y hora indicadas (UTC). El código QR permite confirmar estos datos directamente contra el API.
 </div>
 
 </body>
