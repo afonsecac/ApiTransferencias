@@ -46,6 +46,7 @@ class RechargeVerificationService
             ? $sale->getPhoneNumber()
             : null;
         $dto->package = $sale->getCatalogPackage()?->getName() ?? $sale->getDispatchProduct()?->getDescription();
+        $dto->packageDescription = $sale->getCatalogPackage()?->getDescription();
         $dto->destinationAmount = $sale->getDestinationAmount();
         $dto->destinationCurrency = $sale->getDestinationCurrency();
 
