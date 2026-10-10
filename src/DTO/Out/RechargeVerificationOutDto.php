@@ -12,6 +12,7 @@ final class RechargeVerificationOutDto
     public string $state;
     public ?string $phone = null;
     public ?string $package = null;
+    public ?string $packageDescription = null;
     public ?float $destinationAmount = null;
     public ?string $destinationCurrency = null;
 

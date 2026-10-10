@@ -50,6 +50,7 @@ class RechargeReceiptPdfService
             'enteredAt' => $this->formatDate($data->enteredAt),
             'phone' => $data->phone,
             'package' => $data->package,
+            'packageDescription' => $data->packageDescription,
             'destinationAmount' => $data->destinationAmount,
             'destinationCurrency' => $data->destinationCurrency,
             'promotion' => $data->promotion,

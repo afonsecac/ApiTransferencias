@@ -120,6 +120,7 @@ class CommunicationSaleServicePromotionDispatchTest extends TestCase
             $this->createMock(\App\Provider\ProviderDispatchResolver::class),
             $this->createMock(\App\Provider\PromotionProviderDispatchResolver::class),
             $this->createMock(\App\Service\Provider\SaleProviderFailoverService::class),
+            $this->createMock(\App\Service\DispatchPauseLedger::class),
         );
 
         $this->saleRecharge = $this->buildPendingPromotionRecharge();
