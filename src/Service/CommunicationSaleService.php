@@ -217,7 +217,6 @@ class CommunicationSaleService extends CommonService
         /** @var \App\Repository\CommunicationSaleInfoRepository $repo */
         $repo = $this->em->getRepository(CommunicationSaleInfo::class);
         $toDispatch = [];
-        $failed = [];
 
         foreach ($repo->findAwaitingProvider() as $sale) {
             $account = $sale->getTenant();
@@ -239,22 +238,18 @@ class CommunicationSaleService extends CommonService
                 try {
                     $this->assertRecipientIdentifierSatisfied($selected->product, $sale->getPhoneNumber(), $sale->getAccountIdentifier());
                 } catch (MyCurrentException $e) {
-                    $failed[] = [$sale, $e->getMessage()];
+                    $this->rejectAwaitingSale($sale, $e->getMessage());
                     continue;
                 }
             }
 
-            $sale->setProvider($selected->provider->value);
-            $sale->setDispatchProduct($selected->product);
-            $sale->setDispatchExternalRef($selected->externalRef);
-            $sale->setStateProcess(CommunicationStateEnum::CREATED->value);
+            // Quien gana el UPDATE condicionado es el único que despacha:
+            // otro barrido concurrente (ping, cron, Reintentar) la habría
+            // tomado ya y aquí no se toca nada.
+            if (!$this->claimAwaitingProvider($sale, $selected)) {
+                continue;
+            }
             $toDispatch[] = $sale;
-        }
-
-        $this->em->flush();
-
-        foreach ($failed as [$sale, $reason]) {
-            $this->failSale($sale, $reason, 'INTERNAL_MISSING_RECIPIENT_IDENTIFIER');
         }
 
         foreach ($toDispatch as $sale) {
@@ -265,6 +260,50 @@ class CommunicationSaleService extends CommonService
         }
 
         return count($toDispatch);
+    }
+
+    /**
+     * Asigna proveedor+producto y devuelve la venta a CREATED en un único
+     * UPDATE condicionado a que siga en AWAITING_PROVIDER (mismo patrón que
+     * claimForSending()): sin esto, dos barridos concurrentes pisarían el
+     * SENDING del otro y la venta se enviaría dos veces.
+     */
+    private function claimAwaitingProvider(CommunicationSaleInfo $sale, SelectedDispatch $selected): bool
+    {
+        $table = $this->em->getClassMetadata(CommunicationSaleInfo::class)->getTableName();
+
+        $affected = $this->em->getConnection()->executeStatement(
+            "UPDATE {$table} SET provider = :provider, dispatch_product_id = :product, dispatch_external_ref = :ref, state_process = :created WHERE id = :id AND state_process = :awaiting",
+            [
+                'provider' => $selected->provider->value,
+                'product' => $selected->product->getId(),
+                'ref' => $selected->externalRef,
+                'created' => CommunicationStateEnum::CREATED->value,
+                'id' => $sale->getId(),
+                'awaiting' => CommunicationSaleInfo::STATE_PROCESS_AWAITING_PROVIDER,
+            ]
+        );
+
+        if ($affected > 0) {
+            $this->em->refresh($sale);
+        }
+
+        return $affected > 0;
+    }
+
+    /**
+     * REJECTED y no FAILED: es un rechazo determinista (falta un
+     * identificador que el producto exige) y CheckFailedRechargesTask
+     * devuelve toda venta FAILED a PENDING, con lo que una venta que nunca
+     * salió acabaría consultándose a un proveedor que no la tiene.
+     */
+    private function rejectAwaitingSale(CommunicationSaleInfo $sale, string $reason): void
+    {
+        $sale->setState(CommunicationStateEnum::REJECTED);
+        $sale->setStateProcess(CommunicationStateEnum::REJECTED->value);
+        $sale->setTransactionStatus(TransactionStatus::internal(ProviderOutcomeEnum::REJECTED, 'INTERNAL_MISSING_RECIPIENT_IDENTIFIER', $reason));
+        $this->em->flush();
+        $this->logger->warning("Sale {$sale->getId()} rejected while awaiting provider: {$reason}");
     }
 
     /**

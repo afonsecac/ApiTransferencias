@@ -114,8 +114,12 @@ class AwaitingProviderSweepFunctionalTest extends ProviderFunctionalTestCase
         $this->saleService()->dispatchAwaitingProviderSales();
 
         $this->em->refresh($sale);
-        $this->assertSame(CommunicationStateEnum::FAILED, $sale->getState());
-        $this->assertSame(CommunicationStateEnum::FAILED->value, $sale->getStateProcess());
+        // REJECTED y no FAILED: CheckFailedRechargesTask devuelve toda venta
+        // FAILED a PENDING cada 2 min, y una venta que nunca salió (sin
+        // proveedor) acabaría consultándose a ETECSA.
+        $this->assertSame(CommunicationStateEnum::REJECTED, $sale->getState());
+        $this->assertSame(CommunicationStateEnum::REJECTED->value, $sale->getStateProcess());
+        $this->assertNull($sale->getProvider());
     }
 
     /**
@@ -184,6 +188,81 @@ class AwaitingProviderSweepFunctionalTest extends ProviderFunctionalTestCase
         $this->assertSame('ETECSA', $sale->getProvider());
         $this->assertNotNull($sale->getDispatchProduct());
         $this->assertSame(CommunicationStateEnum::CREATED->value, $sale->getStateProcess());
+    }
+
+    /**
+     * Hallazgo de revisión: dos barridos concurrentes (ping/cron + el
+     * Reintentar HTTP) leían la misma venta y el segundo flush pisaba el
+     * SENDING del primero → doble envío al proveedor. La asignación debe ser
+     * un UPDATE condicionado a que siga en AWAITING_PROVIDER.
+     */
+    public function testAssigningTheProviderNeverOverwritesASaleAnotherSweepAlreadyTook(): void
+    {
+        $client = $this->createClient();
+        $environment = $this->createEnvironment();
+        $account = $this->createAccount($client, $environment);
+        $package = $this->createSellableV2Package($environment, 'ETECSA');
+        $sale = $this->awaitingSale($account, $package, '00006');
+        $this->em->flush();
+
+        // El otro barrido ya la tomó y el worker la está enviando; esta
+        // instancia en memoria sigue creyendo que espera proveedor.
+        $this->em->getConnection()->executeStatement(
+            "UPDATE communication_sale_info SET provider = 'ETECSA', state_process = 'SENDING' WHERE id = :id",
+            ['id' => $sale->getId()]
+        );
+        $product = $this->em->getRepository(\App\Entity\CommunicationPackageProviderProduct::class)
+            ->findOneBy(['communicationPackage' => $package])->getProduct();
+
+        $claim = new \ReflectionMethod(CommunicationSaleService::class, 'claimAwaitingProvider');
+        $won = $claim->invoke(
+            $this->saleService(),
+            $sale,
+            new \App\Provider\SelectedDispatch(\App\Enums\CommunicationProviderEnum::CSQ, $product, 'otra-ref')
+        );
+
+        $this->assertFalse($won);
+        $row = $this->em->getConnection()->fetchAssociative(
+            'SELECT provider, state_process, dispatch_external_ref FROM communication_sale_info WHERE id = :id',
+            ['id' => $sale->getId()]
+        );
+        $this->assertSame('ETECSA', $row['provider']);
+        $this->assertSame('SENDING', $row['state_process']);
+        $this->assertNull($row['dispatch_external_ref']);
+    }
+
+    /**
+     * Hallazgo de revisión: el Reintentar del dashboard para una venta de
+     * PAQUETE en espera forzaba CREATED y encolaba el mensaje sin proveedor
+     * ni producto (y la sacaba para siempre del barrido).
+     */
+    public function testDashboardRetryOfAPackageSaleAwaitingProviderNeverDispatchesIt(): void
+    {
+        $client = $this->createClient();
+        $environment = $this->createEnvironment();
+        $account = $this->createAccount($client, $environment);
+        $package = $this->createSellableV2Package($environment, 'ETECSA');
+        $this->etecsaAvailable(false);
+
+        $sale = (new \App\Entity\CommunicationSalePackage())
+            ->setTenant($account)
+            ->setCatalogPackage($package)
+            ->setPackageId($package->getId())
+            ->setAmount(5.0)
+            ->setCurrency('USD')
+            ->setClientTransactionId('func-await-pkg')
+            ->setTransactionId('26101002' . '00007')
+            ->setState(CommunicationStateEnum::PENDING)
+            ->setStateProcess(CommunicationSaleInfo::STATE_PROCESS_AWAITING_PROVIDER);
+        $this->em->persist($sale);
+        $this->em->flush();
+
+        $controller = self::getContainer()->get(\App\Controller\DashboardSalesController::class);
+        $controller->retry($sale->getId(), new \App\DTO\RetrySaleDto());
+
+        $this->em->refresh($sale);
+        $this->assertSame(CommunicationSaleInfo::STATE_PROCESS_AWAITING_PROVIDER, $sale->getStateProcess());
+        $this->assertNull($sale->getProvider());
     }
 
     public function testSaleWithoutPendingStateIsNotTouched(): void

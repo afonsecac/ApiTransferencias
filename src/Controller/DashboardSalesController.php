@@ -244,6 +244,20 @@ class DashboardSalesController extends AbstractController
             ], Response::HTTP_BAD_REQUEST);
         }
 
+        // Una venta sin proveedor asignado no tiene nada que reenviar: lo
+        // único que puede hacer el reintento es intentar resolverlo ahora.
+        if ($sale->getStateProcess() === CommunicationSaleInfo::STATE_PROCESS_AWAITING_PROVIDER) {
+            $this->saleService->dispatchAwaitingProviderSales();
+            $this->em->refresh($sale);
+
+            return $this->json([
+                'id' => $sale->getId(),
+                'state' => $sale->getState()->value,
+                'stateProcess' => $sale->getStateProcess(),
+                'retryDispatched' => $sale->getStateProcess() !== CommunicationSaleInfo::STATE_PROCESS_AWAITING_PROVIDER,
+            ]);
+        }
+
         // Reintento SEGURO (check/resend vía /sale/retry): solo para
         // recargas ETECSA, único proveedor con un endpoint de reintento
         // documentado hoy. DTOne/CSQ y las ventas de paquetes siguen con el
