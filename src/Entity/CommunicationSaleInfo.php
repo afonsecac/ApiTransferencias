@@ -484,6 +484,16 @@ class CommunicationSaleInfo
         return $this->accessToken;
     }
 
+    /**
+     * Genera el token si falta, sin tocarlo si ya existe — para rellenar
+     * ventas creadas antes de que este campo existiera (PrePersist solo
+     * corre en inserts nuevos, no en las filas ya persistidas).
+     */
+    public function ensureAccessToken(): void
+    {
+        $this->accessToken ??= bin2hex(random_bytes(32));
+    }
+
     public function getTransactionStatus(): array
     {
         return $this->transactionStatus;
