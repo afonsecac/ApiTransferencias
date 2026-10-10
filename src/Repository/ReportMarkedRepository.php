@@ -19,22 +19,23 @@ class ReportMarkedRepository extends ServiceEntityRepository
     }
 
     /**
-     * @param int|null $accountId
-     * @param int $limit
+     * @param int|null $clientId filtra por App\Entity\ReportMarked::$client (null = sin filtro)
      * @param int $page
+     * @param int $limit
      * @return \App\DTO\PaginationResult
      */
-    public function list(?int $accountId = null, int $limit = 10, int $page = 0): PaginationResult
+    public function list(?int $clientId = null, int $page = 0, int $limit = 40): PaginationResult
     {
         $dql = $this->createQueryBuilder('r');
-        if (!is_null($accountId)) {
+        if (!is_null($clientId)) {
             $dql
-                ->leftJoin('r.account', 't')
-                ->leftJoin('t.client', 'c')
-                ->andWhere('c.id = :accountId')
-                ->setParameter('accountId', $accountId);
+                ->andWhere('r.client = :clientId')
+                ->setParameter('clientId', $clientId);
         }
-        $dql->orderBy('r.createdAt', 'DESC');
+        $dql->orderBy('r.createdAt', 'DESC')
+            ->setFirstResult($page * $limit)
+            ->setMaxResults($limit);
+
         $paginator = new Paginator($dql, fetchJoinCollection: false);
         $total = count($paginator);
 
