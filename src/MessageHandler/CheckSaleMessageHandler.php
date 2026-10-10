@@ -41,12 +41,8 @@ final class CheckSaleMessageHandler
         }
 
         // Si la transacción aún no fue enviada a ETECSA, reintentar más tarde
-        $stateProcess = $sale->getStateProcess();
-        if ($stateProcess === null
-            || $stateProcess === CommunicationStateEnum::CREATED->value
-            || $stateProcess === 'SENDING'
-        ) {
-            $this->logger->info("CheckSale: sale {$saleId} not yet sent to provider (stateProcess={$stateProcess}), will retry.");
+        if (!$sale->wasSentToProvider()) {
+            $this->logger->info("CheckSale: sale {$saleId} not yet sent to provider (stateProcess={$sale->getStateProcess()}), will retry.");
             throw new MyCurrentException('501', 'Sale not yet sent, retry later');
         }
 

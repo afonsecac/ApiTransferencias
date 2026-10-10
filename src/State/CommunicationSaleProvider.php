@@ -39,12 +39,7 @@ class CommunicationSaleProvider implements ProviderInterface
 
         if ($communicationSale instanceof CommunicationSaleInfo && $communicationSale->getState() === CommunicationStateEnum::PENDING) {
             // Solo hacer check si la transacción ya fue enviada a ETECSA
-            $stateProcess = $communicationSale->getStateProcess();
-            $wasSent = $stateProcess !== null
-                && $stateProcess !== CommunicationStateEnum::CREATED->value
-                && $stateProcess !== 'SENDING';
-
-            if ($wasSent) {
+            if ($communicationSale->wasSentToProvider()) {
                 $currentDate = new \DateTimeImmutable('now');
                 $updatedAt = $communicationSale->getUpdatedAt();
                 if ($updatedAt !== null) {

@@ -78,6 +78,14 @@ use Symfony\Component\Validator\Constraints as Assert;
 )]
 class CommunicationSaleInfo
 {
+    /**
+     * stateProcess de una venta ya aceptada (state=PENDING) a la que todavía
+     * no se le pudo asignar proveedor porque todos los candidatos del cliente
+     * estaban fuera de servicio al admitirla — ver
+     * CommunicationSaleService::dispatchAwaitingProviderSales().
+     */
+    public const STATE_PROCESS_AWAITING_PROVIDER = 'AWAITING_PROVIDER';
+
     #[ORM\Id]
     #[ORM\GeneratedValue(strategy: 'SEQUENCE')]
     #[ORM\Column]
@@ -271,17 +279,19 @@ class CommunicationSaleInfo
 
     /**
      * Snapshot inmutable del proveedor que procesó (o procesará) esta venta —
-     * ver App\Enums\CommunicationProviderEnum. NOT NULL en BD desde
-     * Version20260801150000 (backfill a ETECSA de filas históricas en
-     * Version20260801100000; el único punto de creación de ventas,
-     * CommunicationSaleService, siempre lo asigna antes de persistir).
-     * El tipo PHP se mantiene nullable porque ProviderResolver::resolveForSale()
-     * conserva su rama defensiva para filas que pudieran llegar sin valor.
+     * ver App\Enums\CommunicationProviderEnum. Solo es null mientras la
+     * venta espera proveedor (stateProcess=AWAITING_PROVIDER, ver
+     * Version20261010200000): todos los candidatos del cliente estaban fuera
+     * de servicio al admitirla, y CommunicationSaleService::
+     * dispatchAwaitingProviderSales() lo asigna al recuperarse alguno —
+     * desde ahí es el snapshot de siempre. (Era NOT NULL desde
+     * Version20260801150000.) ProviderResolver::resolveForSale() conserva
+     * su rama defensiva para filas sin valor.
      * Nunca se re-resuelve tras crearse: resolveForSale() lee este campo para
      * que el chequeo de estado y la conciliación sigan consultando al
      * proveedor correcto aunque cambie el routing del cliente.
      */
-    #[ORM\Column(length: 20)]
+    #[ORM\Column(length: 20, nullable: true)]
     #[Groups(['sale:list', 'sale:detail'])]
     private ?string $provider = null;
 
@@ -475,7 +485,7 @@ class CommunicationSaleInfo
     public function setCreated(): void
     {
         $this->createdAt = new \DateTimeImmutable('now');
-        $this->stateProcess = CommunicationStateEnum::CREATED->value;
+        $this->stateProcess ??= CommunicationStateEnum::CREATED->value;
         $this->accessToken ??= bin2hex(random_bytes(32));
     }
 
@@ -597,6 +607,19 @@ class CommunicationSaleInfo
         $this->stateProcess = $stateProcess;
 
         return $this;
+    }
+
+    /**
+     * false mientras la venta siga sin salir hacia el proveedor (sin
+     * estado, CREATED, SENDING o esperando proveedor) — no hay nada que
+     * consultarle todavía.
+     */
+    public function wasSentToProvider(): bool
+    {
+        return $this->stateProcess !== null
+            && $this->stateProcess !== CommunicationStateEnum::CREATED->value
+            && $this->stateProcess !== 'SENDING'
+            && $this->stateProcess !== self::STATE_PROCESS_AWAITING_PROVIDER;
     }
 
     public function getProvider(): ?string

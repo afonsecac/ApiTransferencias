@@ -260,6 +260,37 @@ class PromotionProviderDispatchResolverTest extends TestCase
         }
     }
 
+    public function testSelectOrDeferDefersWhenTheProviderHasTheProductButIsNotAvailable(): void
+    {
+        $account = $this->account(1);
+        $product = $this->product('CSQ', 'ref-default');
+        $promotion = $this->promotion($product);
+
+        $this->routingRepo->method('findActiveRouteScopesForClient')->willReturn([$this->routing('CSQ')]);
+        $this->availabilityService->method('canDispatchTo')->willReturn(false);
+
+        $result = $this->resolver->selectOrDefer($account, $promotion);
+
+        $this->assertInstanceOf(\App\Provider\DeferredDispatch::class, $result);
+        $this->assertNull($this->resolver->trySelect($account, $promotion));
+    }
+
+    public function testSelectOrDeferStillThrowsWhenNoProviderHasAProductForThePromotion(): void
+    {
+        $account = $this->account(1);
+        $promotion = $this->promotion(null);
+
+        $this->routingRepo->method('findActiveRouteScopesForClient')->willReturn([$this->routing('CSQ')]);
+        $this->availabilityService->method('canDispatchTo')->willReturn(false);
+
+        try {
+            $this->resolver->selectOrDefer($account, $promotion);
+            $this->fail('Se esperaba MyCurrentException');
+        } catch (MyCurrentException $e) {
+            $this->assertSame('PROMOTION_NOT_DISPATCHABLE', $e->getCodeWork());
+        }
+    }
+
     public function testKillSwitchIgnoresRoutingTableAndTriesOnlyTheDefaultProvider(): void
     {
         $account = $this->account(1);

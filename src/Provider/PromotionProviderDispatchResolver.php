@@ -50,6 +50,43 @@ class PromotionProviderDispatchResolver
 
     public function select(Account $account, CommunicationPromotions $promotion): SelectedDispatch
     {
+        $selected = $this->trySelect($account, $promotion);
+        if ($selected !== null) {
+            return $selected;
+        }
+
+        throw $this->notDispatchable();
+    }
+
+    /**
+     * Como select(), pero una promoción que algún candidato SÍ tiene
+     * vinculada (aunque ahora mismo ninguno esté despachable) devuelve
+     * DeferredDispatch en vez de lanzar — la reserva se acepta y espera
+     * proveedor. Sin ningún proveedor con producto para la promoción sigue
+     * lanzando PROMOTION_NOT_DISPATCHABLE (409).
+     *
+     * @throws MyCurrentException
+     */
+    public function selectOrDefer(Account $account, CommunicationPromotions $promotion): SelectedDispatch|DeferredDispatch
+    {
+        $selected = $this->trySelect($account, $promotion);
+        if ($selected !== null) {
+            return $selected;
+        }
+
+        if ($this->hasCoverage($account, $promotion)) {
+            return new DeferredDispatch();
+        }
+
+        throw $this->notDispatchable();
+    }
+
+    /**
+     * Primer proveedor despachable ahora mismo con producto para la
+     * promoción, o null si no hay ninguno.
+     */
+    public function trySelect(Account $account, CommunicationPromotions $promotion): ?SelectedDispatch
+    {
         $environmentType = $account->getEnvironment()?->getType();
 
         foreach ($this->candidateProviders($account) as $provider) {
@@ -63,7 +100,27 @@ class PromotionProviderDispatchResolver
             }
         }
 
-        throw new MyCurrentException(
+        return null;
+    }
+
+    /**
+     * ¿Algún candidato tiene producto para la promoción, sin mirar si está
+     * despachable ahora mismo?
+     */
+    public function hasCoverage(Account $account, CommunicationPromotions $promotion): bool
+    {
+        foreach ($this->candidateProviders($account) as $provider) {
+            if ($this->findDispatchableProduct($promotion, $provider->value, $account->getEnvironment()) !== null) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function notDispatchable(): MyCurrentException
+    {
+        return new MyCurrentException(
             'PROMOTION_NOT_DISPATCHABLE',
             'Ningún proveedor disponible puede despachar esta promoción',
             Response::HTTP_CONFLICT,

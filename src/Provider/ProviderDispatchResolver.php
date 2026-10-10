@@ -77,6 +77,48 @@ class ProviderDispatchResolver
     }
 
     /**
+     * Como select(), pero un destino que algún candidato SÍ cubre (aunque
+     * ahora mismo ninguno esté despachable) no es un error: devuelve
+     * DeferredDispatch para que la venta se acepte y espere proveedor.
+     * Solo un destino que NINGÚN candidato cubre (error de catálogo, no de
+     * disponibilidad) sigue lanzando PACKAGE_NOT_DISPATCHABLE (409).
+     *
+     * @throws MyCurrentException
+     */
+    public function selectOrDefer(Account $account, CommunicationPackage $package, ?string $saleType = null): SelectedDispatch|DeferredDispatch
+    {
+        $selected = $this->selectExcluding($account, $package, $saleType, []);
+        if ($selected !== null) {
+            return $selected;
+        }
+
+        if ($this->hasCoverage($account, $package, $saleType)) {
+            return new DeferredDispatch();
+        }
+
+        throw new MyCurrentException(
+            'PACKAGE_NOT_DISPATCHABLE',
+            'Ningún proveedor puede despachar este paquete',
+            Response::HTTP_CONFLICT,
+        );
+    }
+
+    /**
+     * ¿Algún candidato del cliente tiene un producto que cubra este
+     * paquete, sin mirar si está despachable ahora mismo?
+     */
+    public function hasCoverage(Account $account, CommunicationPackage $package, ?string $saleType = null): bool
+    {
+        foreach ($this->candidateProviders($account, $package, $saleType) as $provider) {
+            if ($this->findDispatchableProduct($account, $package, $provider->value, $saleType) !== null) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
      * Igual que select(), salvo que (a) salta cualquier proveedor en
      * $excludeProviders (ya intentado por SaleProviderFailoverService) y
      * (b) devuelve null en vez de lanzar cuando nadie puede despachar —

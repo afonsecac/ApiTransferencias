@@ -12,6 +12,7 @@ use App\Entity\Environment;
 use App\Enums\CommunicationProviderEnum;
 use App\Exception\MyCurrentException;
 use App\Provider\ProviderDispatchResolver;
+use App\Provider\SelectedDispatch;
 use App\Provider\ProviderResolver;
 use App\Repository\ClientProviderRoutingRepository;
 use App\Repository\CommunicationPackageProviderProductRepository;
@@ -308,6 +309,56 @@ class ProviderDispatchResolverTest extends TestCase
             $this->assertSame('PACKAGE_NOT_DISPATCHABLE', $e->getCodeWork());
             $this->assertSame(409, $e->getCode());
         }
+    }
+
+    public function testSelectOrDeferDefersWhenAProviderCoversTheDestinationButNoneIsAvailable(): void
+    {
+        $account = $this->account(1);
+        $package = $this->package();
+        $product = $this->createMock(CommunicationProduct::class);
+
+        $this->routingRepo->method('findActiveRouteScopesForClient')->willReturn([$this->routeScope('CSQ')]);
+        $this->availabilityService->method('canDispatchTo')->willReturn(false);
+        $this->productRepository->method('findMatchingDestination')->willReturn([$product]);
+
+        $result = $this->resolver->selectOrDefer($account, $package);
+
+        $this->assertInstanceOf(\App\Provider\DeferredDispatch::class, $result);
+    }
+
+    public function testSelectOrDeferStillThrowsWhenNoProviderCoversTheDestination(): void
+    {
+        $account = $this->account(1);
+        $package = $this->package();
+
+        $this->routingRepo->method('findActiveRouteScopesForClient')->willReturn([$this->routeScope('CSQ')]);
+        $this->availabilityService->method('canDispatchTo')->willReturn(false);
+        $this->productRepository->method('findMatchingDestination')->willReturn([]);
+
+        try {
+            $this->resolver->selectOrDefer($account, $package);
+            $this->fail('Se esperaba MyCurrentException');
+        } catch (MyCurrentException $e) {
+            $this->assertSame('PACKAGE_NOT_DISPATCHABLE', $e->getCodeWork());
+            $this->assertSame(409, $e->getCode());
+        }
+    }
+
+    public function testSelectOrDeferReturnsTheSelectionWhenAProviderIsAvailable(): void
+    {
+        $account = $this->account(1);
+        $package = $this->package();
+        $product = $this->createMock(CommunicationProduct::class);
+        $product->method('getExternalRef')->willReturn('ref-csq');
+
+        $this->routingRepo->method('findActiveRouteScopesForClient')->willReturn([$this->routeScope('CSQ')]);
+        $this->availabilityService->method('canDispatchTo')->willReturn(true);
+        $this->productRepository->method('findMatchingDestination')->willReturn([$product]);
+
+        $result = $this->resolver->selectOrDefer($account, $package);
+
+        $this->assertInstanceOf(SelectedDispatch::class, $result);
+        $this->assertSame(CommunicationProviderEnum::CSQ, $result->provider);
     }
 
     public function testThrowsPackageNotDispatchableWhenNoProductMatchesSaleType(): void

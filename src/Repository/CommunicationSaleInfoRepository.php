@@ -33,6 +33,30 @@ class CommunicationSaleInfoRepository extends ServiceEntityRepository
     }
 
     /**
+     * Ventas aceptadas sin proveedor asignado (state=PENDING,
+     * stateProcess=AWAITING_PROVIDER): todos los candidatos del cliente
+     * estaban fuera de servicio al admitirlas — ver
+     * CommunicationSaleService::dispatchAwaitingProviderSales(). Más
+     * antiguas primero, acotado para que un barrido nunca sea ilimitado.
+     *
+     * @return CommunicationSaleInfo[]
+     */
+    public function findAwaitingProvider(int $limit = 200): array
+    {
+        return $this->createQueryBuilder('s')
+            ->leftJoin('s.tenant', 't')->addSelect('t')
+            ->leftJoin('t.environment', 'e')->addSelect('e')
+            ->andWhere('s.state = :state')
+            ->andWhere('s.stateProcess = :stateProcess')
+            ->setParameter('state', CommunicationStateEnum::PENDING)
+            ->setParameter('stateProcess', CommunicationSaleInfo::STATE_PROCESS_AWAITING_PROVIDER)
+            ->orderBy('s.createdAt', 'ASC')
+            ->setMaxResults($limit)
+            ->getQuery()
+            ->getResult();
+    }
+
+    /**
      * Ventas en estado PENDING con stateProcess=CREATED: fueron persistidas pero nunca encoladas
      * (porque el dispatch estaba deshabilitado, o el proveedor no estaba despachable, cuando se crearon).
      *
