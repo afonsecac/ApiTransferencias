@@ -138,6 +138,18 @@ class CommunicationSaleInfoRepository extends ServiceEntityRepository
         return (float) $result;
     }
 
+    public function countAwaitingProvider(): int
+    {
+        return (int) $this->createQueryBuilder('s')
+            ->select('COUNT(s.id)')
+            ->andWhere('s.state = :state')
+            ->andWhere('s.stateProcess = :stateProcess')
+            ->setParameter('state', CommunicationStateEnum::PENDING)
+            ->setParameter('stateProcess', CommunicationSaleInfo::STATE_PROCESS_AWAITING_PROVIDER)
+            ->getQuery()
+            ->getSingleScalarResult();
+    }
+
     public function countPendingUndispatched(): int
     {
         return (int) $this->createQueryBuilder('s')

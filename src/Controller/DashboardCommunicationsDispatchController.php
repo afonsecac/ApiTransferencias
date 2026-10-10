@@ -77,6 +77,7 @@ class DashboardCommunicationsDispatchController extends AbstractController
             set_time_limit(0);
 
             $lastCount   = -1;
+            $lastAwaiting = -1;
             $lastEnabled = null;
             $deadline    = time() + 270; // cierra antes de que el proxy corte (< 5 min)
 
@@ -85,16 +86,19 @@ class DashboardCommunicationsDispatchController extends AbstractController
                 $this->em->clear();
                 $this->dispatchService->invalidateCache();
 
-                $count   = $this->dispatchService->countPendingUndispatched();
-                $enabled = $this->dispatchService->isEnabled();
+                $count    = $this->dispatchService->countPendingUndispatched();
+                $awaiting = $this->dispatchService->countAwaitingProvider();
+                $enabled  = $this->dispatchService->isEnabled();
 
-                if ($count !== $lastCount || $enabled !== $lastEnabled) {
-                    $lastCount   = $count;
-                    $lastEnabled = $enabled;
+                if ($count !== $lastCount || $awaiting !== $lastAwaiting || $enabled !== $lastEnabled) {
+                    $lastCount    = $count;
+                    $lastAwaiting = $awaiting;
+                    $lastEnabled  = $enabled;
 
                     echo 'data: ' . json_encode([
-                        'pendingCount'    => $count,
-                        'dispatchEnabled' => $enabled,
+                        'pendingCount'           => $count,
+                        'awaitingProviderCount'  => $awaiting,
+                        'dispatchEnabled'        => $enabled,
                     ]) . "\n\n";
                     if (ob_get_level() > 0) {
                         ob_flush();
@@ -130,8 +134,9 @@ class DashboardCommunicationsDispatchController extends AbstractController
     private function buildResponse(): array
     {
         return [
-            'dispatchEnabled'  => $this->dispatchService->isEnabled(),
-            'pendingCount'     => $this->dispatchService->countPendingUndispatched(),
+            'dispatchEnabled'       => $this->dispatchService->isEnabled(),
+            'pendingCount'          => $this->dispatchService->countPendingUndispatched(),
+            'awaitingProviderCount' => $this->dispatchService->countAwaitingProvider(),
         ];
     }
 }

@@ -29,6 +29,7 @@ class CommunicationsDispatchService
         private readonly SysConfigRepository $sysConfigRepo,
         private readonly MessageBusInterface $messageBus,
         private readonly ProviderAvailabilityService $availabilityService,
+        private readonly CommunicationSaleService $saleService,
         #[Autowire('@monolog.logger.provider')] private readonly LoggerInterface $logger,
     ) {}
 
@@ -62,6 +63,18 @@ class CommunicationsDispatchService
     }
 
     /**
+     * Ventas aceptadas sin proveedor asignado (AWAITING_PROVIDER): todos los
+     * candidatos del cliente estaban fuera de servicio al admitirlas. No
+     * entran en countPendingUndispatched() — todavía no hay nada que encolar.
+     */
+    public function countAwaitingProvider(): int
+    {
+        /** @var CommunicationSaleInfoRepository $repo */
+        $repo = $this->em->getRepository(CommunicationSaleInfo::class);
+        return $repo->countAwaitingProvider();
+    }
+
+    /**
      * Encola en RabbitMQ todas las ventas que quedaron sin despachar y envía un email de resumen.
      * Salta (no encola) las ventas cuyo proveedor no esté despachable ahora mismo
      * (App\Service\Provider\ProviderAvailabilityService::canDispatchTo()) — global
@@ -69,7 +82,11 @@ class CommunicationsDispatchService
      * en `skipped`, agrupadas por "PROVIDER|ENVIRONMENT_TYPE".
      * Lanza MyCurrentException si el dispatch está deshabilitado.
      *
-     * @return array{recharges: int, packages: int, total: int, skipped: array<string, int>}
+     * También intenta asignar proveedor a las ventas en espera de uno
+     * (AWAITING_PROVIDER) — `awaitingResolved` es cuántas lo consiguieron; no
+     * suman a `total`, que solo cuenta mensajes encolados desde CREATED.
+     *
+     * @return array{recharges: int, packages: int, total: int, skipped: array<string, int>, awaitingResolved: int}
      * @throws MyCurrentException
      */
     public function dispatchPending(?string $triggeredBy = null): array
@@ -126,7 +143,13 @@ class CommunicationsDispatchService
             ));
         }
 
-        return ['recharges' => $recharges, 'packages' => $packages, 'total' => $total, 'skipped' => $skipped];
+        return [
+            'recharges' => $recharges,
+            'packages' => $packages,
+            'total' => $total,
+            'skipped' => $skipped,
+            'awaitingResolved' => $this->saleService->dispatchAwaitingProviderSales(),
+        ];
     }
 
     /**

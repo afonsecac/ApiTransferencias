@@ -11,4 +11,7 @@ final class DispatchConfigOutDto
 
     #[OAProperty(description: 'Número de ventas persistidas pero pendientes de encolar (stateProcess=Created, state=Pending)')]
     public int $pendingCount;
+
+    #[OAProperty(description: 'Ventas aceptadas sin proveedor asignado todavía, esperando que uno esté disponible (stateProcess=AWAITING_PROVIDER, state=Pending)')]
+    public int $awaitingProviderCount;
 }
