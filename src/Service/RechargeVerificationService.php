@@ -38,6 +38,7 @@ class RechargeVerificationService
         $dto = new RechargeVerificationOutDto();
         $dto->transactionId = (string) $sale->getTransactionId();
         $dto->etecsaOrderId = $sale->getTransactionOrder();
+        $dto->clientTransactionId = $sale->getClientTransactionId();
         $dto->clientName = $sale->getTenant()?->getClient()?->getCompanyName();
         $dto->enteredAt = $sale->getCreatedAt()?->format('Y-m-d\TH:i:s\Z');
         $dto->state = $sale->getState()->value;

@@ -87,6 +87,7 @@ class RechargeVerificationControllerTest extends ProviderFunctionalTestCase
         $this->assertSame(200, $response->getStatusCode());
         $this->assertSame('txc1', $data['transactionId']);
         $this->assertSame('ETC-txc1', $data['etecsaOrderId']);
+        $this->assertSame('ctx-txc1', $data['clientTransactionId']);
         $this->assertSame($client->getCompanyName(), $data['clientName']);
         $this->assertSame('Completed', $data['state']);
         $this->assertEquals(625.0, $data['destinationAmount']);

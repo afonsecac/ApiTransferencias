@@ -118,6 +118,12 @@
                     <td class="label">ID de plataforma</td>
                     <td class="value">{{ transactionId }}</td>
                 </tr>
+                {% if clientTransactionId %}
+                <tr>
+                    <td class="label">ID del cliente</td>
+                    <td class="value">{{ clientTransactionId }}</td>
+                </tr>
+                {% endif %}
                 {% if etecsaOrderId %}
                 <tr>
                     <td class="label">Order ID ETECSA</td>
