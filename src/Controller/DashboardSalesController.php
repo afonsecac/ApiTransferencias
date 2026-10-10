@@ -201,15 +201,11 @@ class DashboardSalesController extends AbstractController
             ]);
         }
 
-        $stateProcess = $sale->getStateProcess();
-        if ($stateProcess === null
-            || $stateProcess === CommunicationStateEnum::CREATED->value
-            || $stateProcess === 'SENDING'
-        ) {
+        if (!$sale->wasSentToProvider()) {
             return $this->json([
                 'id' => $sale->getId(),
                 'state' => $sale->getState()->value,
-                'stateProcess' => $stateProcess,
+                'stateProcess' => $sale->getStateProcess(),
                 'message' => 'Sale has not been sent to the provider yet. Please wait.',
             ]);
         }

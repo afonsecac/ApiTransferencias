@@ -167,7 +167,7 @@ class CommunicationSaleServiceRecipientIdentifierValidationTest extends TestCase
 
         $this->packageCatalogResolver->method('offerForSale')
             ->willReturn(new ResolvedPackageOffer($package, 9.97, 'USD', PackageOfferSourceEnum::PRODUCT_MAX));
-        $this->dispatchResolver->method('select')
+        $this->dispatchResolver->method('selectOrDefer')
             ->willReturn(new SelectedDispatch(CommunicationProviderEnum::DTONE, $product, '35835'));
         $this->balanceService->method('hasAvailableBalance')->willReturn(true);
 
