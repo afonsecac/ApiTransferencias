@@ -30,10 +30,10 @@ class RechargeVerificationController extends AbstractController
     }
 
     #[Route('/{transactionId}', name: 'api_recharge_verify', methods: ['GET'])]
-    public function verify(string $transactionId): JsonResponse
+    public function verify(string $transactionId, Request $request): JsonResponse
     {
         try {
-            $result = $this->verificationService->verify($transactionId);
+            $result = $this->verificationService->verify($transactionId, $request->query->get('token'));
         } catch (MyCurrentException $e) {
             return $this->json(['error' => ['message' => $e->getMessage()]], $e->getCode());
         }
@@ -51,7 +51,11 @@ class RechargeVerificationController extends AbstractController
     public function receipt(string $transactionId, Request $request): Response
     {
         try {
-            $pdf = $this->receiptPdfService->renderPdf($transactionId, $request->getSchemeAndHttpHost());
+            $pdf = $this->receiptPdfService->renderPdf(
+                $transactionId,
+                $request->query->get('token'),
+                $request->getSchemeAndHttpHost(),
+            );
         } catch (MyCurrentException $e) {
             return $this->json(['error' => ['message' => $e->getMessage()]], $e->getCode());
         }

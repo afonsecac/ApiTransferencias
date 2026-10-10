@@ -23,12 +23,13 @@ class AdminReportController extends AbstractController
     #[Route(name: 'admin_report', methods: ['GET'])]
     #[DashboardEndpoint(summary: 'Listar reportes', tag: 'Admin Reports', responseIsArray: true)]
     public function __invoke(
+        #[MapQueryParameter] ?int $clientId = null,
         #[MapQueryParameter] int $page = 0,
         #[MapQueryParameter] int $limit = 40,
     ): JsonResponse {
         return $this->json(
             $this->serializer->normalize(
-                $this->reportService->getAllReports($page, $limit),
+                $this->reportService->getAllReports($clientId, $page, $limit),
                 'json',
                 [
                     'groups' => [

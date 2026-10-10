@@ -35,19 +35,19 @@ class RechargeReceiptPdfService
     }
 
     /**
-     * @throws \App\Exception\MyCurrentException si la venta no existe o no está Completed
+     * @throws \App\Exception\MyCurrentException si la venta no existe, no está Completed o el token no coincide
      */
-    public function renderPdf(string $transactionId, string $verifyBaseUrl): string
+    public function renderPdf(string $transactionId, ?string $accessToken, string $verifyBaseUrl): string
     {
-        $data = $this->verificationService->verify($transactionId);
-        $verifyUrl = rtrim($verifyBaseUrl, '/') . '/api/verify/' . $transactionId . '/receipt';
+        $data = $this->verificationService->verify($transactionId, $accessToken);
+        $verifyUrl = rtrim($verifyBaseUrl, '/') . '/api/verify/' . $transactionId . '/receipt?token=' . $accessToken;
 
         $html = $this->twig->render('receipt/recharge.html.twig', [
             'transactionId' => $data->transactionId,
             'etecsaOrderId' => $data->etecsaOrderId,
             'clientId' => $data->clientId,
             'enteredAt' => $this->formatDate($data->enteredAt),
-            'phoneMasked' => $data->phoneMasked,
+            'phone' => $data->phone,
             'package' => $data->package,
             'destinationAmount' => $data->destinationAmount,
             'destinationCurrency' => $data->destinationCurrency,
@@ -55,7 +55,6 @@ class RechargeReceiptPdfService
             'history' => $this->viewHistory($data),
             'logoDataUri' => $this->logoDataUri(),
             'qrDataUri' => $this->qrDataUri($verifyUrl),
-            'verifyUrl' => $verifyUrl,
         ]);
 
         $options = new DompdfOptions();
