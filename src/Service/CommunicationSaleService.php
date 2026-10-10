@@ -64,6 +64,8 @@ use App\Entity\User;
 
 class CommunicationSaleService extends CommonService
 {
+    /** Tope de espera de una venta aceptada sin proveedor — ver awaitingExpiryReason(). */
+    private const AWAITING_PROVIDER_MAX_HOURS = 24;
 
     /**
      * @param \Doctrine\ORM\EntityManagerInterface $em
@@ -103,6 +105,7 @@ class CommunicationSaleService extends CommonService
         private readonly ProviderDispatchResolver $dispatchResolver,
         private readonly PromotionProviderDispatchResolver $promotionDispatchResolver,
         private readonly SaleProviderFailoverService $failoverService,
+        private readonly DispatchPauseLedger $pauseLedger,
     ) {
         parent::__construct(
             $em,
@@ -214,6 +217,10 @@ class CommunicationSaleService extends CommonService
      */
     public function dispatchAwaitingProviderSales(): int
     {
+        // Mantiene al día el registro de pausas de la entrega: el tope de
+        // espera descuenta los periodos con la entrega deshabilitada.
+        $this->pauseLedger->observe(new \DateTimeImmutable('now'));
+
         /** @var \App\Repository\CommunicationSaleInfoRepository $repo */
         $repo = $this->em->getRepository(CommunicationSaleInfo::class);
         $toDispatch = [];
@@ -222,6 +229,14 @@ class CommunicationSaleService extends CommonService
             $account = $sale->getTenant();
             $package = $sale->getCatalogPackage();
             if ($account === null || $package === null) {
+                continue;
+            }
+
+            // Vencida (24 h o caducidad del paquete/promoción): se rechaza
+            // aunque ya haya proveedor, y deja de comprometer saldo.
+            $expiredReason = $this->awaitingExpiryReason($sale, $package);
+            if ($expiredReason !== null) {
+                $this->rejectAwaitingSale($sale, 'INTERNAL_AWAITING_PROVIDER_EXPIRED', $expiredReason);
                 continue;
             }
 
@@ -238,7 +253,7 @@ class CommunicationSaleService extends CommonService
                 try {
                     $this->assertRecipientIdentifierSatisfied($selected->product, $sale->getPhoneNumber(), $sale->getAccountIdentifier());
                 } catch (MyCurrentException $e) {
-                    $this->rejectAwaitingSale($sale, $e->getMessage());
+                    $this->rejectAwaitingSale($sale, 'INTERNAL_MISSING_RECIPIENT_IDENTIFIER', $e->getMessage());
                     continue;
                 }
             }
@@ -260,6 +275,36 @@ class CommunicationSaleService extends CommonService
         }
 
         return count($toDispatch);
+    }
+
+    /**
+     * Una venta no espera proveedor más de AWAITING_PROVIDER_MAX_HOURS (sin
+     * contar las pausas de la entrega, ver DispatchPauseLedger) ni
+     * más allá de la caducidad de su paquete o de su promoción, lo que
+     * ocurra primero: pasada la fecha, despacharla sería vender algo que ya
+     * no existe, y esperar sin fin comprometería saldo del cliente
+     * indefinidamente (getReservedAmount cuenta toda venta PENDING).
+     */
+    private function awaitingExpiryReason(CommunicationSaleInfo $sale, CommunicationPackage $package): ?string
+    {
+        $now = new \DateTimeImmutable('now');
+        $createdAt = $sale->getCreatedAt();
+
+        // La espera no cuenta los periodos con la entrega deshabilitada
+        // (decisión de la plataforma, no del proveedor).
+        $waited = $createdAt === null ? 0 : $now->getTimestamp() - $createdAt->getTimestamp() - $this->pauseLedger->pausedSeconds($createdAt, $now);
+        if ($waited > self::AWAITING_PROVIDER_MAX_HOURS * 3600) {
+            return 'No provider became available within ' . self::AWAITING_PROVIDER_MAX_HOURS . ' hours';
+        }
+        if (!$this->isPackageWithinActiveWindow($package)) {
+            return 'The package expired while awaiting an available provider';
+        }
+        $promotion = $sale->getPromotion();
+        if ($promotion !== null && $promotion->getEndAt() < $now) {
+            return 'The promotion expired while awaiting an available provider';
+        }
+
+        return null;
     }
 
     /**
@@ -297,11 +342,11 @@ class CommunicationSaleService extends CommonService
      * devuelve toda venta FAILED a PENDING, con lo que una venta que nunca
      * salió acabaría consultándose a un proveedor que no la tiene.
      */
-    private function rejectAwaitingSale(CommunicationSaleInfo $sale, string $reason): void
+    private function rejectAwaitingSale(CommunicationSaleInfo $sale, string $code, string $reason): void
     {
         $sale->setState(CommunicationStateEnum::REJECTED);
         $sale->setStateProcess(CommunicationStateEnum::REJECTED->value);
-        $sale->setTransactionStatus(TransactionStatus::internal(ProviderOutcomeEnum::REJECTED, 'INTERNAL_MISSING_RECIPIENT_IDENTIFIER', $reason));
+        $sale->setTransactionStatus(TransactionStatus::internal(ProviderOutcomeEnum::REJECTED, $code, $reason));
         $this->em->flush();
         $this->logger->warning("Sale {$sale->getId()} rejected while awaiting provider: {$reason}");
     }

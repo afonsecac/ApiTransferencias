@@ -114,6 +114,7 @@ class CommunicationSaleServiceRecipientIdentifierValidationTest extends TestCase
             $this->dispatchResolver,
             $promotionDispatchResolver,
             $this->createMock(\App\Service\Provider\SaleProviderFailoverService::class),
+            $this->createMock(\App\Service\DispatchPauseLedger::class),
         );
     }
 
