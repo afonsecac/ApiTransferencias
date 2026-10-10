@@ -252,9 +252,16 @@ class CommunicationSaleInfo
 
     /**
      * @var Collection<int, CommunicationSaleHistory>
+     *
+     * Desempate por 'id' DESC: dos transiciones de estado consecutivas
+     * (p.ej. Pending->Completed de un proveedor síncrono) pueden caer en el
+     * mismo segundo de reloj — updated_at es TIMESTAMP(0), sin fracción de
+     * segundo — y Postgres no garantiza orden estable entre filas con la
+     * misma updated_at. El id autoincremental sí refleja fielmente el orden
+     * real de inserción, así que resuelve el empate sin ambigüedad.
      */
     #[ORM\OneToMany(targetEntity: CommunicationSaleHistory::class, mappedBy: 'sale')]
-    #[ORM\OrderBy(['updatedAt' => 'DESC'])]
+    #[ORM\OrderBy(['updatedAt' => 'DESC', 'id' => 'DESC'])]
     #[ApiProperty]
     #[Groups(['comSales:read', 'sale:detail'])]
     private Collection $historical;
