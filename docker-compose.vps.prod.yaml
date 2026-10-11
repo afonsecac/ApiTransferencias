@@ -58,6 +58,10 @@ services:
     # el script real, fuera del contenedor.
     volumes:
       - ./var/staging-sync-trigger:/var/www/var/staging-sync-trigger
+    # Sin interfaz web (Swagger UI) en /api/docs; el JSON de OpenAPI sigue
+    # disponible (ver App\EventListener\ApiDocsUiGuardListener).
+    environment:
+      API_DOCS_UI: "0"
     deploy:
       resources:
         limits:
