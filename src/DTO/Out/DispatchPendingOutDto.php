@@ -18,4 +18,7 @@ final class DispatchPendingOutDto
     /** @var array<string, int> */
     #[OAProperty(description: 'Ventas saltadas por proveedor no despachable, agrupadas por "PROVIDER|ENVIRONMENT_TYPE"')]
     public array $skipped;
+
+    #[OAProperty(description: 'Ventas en espera de proveedor a las que se les pudo asignar uno en esta operación (no suman a total)')]
+    public int $awaitingResolved;
 }
