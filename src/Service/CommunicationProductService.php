@@ -11,11 +11,17 @@ use App\Util\IPaginationResponse;
 
 class CommunicationProductService extends CommonService
 {
-    public function getProducts(int $page = 0, int $limit = 10, string $env = 'TEST', ?string $query = null): IPaginationResponse
-    {
+    public function getProducts(
+        int $page = 0,
+        int $limit = 10,
+        ?string $environmentType = null,
+        ?string $search = null,
+        ?string $provider = null,
+        string $orderBy = 'price ASC',
+    ): IPaginationResponse {
         /** @var \App\Repository\CommunicationProductRepository $productRepo */
         $productRepo = $this->em->getRepository(CommunicationProduct::class);
-        return $productRepo->getProducts($page, $limit, $env, $query);
+        return $productRepo->getProducts($page, $limit, $environmentType, $search, $provider, $orderBy);
     }
 
     public function createProduct(CreateCommunicationProductDto $dto): CommunicationProduct
