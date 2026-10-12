@@ -70,9 +70,9 @@ class ApiTokenAuthenticator extends AbstractAuthenticator
         // es falsificable; con ella, getClientIp() ignora las cabeceras que no
         // provengan de un proxy de confianza.
         $clientIp = $request->getClientIp();
-        $referer = $request->headers->get("Referer");
-        $host = $request->headers->get("host");
-        $isWebPage = !is_null($referer) && !is_null($host) && str_contains($referer, $host);
+        // Ya no se admite «venir de una página web» (Referer que contiene el Host) como alternativa a la lista de IP:
+        // ambas cabeceras las controla quien llama, así que con solo conocer un token cualquiera se saltaba la lista
+        // de origen de la cuenta (COMR-184).
 
         $isLocal = in_array($clientIp, ['127.0.0.1', '::1'], true);
         $origin = $permission->getOrigin();
@@ -82,11 +82,10 @@ class ApiTokenAuthenticator extends AbstractAuthenticator
             $isOriginMatch = $this->ipMatcherService->isIpAllowed($clientIp, $origin);
         }
         $isRemote = $isWildcard || $isOriginMatch;
-        if (!$isLocal && !$isRemote && !$isWebPage) {
-            $this->logger->debug('The logger in reques URL {url} info Local: {isLocal}, IsRemote: {isRemote}, IPs: {ips}, IsWebPage: {isWebPage}', [
+        if (!$isLocal && !$isRemote) {
+            $this->logger->debug('The logger in reques URL {url} info Local: {isLocal}, IsRemote: {isRemote}, IPs: {ips}', [
                 'isLocal' => $isLocal,
                 'isRemote' => $isRemote,
-                'isWebPage' => $isWebPage,
                 'ips' => $clientIp,
                 'url' => $request->getPathInfo(),
                 'headers' => $request->headers->all(),
