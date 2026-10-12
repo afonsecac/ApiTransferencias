@@ -70,4 +70,28 @@ class CreateProviderRoutingDtoTest extends TestCase
 
         $this->assertGreaterThan(0, count($violations));
     }
+
+    // ---- COMR-264 (C1): area opcional ----
+
+    public function testAreaAloneWithoutServiceIsValid(): void
+    {
+        $dto = new CreateProviderRoutingDto(clientId: 1, provider: 'DTONE', areaName: 'Retail');
+
+        $this->assertCount(0, $this->validator->validate($dto));
+    }
+
+    public function testAreaNameCannotContainThePipeSeparator(): void
+    {
+        $violations = $this->validator->validate(new CreateProviderRoutingDto(clientId: 1, provider: 'DTONE', areaName: 'Gift|Cards'));
+
+        $this->assertGreaterThan(0, count($violations));
+        $this->assertSame('areaName', $violations[0]->getPropertyPath());
+    }
+
+    public function testAreaNameIsLimitedTo255Characters(): void
+    {
+        $violations = $this->validator->validate(new CreateProviderRoutingDto(clientId: 1, provider: 'DTONE', areaName: str_repeat('a', 256)));
+
+        $this->assertGreaterThan(0, count($violations));
+    }
 }

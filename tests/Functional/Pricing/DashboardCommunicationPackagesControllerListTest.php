@@ -198,4 +198,22 @@ class DashboardCommunicationPackagesControllerListTest extends ProviderFunctiona
         $desc = json_decode($this->controller()->list(new Request(['orderBy' => 'createdAt DESC']))->getContent(), true);
         $this->assertSame([$second->getId(), $first->getId()], array_column($desc['results'], 'id'));
     }
+
+    // ---- COMR-264 (C1): un paquete con área sigue en su categoría ----
+
+    public function testFilteringByServiceAndSubserviceAlsoFindsPackagesThatCarryAnArea(): void
+    {
+        $plain = $this->communicationPackage('Gift Card sin area');
+        $plain->setService(['name' => 'Gift', 'subservice' => ['name' => 'Card']]);
+        $withArea = $this->communicationPackage('Gift Card Retail');
+        $withArea->setService(['name' => 'Gift', 'subservice' => ['name' => 'Card'], 'area' => ['name' => 'Retail']]);
+        $lookalike = $this->communicationPackage('Gift CardX');
+        $lookalike->setService(['name' => 'Gift', 'subservice' => ['name' => 'CardX']]);
+        $this->em->flush();
+        $this->em->clear();
+
+        $data = json_decode($this->controller()->list(new Request(['service' => 'Gift', 'subservice' => 'Card']))->getContent(), true);
+
+        $this->assertEqualsCanonicalizing([$plain->getId(), $withArea->getId()], array_column($data['results'], 'id'));
+    }
 }

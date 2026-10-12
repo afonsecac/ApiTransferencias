@@ -657,4 +657,41 @@ class DashboardProviderRoutingControllerTest extends TestCase
         $this->assertFalse($data['success']);
         $this->assertSame('boom', $data['message']);
     }
+
+    // ---- COMR-264 (C1): area opcional ----
+
+    public function testShowSerializesTheArea(): void
+    {
+        $routing = $this->routingMock(1, 'DTONE');
+        $routing->method('getAreaName')->willReturn('Retail');
+        $this->routingRepo->method('find')->with(1)->willReturn($routing);
+
+        $data = json_decode($this->controller->show(1)->getContent(), true);
+
+        $this->assertSame('Retail', $data['areaName']);
+    }
+
+    public function testShowSerializesANullAreaWhenTheRoutingHasNone(): void
+    {
+        $this->routingRepo->method('find')->with(1)->willReturn($this->routingMock(1, 'DTONE'));
+
+        $data = json_decode($this->controller->show(1)->getContent(), true);
+
+        $this->assertArrayHasKey('areaName', $data);
+        $this->assertNull($data['areaName']);
+    }
+
+    public function testPreviewPassesTheProposedAreaToTheCatalogImpactResolver(): void
+    {
+        $this->adminService->method('preview')->willReturn(new ProviderRoutingPreviewOutDto());
+        $this->catalogImpactResolver->expects($this->once())
+            ->method('countNewlyHiddenPackages')
+            ->with(1, null, 'Gift', 'Card', true, null, 'Retail')
+            ->willReturn(3);
+
+        $request = new Request(['clientId' => '1', 'provider' => 'ETECSA', 'serviceName' => 'Gift', 'subserviceName' => 'Card', 'areaName' => 'Retail']);
+        $data = json_decode($this->controller->preview($request)->getContent(), true);
+
+        $this->assertSame(3, $data['newlyHiddenPackagesCount']);
+    }
 }
