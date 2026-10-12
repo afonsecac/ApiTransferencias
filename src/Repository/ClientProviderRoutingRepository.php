@@ -119,9 +119,12 @@ class ClientProviderRoutingRepository extends ServiceEntityRepository
      * filtrado en PHP sobre este mismo resultado cacheado, para no explotar
      * la clave de caché con una dimensión más por combinación de scope.
      *
+     * `areaName` se añadió después (C1, ADR-001): una proyección que ya estuviera en caché al desplegar
+     * no la trae, así que quien la lee debe tratar la clave ausente como null.
+     *
      * @return list<array{id:int, provider:?string, fallbackProvider:?string,
      *   environmentId:?int, saleType:?string, serviceName:?string,
-     *   subserviceName:?string, priority:int}>
+     *   subserviceName:?string, areaName?:?string, priority:int}>
      */
     public function findActiveRouteScopesForClient(int $clientId): array
     {
@@ -139,6 +142,7 @@ class ClientProviderRoutingRepository extends ServiceEntityRepository
                     'cpr.saleType AS saleType',
                     'cpr.serviceName AS serviceName',
                     'cpr.subserviceName AS subserviceName',
+                    'cpr.areaName AS areaName',
                     'cpr.priority AS priority',
                 )
                 ->andWhere('cpr.client = :clientId')

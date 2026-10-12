@@ -62,6 +62,13 @@ class ClientProviderRouting
     private ?string $subserviceName = null;
 
     /**
+     * Área opcional (ADR-001, mercado: Gift Cards, Retail…). Forma parte de $serviceKey. NULL = la regla
+     * aplica a cualquier área, que es lo que significa en todas las filas existentes (sin backfill).
+     */
+    #[ORM\Column(length: 255, nullable: true)]
+    private ?string $areaName = null;
+
+    /**
      * Derivada de $serviceName/$subserviceName vía ServiceCategoryKey — SE
      * DERIVA EN EL SETTER (ver setServiceCategory()), nunca en un lifecycle
      * callback (mismo razonamiento que CommunicationContract::$serviceKey).
@@ -181,6 +188,11 @@ class ClientProviderRouting
         return $this->subserviceName;
     }
 
+    public function getAreaName(): ?string
+    {
+        return $this->areaName;
+    }
+
     public function getServiceKey(): string
     {
         return $this->serviceKey;
@@ -191,11 +203,12 @@ class ClientProviderRouting
      * mismo paso, no hay setServiceKey() independiente (ver docblock de la
      * propiedad).
      */
-    public function setServiceCategory(?string $serviceName, ?string $subserviceName): static
+    public function setServiceCategory(?string $serviceName, ?string $subserviceName, ?string $areaName = null): static
     {
         $this->serviceName = $serviceName;
         $this->subserviceName = $subserviceName;
-        $this->serviceKey = ServiceCategoryKey::of($serviceName, $subserviceName);
+        $this->areaName = $areaName === '' ? null : $areaName;
+        $this->serviceKey = ServiceCategoryKey::of($serviceName, $subserviceName, $this->areaName);
 
         return $this;
     }
