@@ -442,4 +442,24 @@ class CommunicationSaleServiceTransactionStatusTest extends TestCase
         $this->assertSame(CommunicationStateEnum::REJECTED->value, $this->saleRecharge->getStateProcess());
         $this->assertSame('INTERNAL_GATEWAY_MISSING', $this->saleRecharge->getTransactionStatus()['providerCode']);
     }
+
+    // ---- COMR-261: un rechazo síncrono debe dejar state process coherente con state ----
+
+    public function testSynchronousProviderRejectionLeavesStateProcessRejectedToo(): void
+    {
+        $this->availabilityService->method('canDispatchTo')->willReturn(true);
+        $this->balanceService->method('balance')->willReturn(new AccountBalanceDto('USD', 1000.0));
+        $this->connection->method('executeStatement')->willReturn(1);
+        // Rechazo determinista de CSQ (importe incorrecto) y sin proveedor secundario al que pasar.
+        $this->csqClient->method('purchase')->willReturn(['rc' => -1, 'items' => [['resultcode' => '927', 'resultmessage' => 'Importe incorrecto']]]);
+
+        $this->service->invokeRechargeCommunication(555);
+
+        $this->assertSame(CommunicationStateEnum::REJECTED, $this->saleRecharge->getState());
+        $this->assertSame(
+            CommunicationStateEnum::REJECTED->value,
+            $this->saleRecharge->getStateProcess(),
+            'Una venta rechazada no puede seguir con state process Pending (caso de la venta 5387 de producción).',
+        );
+    }
 }

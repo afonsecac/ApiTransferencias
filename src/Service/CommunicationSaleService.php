@@ -735,6 +735,9 @@ class CommunicationSaleService extends CommonService
                     }
 
                     $saleRecharge->setState(CommunicationStateEnum::REJECTED);
+                    // Antes de esto el state process quedaba en Pending (fijado arriba): una venta
+                    // rechazada que parecía seguir en proceso. Los demás rechazos ya lo actualizan.
+                    $saleRecharge->setStateProcess(CommunicationStateEnum::REJECTED->value);
                     $this->historicalSaleService->createHistoricalCommunication(
                         $saleRecharge->getId(),
                         CommunicationStateEnum::REJECTED,
