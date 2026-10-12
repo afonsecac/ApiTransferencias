@@ -829,4 +829,115 @@ class ProviderDispatchResolverTest extends TestCase
         $this->assertNotNull($selected);
         $this->assertSame(CommunicationProviderEnum::DTONE, $selected->provider);
     }
+
+    // ---- COMR-263: pesos de especificidad (8/4/2/1) y reglas de comparación, tal como están hoy ----
+
+    /**
+     * Orden completo de candidatos: se pide el siguiente excluyendo los ya devueltos. Todos los proveedores
+     * están disponibles y tienen producto, así que solo manda el orden de las filas.
+     *
+     * @param list<array<string, mixed>> $rows
+     *
+     * @return list<string>
+     */
+    private function candidateOrder(array $rows, CommunicationPackage $package, ?string $saleType = null): array
+    {
+        $this->routingRepo->method('findActiveRouteScopesForClient')->willReturn($rows);
+        $this->availabilityService->method('canDispatchTo')->willReturn(true);
+        $product = $this->createMock(CommunicationProduct::class);
+        $product->method('getExternalRef')->willReturn('ref');
+        // Producto de móvil/internet: apto para el tipo de venta 'recharge' (ver ProductSaleTypeMatcher).
+        $product->method('isMobileOrInternetService')->willReturn(true);
+        $this->productRepository->method('findMatchingDestination')->willReturn([$product]);
+
+        $account = $this->account(1, environmentId: 10);
+        $order = [];
+        $excluded = [];
+        while (($selected = $this->resolver->selectExcluding($account, $package, $saleType, $excluded)) !== null) {
+            $order[] = $selected->provider->value;
+            $excluded[] = $selected->provider;
+        }
+
+        return $order;
+    }
+
+    public function testAnEnvironmentRowOutweighsSaleTypeServiceAndSubserviceCombined(): void
+    {
+        // 8 (entorno) > 4 + 2 + 1 (tipo de venta + servicio + subservicio): el entorno solo gana a las otras tres juntas.
+        $order = $this->candidateOrder([
+            $this->routeScope('CSQ', saleType: 'recharge', serviceName: 'Mobile', subserviceName: 'AIRTIME', priority: 0, id: 1),
+            $this->routeScope('DTONE', environmentId: 10, priority: 100, id: 2),
+        ], $this->packageWithService('Mobile', 'AIRTIME'), 'recharge');
+
+        $this->assertSame(['DTONE', 'CSQ'], $order);
+    }
+
+    public function testASaleTypeRowOutweighsServiceAndSubserviceCombined(): void
+    {
+        // 4 (tipo de venta) > 2 + 1 (servicio + subservicio).
+        $order = $this->candidateOrder([
+            $this->routeScope('CSQ', serviceName: 'Mobile', subserviceName: 'AIRTIME', priority: 0, id: 1),
+            $this->routeScope('DTONE', saleType: 'recharge', priority: 100, id: 2),
+        ], $this->packageWithService('Mobile', 'AIRTIME'), 'recharge');
+
+        $this->assertSame(['DTONE', 'CSQ'], $order);
+    }
+
+    public function testAServiceRowOutweighsASubserviceOnlyRow(): void
+    {
+        // 2 (servicio) > 1 (solo subservicio).
+        $order = $this->candidateOrder([
+            $this->routeScope('CSQ', subserviceName: 'AIRTIME', priority: 0, id: 1),
+            $this->routeScope('DTONE', serviceName: 'Mobile', priority: 100, id: 2),
+        ], $this->packageWithService('Mobile', 'AIRTIME'));
+
+        $this->assertSame(['DTONE', 'CSQ'], $order);
+    }
+
+    public function testServiceAndSubserviceNamesAreComparedIgnoringSurroundingWhitespace(): void
+    {
+        $order = $this->candidateOrder([
+            $this->routeScope('CSQ', serviceName: ' Mobile ', subserviceName: ' AIRTIME ', id: 1),
+        ], $this->packageWithService('Mobile', 'AIRTIME'));
+
+        $this->assertSame(['CSQ'], $order);
+    }
+
+    public function testServiceAndSubserviceNamesAreCaseSensitive(): void
+    {
+        // Sin fila aplicable cae al proveedor por defecto (ETECSA): 'mobile' no es 'Mobile'.
+        $order = $this->candidateOrder([
+            $this->routeScope('CSQ', serviceName: 'mobile', subserviceName: 'airtime', id: 1),
+        ], $this->packageWithService('Mobile', 'AIRTIME'));
+
+        $this->assertSame(['ETECSA'], $order);
+    }
+
+    public function testARowWithAServiceDoesNotApplyToAPackageWithoutService(): void
+    {
+        $order = $this->candidateOrder([
+            $this->routeScope('CSQ', serviceName: 'Mobile', id: 1),
+        ], $this->package());
+
+        $this->assertSame(['ETECSA'], $order);
+    }
+
+    public function testAnUnknownProviderCodeIsIgnoredButItsFallbackIsStillTried(): void
+    {
+        $order = $this->candidateOrder([
+            $this->routeScope('BOGUS', fallbackProvider: 'DTONE', id: 1),
+        ], $this->packageWithService('Mobile', 'AIRTIME'));
+
+        $this->assertSame(['DTONE'], $order);
+    }
+
+    public function testWhenNoRowIsApplicableTheDefaultProviderIsTheOnlyCandidate(): void
+    {
+        $order = $this->candidateOrder([
+            $this->routeScope('CSQ', environmentId: 99, id: 1),
+            $this->routeScope('DTONE', saleType: 'sale', id: 2),
+        ], $this->packageWithService('Mobile', 'AIRTIME'), 'recharge');
+
+        $this->assertSame(['ETECSA'], $order);
+    }
 }
