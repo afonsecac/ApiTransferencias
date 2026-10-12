@@ -129,3 +129,8 @@ when@test:
             public: true
         App\Tests\Examples\Pedido\Infrastructure\Http\PedidoEjemploController: ~
         App\Tests\Examples\Pedido\Infrastructure\Http\FueraDePrefijoEjemploController: ~
+        # Este sí lleva dependencias: necesita autowire y la etiqueta de controlador (los demás ejemplos no tienen
+        # constructor y Symfony los instancia directamente).
+        App\Tests\Examples\Mercado\Infrastructure\Http\RolesEjemploController:
+            autowire: true
+            tags: ['controller.service_arguments']

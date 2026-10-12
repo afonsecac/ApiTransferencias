@@ -91,6 +91,8 @@ security:
         ROLE_SYSTEM_ADMIN: [ROLE_SYSTEM_EDITOR]
         ROLE_COM_API_USER: ROLE_API_USER
         ROLE_REM_API_USER: ROLE_API_USER
+        # Mercado (ADR-001): lo concede ApiTokenAuthenticator a las cuentas con marketEnabled y market.enabled='1'.
+        ROLE_MARKET_API_USER: ROLE_API_USER
         ROLE_COM_API_ADMIN: [ROLE_COM_API_USER]
         ROLE_REM_API_ADMIN: [ROLE_REM_API_USER]
         ROLE_API_ADMIN: [ROLE_API_EDITOR, ROLE_COM_API_ADMIN, ROLE_REM_API_ADMIN, ROLE_SYSTEM_ADMIN]

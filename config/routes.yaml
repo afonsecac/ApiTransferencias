@@ -27,6 +27,10 @@ when@test:
         type: attribute
         prefix: /dashboard/api
 
+    ejemplo_mercado_roles:
+        resource: ../tests/Examples/Mercado/Infrastructure/Http/RolesEjemploController.php
+        type: attribute
+
     ejemplo_pedido_fuera_de_prefijo:
         resource: ../tests/Examples/Pedido/Infrastructure/Http/FueraDePrefijoEjemploController.php
         type: attribute
