@@ -57,7 +57,7 @@ jobs:
 
             echo "=== Deploying ==="
             # Limitado a los servicios que corren la imagen recién construida
-            # (php-fpm, nginx y los 6 worker-*) — NO a database/rabbitmq/traefik,
+            # (php-fpm, nginx y los 7 worker-*) — NO a database/rabbitmq/traefik,
             # que no cambian de imagen en cada deploy. --force-recreate en el
             # comando sin acotar los recreaba a todos, matando las conexiones
             # activas a Postgres (incl. streams SSE de larga duración como
@@ -69,7 +69,7 @@ jobs:
             docker compose -f docker-compose.vps.yaml -f docker-compose.vps.prod.yaml \
               --env-file .env.vps up -d --remove-orphans --force-recreate \
               php-fpm nginx worker-notifications worker-clients worker-packages \
-              worker-check-status worker-balance worker-scheduler
+              worker-check-status worker-balance worker-events worker-scheduler
 
             # SIN cache:clear a propósito. La imagen ya trae var/cache/prod
             # horneado (cache:warmup en docker/php-fpm/Dockerfile) y no es un
