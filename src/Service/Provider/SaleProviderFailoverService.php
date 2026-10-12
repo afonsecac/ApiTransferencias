@@ -11,6 +11,7 @@ use App\Provider\ProviderDispatchResolver;
 use App\Provider\TransactionStatus;
 use App\Repository\SysConfigRepository;
 use App\Service\HistoricalSaleService;
+use App\Service\SaleSubtype;
 
 /**
  * Único salto principal → secundario tras un RECHAZO DETERMINISTA del
@@ -70,7 +71,7 @@ class SaleProviderFailoverService
             return false;
         }
 
-        $saleType = $sale instanceof CommunicationSaleRecharge ? 'recharge' : 'sale';
+        $saleType = SaleSubtype::saleTypeOf($sale);
 
         $selected = $this->dispatchResolver->selectExcluding($account, $package, $saleType, [$currentProvider]);
         if ($selected === null) {

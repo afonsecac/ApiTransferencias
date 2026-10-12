@@ -20,6 +20,7 @@ use App\Message\SalePackageMessage;
 use App\OpenApi\Attribute\DashboardEndpoint;
 use App\Service\CommunicationSaleService;
 use App\Service\Etecsa\EtecsaRetryService;
+use App\Service\SaleSubtype;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -299,7 +300,7 @@ class DashboardSalesController extends AbstractController
         } elseif ($sale instanceof CommunicationSaleRecharge) {
             $this->saleService->tryAgainWithTransaction($sale->getId());
         } else {
-            $this->messageBus->dispatch(new CheckSaleMessage($sale->getId()), [new DelayStamp(2000)]);
+            throw SaleSubtype::unsupported($sale);
         }
 
         return $this->json([
