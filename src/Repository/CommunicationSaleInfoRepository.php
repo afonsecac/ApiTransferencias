@@ -184,6 +184,25 @@ class CommunicationSaleInfoRepository extends ServiceEntityRepository
      * @throws \DateMalformedStringException
      */
     /**
+     * Ventas inciertas (COMR-258), las más antiguas primero.
+     *
+     * @return list<CommunicationSaleInfo>
+     */
+    public function findUncertain(int $offset, int $limit): array
+    {
+        return array_values($this->onlyDispatchableSubtypes($this->createQueryBuilder('csi'), 'csi')
+            ->andWhere('csi.state = :status')
+            ->andWhere('csi.stateProcess = :uncertain')
+            ->setParameter('status', CommunicationStateEnum::PENDING)
+            ->setParameter('uncertain', CommunicationSaleInfo::STATE_PROCESS_UNCERTAIN)
+            ->orderBy('csi.createdAt', 'ASC')
+            ->addOrderBy('csi.id', 'ASC')
+            ->setFirstResult($offset)
+            ->setMaxResults($limit)
+            ->getQuery()->execute());
+    }
+
+    /**
      * Ventas aceptadas que llevan en SENDING desde antes de $before (COMR-257): candidatas al rescate.
      *
      * @return list<CommunicationSaleInfo>
