@@ -5,6 +5,7 @@ namespace App\Tests\Service;
 use App\Entity\CommunicationSaleInfo;
 use App\Entity\CommunicationSalePackage;
 use App\Entity\CommunicationSaleRecharge;
+use App\Exception\MyCurrentException;
 use App\Message\DispatchPendingEmailMessage;
 use App\Message\SalePackageMessage;
 use App\Message\SaleRechargeMessage;
@@ -23,8 +24,8 @@ use Symfony\Component\Messenger\MessageBusInterface;
 /**
  * Pruebas de caracterización (COMR-263): cómo despacha hoy CommunicationsDispatchService según el subtipo de
  * venta. Hay una rama para recarga y otra para paquete, y NINGUNA para cualquier otro subtipo: se ignora en
- * silencio. Las pruebas describen el comportamiento actual; cuando se añada la rama que lanza una excepción
- * ante un subtipo desconocido (C3), los tests de «subtipo desconocido» cambian a propósito.
+ * silencio. COMR-62 (C3) convirtió ese silencio en una excepción: los tests de «subtipo desconocido» cambiaron a
+ * propósito respecto a la caracterización de COMR-263.
  *
  * @covers \App\Service\CommunicationsDispatchService
  */
@@ -93,43 +94,43 @@ class CommunicationsDispatchServiceSubtypeTest extends TestCase
         );
     }
 
-    public function testASaleOfAnyOtherSubtypeIsSilentlyNotQueued(): void
+    public function testASaleOfAnyOtherSubtypeThrowsInsteadOfBeingSilentlyIgnored(): void
     {
         $this->repository->method('findPendingUndispatched')->willReturn([
             $this->withId(new CommunicationSaleInfo(), 3, '2610120000003'),
         ]);
 
-        $result = $this->service->dispatchPending();
+        try {
+            $this->service->dispatchPending();
+            $this->fail('Un subtipo desconocido debe lanzar.');
+        } catch (MyCurrentException $e) {
+            $this->assertSame('UNSUPPORTED_SALE_SUBTYPE', $e->getCodeWork());
+        }
 
-        $this->assertSame(0, $result['total']);
-        $this->assertSame([], $this->dispatched, 'No se encola nada ni se avisa: la venta se queda en CREATED sin que nadie lo vea.');
+        $this->assertSame([], $this->dispatched, 'No se encola nada ni se manda un correo resumen engañoso.');
     }
 
-    public function testAnUnknownSubtypeStillAppearsInTheSummaryEmailEvenThoughNothingWasQueuedForIt(): void
-    {
-        $this->repository->method('findPendingUndispatched')->willReturn([
-            $this->withId(new CommunicationSaleRecharge(), 1, '2610120000001'),
-            $this->withId(new CommunicationSaleInfo(), 3, '2610120000003'),
-        ]);
-
-        $this->service->dispatchPending();
-
-        $summary = array_values(array_filter($this->dispatched, static fn (object $m): bool => $m instanceof DispatchPendingEmailMessage))[0];
-        $this->assertSame(1, $summary->getTotal());
-        $this->assertSame(['2610120000001', '2610120000003'], $summary->getTransactionIds(), 'El correo lista un transactionId que nunca se encoló.');
-    }
-
-    public function testRedispatchAfterAProviderRecoversQueuesRechargesAndPackagesAndIgnoresOtherSubtypes(): void
+    public function testRedispatchAfterAProviderRecoversQueuesRechargesAndPackages(): void
     {
         $this->repository->method('findPendingUndispatchedByProvider')->willReturn([
             $this->withId(new CommunicationSaleRecharge(), 1, '2610120000001'),
             $this->withId(new CommunicationSalePackage(), 2, '2610120000002'),
-            $this->withId(new CommunicationSaleInfo(), 3, '2610120000003'),
         ]);
 
         $count = $this->service->redispatchPendingFor('CSQ', 'PROD');
 
         $this->assertSame(2, $count);
         $this->assertSame([SaleRechargeMessage::class, SalePackageMessage::class], $this->dispatchedTypes());
+    }
+
+    public function testRedispatchOfAnotherSubtypeThrowsInsteadOfBeingSilentlyIgnored(): void
+    {
+        $this->repository->method('findPendingUndispatchedByProvider')->willReturn([
+            $this->withId(new CommunicationSaleInfo(), 3, '2610120000003'),
+        ]);
+
+        $this->expectException(MyCurrentException::class);
+
+        $this->service->redispatchPendingFor('CSQ', 'PROD');
     }
 }

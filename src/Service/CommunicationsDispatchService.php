@@ -124,6 +124,8 @@ class CommunicationsDispatchService
             } elseif ($sale instanceof CommunicationSalePackage) {
                 $this->messageBus->dispatch(new SalePackageMessage($sale->getId()));
                 $packages++;
+            } else {
+                throw SaleSubtype::unsupported($sale);
             }
             if ($sale->getTransactionId() !== null) {
                 $transactionIds[] = $sale->getTransactionId();
@@ -173,6 +175,8 @@ class CommunicationsDispatchService
             } elseif ($sale instanceof CommunicationSalePackage) {
                 $this->messageBus->dispatch(new SalePackageMessage($sale->getId()));
                 $count++;
+            } else {
+                throw SaleSubtype::unsupported($sale);
             }
         }
 

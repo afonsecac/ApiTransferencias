@@ -6,6 +6,7 @@ use ApiPlatform\Metadata\Post;
 use App\Entity\CommunicationSaleInfo;
 use App\Entity\CommunicationSalePackage;
 use App\Entity\CommunicationSaleRecharge;
+use App\Exception\MyCurrentException;
 use App\Service\CommunicationSaleService;
 use App\State\CreateSaleInfoProcessor;
 use Doctrine\ORM\EntityManagerInterface;
@@ -16,8 +17,8 @@ use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\RateLimiter\Storage\InMemoryStorage;
 
 /**
- * Pruebas de caracterización (COMR-263): el processor de creación bifurca por subtipo (recarga, paquete,
- * reserva) y no tiene rama final. Un subtipo que no encaje devuelve null sin crear nada ni avisar.
+ * El processor de creación bifurca por subtipo (recarga, paquete, reserva). COMR-62 (C3): un subtipo que no
+ * encaje lanza, en lugar de devolver null sin crear nada ni avisar (comportamiento que fijó COMR-263).
  *
  * @covers \App\State\CreateSaleInfoProcessor
  */
@@ -54,12 +55,14 @@ class CreateSaleInfoProcessorSubtypeTest extends TestCase
         $this->assertSame($package, $this->processor->process($package, new Post()));
     }
 
-    public function testAnyOtherSubtypeReturnsNullWithoutCreatingAnything(): void
+    public function testAnyOtherSubtypeThrowsWithoutCreatingAnything(): void
     {
         $this->saleService->expects($this->never())->method('processRecharge');
         $this->saleService->expects($this->never())->method('executeSale');
         $this->saleService->expects($this->never())->method('processReserve');
 
-        $this->assertNull($this->processor->process(new CommunicationSaleInfo(), new Post()));
+        $this->expectException(MyCurrentException::class);
+
+        $this->processor->process(new CommunicationSaleInfo(), new Post());
     }
 }

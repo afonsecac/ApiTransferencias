@@ -3,8 +3,11 @@
 namespace App\Repository;
 
 use App\Entity\CommunicationSaleInfo;
+use App\Entity\CommunicationSalePackage;
+use App\Entity\CommunicationSaleRecharge;
 use App\Enums\CommunicationStateEnum;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
+use Doctrine\ORM\QueryBuilder;
 use Doctrine\Persistence\ManagerRegistry;
 
 /**
@@ -17,6 +20,20 @@ use Doctrine\Persistence\ManagerRegistry;
  */
 class CommunicationSaleInfoRepository extends ServiceEntityRepository
 {
+    /**
+     * Subtipos de venta que los bucles de despacho y de consulta de estado saben procesar (ADR-001, COMR-62).
+     * Esas consultas se limitan a ellos: un subtipo nuevo (mercado) no entra a un bucle donde lanzaría ante
+     * lo desconocido y pararía el lote de las demás ventas; entra cuando su flujo exista.
+     *
+     * @var list<class-string<CommunicationSaleInfo>>
+     */
+    public const DISPATCHABLE_SUBTYPES = [CommunicationSaleRecharge::class, CommunicationSalePackage::class];
+
+    private function onlyDispatchableSubtypes(QueryBuilder $qb, string $alias): QueryBuilder
+    {
+        return $qb->andWhere(sprintf('%s INSTANCE OF (%s)', $alias, implode(', ', self::DISPATCHABLE_SUBTYPES)));
+    }
+
     public function __construct(ManagerRegistry $registry)
     {
         parent::__construct($registry, CommunicationSaleInfo::class);
@@ -43,7 +60,7 @@ class CommunicationSaleInfoRepository extends ServiceEntityRepository
      */
     public function findAwaitingProvider(int $limit = 200): array
     {
-        return $this->createQueryBuilder('s')
+        return $this->onlyDispatchableSubtypes($this->createQueryBuilder('s'), 's')
             ->leftJoin('s.tenant', 't')->addSelect('t')
             ->leftJoin('t.environment', 'e')->addSelect('e')
             ->andWhere('s.state = :state')
@@ -69,7 +86,7 @@ class CommunicationSaleInfoRepository extends ServiceEntityRepository
      */
     public function findPendingUndispatched(): array
     {
-        return $this->createQueryBuilder('s')
+        return $this->onlyDispatchableSubtypes($this->createQueryBuilder('s'), 's')
             ->leftJoin('s.tenant', 't')->addSelect('t')
             ->leftJoin('t.environment', 'e')->addSelect('e')
             ->andWhere('s.state = :state')
@@ -92,7 +109,7 @@ class CommunicationSaleInfoRepository extends ServiceEntityRepository
      */
     public function findPendingUndispatchedByProvider(string $provider, ?string $environmentType, int $limit = 500): array
     {
-        $qb = $this->createQueryBuilder('s')
+        $qb = $this->onlyDispatchableSubtypes($this->createQueryBuilder('s'), 's')
             ->leftJoin('s.tenant', 't')->addSelect('t')
             ->leftJoin('t.environment', 'e')->addSelect('e')
             ->andWhere('s.state = :state')
@@ -140,7 +157,7 @@ class CommunicationSaleInfoRepository extends ServiceEntityRepository
 
     public function countAwaitingProvider(): int
     {
-        return (int) $this->createQueryBuilder('s')
+        return (int) $this->onlyDispatchableSubtypes($this->createQueryBuilder('s'), 's')
             ->select('COUNT(s.id)')
             ->andWhere('s.state = :state')
             ->andWhere('s.stateProcess = :stateProcess')
@@ -152,7 +169,7 @@ class CommunicationSaleInfoRepository extends ServiceEntityRepository
 
     public function countPendingUndispatched(): int
     {
-        return (int) $this->createQueryBuilder('s')
+        return (int) $this->onlyDispatchableSubtypes($this->createQueryBuilder('s'), 's')
             ->select('COUNT(s.id)')
             ->andWhere('s.state = :state')
             ->andWhere('s.stateProcess = :stateProcess')
@@ -168,7 +185,7 @@ class CommunicationSaleInfoRepository extends ServiceEntityRepository
      */
     public function getLastPending(): array
     {
-        return $this->createQueryBuilder('csi')
+        return $this->onlyDispatchableSubtypes($this->createQueryBuilder('csi'), 'csi')
             ->andWhere('csi.state = :status')
             ->andWhere('csi.stateProcess = :pendingProcess')
             ->setParameter('status', CommunicationStateEnum::PENDING)

@@ -240,8 +240,9 @@ class CommunicationSaleService extends CommonService
                 continue;
             }
 
-            $isRecharge = $sale instanceof CommunicationSaleRecharge;
-            $selected = $this->dispatchResolver->selectExcluding($account, $package, $isRecharge ? 'recharge' : 'sale', []);
+            $saleType = SaleSubtype::saleTypeOf($sale);
+            $isRecharge = $saleType === SaleSubtype::SALE_TYPE_RECHARGE;
+            $selected = $this->dispatchResolver->selectExcluding($account, $package, $saleType, []);
             if ($selected === null && $isRecharge && $sale->getPromotion() !== null) {
                 $selected = $this->promotionDispatchResolver->trySelect($account, $sale->getPromotion());
             }
@@ -249,7 +250,7 @@ class CommunicationSaleService extends CommonService
                 continue;
             }
 
-            if ($isRecharge) {
+            if ($sale instanceof CommunicationSaleRecharge) {
                 try {
                     $this->assertRecipientIdentifierSatisfied($selected->product, $sale->getPhoneNumber(), $sale->getAccountIdentifier());
                 } catch (MyCurrentException $e) {
@@ -269,7 +270,7 @@ class CommunicationSaleService extends CommonService
 
         foreach ($toDispatch as $sale) {
             $this->logger->info("Sale {$sale->getId()} resolved provider {$sale->getProvider()} after awaiting an available provider.");
-            $this->dispatchOrDefer($sale, $sale instanceof CommunicationSaleRecharge
+            $this->dispatchOrDefer($sale, SaleSubtype::saleTypeOf($sale) === SaleSubtype::SALE_TYPE_RECHARGE
                 ? fn () => new SaleRechargeMessage($sale->getId())
                 : fn () => new SalePackageMessage($sale->getId()));
         }
@@ -1293,7 +1294,7 @@ class CommunicationSaleService extends CommonService
         // engancha la notificación in-app, independiente del email.
         $client = $sale->getTenant()?->getClient();
         if ($client !== null) {
-            $isRecharge = $sale instanceof CommunicationSaleRecharge;
+            $isRecharge = SaleSubtype::saleTypeOf($sale) === SaleSubtype::SALE_TYPE_RECHARGE;
             $this->notificationCenter->notifyClient($client, new NotificationDraft(
                 type: $isRecharge ? NotificationTypeEnum::RECHARGE_FAILED : NotificationTypeEnum::SALE_FAILED,
                 title: sprintf('%s fallida (#%d)', $isRecharge ? 'Recarga' : 'Venta', $sale->getId()),
@@ -1373,7 +1374,7 @@ class CommunicationSaleService extends CommonService
             return;
         }
 
-        $isRecharge = $sale instanceof CommunicationSaleRecharge;
+        $isRecharge = SaleSubtype::saleTypeOf($sale) === SaleSubtype::SALE_TYPE_RECHARGE;
 
         try {
             $provider = $this->providerResolver->resolveForSale($sale);

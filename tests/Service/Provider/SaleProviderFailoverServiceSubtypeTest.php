@@ -6,6 +6,7 @@ use App\Entity\Account;
 use App\Entity\CommunicationPackage;
 use App\Entity\CommunicationSaleInfo;
 use App\Entity\CommunicationSalePackage;
+use App\Exception\MyCurrentException;
 use App\Provider\ProviderDispatchResolver;
 use App\Repository\SysConfigRepository;
 use App\Service\HistoricalSaleService;
@@ -14,9 +15,8 @@ use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 
 /**
- * Pruebas de caracterización (COMR-263): el failover solo distingue «recarga» de «lo demás». Cualquier
- * subtipo que no sea recarga se enruta como tipo de venta 'sale', igual que un paquete. Cuando se añada el
- * subtipo de mercado (C3/hito 4) esto debe dejar de ser implícito.
+ * COMR-62 (C3): el failover distingue recarga ('recharge') de paquete ('sale') y lanza ante cualquier otro
+ * subtipo, en vez de enrutarlo en silencio como 'sale' (comportamiento que fijó la caracterización de COMR-263).
  *
  * @covers \App\Service\Provider\SaleProviderFailoverService
  */
@@ -54,12 +54,12 @@ class SaleProviderFailoverServiceSubtypeTest extends TestCase
         $this->assertFalse($this->service->promoteToFallback($this->sale(new CommunicationSalePackage()), 'rechazo'));
     }
 
-    public function testAnyOtherSubtypeIsAlsoRoutedAsTheSaleTypeWithoutFailing(): void
+    public function testAnyOtherSubtypeThrowsInsteadOfBeingRoutedAsASale(): void
     {
-        $this->dispatchResolver->expects($this->once())->method('selectExcluding')
-            ->with($this->anything(), $this->anything(), 'sale', $this->anything())
-            ->willReturn(null);
+        $this->dispatchResolver->expects($this->never())->method('selectExcluding');
 
-        $this->assertFalse($this->service->promoteToFallback($this->sale(new CommunicationSaleInfo()), 'rechazo'));
+        $this->expectException(MyCurrentException::class);
+
+        $this->service->promoteToFallback($this->sale(new CommunicationSaleInfo()), 'rechazo');
     }
 }
