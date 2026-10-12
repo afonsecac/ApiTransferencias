@@ -90,7 +90,7 @@ echo "PG15 confirmed. Proceeding with upgrade."
 echo ""
 echo "=== [2/10] Stopping app services (DB stays up) ==="
 $COMPOSE stop php-fpm nginx worker worker-notifications worker-clients \
-              worker-packages worker-check-status worker-balance 2>/dev/null || true
+              worker-packages worker-check-status worker-balance worker-events worker-scheduler 2>/dev/null || true
 echo "App services stopped."
 
 # ── 3. DUMP (custom format + plain SQL fallback) ──────────────────────────────

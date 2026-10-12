@@ -12,7 +12,7 @@ entornos corren en VPS independientes con Docker Compose detrás de Traefik
 | Dominio API | `staging-api.comremit.com` | `api.prod.comremit.com` (+ alias `api-tx.sendmundo.com`) |
 | Deploy automático | `.github/workflows/deploy-staging.yaml` (push a `develop`) | `.github/workflows/deploy-prod.yaml` (push a `master`) |
 | Base de datos | `postgres:18-alpine`, 1 réplica | `postgres:18-alpine`, 1 réplica |
-| Workers | 1 contenedor (`worker`) consumiendo todas las colas | 6 contenedores, uno por cola (`worker-notifications`, `worker-clients`, `worker-packages`, `worker-check-status`, `worker-balance`, `worker-scheduler`) |
+| Workers | 1 contenedor (`worker`) consumiendo todas las colas | 7 contenedores, uno por cola (`worker-notifications`, `worker-clients`, `worker-packages`, `worker-check-status`, `worker-balance`, `worker-events`, `worker-scheduler`) |
 | Extra | `mailcatcher` (captura correo, no envía real) | — (SMTP real vía `MAILER_DSN`) |
 | Recursos por contenedor | Límites bajos (php-fpm: 0.5 CPU / 256M) | Límites más altos (php-fpm: 1.0 CPU / 512M) |
 

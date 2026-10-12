@@ -146,6 +146,20 @@ services:
           cpus: "0.5"
           memory: 256M
 
+  # Consume el outbox de eventos de dominio (ADR-001). Sin este worker los eventos
+  # publicados quedan en messenger_messages sin procesarse.
+  worker-events:
+    <<: *worker-base
+    command: >
+      sh -c "until nc -z rabbitmq 5672 2>/dev/null; do sleep 2; done &&
+      php bin/console messenger:consume domain_events
+      --time-limit=3600 --memory-limit=192M -vv"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+
   worker-scheduler:
     <<: *worker-base
     command: >
