@@ -73,6 +73,9 @@ services:
             - '../src/DependencyInjection/'
             - '../src/Entity/'
             - '../src/Kernel.php'
+            # ADR-001: entidades, objetos de valor y eventos de los contextos nuevos no son servicios.
+            - '../src/Market/*/Domain/'
+            - '../src/Delivery/*/Domain/'
 
     App\Service\TwoFactorService:
         arguments:
