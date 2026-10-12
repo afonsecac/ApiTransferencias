@@ -127,3 +127,5 @@ when@test:
         App\Shared\Application\Event\EventBus:
             alias: App\Shared\Infrastructure\Event\MessengerEventBus
             public: true
+        App\Tests\Examples\Pedido\Infrastructure\Http\PedidoEjemploController: ~
+        App\Tests\Examples\Pedido\Infrastructure\Http\FueraDePrefijoEjemploController: ~

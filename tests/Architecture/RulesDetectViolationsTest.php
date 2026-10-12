@@ -46,6 +46,13 @@ final class RulesDetectViolationsTest extends TestCase
         self::assertNotSame(0, self::$exitCode, 'PHPStan debería fallar con los fixtures que rompen las reglas.');
     }
 
+    public function testDoctrineMappingAttributesAreAllowedInDomain(): void
+    {
+        $reported = array_filter(self::$messages, static fn (string $m): bool => str_contains($m, 'EntidadConAtributos'));
+
+        self::assertSame([], array_values($reported), 'Los atributos de Doctrine\\ORM\\Mapping son legales en Domain.');
+    }
+
     /**
      * @dataProvider brokenRules
      */

@@ -1,6 +1,6 @@
 # ADR-001 · Monolito modular hexagonal con eventos para lo nuevo
 
-- **Estado:** propuesto. Pasa a «aceptado» al cerrarse la decisión COMR-152.
+- **Estado:** aceptado el 2026-10-12 (decisión COMR-152): opción b), phpat dentro del PHPStan de CI y outbox con transporte Doctrine de Messenger y `worker-events`.
 - **Fecha:** 2026-10-12
 - **Alcance:** código nuevo del mercado (`src/Market`) y de la capa de geolocalización (`src/Delivery`). Comunicaciones, promociones y contratos **no se migran**.
 
@@ -31,7 +31,7 @@ El mercado añade unas once capacidades nuevas (catálogo, inventario, distribuc
 Se adopta **b)**.
 
 1. Cada contexto vive en `src/Market/<Contexto>/` con tres capas: `Domain`, `Application` e `Infrastructure`. La capa de geolocalización vive en `src/Delivery/Geo/` con la misma estructura.
-2. **Domain** contiene entidades, objetos de valor, eventos, excepciones de dominio e interfaces de repositorio. No importa Symfony, Doctrine ni `App\Service`; por eso el mapeo de Doctrine de sus entidades se declara en XML dentro de `Infrastructure`, no con atributos.
+2. **Domain** contiene entidades, objetos de valor, eventos, excepciones de dominio e interfaces de repositorio. No importa Symfony, Doctrine ni `App\Service`, con una única excepción: los atributos de `Doctrine\ORM\Mapping`, que son metadatos inertes (PHP los ignora si Doctrine no está cargado) y mantienen el estilo del resto del proyecto. `EntityManager`, repositorios y `QueryBuilder` siguen prohibidos. Cada contexto registra su carpeta `Domain` en `doctrine.yaml`.
 3. **Application** contiene los casos de uso (comando + manejador, consulta + manejador), DTO de entrada y salida y los puertos. No importa `Infrastructure`.
 4. **Infrastructure** contiene los repositorios Doctrine, los controladores y *state providers* HTTP, los consumidores de Messenger y los comandos de consola.
 5. Un contexto nunca inyecta un servicio de otro. Se comunican solo por **eventos de dominio** o por **puertos síncronos** explícitos, y solo cuando la atomicidad lo exige (reserva de stock y de saldo en la venta).
@@ -55,8 +55,8 @@ TDD (sección 12 de `CLAUDE.md`) y pantalla de administración con pruebas (secc
 
 ## Consecuencias
 
-- Hay que ajustar la configuración compartida antes del primer contexto: autowiring (excluir las carpetas `Domain`), mapeo de Doctrine, rutas y reglas de acceso por defecto fuera de `/api` y `/dashboard/api`. Se resuelve con un esqueleto vacío en COMR-237.
-- Hay que añadir `worker-events` a los compose y a la lista cerrada de servicios de `deploy-prod.yaml` (COMR-252) y el transporte `domain_events` (COMR-238).
+- Hay que ajustar la configuración compartida antes del primer contexto: autowiring (excluir las carpetas `Domain`), mapeo de Doctrine, rutas y reglas de acceso por defecto fuera de `/api` y `/dashboard/api`. Resuelto en COMR-237: las carpetas `Domain` se excluyen del autowiring, las entidades de `Domain` se mapean con atributos y cada contexto registra su carpeta en `doctrine.yaml`, las rutas de `Infrastructure/Http` se importan solas bajo `/dashboard/api` y `access_control` termina con una denegación por defecto, todo con ejemplos y tests en `tests/Examples/Pedido`.
+- Hay que añadir `worker-events` a los compose y a la lista cerrada de servicios de `deploy-prod.yaml` (COMR-252) y el transporte `domain_events` (COMR-238); ambos hechos.
 - Cada evento tiene un test de contrato con su esquema serializado estable (COMR-253).
 - El código de comunicaciones no cambia. Si el mercado necesita reaccionar a una venta de comunicaciones, se publica un evento desde allí sin reescribir el servicio.
 - Riesgo de sobreingeniería: las capas completas se aplican solo a contextos con reglas de negocio (venta, inventario, entrega, geolocalización); el catálogo puede tener `Application` e `Infrastructure` delgadas.
