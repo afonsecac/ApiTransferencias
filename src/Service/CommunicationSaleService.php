@@ -1274,9 +1274,11 @@ class CommunicationSaleService extends CommonService
         $table = $this->em->getClassMetadata(CommunicationSaleInfo::class)->getTableName();
 
         $affected = $this->em->getConnection()->executeStatement(
-            "UPDATE {$table} SET state_process = :sending WHERE id = :id AND state_process = :created",
+            // updated_at marca cuándo empezó el envío: el rescate de COMR-257 mide cuánto lleva en SENDING.
+            "UPDATE {$table} SET state_process = :sending, updated_at = :now WHERE id = :id AND state_process = :created",
             [
                 'sending' => 'SENDING',
+                'now'     => (new \DateTimeImmutable())->format('Y-m-d H:i:s'),
                 'id'      => $sale->getId(),
                 'created' => CommunicationStateEnum::CREATED->value,
             ]
@@ -1545,6 +1547,51 @@ class CommunicationSaleService extends CommonService
             }
             $this->logger->info($message);
         }
+    }
+
+    /**
+     * COMR-257: las ventas que llevan más de $olderThanMinutes minutos en SENDING (el proceso murió tras el
+     * reclamo) pasan a «inciertas» y se consultan por nuestro transactionId. NUNCA se reenvían: si el
+     * proveedor sí las recibió, reenviar cobraría dos veces. Su importe sigue comprometido (state PENDING).
+     *
+     * @return int ventas rescatadas en esta pasada
+     */
+    public function rescueStuckSendingSales(int $olderThanMinutes = 15, int $limit = 100): int
+    {
+        /** @var \App\Repository\CommunicationSaleInfoRepository $repository */
+        $repository = $this->em->getRepository(CommunicationSaleInfo::class);
+        $table = $this->em->getClassMetadata(CommunicationSaleInfo::class)->getTableName();
+        $stuck = $repository->findStuckSending(new \DateTimeImmutable(sprintf('-%d minutes', $olderThanMinutes)), $limit);
+
+        $rescued = 0;
+        foreach ($stuck as $sale) {
+            // Condicional: si el envío terminó entre la lectura y ahora, state_process ya no es SENDING y no se toca.
+            $affected = $this->em->getConnection()->executeStatement(
+                "UPDATE {$table} SET state_process = :uncertain WHERE id = :id AND state_process = :sending",
+                [
+                    'uncertain' => CommunicationSaleInfo::STATE_PROCESS_UNCERTAIN,
+                    'sending'   => 'SENDING',
+                    'id'        => $sale->getId(),
+                ]
+            );
+            if ($affected === 0) {
+                continue;
+            }
+            $this->em->refresh($sale);
+            $envelope = TransactionStatus::internal(
+                ProviderOutcomeEnum::UNKNOWN,
+                'INTERNAL_SENDING_STUCK_UNCERTAIN',
+                sprintf('Stuck in SENDING for more than %d minutes; checking the provider by transactionId, never resending', $olderThanMinutes),
+            );
+            $sale->setTransactionStatus($envelope);
+            $this->historicalSaleService->createHistoricalCommunication($sale->getId(), CommunicationStateEnum::PENDING, $envelope);
+            $this->em->flush();
+            $this->messageBus->dispatch(new CheckSaleMessage($sale->getId()));
+            $this->logger->critical("Sale {$sale->getId()}: stuck in SENDING, marked UNCERTAIN (balance stays reserved) and queued for a status check.");
+            ++$rescued;
+        }
+
+        return $rescued;
     }
 
     /**

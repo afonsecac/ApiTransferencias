@@ -563,6 +563,27 @@ class CommunicationSaleServiceTransactionStatusTest extends TestCase
         $this->assertTrue($this->saleRecharge->isUncertain());
     }
 
+    // ---- COMR-257: el reclamo SENDING marca la hora, para poder rescatar las ventas que se quedan colgadas ----
+
+    public function testClaimingASaleForSendingStampsUpdatedAtSoItsAgeCanBeMeasured(): void
+    {
+        $statements = [];
+        $this->connection->method('executeStatement')->willReturnCallback(static function (string $sql) use (&$statements): int {
+            $statements[] = $sql;
+
+            return 1;
+        });
+        $this->availabilityService->method('canDispatchTo')->willReturn(true);
+        $this->balanceService->method('balance')->willReturn(new AccountBalanceDto('USD', 1000.0));
+        $this->saleRecharge->setStateProcess(CommunicationStateEnum::CREATED->value);
+
+        $this->service->invokeRechargeCommunication(555);
+
+        $claims = array_filter($statements, static fn (string $sql): bool => str_contains($sql, 'state_process = :sending'));
+        $this->assertNotSame([], $claims, 'El reclamo de SENDING debe ejecutarse.');
+        $this->assertStringContainsString('updated_at', array_values($claims)[0], 'Sin updated_at, una venta antigua reclamada hoy parecería colgada al instante.');
+    }
+
     // ---- COMR-261: un rechazo síncrono debe dejar state process coherente con state ----
 
     public function testSynchronousProviderRejectionLeavesStateProcessRejectedToo(): void
