@@ -3,8 +3,10 @@
 namespace App\Provider;
 
 use App\Enums\CommunicationProviderEnum;
+use App\Enums\ProviderDomainEnum;
 use App\Exception\MyCurrentException;
 use App\Provider\Contract\CommunicationProviderInterface;
+use App\Provider\Contract\ProviderDomainAwareInterface;
 use Symfony\Component\DependencyInjection\Attribute\AutowireIterator;
 
 /**
@@ -90,14 +92,44 @@ final class ProviderRegistry
     }
 
     /**
+     * Proveedores de COMUNICACIONES registrados: es lo que consumen el ping, la matriz de disponibilidad, los
+     * vínculos de paquete y promoción y el enrutado. Conserva su significado de siempre; un proveedor que opera
+     * solo en otro dominio (mercado) no aparece aquí, ver registeredFor().
+     *
      * @return list<CommunicationProviderEnum>
      */
     public function registered(): array
     {
-        return array_map(
-            static fn (string $code) => CommunicationProviderEnum::from($code),
-            array_keys($this->index()),
-        );
+        return $this->registeredFor(ProviderDomainEnum::Communications);
+    }
+
+    /**
+     * Proveedores registrados que operan en `$domain`.
+     *
+     * @return list<CommunicationProviderEnum>
+     */
+    public function registeredFor(ProviderDomainEnum $domain): array
+    {
+        $codes = [];
+        foreach ($this->index() as $code => $provider) {
+            if (in_array($domain, self::domainsOf($provider), true)) {
+                $codes[] = CommunicationProviderEnum::from($code);
+            }
+        }
+
+        return $codes;
+    }
+
+    /**
+     * Un proveedor que no declara dominios (solo CommunicationProviderInterface) cuenta como de comunicaciones.
+     *
+     * @return list<ProviderDomainEnum>
+     */
+    private static function domainsOf(CommunicationProviderInterface $provider): array
+    {
+        return $provider instanceof ProviderDomainAwareInterface
+            ? $provider->getDomains()
+            : [ProviderDomainEnum::Communications];
     }
 
     /**

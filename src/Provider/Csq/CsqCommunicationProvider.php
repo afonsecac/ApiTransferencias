@@ -3,6 +3,7 @@
 namespace App\Provider\Csq;
 
 use App\Enums\CommunicationProviderEnum;
+use App\Enums\ProviderDomainEnum;
 use App\Enums\ProviderCapabilityEnum;
 use App\Enums\ProviderOutcomeEnum;
 use App\Exception\MyCurrentException;
@@ -11,6 +12,7 @@ use App\Provider\Contract\ProviderBalanceInterface;
 use App\Provider\Contract\ProviderBalanceResult;
 use App\Provider\Contract\ProviderCatalogInterface;
 use App\Provider\Contract\ProviderConfigField;
+use App\Provider\Contract\ProviderDomainAwareInterface;
 use App\Provider\Contract\ProviderContext;
 use App\Provider\Contract\ProviderDispatchResult;
 use App\Provider\Contract\ProviderHealthCheckInterface;
@@ -99,7 +101,8 @@ final class CsqCommunicationProvider implements
     ProviderCatalogInterface,
     RechargeProviderInterface,
     ProviderBalanceInterface,
-    ProviderPromotionCatalogInterface
+    ProviderPromotionCatalogInterface,
+    ProviderDomainAwareInterface
 {
     /** countryId de Cuba en el portfolio de CSQ (confirmado contra el payload real). */
     private const CUBA_COUNTRY_ID = 192;
@@ -131,6 +134,14 @@ final class CsqCommunicationProvider implements
         #[Autowire(param: 'app.csq.catalog_min_amount_cup')] private readonly ?float $catalogMinAmountCup = null,
         #[Autowire(param: 'app.csq.catalog_max_amount_cup')] private readonly ?float $catalogMaxAmountCup = null,
     ) {
+    }
+
+    /**
+     * @return list<ProviderDomainEnum>
+     */
+    public function getDomains(): array
+    {
+        return [ProviderDomainEnum::Communications];
     }
 
     public function getCode(): CommunicationProviderEnum
