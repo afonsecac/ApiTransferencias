@@ -50,6 +50,8 @@ use Symfony\Bundle\SecurityBundle\Security;
 use Symfony\Component\DependencyInjection\ParameterBag\ParameterBagInterface;
 use Symfony\Component\Mailer\MailerInterface;
 use Symfony\Component\Messenger\MessageBusInterface;
+use Symfony\Component\Messenger\Stamp\DelayStamp;
+use App\Message\CheckSaleMessage;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 use Symfony\Component\Serializer\SerializerInterface;
 
@@ -72,6 +74,10 @@ class CommunicationSaleServiceTransactionStatusTest extends TestCase
     private PackageCatalogResolver&MockObject $packageCatalogResolver;
     private CommunicationSaleService $service;
     private CommunicationSaleRecharge $saleRecharge;
+    /** Código de la excepción cruda que lanza el fake de ETECSA al consultar el estado. */
+    private int $etecsaStatusErrorCode = 404;
+    /** @var list<array{object, list<object>}> mensajes despachados al bus, con sus sellos */
+    private array $dispatched = [];
 
     protected function setUp(): void
     {
@@ -95,7 +101,11 @@ class CommunicationSaleServiceTransactionStatusTest extends TestCase
         $messageBus = $this->createMock(MessageBusInterface::class);
         // Envelope es `final` — sin este stub, PHPUnit intenta generar un
         // valor de retorno automático para dispatch() y falla al doblarla.
-        $messageBus->method('dispatch')->willReturn(new \Symfony\Component\Messenger\Envelope(new \stdClass()));
+        $messageBus->method('dispatch')->willReturnCallback(function (object $message, array $stamps = []): \Symfony\Component\Messenger\Envelope {
+            $this->dispatched[] = [$message, $stamps];
+
+            return new \Symfony\Component\Messenger\Envelope(new \stdClass());
+        });
         $this->historicalSaleService = $this->createMock(HistoricalSaleService::class);
         $this->balanceService = $this->createMock(BalanceService::class);
         $notificationCenter = $this->createMock(NotificationCenterService::class);
@@ -151,7 +161,13 @@ class CommunicationSaleServiceTransactionStatusTest extends TestCase
      */
     private function fakeEtecsaProviderThatThrows404(): RechargeProviderInterface&CommunicationProviderInterface
     {
-        return new class implements RechargeProviderInterface {
+        $errorCode = fn (): int => $this->etecsaStatusErrorCode;
+
+        return new class($errorCode) implements RechargeProviderInterface {
+            public function __construct(private readonly \Closure $errorCode)
+            {
+            }
+
             public function getCode(): CommunicationProviderEnum
             {
                 return CommunicationProviderEnum::ETECSA;
@@ -176,7 +192,7 @@ class CommunicationSaleServiceTransactionStatusTest extends TestCase
 
             public function fetchRechargeStatus(ProviderContext $context, ProviderStatusQuery $query): ProviderStatusResult
             {
-                throw new \Exception('Not Found', 404);
+                throw new \Exception('Provider error', ($this->errorCode)());
             }
         };
     }
@@ -345,5 +361,85 @@ class CommunicationSaleServiceTransactionStatusTest extends TestCase
         $this->assertSame(3, TransactionStatus::retryCountOf($status), 'El contador debía seguir en 2 y avanzar a 3, no reiniciarse a 0->1.');
         $this->assertSame('RETRYABLE', $status['outcome']);
         $this->assertSame(CommunicationStateEnum::CREATED->value, $this->saleRecharge->getStateProcess());
+    }
+
+    // ---- caracterización (COMR-255): cadena de reintentos del HTTP 400, hoy sin tope ----
+
+    private function prepareEtecsaSaleReturning(int $errorCode): void
+    {
+        $this->saleRecharge->setProvider('ETECSA');
+        $this->saleRecharge->setStateProcess('PENDING');
+        $this->etecsaStatusErrorCode = $errorCode;
+    }
+
+    public function testHttp400OnTheStatusQueryRedispatchesACheckWithATwoSecondDelay(): void
+    {
+        $this->prepareEtecsaSaleReturning(400);
+
+        $this->service->checkStatusOrder(555);
+
+        $this->assertCount(1, $this->dispatched);
+        [$message, $stamps] = $this->dispatched[0];
+        $this->assertInstanceOf(CheckSaleMessage::class, $message);
+        $this->assertSame(555, $message->getSaleId());
+        $this->assertSame(2000, $stamps[0]->getDelay());
+        $this->assertInstanceOf(DelayStamp::class, $stamps[0]);
+        $this->assertSame(CommunicationStateEnum::PENDING, $this->saleRecharge->getState());
+        $this->assertSame('INTERNAL_PROVIDER_HTTP_400', $this->saleRecharge->getTransactionStatus()['providerCode']);
+    }
+
+    /**
+     * Documenta el defecto actual: nada limita cuántas veces se vuelve a encolar. Cada consulta que
+     * recibe un 400 despacha otra, siempre con la misma espera de 2 s, sin contador ni antigüedad máxima.
+     * Cuando se añada el tope (backoff, next_check_at) este test debe cambiar a propósito.
+     */
+    public function testHttp400ChainHasNoCapAndNeverChangesItsDelay(): void
+    {
+        $this->prepareEtecsaSaleReturning(400);
+
+        for ($i = 0; $i < 25; ++$i) {
+            $this->service->checkStatusOrder(555);
+        }
+
+        $this->assertCount(25, $this->dispatched);
+        $delays = array_unique(array_map(static fn (array $d): int => $d[1][0]->getDelay(), $this->dispatched));
+        $this->assertSame([2000], array_values($delays));
+        $this->assertSame(CommunicationStateEnum::PENDING, $this->saleRecharge->getState());
+    }
+
+    public function testOtherErrorCodesOnTheStatusQueryRecordHistoryButDispatchNothing(): void
+    {
+        $this->prepareEtecsaSaleReturning(500);
+        $this->historicalSaleService->expects($this->once())->method('createHistoricalCommunication');
+
+        $this->service->checkStatusOrder(555);
+
+        $this->assertSame([], $this->dispatched);
+        $this->assertSame(CommunicationStateEnum::PENDING, $this->saleRecharge->getState());
+    }
+
+    public function testHttp404BeforeFourHoursDoesNotResendNorChangeTheSale(): void
+    {
+        $this->prepareEtecsaSaleReturning(404);
+        $this->saleRecharge->setCreatedAt(new \DateTimeImmutable('-1 hour'));
+
+        $this->service->checkStatusOrder(555);
+
+        $this->assertSame([], $this->dispatched);
+        $this->assertSame('PENDING', $this->saleRecharge->getStateProcess());
+        $this->assertSame(CommunicationStateEnum::PENDING, $this->saleRecharge->getState());
+    }
+
+    public function testHttp404AfterThreeResendsMarksTheSaleRejectedForManualReview(): void
+    {
+        $this->prepareEtecsaSaleReturning(404);
+        $this->saleRecharge->setTransactionStatus(['orderId' => 1, 'retryCount' => 3]);
+
+        $this->service->checkStatusOrder(555);
+
+        $this->assertSame([], $this->dispatched);
+        $this->assertSame(CommunicationStateEnum::REJECTED, $this->saleRecharge->getState());
+        $this->assertSame(CommunicationStateEnum::REJECTED->value, $this->saleRecharge->getStateProcess());
+        $this->assertSame('INTERNAL_GATEWAY_MISSING', $this->saleRecharge->getTransactionStatus()['providerCode']);
     }
 }
