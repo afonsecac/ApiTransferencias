@@ -19,8 +19,23 @@ doctrine:
                 prefix: 'App\Entity'
                 alias: App
 
+# Entidades de los contextos nuevos (ADR-001): viven en Domain con atributos de Doctrine\ORM\Mapping.
+# Cada contexto registra aquí su carpeta Domain (en la clave `mappings` de arriba), por ejemplo:
+#
+#   Catalogo:
+#       type: attribute
+#       is_bundle: false
+#       dir: '%kernel.project_dir%/src/Market/Catalogo/Domain'
+#       prefix: 'App\Market\Catalogo\Domain'
 when@test:
     doctrine:
+        orm:
+            mappings:
+                EjemploPedido:
+                    type: attribute
+                    is_bundle: false
+                    dir: '%kernel.project_dir%/tests/Examples/Pedido/Domain'
+                    prefix: 'App\Tests\Examples\Pedido\Domain'
         dbal:
             # "TEST_TOKEN" is typically set by ParaTest
             dbname_suffix: '_test%env(default::TEST_TOKEN)%'

@@ -33,7 +33,9 @@ final class MarketLayersTest
                 Selector::inNamespace('Doctrine'),
                 Selector::inNamespace('App\Service'),
             )
-            ->because('ADR-001: Domain no importa Symfony, Doctrine ni App\Service.');
+            // Los atributos de mapeo son metadatos inertes: PHP los ignora si Doctrine no está cargado.
+            ->excluding(Selector::inNamespace('Doctrine\ORM\Mapping'))
+            ->because('ADR-001: Domain no importa Symfony, Doctrine (salvo los atributos de Doctrine\ORM\Mapping) ni App\Service.');
     }
 
     #[TestRule]
