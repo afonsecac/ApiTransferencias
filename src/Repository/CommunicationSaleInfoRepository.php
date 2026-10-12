@@ -183,6 +183,25 @@ class CommunicationSaleInfoRepository extends ServiceEntityRepository
      * @return CommunicationSaleInfo[]
      * @throws \DateMalformedStringException
      */
+    /**
+     * Ventas aceptadas que llevan en SENDING desde antes de $before (COMR-257): candidatas al rescate.
+     *
+     * @return list<CommunicationSaleInfo>
+     */
+    public function findStuckSending(\DateTimeImmutable $before, int $limit): array
+    {
+        return array_values($this->onlyDispatchableSubtypes($this->createQueryBuilder('csi'), 'csi')
+            ->andWhere('csi.state = :status')
+            ->andWhere('csi.stateProcess = :sending')
+            ->andWhere('csi.updatedAt < :before')
+            ->setParameter('status', CommunicationStateEnum::PENDING)
+            ->setParameter('sending', 'SENDING')
+            ->setParameter('before', $before)
+            ->orderBy('csi.id', 'ASC')
+            ->setMaxResults($limit)
+            ->getQuery()->execute());
+    }
+
     public function getLastPending(): array
     {
         return $this->onlyDispatchableSubtypes($this->createQueryBuilder('csi'), 'csi')
