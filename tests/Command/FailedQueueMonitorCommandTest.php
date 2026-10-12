@@ -2,6 +2,7 @@
 
 namespace App\Tests\Command;
 
+use App\Command\FailedQueueMonitorCommand;
 use App\Tests\Functional\FunctionalTestCase;
 use Doctrine\DBAL\Connection;
 use Symfony\Component\Console\Command\Command;
@@ -26,8 +27,7 @@ class FailedQueueMonitorCommandTest extends FunctionalTestCase
         // Dentro de la transacción del test (se revierte): la cola arranca vacía.
         $this->connection->executeStatement("DELETE FROM messenger_messages WHERE queue_name = 'failed'");
 
-        $application = new \Symfony\Bundle\FrameworkBundle\Console\Application(self::$kernel);
-        $this->tester = new CommandTester($application->find('app:monitor:failed-queue'));
+        $this->tester = new CommandTester(new FailedQueueMonitorCommand($this->connection));
     }
 
     private function failed(int $count, string $age = '1 minute', string $type = 'App\\\\Message\\\\CheckSaleMessage'): void
