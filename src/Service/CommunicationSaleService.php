@@ -778,6 +778,9 @@ class CommunicationSaleService extends CommonService
                         $this->logger->info("Sale {$saleId}: already completed by another worker, skipping balance.");
                     }
                 }
+                if ($saleRecharge->getState() === CommunicationStateEnum::PENDING) {
+                    $saleRecharge->scheduleNextCheck();
+                }
                 $this->em->flush();
                 // Solo despachar check si el envío fue aceptado (ACCEPTED). Si el
                 // resultado es UNKNOWN (timeout/error de transporte: no sabemos si
@@ -1017,6 +1020,10 @@ class CommunicationSaleService extends CommonService
                 TransactionStatus::fromDispatch($dispatchResult, $provider->value),
             ));
             $sale->setStateProcess(CommunicationStateEnum::PENDING->value);
+            // Aceptada o de resultado desconocido: queda esperando consulta (el cron recoge las UNKNOWN).
+            if (in_array($dispatchResult->outcome, [ProviderOutcomeEnum::ACCEPTED, ProviderOutcomeEnum::UNKNOWN], true)) {
+                $sale->scheduleNextCheck();
+            }
 
             if ($dispatchResult->outcome === ProviderOutcomeEnum::UNKNOWN) {
                 // Transporte falló: no sabemos si el proveedor recibió la venta.
@@ -1459,6 +1466,7 @@ class CommunicationSaleService extends CommonService
                     $statusResult->recordHistoryWithoutData ? [] : $statusEnvelope
                 );
             }
+            $this->recordCheckOutcome($sale);
             $this->em->flush();
         } catch (\Exception $e) {
             $message = $e->getMessage();
@@ -1487,6 +1495,9 @@ class CommunicationSaleService extends CommonService
                         $this->em->flush();
                         $this->messageBus->dispatch(new SaleRechargeMessage($sale->getId()));
                         $this->logger->info("Sale {$saleId}: not found in ApiComm, resending (attempt {$nextRetryCount})");
+                    } else {
+                        $sale->recordCheckAttempt();
+                        $this->em->flush();
                     }
                 } else {
                     $now = new \DateTimeImmutable();
@@ -1507,6 +1518,7 @@ class CommunicationSaleService extends CommonService
                     );
                     $sale->setState(CommunicationStateEnum::REJECTED);
                     $sale->setStateProcess(CommunicationStateEnum::REJECTED->value);
+                    $sale->clearNextCheck();
                     $sale->setTransactionStatus($retryEnvelope);
                     $this->historicalSaleService->createHistoricalCommunication(
                         $sale->getId(),
@@ -1527,6 +1539,7 @@ class CommunicationSaleService extends CommonService
                     'La orden aun esta en procesamiento',
                 );
                 $sale->setTransactionStatus($httpErrorEnvelope);
+                $sale->recordCheckAttempt();
                 $this->historicalSaleService->createHistoricalCommunication(
                     $sale->getId(),
                     CommunicationStateEnum::PENDING,
@@ -1543,10 +1556,25 @@ class CommunicationSaleService extends CommonService
                     CommunicationStateEnum::PENDING,
                     TransactionStatus::internal(ProviderOutcomeEnum::UNKNOWN, 'INTERNAL_STATUS_QUERY_ERROR', $message)
                 );
+                $sale->recordCheckAttempt();
                 $this->em->flush();
             }
             $this->logger->info($message);
         }
+    }
+
+    /**
+     * COMR-260 (paso 1): tras una consulta que no falló, la venta pendiente cuenta un intento y programa la
+     * siguiente; si ya terminó (completada o rechazada), deja de tener consulta programada. Solo se escribe.
+     */
+    private function recordCheckOutcome(CommunicationSaleInfo $sale): void
+    {
+        if ($sale->getState() === CommunicationStateEnum::PENDING) {
+            $sale->recordCheckAttempt();
+
+            return;
+        }
+        $sale->clearNextCheck();
     }
 
     /**
