@@ -76,6 +76,8 @@ class CommunicationSaleServiceTransactionStatusTest extends TestCase
     private CommunicationSaleRecharge $saleRecharge;
     /** Código de la excepción cruda que lanza el fake de ETECSA al consultar el estado. */
     private int $etecsaStatusErrorCode = 404;
+    /** Si el fake de ETECSA acepta el envío (ACCEPTED) en vez de fallar. */
+    private bool $etecsaRechargeAccepted = false;
     /** @var list<array{object, list<object>}> mensajes despachados al bus, con sus sellos */
     private array $dispatched = [];
 
@@ -162,9 +164,10 @@ class CommunicationSaleServiceTransactionStatusTest extends TestCase
     private function fakeEtecsaProviderThatThrows404(): RechargeProviderInterface&CommunicationProviderInterface
     {
         $errorCode = fn (): int => $this->etecsaStatusErrorCode;
+        $accepts = fn (): bool => $this->etecsaRechargeAccepted;
 
-        return new class($errorCode) implements RechargeProviderInterface {
-            public function __construct(private readonly \Closure $errorCode)
+        return new class($errorCode, $accepts) implements RechargeProviderInterface {
+            public function __construct(private readonly \Closure $errorCode, private readonly \Closure $accepts)
             {
             }
 
@@ -187,6 +190,10 @@ class CommunicationSaleServiceTransactionStatusTest extends TestCase
 
             public function recharge(ProviderContext $context, RechargeRequest $request): ProviderDispatchResult
             {
+                if (($this->accepts)()) {
+                    return new ProviderDispatchResult(outcome: \App\Enums\ProviderOutcomeEnum::ACCEPTED);
+                }
+
                 throw new \RuntimeException('not used in this test');
             }
 
@@ -405,6 +412,111 @@ class CommunicationSaleServiceTransactionStatusTest extends TestCase
         $delays = array_unique(array_map(static fn (array $d): int => $d[1][0]->getDelay(), $this->dispatched));
         $this->assertSame([2000], array_values($delays));
         $this->assertSame(CommunicationStateEnum::PENDING, $this->saleRecharge->getState());
+    }
+
+    // ---- COMR-260 paso 1: la consulta escribe next_check_at y check_attempts (todavía nadie los lee) ----
+
+    public function testHttp400RecordsTheAttemptAndSchedulesTheNextCheck(): void
+    {
+        $this->prepareEtecsaSaleReturning(400);
+        $before = new \DateTimeImmutable();
+
+        $this->service->checkStatusOrder(555);
+
+        $this->assertSame(1, $this->saleRecharge->getCheckAttempts());
+        $this->assertNextCheckIsAbout(15, $before);
+    }
+
+    public function testOtherErrorsOnTheStatusQueryAlsoRecordTheAttempt(): void
+    {
+        $this->prepareEtecsaSaleReturning(500);
+        $before = new \DateTimeImmutable();
+
+        $this->service->checkStatusOrder(555);
+
+        $this->assertSame(1, $this->saleRecharge->getCheckAttempts());
+        $this->assertNextCheckIsAbout(15, $before);
+    }
+
+    public function testEachFurtherAttemptLengthensTheWait(): void
+    {
+        $this->prepareEtecsaSaleReturning(500);
+
+        for ($i = 0; $i < 3; ++$i) {
+            $before = new \DateTimeImmutable();
+            $this->service->checkStatusOrder(555);
+        }
+
+        $this->assertSame(3, $this->saleRecharge->getCheckAttempts());
+        $this->assertNextCheckIsAbout(300, $before);
+    }
+
+    public function testHttp404BeforeFourHoursStillRecordsTheAttempt(): void
+    {
+        $this->prepareEtecsaSaleReturning(404);
+        $this->saleRecharge->setCreatedAt(new \DateTimeImmutable('-1 hour'));
+        $before = new \DateTimeImmutable();
+
+        $this->service->checkStatusOrder(555);
+
+        $this->assertSame(1, $this->saleRecharge->getCheckAttempts());
+        $this->assertNextCheckIsAbout(15, $before);
+    }
+
+    public function testSaleRejectedAfterMaxRetriesDoesNotKeepAScheduledCheck(): void
+    {
+        $this->prepareEtecsaSaleReturning(404);
+        $this->saleRecharge->setTransactionStatus(TransactionStatus::withRetry(
+            $this->saleRecharge->getTransactionStatus(),
+            \App\Enums\ProviderOutcomeEnum::RETRYABLE,
+            'INTERNAL_GATEWAY_NOT_FOUND_RETRY',
+            'x',
+            ['count' => 3, 'lastAttemptAt' => (new \DateTimeImmutable('-10 hours'))->format(\DateTimeInterface::ATOM)],
+        ));
+        $this->saleRecharge->scheduleNextCheck(new \DateTimeImmutable());
+
+        $this->service->checkStatusOrder(555);
+
+        $this->assertSame(CommunicationStateEnum::REJECTED, $this->saleRecharge->getState());
+        $this->assertNull($this->saleRecharge->getNextCheckAt());
+    }
+
+    public function testQueryThatLeavesTheSalePendingRecordsTheAttempt(): void
+    {
+        // CSQ sin respuesta del proveedor: resultado UNKNOWN, la venta sigue PENDING sin pasar por el catch.
+        $this->saleRecharge->setStateProcess('PENDING');
+        $this->csqClient->method('getTransactionInfo')->willThrowException(new \App\Exception\MyCurrentException('CSQ_DOWN', 'sin respuesta', 503));
+        $before = new \DateTimeImmutable();
+
+        $this->service->checkStatusOrder(555);
+
+        $this->assertSame(CommunicationStateEnum::PENDING, $this->saleRecharge->getState());
+        $this->assertSame(1, $this->saleRecharge->getCheckAttempts());
+        $this->assertNextCheckIsAbout(15, $before);
+    }
+
+    public function testAcceptedDispatchSchedulesTheFirstCheckWithoutCountingAnAttempt(): void
+    {
+        $this->prepareEtecsaSaleReturning(404);
+        $this->saleRecharge->setStateProcess('CREATED');
+        $this->etecsaRechargeAccepted = true;
+        $this->availabilityService->method('canDispatchTo')->willReturn(true);
+        $this->balanceService->method('balance')->willReturn(new AccountBalanceDto('USD', 1000.0));
+        $this->connection->method('executeStatement')->willReturn(1);
+        $before = new \DateTimeImmutable();
+
+        $this->service->invokeRechargeCommunication(555);
+
+        $this->assertSame(0, $this->saleRecharge->getCheckAttempts());
+        $this->assertNextCheckIsAbout(5, $before);
+    }
+
+    private function assertNextCheckIsAbout(int $seconds, \DateTimeImmutable $before): void
+    {
+        $next = $this->saleRecharge->getNextCheckAt();
+        $this->assertNotNull($next);
+        $this->assertGreaterThanOrEqual($before->getTimestamp() + $seconds, $next->getTimestamp());
+        $this->assertLessThanOrEqual($before->getTimestamp() + $seconds + 5, $next->getTimestamp());
     }
 
     public function testOtherErrorCodesOnTheStatusQueryRecordHistoryButDispatchNothing(): void

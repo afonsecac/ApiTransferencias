@@ -13,6 +13,7 @@ use ApiPlatform\Metadata\Post;
 use App\DTO\ReserveRecharge;
 use App\Enums\CommunicationStateEnum;
 use App\Repository\CommunicationSaleInfoRepository;
+use App\Service\SaleCheckBackoff;
 use App\State\CommunicationSaleProvider;
 use App\State\CreateSaleInfoProcessor;
 use Doctrine\Common\Collections\ArrayCollection;
@@ -276,6 +277,17 @@ class CommunicationSaleInfo
 
     #[ORM\Column(length: 20, nullable: true)]
     private ?string $stateProcess = null;
+
+    /**
+     * Cuándo toca la próxima consulta de estado al proveedor (COMR-260). En el paso 1 del despliegue solo
+     * se escribe; la selección de ventas por esta columna llega en el paso 2. Null: sin consulta programada.
+     */
+    #[ORM\Column(nullable: true)]
+    private ?\DateTimeImmutable $nextCheckAt = null;
+
+    /** Consultas de estado ya hechas a esta venta; fija la espera hasta la siguiente (SaleCheckBackoff). */
+    #[ORM\Column(options: ['default' => 0])]
+    private int $checkAttempts = 0;
 
     /**
      * Snapshot inmutable del proveedor que procesó (o procesará) esta venta —
@@ -600,6 +612,40 @@ class CommunicationSaleInfo
     public function getStateProcess(): ?string
     {
         return $this->stateProcess;
+    }
+
+    public function getNextCheckAt(): ?\DateTimeImmutable
+    {
+        return $this->nextCheckAt;
+    }
+
+    public function getCheckAttempts(): int
+    {
+        return $this->checkAttempts;
+    }
+
+    /** Programa la próxima consulta según las ya hechas, sin contar una nueva. */
+    public function scheduleNextCheck(\DateTimeImmutable $now = new \DateTimeImmutable()): static
+    {
+        $this->nextCheckAt = SaleCheckBackoff::nextCheckAt($this->checkAttempts, $now);
+
+        return $this;
+    }
+
+    /** Cuenta una consulta hecha que dejó la venta pendiente y programa la siguiente. */
+    public function recordCheckAttempt(\DateTimeImmutable $now = new \DateTimeImmutable()): static
+    {
+        ++$this->checkAttempts;
+
+        return $this->scheduleNextCheck($now);
+    }
+
+    /** La venta ya no espera consulta (estado final). */
+    public function clearNextCheck(): static
+    {
+        $this->nextCheckAt = null;
+
+        return $this;
     }
 
     public function setStateProcess(?string $stateProcess): static
