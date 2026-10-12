@@ -144,4 +144,44 @@ class ClientServiceProviderCoverageResolverTest extends TestCase
 
         $this->assertTrue($this->resolver->isCoveredByRows($rows, $this->packageFor('Mobile', 'Data')));
     }
+
+    // ---- COMR-264 (C1): área opcional ----
+
+    private function packageWithArea(string $area): CommunicationPackage
+    {
+        return (new CommunicationPackage())
+            ->setName('P')
+            ->setDescription('P')
+            ->setDestinationAmount(1.0)
+            ->setDestinationCurrency('CUP')
+            ->setService(['name' => 'Gift', 'subservice' => ['name' => 'Card'], 'area' => ['name' => $area]]);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function row(?string $areaName, bool $withAreaKey = true): array
+    {
+        $row = ['id' => 1, 'provider' => 'ETECSA', 'fallbackProvider' => null, 'environmentId' => null, 'saleType' => null, 'serviceName' => 'Gift', 'subserviceName' => 'Card', 'priority' => 100];
+        if ($withAreaKey) {
+            $row['areaName'] = $areaName;
+        }
+
+        return $row;
+    }
+
+    public function testARowWithAnAreaCoversOnlyPackagesOfThatArea(): void
+    {
+        $rows = [$this->row('Retail')];
+
+        $this->assertTrue($this->resolver->isCoveredByRows($rows, $this->packageWithArea('Retail')));
+        $this->assertFalse($this->resolver->isCoveredByRows($rows, $this->packageWithArea('Gift Cards')));
+        $this->assertFalse($this->resolver->isCoveredByRows($rows, $this->packageFor('Gift', 'Card')), 'Un paquete sin área no queda cubierto por una regla de un área concreta.');
+    }
+
+    public function testARowWithoutAnAreaCoversPackagesOfAnyArea(): void
+    {
+        $this->assertTrue($this->resolver->isCoveredByRows([$this->row(null)], $this->packageWithArea('Retail')));
+        $this->assertTrue($this->resolver->isCoveredByRows([$this->row(null, withAreaKey: false)], $this->packageWithArea('Retail')), 'Proyección en caché anterior al área.');
+    }
 }

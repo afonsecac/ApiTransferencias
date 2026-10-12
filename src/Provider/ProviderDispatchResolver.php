@@ -167,10 +167,11 @@ class ProviderDispatchResolver
         $service = $package->getService();
         $packageServiceName = $service['name'] ?? null;
         $packageSubserviceName = $service['subservice']['name'] ?? null;
+        $packageAreaName = $service['area']['name'] ?? null;
 
         $applicable = array_values(array_filter(
             $rows,
-            fn (array $row) => $this->rowApplies($row, $environmentId, $saleType, $packageServiceName, $packageSubserviceName),
+            fn (array $row) => $this->rowApplies($row, $environmentId, $saleType, $packageServiceName, $packageSubserviceName, $packageAreaName),
         ));
 
         if ($applicable === []) {
@@ -193,9 +194,12 @@ class ProviderDispatchResolver
     }
 
     /**
-     * @param array{environmentId:?int, saleType:?string, serviceName:?string, subserviceName:?string} $row
+     * `areaName` puede faltar en la fila: la proyección se guarda en caché y una anterior al área no la trae
+     * (se trata como «sin área», que es lo que significa en todas las filas existentes).
+     *
+     * @param array{environmentId:?int, saleType:?string, serviceName:?string, subserviceName:?string, areaName?:?string} $row
      */
-    private function rowApplies(array $row, ?int $environmentId, ?string $saleType, ?string $packageServiceName, ?string $packageSubserviceName): bool
+    private function rowApplies(array $row, ?int $environmentId, ?string $saleType, ?string $packageServiceName, ?string $packageSubserviceName, ?string $packageAreaName = null): bool
     {
         if ($row['environmentId'] !== null && $row['environmentId'] !== $environmentId) {
             return false;
@@ -209,16 +213,25 @@ class ProviderDispatchResolver
         if ($row['subserviceName'] !== null && trim($row['subserviceName']) !== trim($packageSubserviceName ?? '')) {
             return false;
         }
+        // Una fila sin área aplica a cualquier paquete; una fila con área solo al paquete de esa área.
+        if (($row['areaName'] ?? null) !== null && trim($row['areaName']) !== trim($packageAreaName ?? '')) {
+            return false;
+        }
 
         return true;
     }
 
     /**
-     * @param array{environmentId:?int, saleType:?string, serviceName:?string, subserviceName:?string} $row
+     * Pesos 16/8/4/2/1: cada dimensión pesa más que todas las siguientes juntas (el área, que es la más
+     * específica, más que entorno + tipo de venta + servicio + subservicio). Para las filas actuales, sin
+     * área, el orden relativo es idéntico al de antes.
+     *
+     * @param array{environmentId:?int, saleType:?string, serviceName:?string, subserviceName:?string, areaName?:?string} $row
      */
     private function specificity(array $row): int
     {
-        return ($row['environmentId'] !== null ? 8 : 0)
+        return (($row['areaName'] ?? null) !== null ? 16 : 0)
+            + ($row['environmentId'] !== null ? 8 : 0)
             + ($row['saleType'] !== null ? 4 : 0)
             + ($row['serviceName'] !== null ? 2 : 0)
             + ($row['subserviceName'] !== null ? 1 : 0);

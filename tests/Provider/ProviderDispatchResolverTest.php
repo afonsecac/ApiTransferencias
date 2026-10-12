@@ -104,6 +104,7 @@ class ProviderDispatchResolverTest extends TestCase
         ?string $subserviceName = null,
         int $priority = 100,
         int $id = 1,
+        ?string $areaName = null,
     ): array {
         return [
             'id' => $id,
@@ -113,6 +114,7 @@ class ProviderDispatchResolverTest extends TestCase
             'saleType' => $saleType,
             'serviceName' => $serviceName,
             'subserviceName' => $subserviceName,
+            'areaName' => $areaName,
             'priority' => $priority,
         ];
     }
@@ -939,5 +941,72 @@ class ProviderDispatchResolverTest extends TestCase
         ], $this->packageWithService('Mobile', 'AIRTIME'), 'recharge');
 
         $this->assertSame(['ETECSA'], $order);
+    }
+
+    // ---- COMR-264 (C1): área opcional en el routing ----
+
+    private function packageWithArea(string $area): CommunicationPackage
+    {
+        return $this->package()->setService(['name' => 'Gift', 'subservice' => ['name' => 'Card'], 'area' => ['name' => $area]]);
+    }
+
+    public function testARowWithAnAreaAppliesOnlyToPackagesOfThatArea(): void
+    {
+        $rows = [$this->routeScope('CSQ', serviceName: 'Gift', subserviceName: 'Card', areaName: 'Retail', id: 1)];
+
+        $this->assertSame(['CSQ'], $this->candidateOrder($rows, $this->packageWithArea('Retail')));
+    }
+
+    public function testARowWithAnAreaDoesNotApplyToAPackageOfAnotherAreaOrWithoutArea(): void
+    {
+        $rows = [$this->routeScope('CSQ', serviceName: 'Gift', subserviceName: 'Card', areaName: 'Retail', id: 1)];
+
+        $this->assertSame(['ETECSA'], $this->candidateOrder($rows, $this->packageWithArea('Gift Cards')), 'Otra área: cae al proveedor por defecto.');
+    }
+
+    public function testARowWithAnAreaDoesNotApplyToAPackageWithoutArea(): void
+    {
+        $rows = [$this->routeScope('CSQ', serviceName: 'Gift', subserviceName: 'Card', areaName: 'Retail', id: 1)];
+
+        $this->assertSame(['ETECSA'], $this->candidateOrder($rows, $this->packageWithService('Gift', 'Card')));
+    }
+
+    public function testARowWithoutAreaStillAppliesToAPackageWithAnArea(): void
+    {
+        $rows = [$this->routeScope('CSQ', serviceName: 'Gift', subserviceName: 'Card', id: 1)];
+
+        $this->assertSame(['CSQ'], $this->candidateOrder($rows, $this->packageWithArea('Retail')));
+    }
+
+    public function testTheAreaRowWinsOverAnEquallySpecificRowWithoutArea(): void
+    {
+        // Misma categoría; la fila con área es más específica aunque se creara después y tenga más prioridad numérica.
+        $order = $this->candidateOrder([
+            $this->routeScope('CSQ', serviceName: 'Gift', subserviceName: 'Card', priority: 0, id: 1),
+            $this->routeScope('DTONE', serviceName: 'Gift', subserviceName: 'Card', areaName: 'Retail', priority: 100, id: 2),
+        ], $this->packageWithArea('Retail'));
+
+        $this->assertSame(['DTONE', 'CSQ'], $order);
+    }
+
+    public function testTheAreaOutweighsEnvironmentSaleTypeServiceAndSubserviceCombined(): void
+    {
+        // 16 (área) > 8 + 4 + 2 + 1 (entorno + tipo de venta + servicio + subservicio).
+        $order = $this->candidateOrder([
+            $this->routeScope('CSQ', environmentId: 10, saleType: 'recharge', serviceName: 'Gift', subserviceName: 'Card', priority: 0, id: 1),
+            $this->routeScope('DTONE', areaName: 'Retail', priority: 100, id: 2),
+        ], $this->packageWithArea('Retail'), 'recharge');
+
+        $this->assertSame(['DTONE', 'CSQ'], $order);
+    }
+
+    public function testARowProjectionCachedBeforeTheAreaExistedIsTreatedAsHavingNoArea(): void
+    {
+        // La proyección se guarda en caché: tras el despliegue puede traer filas sin la clave areaName.
+        $legacyRow = $this->routeScope('CSQ', serviceName: 'Gift', subserviceName: 'Card', id: 1);
+        unset($legacyRow['areaName']);
+
+        $this->assertSame(['CSQ'], $this->candidateOrder([$legacyRow], $this->packageWithArea('Retail')));
+        $this->assertSame(['CSQ'], $this->candidateOrder([$legacyRow], $this->packageWithService('Gift', 'Card')));
     }
 }

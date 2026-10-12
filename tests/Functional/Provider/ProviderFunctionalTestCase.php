@@ -236,6 +236,7 @@ abstract class ProviderFunctionalTestCase extends FunctionalTestCase
         ?string $fallbackProvider = null,
         ?string $serviceName = null,
         ?string $subserviceName = null,
+        ?string $areaName = null,
     ): ClientProviderRouting {
         $routing = (new ClientProviderRouting())
             ->setClient($client)
@@ -243,7 +244,7 @@ abstract class ProviderFunctionalTestCase extends FunctionalTestCase
             ->setSaleType($saleType)
             ->setProvider($provider)
             ->setFallbackProvider($fallbackProvider)
-            ->setServiceCategory($serviceName, $subserviceName)
+            ->setServiceCategory($serviceName, $subserviceName, $areaName)
             ->setIsActive($isActive);
 
         if ($priority !== null) {

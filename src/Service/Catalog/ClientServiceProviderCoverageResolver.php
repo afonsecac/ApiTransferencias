@@ -51,7 +51,7 @@ class ClientServiceProviderCoverageResolver
      * "después" (con una fila propuesta añadida/editada, sin persistir)
      * reutilizando exactamente el mismo criterio de comodín.
      *
-     * @param list<array{serviceName:?string, subserviceName:?string}> $rows
+     * @param list<array{serviceName:?string, subserviceName:?string, areaName?:?string}> $rows
      */
     public function isCoveredByRows(array $rows, CommunicationPackage $package): bool
     {
@@ -62,9 +62,10 @@ class ClientServiceProviderCoverageResolver
         $service = $package->getService();
         $packageServiceName = $service['name'] ?? null;
         $packageSubserviceName = $service['subservice']['name'] ?? null;
+        $packageAreaName = $service['area']['name'] ?? null;
 
         foreach ($rows as $row) {
-            if ($this->rowCoversCategory($row, $packageServiceName, $packageSubserviceName)) {
+            if ($this->rowCoversCategory($row, $packageServiceName, $packageSubserviceName, $packageAreaName)) {
                 return true;
             }
         }
@@ -73,14 +74,19 @@ class ClientServiceProviderCoverageResolver
     }
 
     /**
-     * @param array{serviceName:?string, subserviceName:?string} $row
+     * `areaName` puede faltar (proyección en caché anterior al área): se trata como «sin área».
+     *
+     * @param array{serviceName:?string, subserviceName:?string, areaName?:?string} $row
      */
-    private function rowCoversCategory(array $row, ?string $packageServiceName, ?string $packageSubserviceName): bool
+    private function rowCoversCategory(array $row, ?string $packageServiceName, ?string $packageSubserviceName, ?string $packageAreaName = null): bool
     {
         if ($row['serviceName'] !== null && trim($row['serviceName']) !== trim($packageServiceName ?? '')) {
             return false;
         }
+        if ($row['subserviceName'] !== null && trim($row['subserviceName']) !== trim($packageSubserviceName ?? '')) {
+            return false;
+        }
 
-        return $row['subserviceName'] === null || trim($row['subserviceName']) === trim($packageSubserviceName ?? '');
+        return ($row['areaName'] ?? null) === null || trim($row['areaName']) === trim($packageAreaName ?? '');
     }
 }
