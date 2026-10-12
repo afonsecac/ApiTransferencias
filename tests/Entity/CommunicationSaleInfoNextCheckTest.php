@@ -42,4 +42,19 @@ class CommunicationSaleInfoNextCheckTest extends TestCase
         $this->assertSame(2, $sale->getCheckAttempts());
         $this->assertEquals(new \DateTimeImmutable('2026-10-12 12:01:00'), $sale->getNextCheckAt());
     }
+
+    public function testAnUncertainSaleStaysPendingButIsFlaggedAndStillQueryable(): void
+    {
+        $sale = new CommunicationSaleRecharge();
+        $sale->setState(\App\Enums\CommunicationStateEnum::PENDING);
+        $sale->setStateProcess('SENDING');
+        $this->assertFalse($sale->wasSentToProvider());
+
+        $sale->markUncertain();
+
+        $this->assertTrue($sale->isUncertain());
+        $this->assertSame(\App\Enums\CommunicationStateEnum::PENDING, $sale->getState());
+        $this->assertSame(CommunicationSaleRecharge::STATE_PROCESS_UNCERTAIN, $sale->getStateProcess());
+        $this->assertTrue($sale->wasSentToProvider(), 'Una venta incierta se consulta por su transactionId.');
+    }
 }

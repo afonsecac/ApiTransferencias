@@ -187,9 +187,10 @@ class CommunicationSaleInfoRepository extends ServiceEntityRepository
     {
         return $this->onlyDispatchableSubtypes($this->createQueryBuilder('csi'), 'csi')
             ->andWhere('csi.state = :status')
-            ->andWhere('csi.stateProcess = :pendingProcess')
+            ->andWhere('csi.stateProcess IN (:pendingProcesses)')
             ->setParameter('status', CommunicationStateEnum::PENDING)
-            ->setParameter('pendingProcess', CommunicationStateEnum::PENDING->value)
+            // Las inciertas (COMR-257) se siguen consultando: la respuesta del proveedor es lo que las resuelve.
+            ->setParameter('pendingProcesses', [CommunicationStateEnum::PENDING->value, CommunicationSaleInfo::STATE_PROCESS_UNCERTAIN])
             ->getQuery()->execute();
     }
 

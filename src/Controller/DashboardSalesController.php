@@ -259,6 +259,18 @@ class DashboardSalesController extends AbstractController
             ]);
         }
 
+        // COMR-257: una venta incierta puede haberla procesado ya el proveedor. Reenviarla a ciegas cobraría
+        // dos veces, así que solo se admite el reintento seguro de ETECSA (abajo); lo demás se resuelve a mano.
+        $hasSafeRetry = $sale instanceof CommunicationSaleRecharge && $sale->getProvider() === CommunicationProviderEnum::ETECSA->value;
+        if ($sale->isUncertain() && !$hasSafeRetry) {
+            return $this->json([
+                'error' => [
+                    'message' => 'The sale is uncertain: the provider may have processed it, so it cannot be resent. Resolve it manually.',
+                    'code' => 'UNCERTAIN_SALE_REQUIRES_MANUAL_RESOLUTION',
+                ],
+            ], Response::HTTP_CONFLICT);
+        }
+
         // Reintento SEGURO (check/resend vía /sale/retry): solo para
         // recargas ETECSA, único proveedor con un endpoint de reintento
         // documentado hoy. DTOne/CSQ y las ventas de paquetes siguen con el
