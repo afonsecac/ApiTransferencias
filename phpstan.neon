@@ -1,5 +1,6 @@
 includes:
     - vendor/phpstan/phpstan-symfony/extension.neon
+    - vendor/phpat/phpat/extension.neon
 
 parameters:
     level: 5
@@ -14,3 +15,9 @@ parameters:
           path: src/Entity/*
     symfony:
         containerXmlPath: var/cache/dev/App_KernelDevDebugContainer.xml
+
+services:
+    -
+        class: App\Tests\Architecture\MarketLayersTest
+        tags:
+            - phpat.test

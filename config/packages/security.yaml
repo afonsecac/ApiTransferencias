@@ -80,6 +80,9 @@ security:
         - { path: '^/api/verify', roles: PUBLIC_ACCESS }
         - { path: '^/api', roles: ROLE_API_USER }
         - { path: '^/dashboard/api', roles: ROLE_SYSTEM_USER }
+        # Denegación por defecto (ADR-001): cualquier ruta que no coincida con una regla de arriba
+        # (p. ej. un prefijo nuevo de portal) queda denegada hasta que se declare su regla explícita.
+        - { path: '^/', roles: ROLE_DENY_BY_DEFAULT }
         # - { path: ^/profile, roles: ROLE_USER }
     role_hierarchy:
         ROLE_SYSTEM_USER: ROLE_USER
