@@ -25,6 +25,8 @@ final class ProviderRoutingOutDto
     #[OAProperty(schema: ['type' => 'string', 'enum' => ['AIRTIME', 'BUNDLE', 'DATA', 'SMS', 'INTERNET', 'LANDLINE', 'uSIM'], 'nullable' => true])]
     public ?string $subserviceName = null;
 
+    public ?string $areaName = null;
+
     public bool $isActive = true;
     public ?string $notes = null;
     public ?string $createdAt = null;

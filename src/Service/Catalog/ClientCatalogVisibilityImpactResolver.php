@@ -51,6 +51,7 @@ class ClientCatalogVisibilityImpactResolver
         ?string $proposedSubserviceName,
         bool $proposedIsActive,
         ?\DateTimeImmutable $now = null,
+        ?string $proposedAreaName = null,
     ): int {
         $now ??= new \DateTimeImmutable();
 
@@ -61,7 +62,12 @@ class ClientCatalogVisibilityImpactResolver
             static fn (array $row) => $row['id'] !== $excludeRoutingId,
         ));
         if ($proposedIsActive) {
-            $afterRows[] = ['serviceName' => $proposedServiceName, 'subserviceName' => $proposedSubserviceName];
+            $proposedRow = ['serviceName' => $proposedServiceName, 'subserviceName' => $proposedSubserviceName];
+            if ($proposedAreaName !== null) {
+                // Solo con área: sin ella la fila tiene la forma de siempre.
+                $proposedRow['areaName'] = $proposedAreaName;
+            }
+            $afterRows[] = $proposedRow;
         }
 
         $newlyHidden = 0;

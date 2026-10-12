@@ -738,4 +738,94 @@ class ProviderRoutingAdminServiceTest extends TestCase
 
         $this->service->preview(999, null, null, 'DTONE');
     }
+
+    // ---- COMR-264 (C1): area opcional ----
+
+    public function testCreatePersistsTheAreaAndDerivesAKeyThatIncludesIt(): void
+    {
+        $client = $this->createMock(Client::class);
+        $client->method('getId')->willReturn(1);
+        $this->stubClientAndFreeScope($client);
+        $this->security->method('getUser')->willReturn(null);
+
+        $routing = $this->service->create(new CreateProviderRoutingDto(
+            clientId: 1,
+            provider: 'DTONE',
+            serviceName: 'Mobile',
+            subserviceName: 'AIRTIME',
+            areaName: 'Retail',
+        ));
+
+        $this->assertSame('Retail', $routing->getAreaName());
+        $this->assertSame('Mobile|AIRTIME|Retail', $routing->getServiceKey());
+    }
+
+    public function testCreateWithoutAreaKeepsTheKeyOfToday(): void
+    {
+        $client = $this->createMock(Client::class);
+        $client->method('getId')->willReturn(1);
+        $this->stubClientAndFreeScope($client);
+        $this->security->method('getUser')->willReturn(null);
+
+        $routing = $this->service->create(new CreateProviderRoutingDto(clientId: 1, provider: 'DTONE', serviceName: 'Mobile', subserviceName: 'AIRTIME'));
+
+        $this->assertNull($routing->getAreaName());
+        $this->assertSame('Mobile|AIRTIME', $routing->getServiceKey());
+    }
+
+    private function routingWithClient(?string $area = null): ClientProviderRouting
+    {
+        $client = $this->createMock(Client::class);
+        $client->method('getId')->willReturn(1);
+
+        $routing = new ClientProviderRouting();
+        $routing->setClient($client);
+        $routing->setProvider('ETECSA');
+        $routing->setServiceCategory('Mobile', 'AIRTIME', $area);
+
+        return $routing;
+    }
+
+    public function testUpdateChangesTheAreaAndRevalidatesScope(): void
+    {
+        $routing = $this->routingWithClient();
+        $this->stubScopeQuery(null);
+
+        $updated = $this->service->update($routing, new UpdateProviderRoutingDto(areaName: 'Retail'));
+
+        $this->assertSame('Retail', $updated->getAreaName());
+        $this->assertSame('Mobile|AIRTIME|Retail', $updated->getServiceKey());
+    }
+
+    public function testUpdateWithEmptyStringClearsTheAreaBackToWildcard(): void
+    {
+        $routing = $this->routingWithClient('Retail');
+        $this->stubScopeQuery(null);
+
+        $updated = $this->service->update($routing, new UpdateProviderRoutingDto(areaName: ''));
+
+        $this->assertNull($updated->getAreaName());
+        $this->assertSame('Mobile|AIRTIME', $updated->getServiceKey());
+    }
+
+    public function testUpdateOfOtherScopeFieldsPreservesTheArea(): void
+    {
+        $routing = $this->routingWithClient('Retail');
+        $this->stubScopeQuery(null);
+
+        $updated = $this->service->update($routing, new UpdateProviderRoutingDto(saleType: 'recharge'));
+
+        $this->assertSame('Retail', $updated->getAreaName());
+        $this->assertSame('Mobile|AIRTIME|Retail', $updated->getServiceKey());
+    }
+
+    public function testUpdateOfTheServiceCategoryPreservesTheArea(): void
+    {
+        $routing = $this->routingWithClient('Retail');
+        $this->stubScopeQuery(null);
+
+        $updated = $this->service->update($routing, new UpdateProviderRoutingDto(serviceName: 'Utilities', subserviceName: 'INTERNET'));
+
+        $this->assertSame('Utilities|INTERNET|Retail', $updated->getServiceKey());
+    }
 }

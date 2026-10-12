@@ -296,6 +296,7 @@ class DashboardProviderRoutingController extends AbstractController
         $provider = (string) $request->query->get('provider');
         $serviceName = $request->query->get('serviceName') ?: null;
         $subserviceName = $request->query->get('subserviceName') ?: null;
+        $areaName = $request->query->get('areaName') ?: null;
         $routingId = $request->query->has('routingId') ? (int) $request->query->get('routingId') : null;
         $isActive = $request->query->has('isActive')
             ? filter_var($request->query->get('isActive'), FILTER_VALIDATE_BOOLEAN)
@@ -320,6 +321,8 @@ class DashboardProviderRoutingController extends AbstractController
             $serviceName,
             $subserviceName,
             $isActive,
+            null,
+            $areaName,
         );
 
         return $this->json((array) $preview);
@@ -427,6 +430,7 @@ class DashboardProviderRoutingController extends AbstractController
             'fallbackProvider' => $routing->getFallbackProvider(),
             'serviceName'      => $routing->getServiceName(),
             'subserviceName'   => $routing->getSubserviceName(),
+            'areaName'         => $routing->getAreaName(),
             'isActive'         => $routing->isActive(),
             'notes'            => $routing->getNotes(),
             'createdAt'        => $routing->getCreatedAt()?->format('c'),

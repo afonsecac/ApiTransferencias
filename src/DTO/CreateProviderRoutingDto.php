@@ -39,6 +39,10 @@ class CreateProviderRoutingDto implements IInput
     #[Assert\Length(max: 255)]
     protected ?string $subserviceName;
 
+    #[OAProperty(description: 'Área a la que aplica este enrutado (p. ej. Gift Cards, Retail). null = cualquier área. Es independiente de serviceName: puede indicarse sola')]
+    #[Assert\Length(max: 255)]
+    protected ?string $areaName;
+
     #[OAProperty(description: 'Nota interna sobre el motivo de este enrutado')]
     #[Assert\Length(max: 255)]
     protected ?string $notes;
@@ -52,6 +56,7 @@ class CreateProviderRoutingDto implements IInput
         ?string $serviceName = null,
         ?string $subserviceName = null,
         ?string $notes = null,
+        ?string $areaName = null,
     ) {
         $this->clientId = $clientId;
         $this->environmentId = $environmentId;
@@ -61,6 +66,7 @@ class CreateProviderRoutingDto implements IInput
         $this->serviceName = $serviceName;
         $this->subserviceName = $subserviceName;
         $this->notes = $notes;
+        $this->areaName = $areaName;
     }
 
     #[Assert\Callback]
@@ -77,6 +83,9 @@ class CreateProviderRoutingDto implements IInput
         }
         if ($this->subserviceName !== null && str_contains($this->subserviceName, '|')) {
             $context->buildViolation('subserviceName no puede contener "|"')->atPath('subserviceName')->addViolation();
+        }
+        if ($this->areaName !== null && str_contains($this->areaName, '|')) {
+            $context->buildViolation('areaName no puede contener "|"')->atPath('areaName')->addViolation();
         }
     }
 
@@ -100,6 +109,9 @@ class CreateProviderRoutingDto implements IInput
 
     public function getSubserviceName(): ?string { return $this->subserviceName; }
     public function setSubserviceName(?string $v): void { $this->subserviceName = $v; }
+
+    public function getAreaName(): ?string { return $this->areaName; }
+    public function setAreaName(?string $v): void { $this->areaName = $v; }
 
     public function getNotes(): ?string { return $this->notes; }
     public function setNotes(?string $v): void { $this->notes = $v; }
