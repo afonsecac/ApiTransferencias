@@ -76,6 +76,10 @@ services:
             # ADR-001: entidades, objetos de valor y eventos de los contextos nuevos no son servicios.
             - '../src/Market/*/Domain/'
             - '../src/Delivery/*/Domain/'
+            - '../src/Shared/Domain/'
+
+    App\Shared\Application\Event\EventBus: '@App\Shared\Infrastructure\Event\MessengerEventBus'
+    App\Shared\Application\Event\ProcessedEvents: '@App\Shared\Infrastructure\Event\DbalProcessedEvents'
 
     App\Service\TwoFactorService:
         arguments:
@@ -116,3 +120,10 @@ services:
     # add more service definitions when explicit configuration is needed
     # please note that last definitions always *replace* previous ones
 
+
+when@test:
+    services:
+        # Los tests funcionales piden estos servicios al contenedor; en la app solo se inyectan.
+        App\Shared\Application\Event\EventBus:
+            alias: App\Shared\Infrastructure\Event\MessengerEventBus
+            public: true
