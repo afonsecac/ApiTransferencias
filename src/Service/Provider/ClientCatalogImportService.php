@@ -7,6 +7,7 @@ use App\Entity\Client;
 use App\Entity\ClientProviderRouting;
 use App\Entity\Environment;
 use App\Enums\CommunicationProviderEnum;
+use App\Enums\ProviderDomainEnum;
 use Doctrine\ORM\EntityManagerInterface;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
@@ -45,6 +46,10 @@ class ClientCatalogImportService
     {
         $providerCode = CommunicationProviderEnum::tryFrom($routing->getProvider() ?? '');
         if ($providerCode === null || $providerCode === CommunicationProviderEnum::ETECSA) {
+            return;
+        }
+        // Un proveedor que no opera en comunicaciones (OWN, de mercado) no tiene catálogo de comunicaciones.
+        if (!in_array(ProviderDomainEnum::Communications, $providerCode->domains(), true)) {
             return;
         }
 

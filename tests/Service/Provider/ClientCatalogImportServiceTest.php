@@ -155,4 +155,16 @@ class ClientCatalogImportServiceTest extends TestCase
         $this->service->importForRouting($routing);
         $this->addToAssertionCount(1);
     }
+
+    // COMR-71 (C2): un proveedor que no opera en comunicaciones (OWN, de mercado) no tiene catálogo que sincronizar.
+    public function testDoesNothingWhenTheProviderDoesNotOperateInCommunications(): void
+    {
+        $routing = new ClientProviderRouting();
+        $routing->setClient(new Client());
+        $routing->setProvider(CommunicationProviderEnum::OWN->value);
+
+        $this->catalogSyncService->expects($this->never())->method('syncProducts');
+
+        $this->service->importForRouting($routing);
+    }
 }

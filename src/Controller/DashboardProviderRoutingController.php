@@ -15,6 +15,7 @@ use App\DTO\UpdateProviderCredentialsDto;
 use App\DTO\UpdateProviderRoutingDto;
 use App\Entity\ClientProviderRouting;
 use App\Enums\CommunicationProviderEnum;
+use App\Enums\ProviderDomainEnum;
 use App\Exception\MyCurrentException;
 use App\OpenApi\Attribute\DashboardEndpoint;
 use App\Provider\ProviderCredentialsResolver;
@@ -110,7 +111,7 @@ class DashboardProviderRoutingController extends AbstractController
     #[DashboardEndpoint(summary: 'Estado de las credenciales configuradas para un proveedor (TEST/PROD)', tag: 'Provider Routing')]
     public function credentialsStatus(string $code): JsonResponse
     {
-        $provider = CommunicationProviderEnum::tryFrom($code);
+        $provider = $this->communicationsProvider($code);
         if ($provider === null) {
             return $this->json(['error' => ['message' => 'Proveedor no encontrado']], Response::HTTP_NOT_FOUND);
         }
@@ -123,7 +124,7 @@ class DashboardProviderRoutingController extends AbstractController
     #[DashboardEndpoint(summary: 'Actualizar las credenciales de un proveedor para un entorno', tag: 'Provider Routing')]
     public function updateCredentials(string $code, string $environmentType, UpdateProviderCredentialsDto $dto): JsonResponse
     {
-        $provider = CommunicationProviderEnum::tryFrom($code);
+        $provider = $this->communicationsProvider($code);
         if ($provider === null) {
             return $this->json(['error' => ['message' => 'Proveedor no encontrado']], Response::HTTP_NOT_FOUND);
         }
@@ -142,7 +143,7 @@ class DashboardProviderRoutingController extends AbstractController
     #[DashboardEndpoint(summary: 'Activar o desactivar manualmente un proveedor para un entorno', tag: 'Provider Routing')]
     public function setActive(string $code, string $environmentType, SetProviderActiveDto $dto): JsonResponse
     {
-        $provider = CommunicationProviderEnum::tryFrom($code);
+        $provider = $this->communicationsProvider($code);
         if ($provider === null) {
             return $this->json(['error' => ['message' => 'Proveedor no encontrado']], Response::HTTP_NOT_FOUND);
         }
@@ -164,7 +165,7 @@ class DashboardProviderRoutingController extends AbstractController
     #[DashboardEndpoint(summary: 'Probar en vivo si las credenciales configuradas funcionan (consulta de saldo)', tag: 'Provider Routing')]
     public function testConnection(string $code, Request $request): JsonResponse
     {
-        $provider = CommunicationProviderEnum::tryFrom($code);
+        $provider = $this->communicationsProvider($code);
         if ($provider === null) {
             return $this->json(['error' => ['message' => 'Proveedor no encontrado']], Response::HTTP_NOT_FOUND);
         }
@@ -415,6 +416,17 @@ class DashboardProviderRoutingController extends AbstractController
         }
 
         return $routing;
+    }
+
+    /**
+     * Solo proveedores que operan en comunicaciones: un código de otro dominio (OWN, de mercado) no tiene
+     * credenciales ni activación aquí, igual que uno desconocido.
+     */
+    private function communicationsProvider(string $code): ?CommunicationProviderEnum
+    {
+        $provider = CommunicationProviderEnum::tryFrom($code);
+
+        return $provider !== null && in_array(ProviderDomainEnum::Communications, $provider->domains(), true) ? $provider : null;
     }
 
     private function serialize(ClientProviderRouting $routing): array

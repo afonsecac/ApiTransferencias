@@ -94,4 +94,15 @@ class CreateProviderRoutingDtoTest extends TestCase
 
         $this->assertGreaterThan(0, count($violations));
     }
+
+    // ---- COMR-71 (C2): OWN es de mercado, no se puede elegir en el enrutado de comunicaciones ----
+
+    public function testTheOwnMarketProviderCannotBeChosenAsProviderOrFallback(): void
+    {
+        $asProvider = $this->validator->validate(new CreateProviderRoutingDto(clientId: 1, provider: 'OWN'));
+        $asFallback = $this->validator->validate(new CreateProviderRoutingDto(clientId: 1, provider: 'DTONE', fallbackProvider: 'OWN'));
+
+        $this->assertSame('provider', $asProvider[0]->getPropertyPath());
+        $this->assertSame('fallbackProvider', $asFallback[0]->getPropertyPath());
+    }
 }
