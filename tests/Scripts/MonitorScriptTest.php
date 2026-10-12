@@ -25,7 +25,8 @@ class MonitorScriptTest extends TestCase
             mkdir($this->dir . '/' . $sub, 0777, true);
         }
         file_put_contents($this->dir . '/app/.env.vps', "POSTGRES_USER=x\nDOMAIN=api.example.test\n");
-        $this->shim('docker', "echo \"\$*\" | tr '\\n' ' ' >> \"\$SHIM_LOG\"\necho >> \"\$SHIM_LOG\"\nexit \"\${FAKE_DOCKER_EXIT:-0}\"");
+        // La comprobación de la cola failed se simula aparte (no cuenta como aviso): imprime FAKE_FAILED_OUT y sale con FAKE_FAILED_EXIT.
+        $this->shim('docker', "case \"\$*\" in\n*monitor:failed-queue*) echo \"\$*\" >> \"\$SHIM_LOG.checks\"; [ -n \"\$FAKE_FAILED_OUT\" ] && echo \"\$FAKE_FAILED_OUT\"; exit \"\${FAKE_FAILED_EXIT:-0}\" ;;\nesac\necho \"\$*\" | tr '\\n' ' ' >> \"\$SHIM_LOG\"\necho >> \"\$SHIM_LOG\"\nexit \"\${FAKE_DOCKER_EXIT:-0}\"");
         $this->shim('df', "echo 'Filesystem 1K-blocks Used Available Use% Mounted on'\necho \"/dev/sda1 1000 500 500 \${FAKE_DISK:-10}% /\"");
         $this->shim('free', "echo '       total used free'\necho \"Mem: 1000 \$(( \${FAKE_MEM:-10} * 10 )) 0\"");
         file_put_contents($this->dir . '/app/scripts/health-check.sh', <<<'SH'
@@ -191,6 +192,62 @@ class MonitorScriptTest extends TestCase
         $calls = $this->alertCalls();
         $this->assertCount(1, $calls);
         $this->assertStringContainsString('DOMAIN', $calls[0]);
+    }
+
+    // ---- COMR-262: cola failed de Messenger ----
+
+    public function testFailedQueueOverTheThresholdAlertsWithTheReportOfTheCommand(): void
+    {
+        $this->monitor(['FAKE_FAILED_EXIT' => '1', 'FAKE_FAILED_OUT' => 'La cola failed tiene 40 mensajes. CheckSaleMessage: 35']);
+
+        $calls = $this->alertCalls();
+        $this->assertCount(1, $calls);
+        $this->assertStringContainsString('ALERTA COLA FAILED', $calls[0]);
+        $this->assertStringContainsString('40 mensajes', $calls[0]);
+        $this->assertSame(['failed'], $this->stateKeys());
+    }
+
+    public function testFailedQueueCheckRunsInsideTheAppContainerWithoutDependencies(): void
+    {
+        $this->monitor();
+
+        $checks = file($this->dir . '/docker-calls.checks', FILE_IGNORE_NEW_LINES) ?: [];
+        $this->assertCount(1, $checks);
+        $this->assertStringContainsString('run --rm -T --no-deps php-fpm php bin/console app:monitor:failed-queue', $checks[0]);
+        $this->assertSame([], $this->alertCalls(), 'Cola sana: ningún aviso.');
+    }
+
+    public function testFailedQueueDoesNotRepeatTheAlertEveryCycle(): void
+    {
+        $this->monitor(['FAKE_FAILED_EXIT' => '1', 'FAKE_FAILED_OUT' => 'problema']);
+        $this->monitor(['FAKE_FAILED_EXIT' => '1', 'FAKE_FAILED_OUT' => 'problema']);
+
+        $this->assertCount(1, $this->alertCalls());
+    }
+
+    public function testFailedQueueRecoveryIsNoticed(): void
+    {
+        $this->setState('failed', time() - 600);
+
+        $this->monitor(); // cola vacía otra vez
+
+        $calls = $this->alertCalls();
+        $this->assertCount(1, $calls);
+        $this->assertStringContainsString('RECUPERADO COLA FAILED', $calls[0]);
+        $this->assertSame([], $this->stateKeys());
+    }
+
+    public function testWhenTheQueueCannotBeCheckedNothingIsAlertedNorRecovered(): void
+    {
+        // Código distinto de 0 y 1 (p. ej. base de datos caída): no es "cola sana" ni "cola con problema".
+        // No debe enviar ni una alerta falsa ni un "recuperado" falso, y el estado previo se conserva.
+        $this->setState('failed', time() - 600);
+
+        $this->monitor(['FAKE_FAILED_EXIT' => '2', 'FAKE_FAILED_OUT' => 'no hay conexión']);
+
+        $this->assertSame([], $this->alertCalls());
+        $this->assertSame(['failed'], $this->stateKeys());
+        $this->assertStringContainsString('no se pudo comprobar la cola failed', $this->log());
     }
 
     public function testScriptIsExecutableWithABashShebang(): void
