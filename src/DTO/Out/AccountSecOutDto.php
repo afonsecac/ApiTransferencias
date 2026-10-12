@@ -14,4 +14,10 @@ final class AccountSecOutDto
     public ?bool $isActive = null;
     public ?float $discount = null;
     public ?float $commission = null;
+    /** Solo admin: interruptor de mercado de la cuenta. */
+    public ?bool $marketEnabled = null;
+    /** Solo admin: mercado realmente abierto (flag de la cuenta Y interruptor global). */
+    public ?bool $marketOpen = null;
+    public ?string $marketChangedAt = null;
+    public ?string $marketChangedBy = null;
 }

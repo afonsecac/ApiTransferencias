@@ -36,6 +36,14 @@ class Account implements UserInterface
     #[ORM\Column(options: ['default' => false])]
     private bool $marketEnabled = false;
 
+    /** Auditoría del último cambio del interruptor de mercado: cuándo y quién (NULL si nunca se tocó). */
+    #[ORM\Column(nullable: true)]
+    private ?DateTimeImmutable $marketChangedAt = null;
+
+    #[ORM\ManyToOne(targetEntity: User::class)]
+    #[ORM\JoinColumn(nullable: true)]
+    private ?User $marketChangedBy = null;
+
     /**
      * Concesión del rol de mercado para ESTA petición: la fija el autenticador y no se persiste (no está mapeada).
      */
@@ -154,6 +162,27 @@ class Account implements UserInterface
     public function setMarketEnabled(bool $marketEnabled): static
     {
         $this->marketEnabled = $marketEnabled;
+
+        return $this;
+    }
+
+    public function getMarketChangedAt(): ?DateTimeImmutable
+    {
+        return $this->marketChangedAt;
+    }
+
+    public function getMarketChangedBy(): ?User
+    {
+        return $this->marketChangedBy;
+    }
+
+    /**
+     * Registra el cambio del interruptor de mercado: cuándo y quién.
+     */
+    public function markMarketChanged(?User $by, DateTimeImmutable $at): static
+    {
+        $this->marketChangedBy = $by;
+        $this->marketChangedAt = $at;
 
         return $this;
     }

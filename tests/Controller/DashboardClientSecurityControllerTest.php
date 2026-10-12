@@ -154,4 +154,90 @@ class DashboardClientSecurityControllerTest extends TestCase
 
         $this->assertSame([], $data);
     }
+
+    // ---- COMR-64 (D): interruptor de mercado por cuenta ----
+
+    private function accountOfClient(int $clientId, int $accountId): Account&MockObject
+    {
+        $client = $this->createMock(Client::class);
+        $client->method('getId')->willReturn($clientId);
+        $account = $this->createMock(Account::class);
+        $account->method('getId')->willReturn($accountId);
+        $account->method('getClient')->willReturn($client);
+
+        return $account;
+    }
+
+    public function testSetMarketDelegatesToTheServiceWithTheAdminAsAuthor(): void
+    {
+        $admin = $this->createMock(User::class);
+        $this->authenticateAs($admin, true);
+        $client = $this->createMock(Client::class);
+        $client->method('getId')->willReturn(1);
+        $account = $this->accountOfClient(1, 5);
+        $account->method('isMarketEnabled')->willReturn(true);
+        $this->em->method('getRepository')->willReturnMap([
+            [Client::class, $this->repoFinding($client)],
+            [Account::class, $this->repoFinding($account)],
+        ]);
+
+        $this->accountSecurityService->expects($this->once())->method('setMarketEnabled')->with($account, true, $admin)->willReturn($account);
+        $this->accountSecurityService->method('isMarketOpen')->willReturn(false);
+
+        $data = json_decode($this->controller->setMarket(1, 5, new \App\DTO\SetAccountMarketDto(enabled: true))->getContent(), true);
+
+        $this->assertSame(5, $data['id']);
+        $this->assertTrue($data['marketEnabled']);
+        $this->assertFalse($data['marketOpen'], 'Habilitada, pero el interruptor global sigue apagado.');
+    }
+
+    public function testSetMarketReturnsNotFoundForAnAccountOfAnotherClient(): void
+    {
+        $this->authenticateAs($this->createMock(User::class), true);
+        $client = $this->createMock(Client::class);
+        $client->method('getId')->willReturn(1);
+        $this->em->method('getRepository')->willReturnMap([
+            [Client::class, $this->repoFinding($client)],
+            [Account::class, $this->repoFinding($this->accountOfClient(2, 5))],
+        ]);
+
+        $this->accountSecurityService->expects($this->never())->method('setMarketEnabled');
+
+        $this->assertSame(404, $this->controller->setMarket(1, 5, new \App\DTO\SetAccountMarketDto(enabled: true))->getStatusCode());
+    }
+
+    public function testTheAdminSeesTheMarketStateAndAuditOfEachAccountButOthersDoNot(): void
+    {
+        $account = $this->accountOfClient(1, 5);
+        $account->method('isMarketEnabled')->willReturn(true);
+        $account->method('getMarketChangedAt')->willReturn(new \DateTimeImmutable('2026-10-12T10:00:00+00:00'));
+        $changer = $this->createMock(User::class);
+        $changer->method('getEmail')->willReturn('admin@example.test');
+        $account->method('getMarketChangedBy')->willReturn($changer);
+        $this->accountSecurityService->method('isMarketOpen')->willReturn(true);
+        $client = $this->createMock(Client::class);
+        $client->method('getId')->willReturn(1);
+        $client->method('isActive')->willReturn(true);
+        $accountRepo = $this->createMock(EntityRepository::class);
+        $accountRepo->method('findBy')->willReturn([$account]);
+        $this->em->method('getRepository')->willReturnMap([
+            [Client::class, $this->repoFinding($client)],
+            [Account::class, $accountRepo],
+        ]);
+
+        $this->authenticateAs($this->createMock(User::class), true);
+        $admin = json_decode($this->controller->show(1)->getContent(), true)['accounts'][0];
+        $this->assertTrue($admin['marketEnabled']);
+        $this->assertTrue($admin['marketOpen']);
+        $this->assertSame('admin@example.test', $admin['marketChangedBy']);
+        $this->assertSame('2026-10-12T10:00:00+00:00', $admin['marketChangedAt']);
+    }
+
+    private function repoFinding(object $entity): EntityRepository&MockObject
+    {
+        $repo = $this->createMock(EntityRepository::class);
+        $repo->method('find')->willReturn($entity);
+
+        return $repo;
+    }
 }
