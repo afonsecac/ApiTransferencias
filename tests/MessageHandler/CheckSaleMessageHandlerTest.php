@@ -153,4 +153,16 @@ class CheckSaleMessageHandlerTest extends TestCase
         yield 'completada' => [CommunicationStateEnum::COMPLETED];
         yield 'rechazada' => [CommunicationStateEnum::REJECTED];
     }
+
+    public function testDoesNotAskMessengerToRetryWhenTheSaleIsUncertain(): void
+    {
+        $sale = $this->sale(CommunicationStateEnum::PENDING, 'Pending');
+        $this->service->method('checkStatusSaleInfo')->willReturnCallback(static function () use ($sale): void {
+            $sale->markUncertain();
+        });
+
+        ($this->handler)(new CheckSaleMessage(7));
+
+        $this->addToAssertionCount(1); // no lanza «Check again»: el cron horario la vuelve a consultar
+    }
 }

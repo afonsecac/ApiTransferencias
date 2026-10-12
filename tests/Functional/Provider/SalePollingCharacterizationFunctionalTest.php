@@ -104,6 +104,23 @@ class SalePollingCharacterizationFunctionalTest extends ProviderFunctionalTestCa
         $this->assertSame([$pending->getId()], $this->ids(array_values($selected)));
     }
 
+    public function testLastPendingAlsoSelectsUncertainSalesSoTheyKeepBeingQueried(): void
+    {
+        $pending = $this->sale(CommunicationStateEnum::PENDING, 'Pending');
+        $uncertain = $this->sale(CommunicationStateEnum::PENDING, CommunicationSaleInfo::STATE_PROCESS_UNCERTAIN);
+
+        $selected = array_filter($this->repository()->getLastPending(), fn (CommunicationSaleInfo $s): bool => $s->getTenant()?->getId() === $this->account->getId());
+
+        $this->assertSame($this->ids([$pending, $uncertain]), $this->ids(array_values($selected)));
+    }
+
+    public function testUncertainSaleCountsAsReservedBalance(): void
+    {
+        $this->sale(CommunicationStateEnum::PENDING, CommunicationSaleInfo::STATE_PROCESS_UNCERTAIN, 8.0);
+
+        $this->assertSame(8.0, $this->repository()->getReservedAmount($this->account->getId()));
+    }
+
     public function testLastPendingHasNoAgeLimitNorRowLimit(): void
     {
         $recent = $this->sale(CommunicationStateEnum::PENDING, 'Pending');

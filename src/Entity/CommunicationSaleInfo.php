@@ -87,6 +87,13 @@ class CommunicationSaleInfo
      */
     public const STATE_PROCESS_AWAITING_PROVIDER = 'AWAITING_PROVIDER';
 
+    /**
+     * stateProcess de una venta «incierta» (COMR-257): no sabemos si el proveedor la procesó (404 al consultarla
+     * o enviada y colgada). Sigue en state=PENDING para que su importe continúe comprometido, se sigue consultando
+     * por nuestro transactionId y NUNCA se reenvía sin confirmación: reenviarla podría cobrar dos veces.
+     */
+    public const STATE_PROCESS_UNCERTAIN = 'UNCERTAIN';
+
     #[ORM\Id]
     #[ORM\GeneratedValue(strategy: 'SEQUENCE')]
     #[ORM\Column]
@@ -612,6 +619,19 @@ class CommunicationSaleInfo
     public function getStateProcess(): ?string
     {
         return $this->stateProcess;
+    }
+
+    public function isUncertain(): bool
+    {
+        return $this->stateProcess === self::STATE_PROCESS_UNCERTAIN;
+    }
+
+    /** Marca la venta como incierta sin tocar state: sigue PENDING y su importe, comprometido. */
+    public function markUncertain(): static
+    {
+        $this->stateProcess = self::STATE_PROCESS_UNCERTAIN;
+
+        return $this;
     }
 
     public function getNextCheckAt(): ?\DateTimeImmutable

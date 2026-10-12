@@ -1365,6 +1365,9 @@ class CommunicationSaleService extends CommonService
         $this->checkStatusOrder($saleId);
     }
 
+    /** Margen antes de dar por «no encontrada» una venta que el proveedor aún puede no haber indexado (4 h). */
+    private const NOT_FOUND_GRACE_SECONDS = 4 * 3600;
+
     public function checkStatusOrder(int $saleId): void
     {
         $sale = $this->em->getRepository(CommunicationSaleInfo::class)->find($saleId);
@@ -1434,7 +1437,9 @@ class CommunicationSaleService extends CommonService
                     CommunicationStateEnum::COMPLETED,
                     $statusEnvelope
                 );
-            } elseif ($statusResult->outcome === ProviderOutcomeEnum::REJECTED) {
+            } elseif ($statusResult->outcome === ProviderOutcomeEnum::REJECTED && !$sale->isUncertain()) {
+                // Una venta incierta (COMR-257) no se rechaza ni pasa a otro proveedor por un «no la conozco»:
+                // el saldo sigue comprometido hasta que alguien la resuelva.
                 // Camino habitual de ETECSA: solo devuelve ACCEPTED en el
                 // dispatch y confirma el rechazo aquí — mismo failover que
                 // el rechazo síncrono de CSQ/DTOne en invokeRechargeCommunication()/
@@ -1472,61 +1477,40 @@ class CommunicationSaleService extends CommonService
             $message = $e->getMessage();
             $this->logger->error($message);
             if ($e->getCode() === 404) {
+                // COMR-257: un 404 es «el proveedor no la conoce», no «nunca se envió». Ya no se reenvía ni se
+                // rechaza (liberaría el saldo): pasado el margen de indexación, la venta queda incierta.
                 $currentStatus = $sale->getTransactionStatus();
-                $retryCount = TransactionStatus::retryCountOf($currentStatus);
+                $now = new \DateTimeImmutable();
+                $lastRetryAtRaw = TransactionStatus::lastRetryAtOf($currentStatus);
+                $referenceTime = $lastRetryAtRaw !== null ? new \DateTimeImmutable($lastRetryAtRaw) : $sale->getCreatedAt();
 
-                if ($sale instanceof CommunicationSaleRecharge && $retryCount < 3) {
-                    $now = new \DateTimeImmutable();
-                    $lastRetryAtRaw = TransactionStatus::lastRetryAtOf($currentStatus);
-                    $lastRetryAt = $lastRetryAtRaw !== null ? new \DateTimeImmutable($lastRetryAtRaw) : null;
-                    $referenceTime = $lastRetryAt ?? $sale->getCreatedAt();
-                    $secondsElapsed = $now->getTimestamp() - $referenceTime->getTimestamp();
-
-                    if ($secondsElapsed >= 4 * 3600) {
-                        $nextRetryCount = $retryCount + 1;
-                        $sale->setTransactionStatus(TransactionStatus::withRetry(
-                            $currentStatus,
-                            ProviderOutcomeEnum::RETRYABLE,
-                            'INTERNAL_GATEWAY_NOT_FOUND_RETRY',
-                            'Not found in ApiComm, resending',
-                            ['count' => $nextRetryCount, 'lastAttemptAt' => $now->format(\DateTimeInterface::ATOM)],
-                        ));
-                        $sale->setStateProcess(CommunicationStateEnum::CREATED->value);
-                        $this->em->flush();
-                        $this->messageBus->dispatch(new SaleRechargeMessage($sale->getId()));
-                        $this->logger->info("Sale {$saleId}: not found in ApiComm, resending (attempt {$nextRetryCount})");
-                    } else {
-                        $sale->recordCheckAttempt();
-                        $this->em->flush();
-                    }
+                if ($sale->isUncertain() || $now->getTimestamp() - $referenceTime->getTimestamp() < self::NOT_FOUND_GRACE_SECONDS) {
+                    $sale->recordCheckAttempt();
+                    $this->em->flush();
                 } else {
-                    $now = new \DateTimeImmutable();
-                    $reason = $sale instanceof CommunicationSaleRecharge
-                        ? 'Not found in ApiComm after max retries'
-                        : 'Not found in ApiComm';
-                    $retryEnvelope = TransactionStatus::withRetry(
+                    $reason = 'Not found in the provider; resolve manually, never resend blindly';
+                    $uncertainEnvelope = TransactionStatus::withRetry(
                         $currentStatus,
-                        ProviderOutcomeEnum::REJECTED,
-                        'INTERNAL_GATEWAY_MISSING',
+                        ProviderOutcomeEnum::UNKNOWN,
+                        'INTERNAL_PROVIDER_NOT_FOUND_UNCERTAIN',
                         $reason,
                         [
-                            'count' => $retryCount,
-                            'gatewayMissing' => true,
-                            'markedRejectedAt' => $now->format(\DateTimeInterface::ATOM),
+                            'count' => TransactionStatus::retryCountOf($currentStatus),
+                            'uncertain' => true,
+                            'markedUncertainAt' => $now->format(\DateTimeInterface::ATOM),
                             'reason' => $reason,
                         ],
                     );
-                    $sale->setState(CommunicationStateEnum::REJECTED);
-                    $sale->setStateProcess(CommunicationStateEnum::REJECTED->value);
-                    $sale->clearNextCheck();
-                    $sale->setTransactionStatus($retryEnvelope);
+                    $sale->markUncertain();
+                    $sale->setTransactionStatus($uncertainEnvelope);
+                    $sale->recordCheckAttempt();
                     $this->historicalSaleService->createHistoricalCommunication(
                         $sale->getId(),
-                        CommunicationStateEnum::REJECTED,
-                        $retryEnvelope
+                        CommunicationStateEnum::PENDING,
+                        $uncertainEnvelope
                     );
                     $this->em->flush();
-                    $this->logger->critical("Sale {$saleId}: not found in ApiComm, marked REJECTED for manual review.");
+                    $this->logger->critical("Sale {$saleId}: not found in the provider, marked UNCERTAIN (balance stays reserved) for manual review.");
                 }
             } elseif ($e->getCode() === 400) {
                 // internalPreserving(): un 400 durante el polling no debe

@@ -51,6 +51,10 @@ final class CheckSaleMessageHandler
         // Refrescar estado después del check
         $this->em->refresh($sale);
 
+        // Una venta incierta no se reintenta por Messenger: la vuelve a consultar el cron, sin reenviarla.
+        if ($sale->isUncertain()) {
+            return;
+        }
         if ($sale->getState() === CommunicationStateEnum::PENDING) {
             throw new MyCurrentException('501', 'Check again');
         }
