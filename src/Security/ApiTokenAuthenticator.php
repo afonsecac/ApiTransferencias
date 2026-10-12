@@ -28,6 +28,7 @@ class ApiTokenAuthenticator extends AbstractAuthenticator
         LoggerInterface $logger,
         AccountRepository $permissionRepo,
         IpMatcherService $ipMatcherService,
+        private readonly MarketAccess $marketAccess,
     )
     {
         $this->permission = $permissionRepo;
@@ -93,6 +94,12 @@ class ApiTokenAuthenticator extends AbstractAuthenticator
                 'allIps' => $request->getClientIps()
             ]);
             throw new CustomUserMessageAuthenticationException('Access not allowed from this IP address');
+        }
+
+        // Mercado (ADR-001): la cuenta habilitada recibe además ROLE_MARKET_API_USER, y solo si el interruptor
+        // global está encendido. Las cuentas actuales no cambian de roles.
+        if ($this->marketAccess->isOpenFor($permission)) {
+            $permission->grantMarketRole();
         }
 
         return new SelfValidatingPassport(new UserBadge($permission->getUserIdentifier()));
