@@ -28,11 +28,11 @@ class UpdateProviderRoutingDto implements IInput
     protected ?string $saleType;
 
     #[OAProperty(schema: ['type' => 'string', 'enum' => ['ETECSA', 'DTONE']], description: 'Proveedor a usar')]
-    #[Assert\Choice(callback: [CommunicationProviderEnum::class, 'values'])]
+    #[Assert\Choice(callback: [CommunicationProviderEnum::class, 'communicationsValues'])]
     protected ?string $provider;
 
     #[OAProperty(schema: ['type' => 'string', 'enum' => ['ETECSA', 'DTONE'], 'nullable' => true], description: 'Proveedor de respaldo: si el proveedor principal no puede despachar o rechaza el envío, se intenta este')]
-    #[Assert\Choice(callback: [CommunicationProviderEnum::class, 'values'])]
+    #[Assert\Choice(callback: [CommunicationProviderEnum::class, 'communicationsValues'])]
     protected ?string $fallbackProvider;
 
     #[OAProperty(schema: ['type' => 'string', 'enum' => ['Mobile', 'uSIM', 'Devices', 'Utilities'], 'nullable' => true], description: 'Servicio al que aplica. null = no tocar, "" = volver a comodín (cualquier servicio)')]

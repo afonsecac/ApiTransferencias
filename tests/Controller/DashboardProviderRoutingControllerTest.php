@@ -694,4 +694,24 @@ class DashboardProviderRoutingControllerTest extends TestCase
 
         $this->assertSame(3, $data['newlyHiddenPackagesCount']);
     }
+
+    // ---- COMR-71 (C2): OWN es de mercado, no tiene credenciales ni activación en comunicaciones ----
+
+    public function testEveryProviderEndpointTreatsTheMarketProviderAsNotFound(): void
+    {
+        $this->credentialsAdminService->expects($this->never())->method('getStatus');
+        $this->credentialsAdminService->expects($this->never())->method('upsert');
+        $this->availabilityService->expects($this->never())->method('setManual');
+
+        $responses = [
+            $this->controller->credentialsStatus('OWN'),
+            $this->controller->updateCredentials('OWN', 'TEST', new \App\DTO\UpdateProviderCredentialsDto()),
+            $this->controller->setActive('OWN', 'TEST', new \App\DTO\SetProviderActiveDto()),
+            $this->controller->testConnection('OWN', new Request()),
+        ];
+
+        foreach ($responses as $response) {
+            $this->assertSame(Response::HTTP_NOT_FOUND, $response->getStatusCode());
+        }
+    }
 }

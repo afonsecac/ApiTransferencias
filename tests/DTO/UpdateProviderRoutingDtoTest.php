@@ -89,4 +89,15 @@ class UpdateProviderRoutingDtoTest extends TestCase
         $this->assertGreaterThan(0, count($violations));
         $this->assertSame('areaName', $violations[0]->getPropertyPath());
     }
+
+    // ---- COMR-71 (C2) ----
+
+    public function testTheOwnMarketProviderCannotBeChosenAsProviderOrFallback(): void
+    {
+        $asProvider = $this->validator->validate(new UpdateProviderRoutingDto(provider: 'OWN'));
+        $asFallback = $this->validator->validate(new UpdateProviderRoutingDto(fallbackProvider: 'OWN'));
+
+        $this->assertSame('provider', $asProvider[0]->getPropertyPath());
+        $this->assertSame('fallbackProvider', $asFallback[0]->getPropertyPath());
+    }
 }
