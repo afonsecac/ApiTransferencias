@@ -1370,6 +1370,9 @@ class CommunicationSaleService extends CommonService
     /** Margen antes de dar por «no encontrada» una venta que el proveedor aún puede no haber indexado (4 h). */
     private const NOT_FOUND_GRACE_SECONDS = 4 * 3600;
 
+    /** Pasado este tiempo pendiente, una venta deja de darse por «en curso» y pasa a incierta (COMR-260). */
+    private const MAX_PENDING_AGE_SECONDS = 24 * 3600;
+
     public function checkStatusOrder(int $saleId): void
     {
         $sale = $this->em->getRepository(CommunicationSaleInfo::class)->find($saleId);
@@ -1387,6 +1390,8 @@ class CommunicationSaleService extends CommonService
         }
 
         $isRecharge = SaleSubtype::saleTypeOf($sale) === SaleSubtype::SALE_TYPE_RECHARGE;
+
+        $this->markUncertainIfPendingTooLong($sale);
 
         try {
             $provider = $this->providerResolver->resolveForSale($sale);
@@ -1593,6 +1598,44 @@ class CommunicationSaleService extends CommonService
         }
 
         return $rescued;
+    }
+
+    /**
+     * COMR-260 paso 2: una venta que lleva más de 24 h pendiente pasa a «incierta». Sigue en PENDING (su importe
+     * continúa comprometido) y se sigue consultando, así que si el proveedor la confirma, se completa; lo que cambia
+     * es que deja de tratarse como una venta normal en curso y aparece en la pantalla de revisión (COMR-258). Se
+     * marca una sola vez: las que ya son inciertas conservan su motivo.
+     */
+    private function markUncertainIfPendingTooLong(CommunicationSaleInfo $sale): void
+    {
+        if ($sale->isUncertain() || $sale->getStateProcess() !== CommunicationStateEnum::PENDING->value) {
+            return;
+        }
+        $createdAt = $sale->getCreatedAt();
+        if ($createdAt === null || time() - $createdAt->getTimestamp() < self::MAX_PENDING_AGE_SECONDS) {
+            return;
+        }
+
+        $reason = 'Pending for more than 24 hours without a final answer from the provider; resolve manually, never resend blindly';
+        $status = $sale->getTransactionStatus();
+        $envelope = TransactionStatus::withRetry(
+            $status,
+            ProviderOutcomeEnum::UNKNOWN,
+            'INTERNAL_PENDING_TOO_LONG_UNCERTAIN',
+            $reason,
+            [
+                'count' => TransactionStatus::retryCountOf($status),
+                'uncertain' => true,
+                'markedUncertainAt' => (new \DateTimeImmutable())->format(\DateTimeInterface::ATOM),
+                'reason' => $reason,
+            ],
+        );
+        $sale->markUncertain();
+        $sale->setTransactionStatus($envelope);
+        $this->historicalSaleService->createHistoricalCommunication($sale->getId(), CommunicationStateEnum::PENDING, $envelope);
+        // Se guarda ya: una confirmación COMPLETED a continuación hace un refresh() que descartaría cambios sin guardar.
+        $this->em->flush();
+        $this->logger->critical("Sale {$sale->getId()}: pending for more than 24 h, marked UNCERTAIN (balance stays reserved) for manual review.");
     }
 
     /**

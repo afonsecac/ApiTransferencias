@@ -578,6 +578,64 @@ class CommunicationSaleServiceTransactionStatusTest extends TestCase
         $this->assertStringContainsString('updated_at', array_values($claims)[0], 'Sin updated_at, una venta antigua reclamada hoy parecería colgada al instante.');
     }
 
+    // ---- COMR-260 paso 2: una venta pendiente más de 24 h pasa a «incierta» ----
+
+    private function pendingCsqSaleCreated(string $ago): void
+    {
+        $this->saleRecharge->setStateProcess(CommunicationStateEnum::PENDING->value);
+        $this->saleRecharge->setCreatedAt(new \DateTimeImmutable($ago));
+        // El proveedor no responde: la venta sigue pendiente tras la consulta.
+        $this->csqClient->method('getTransactionInfo')->willThrowException(new \App\Exception\MyCurrentException('CSQ_DOWN', 'sin respuesta', 503));
+    }
+
+    public function testASaleStillPendingAfter24HoursBecomesUncertainButKeepsItsReservedBalance(): void
+    {
+        $this->pendingCsqSaleCreated('-25 hours');
+        $this->historicalSaleService->expects($this->atLeastOnce())->method('createHistoricalCommunication');
+
+        $this->service->checkStatusOrder(555);
+
+        $this->assertTrue($this->saleRecharge->isUncertain());
+        $this->assertSame(CommunicationStateEnum::PENDING, $this->saleRecharge->getState(), 'Sigue PENDING: el importe sigue comprometido.');
+        // La consulta que sigue reescribe el sobre de estado, pero el bloque de reintento conserva el motivo.
+        $this->assertStringContainsString('more than 24 hours', $this->saleRecharge->getTransactionStatus()['retry']['reason']);
+        $this->assertTrue($this->saleRecharge->getTransactionStatus()['retry']['uncertain']);
+        $this->assertSame([], $this->dispatched, 'No se reenvía nada.');
+        $this->assertNotNull($this->saleRecharge->getNextCheckAt(), 'Se sigue consultando.');
+    }
+
+    public function testASaleYoungerThan24HoursIsNotMarkedUncertain(): void
+    {
+        $this->pendingCsqSaleCreated('-23 hours');
+
+        $this->service->checkStatusOrder(555);
+
+        $this->assertFalse($this->saleRecharge->isUncertain());
+        $this->assertSame(CommunicationStateEnum::PENDING->value, $this->saleRecharge->getStateProcess());
+    }
+
+    public function testAnAlreadyUncertainSaleIsNotMarkedAgainForBeingOld(): void
+    {
+        $this->pendingCsqSaleCreated('-30 hours');
+        $this->saleRecharge->markUncertain();
+
+        $this->service->checkStatusOrder(555);
+
+        $this->assertTrue($this->saleRecharge->isUncertain());
+        $this->assertArrayNotHasKey('retry', $this->saleRecharge->getTransactionStatus(), 'No se vuelve a marcar (ni a escribir el motivo) cada hora.');
+    }
+
+    public function testAnOldSaleThatTheProviderConfirmsAsCompletedIsStillCompleted(): void
+    {
+        $this->saleRecharge->setStateProcess(CommunicationStateEnum::PENDING->value);
+        $this->saleRecharge->setCreatedAt(new \DateTimeImmutable('-40 hours'));
+        $this->csqClient->method('getTransactionInfo')->willReturn(['rc' => 0, 'items' => [['resultcode' => '10', 'supplierreference' => '999', 'resultmessage' => 'ok']]]);
+        $this->connection->method('executeStatement')->willReturn(1);
+        $this->balanceService->expects($this->once())->method('createSaleBalance');
+
+        $this->service->checkStatusOrder(555);
+    }
+
     // ---- COMR-261: un rechazo síncrono debe dejar state process coherente con state ----
 
     public function testSynchronousProviderRejectionLeavesStateProcessRejectedToo(): void
