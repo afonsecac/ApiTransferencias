@@ -16,8 +16,8 @@ use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
 
 /**
- * Pruebas de caracterización (COMR-255): fijan lo que hace hoy el manejador de la consulta de estado
- * para que un cambio involuntario falle. No describen un comportamiento deseado, sino el actual.
+ * Pruebas del manejador de la consulta de estado. Nacieron como caracterización (COMR-255); desde COMR-260 paso 2
+ * el manejador ya no lanza excepciones para que Messenger reintente: el reintento lo gobierna next_check_at.
  *
  * @covers \App\MessageHandler\CheckSaleMessageHandler
  */
@@ -78,17 +78,16 @@ class CheckSaleMessageHandlerTest extends TestCase
     /**
      * @dataProvider notSentYetStateProcesses
      */
-    public function testThrowsSoMessengerRetriesWhenTheSaleWasNotSentToTheProviderYet(?string $stateProcess): void
+    public function testDoesNotCheckNorThrowWhenTheSaleWasNotSentToTheProviderYet(?string $stateProcess): void
     {
         $this->sale(CommunicationStateEnum::PENDING, $stateProcess);
         $this->service->expects($this->never())->method('checkStatusSaleInfo');
 
-        try {
-            ($this->handler)(new CheckSaleMessage(7));
-            $this->fail('Debía lanzar para que Messenger reintente.');
-        } catch (MyCurrentException $e) {
-            $this->assertSame('Sale not yet sent, retry later', $e->getMessage());
-        }
+        // COMR-260 paso 2: no se lanza para que Messenger reintente (cadena sin tope). Una venta aún sin enviar
+        // no se vuelve a consultar hasta que pasa a Pending: el cron solo selecciona las ya enviadas.
+        ($this->handler)(new CheckSaleMessage(7));
+
+        $this->addToAssertionCount(1);
     }
 
     /**
@@ -110,26 +109,25 @@ class CheckSaleMessageHandlerTest extends TestCase
         });
     }
 
-    public function testThrowsCheckAgainWhenTheSaleIsStillPendingAfterTheCheck(): void
+    public function testDoesNotAskMessengerToRetryWhenTheSaleIsStillPendingAfterTheCheck(): void
     {
         $sale = $this->sale(CommunicationStateEnum::PENDING, 'Pending');
         $this->checkLeavesTheSaleIn($sale, CommunicationStateEnum::PENDING);
 
-        $this->expectException(MyCurrentException::class);
-        $this->expectExceptionMessage('Check again');
-
+        // La siguiente consulta la programa next_check_at (espera creciente), no una excepción del manejador.
         ($this->handler)(new CheckSaleMessage(7));
+
+        $this->addToAssertionCount(1);
     }
 
-    public function testThrowsWhenTheCheckLeavesTheSaleFailed(): void
+    public function testDoesNotThrowWhenTheCheckLeavesTheSaleFailed(): void
     {
         $sale = $this->sale(CommunicationStateEnum::PENDING, 'Pending');
         $this->checkLeavesTheSaleIn($sale, CommunicationStateEnum::FAILED);
 
-        $this->expectException(MyCurrentException::class);
-        $this->expectExceptionMessage('Failed to process the check sale');
-
         ($this->handler)(new CheckSaleMessage(7));
+
+        $this->addToAssertionCount(1);
     }
 
     /**
@@ -163,6 +161,6 @@ class CheckSaleMessageHandlerTest extends TestCase
 
         ($this->handler)(new CheckSaleMessage(7));
 
-        $this->addToAssertionCount(1); // no lanza «Check again»: el cron horario la vuelve a consultar
+        $this->addToAssertionCount(1); // sin excepción: la vuelve a consultar el cron por next_check_at
     }
 }

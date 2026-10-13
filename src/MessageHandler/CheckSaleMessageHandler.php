@@ -4,7 +4,6 @@ namespace App\MessageHandler;
 
 use App\Entity\CommunicationSaleInfo;
 use App\Enums\CommunicationStateEnum;
-use App\Exception\MyCurrentException;
 use App\Message\CheckSaleMessage;
 use App\Service\CommunicationSaleService;
 use Doctrine\ORM\EntityManagerInterface;
@@ -21,9 +20,6 @@ final class CheckSaleMessageHandler
     ) {
     }
 
-    /**
-     * @throws MyCurrentException
-     */
     public function __invoke(CheckSaleMessage $message): void
     {
         $saleId = $message->getSaleId();
@@ -40,26 +36,15 @@ final class CheckSaleMessageHandler
             return;
         }
 
-        // Si la transacción aún no fue enviada a ETECSA, reintentar más tarde
+        // Aún no enviada al proveedor: no hay nada que consultar. No se lanza para que Messenger reintente (eso
+        // creaba cadenas sin tope): el cron solo reclama ventas ya enviadas, y esta se consultará cuando lo esté.
         if (!$sale->wasSentToProvider()) {
-            $this->logger->info("CheckSale: sale {$saleId} not yet sent to provider (stateProcess={$sale->getStateProcess()}), will retry.");
-            throw new MyCurrentException('501', 'Sale not yet sent, retry later');
-        }
-
-        $this->communicationSaleService->checkStatusSaleInfo($saleId);
-
-        // Refrescar estado después del check
-        $this->em->refresh($sale);
-
-        // Una venta incierta no se reintenta por Messenger: la vuelve a consultar el cron, sin reenviarla.
-        if ($sale->isUncertain()) {
+            $this->logger->info("CheckSale: sale {$saleId} not yet sent to provider (stateProcess={$sale->getStateProcess()}), nothing to check.");
             return;
         }
-        if ($sale->getState() === CommunicationStateEnum::PENDING) {
-            throw new MyCurrentException('501', 'Check again');
-        }
-        if ($sale->getState() === CommunicationStateEnum::FAILED) {
-            throw new MyCurrentException('501', 'Failed to process the check sale');
-        }
+
+        // Una sola consulta. Si la venta sigue pendiente (o es incierta o FAILED), no se lanza ninguna excepción:
+        // checkStatusOrder() ya programó next_check_at con la espera creciente y el cron la volverá a reclamar.
+        $this->communicationSaleService->checkStatusSaleInfo($saleId);
     }
 }

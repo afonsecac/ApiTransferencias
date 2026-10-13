@@ -785,7 +785,7 @@ class CommunicationSaleService extends CommonService
                 // Solo despachar check si el envío fue aceptado (ACCEPTED). Si el
                 // resultado es UNKNOWN (timeout/error de transporte: no sabemos si
                 // la petición llegó al proveedor) no se reprograma nada aquí — el
-                // cron de pendientes (CheckStatusTask) la recogerá más tarde.
+                // cron de consultas (CheckDueSalesTask) la recogerá más tarde.
                 // Jamás debe reintentarse el ENVÍO mismo tras un UNKNOWN: eso
                 // podría cobrar dos veces la misma recarga. COMPLETED tampoco
                 // reprograma nada: ya se finalizó arriba.
@@ -1532,7 +1532,8 @@ class CommunicationSaleService extends CommonService
                     $httpErrorEnvelope
                 );
                 $this->em->flush();
-                $this->messageBus->dispatch(new CheckSaleMessage($saleId), [new DelayStamp(2000)]);
+                // Sin re-despacho (COMR-260 paso 2): la siguiente consulta la dirige next_check_at, con espera
+                // creciente. Antes se encolaba otro CheckSaleMessage a 2 s: una cadena sin tope.
             } else {
                 // Solo histórico, no transactionStatus — mismo comportamiento
                 // que antes de homologar (el catch genérico nunca tocó la
@@ -1609,21 +1610,25 @@ class CommunicationSaleService extends CommonService
     }
 
     /**
-     * @return void
-     * @throws \Symfony\Component\Messenger\Exception\ExceptionInterface
-     * @throws \Symfony\Contracts\HttpClient\Exception\ClientExceptionInterface
-     * @throws \Symfony\Contracts\HttpClient\Exception\DecodingExceptionInterface
-     * @throws \Symfony\Contracts\HttpClient\Exception\RedirectionExceptionInterface
-     * @throws \Symfony\Contracts\HttpClient\Exception\ServerExceptionInterface
-     * @throws \Symfony\Contracts\HttpClient\Exception\TransportExceptionInterface
+     * COMR-260 paso 2: único mecanismo de consulta periódica. Reclama las ventas cuya consulta toca (next_check_at
+     * vencido o nulo), con tope por proveedor y arrendamiento, y encola un CheckSaleMessage por cada una. Cada consulta
+     * reprograma next_check_at con la espera creciente de SaleCheckBackoff, así que una venta no se vuelve a consultar
+     * hasta entonces y no hay cadenas de reintentos.
+     *
+     * @return int ventas encoladas en esta pasada
      */
-    public function unprocessed(): void
+    public function dispatchDueStatusChecks(int $perProviderLimit = 20, int $leaseSeconds = 90, ?\DateTimeImmutable $now = null): int
     {
         /** @var \App\Repository\CommunicationSaleInfoRepository $saleInfoRepo */
         $saleInfoRepo = $this->em->getRepository(CommunicationSaleInfo::class);
-        $sales = $saleInfoRepo->getLastPending();
-        foreach ($sales as $sale) {
-            $this->checkStatusOrder($sale->getId());
+        $ids = $saleInfoRepo->claimDueForCheck($now ?? new \DateTimeImmutable(), $perProviderLimit, $leaseSeconds);
+        foreach ($ids as $id) {
+            $this->messageBus->dispatch(new CheckSaleMessage($id));
         }
+        if ($ids !== []) {
+            $this->logger->info(sprintf('Consultas de estado encoladas: %d', count($ids)));
+        }
+
+        return count($ids);
     }
 }
