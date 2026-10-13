@@ -96,7 +96,7 @@ COMPOSE_CMD="docker compose -f $COMPOSE_BASE -f $COMPOSE_ENV $COMPOSE_REPLICATIO
 
 # Servicios worker segun entorno
 if [[ "$ENV" == "prod" ]]; then
-    WORKER_SERVICES="worker-notifications worker-clients worker-packages worker-check-status worker-balance worker-scheduler"
+    WORKER_SERVICES="worker-notifications worker-clients worker-packages worker-check-status worker-balance worker-events worker-scheduler"
 else
     WORKER_SERVICES="worker"
 fi

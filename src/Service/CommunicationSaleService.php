@@ -240,8 +240,9 @@ class CommunicationSaleService extends CommonService
                 continue;
             }
 
-            $isRecharge = $sale instanceof CommunicationSaleRecharge;
-            $selected = $this->dispatchResolver->selectExcluding($account, $package, $isRecharge ? 'recharge' : 'sale', []);
+            $saleType = SaleSubtype::saleTypeOf($sale);
+            $isRecharge = $saleType === SaleSubtype::SALE_TYPE_RECHARGE;
+            $selected = $this->dispatchResolver->selectExcluding($account, $package, $saleType, []);
             if ($selected === null && $isRecharge && $sale->getPromotion() !== null) {
                 $selected = $this->promotionDispatchResolver->trySelect($account, $sale->getPromotion());
             }
@@ -249,7 +250,7 @@ class CommunicationSaleService extends CommonService
                 continue;
             }
 
-            if ($isRecharge) {
+            if ($sale instanceof CommunicationSaleRecharge) {
                 try {
                     $this->assertRecipientIdentifierSatisfied($selected->product, $sale->getPhoneNumber(), $sale->getAccountIdentifier());
                 } catch (MyCurrentException $e) {
@@ -269,7 +270,7 @@ class CommunicationSaleService extends CommonService
 
         foreach ($toDispatch as $sale) {
             $this->logger->info("Sale {$sale->getId()} resolved provider {$sale->getProvider()} after awaiting an available provider.");
-            $this->dispatchOrDefer($sale, $sale instanceof CommunicationSaleRecharge
+            $this->dispatchOrDefer($sale, SaleSubtype::saleTypeOf($sale) === SaleSubtype::SALE_TYPE_RECHARGE
                 ? fn () => new SaleRechargeMessage($sale->getId())
                 : fn () => new SalePackageMessage($sale->getId()));
         }
@@ -735,6 +736,9 @@ class CommunicationSaleService extends CommonService
                     }
 
                     $saleRecharge->setState(CommunicationStateEnum::REJECTED);
+                    // Antes de esto el state process quedaba en Pending (fijado arriba): una venta
+                    // rechazada que parecía seguir en proceso. Los demás rechazos ya lo actualizan.
+                    $saleRecharge->setStateProcess(CommunicationStateEnum::REJECTED->value);
                     $this->historicalSaleService->createHistoricalCommunication(
                         $saleRecharge->getId(),
                         CommunicationStateEnum::REJECTED,
@@ -774,11 +778,14 @@ class CommunicationSaleService extends CommonService
                         $this->logger->info("Sale {$saleId}: already completed by another worker, skipping balance.");
                     }
                 }
+                if ($saleRecharge->getState() === CommunicationStateEnum::PENDING) {
+                    $saleRecharge->scheduleNextCheck();
+                }
                 $this->em->flush();
                 // Solo despachar check si el envío fue aceptado (ACCEPTED). Si el
                 // resultado es UNKNOWN (timeout/error de transporte: no sabemos si
                 // la petición llegó al proveedor) no se reprograma nada aquí — el
-                // cron de pendientes (CheckStatusTask) la recogerá más tarde.
+                // cron de consultas (CheckDueSalesTask) la recogerá más tarde.
                 // Jamás debe reintentarse el ENVÍO mismo tras un UNKNOWN: eso
                 // podría cobrar dos veces la misma recarga. COMPLETED tampoco
                 // reprograma nada: ya se finalizó arriba.
@@ -1013,6 +1020,10 @@ class CommunicationSaleService extends CommonService
                 TransactionStatus::fromDispatch($dispatchResult, $provider->value),
             ));
             $sale->setStateProcess(CommunicationStateEnum::PENDING->value);
+            // Aceptada o de resultado desconocido: queda esperando consulta (el cron recoge las UNKNOWN).
+            if (in_array($dispatchResult->outcome, [ProviderOutcomeEnum::ACCEPTED, ProviderOutcomeEnum::UNKNOWN], true)) {
+                $sale->scheduleNextCheck();
+            }
 
             if ($dispatchResult->outcome === ProviderOutcomeEnum::UNKNOWN) {
                 // Transporte falló: no sabemos si el proveedor recibió la venta.
@@ -1263,9 +1274,11 @@ class CommunicationSaleService extends CommonService
         $table = $this->em->getClassMetadata(CommunicationSaleInfo::class)->getTableName();
 
         $affected = $this->em->getConnection()->executeStatement(
-            "UPDATE {$table} SET state_process = :sending WHERE id = :id AND state_process = :created",
+            // updated_at marca cuándo empezó el envío: el rescate de COMR-257 mide cuánto lleva en SENDING.
+            "UPDATE {$table} SET state_process = :sending, updated_at = :now WHERE id = :id AND state_process = :created",
             [
                 'sending' => 'SENDING',
+                'now'     => (new \DateTimeImmutable())->format('Y-m-d H:i:s'),
                 'id'      => $sale->getId(),
                 'created' => CommunicationStateEnum::CREATED->value,
             ]
@@ -1290,7 +1303,7 @@ class CommunicationSaleService extends CommonService
         // engancha la notificación in-app, independiente del email.
         $client = $sale->getTenant()?->getClient();
         if ($client !== null) {
-            $isRecharge = $sale instanceof CommunicationSaleRecharge;
+            $isRecharge = SaleSubtype::saleTypeOf($sale) === SaleSubtype::SALE_TYPE_RECHARGE;
             $this->notificationCenter->notifyClient($client, new NotificationDraft(
                 type: $isRecharge ? NotificationTypeEnum::RECHARGE_FAILED : NotificationTypeEnum::SALE_FAILED,
                 title: sprintf('%s fallida (#%d)', $isRecharge ? 'Recarga' : 'Venta', $sale->getId()),
@@ -1354,6 +1367,12 @@ class CommunicationSaleService extends CommonService
         $this->checkStatusOrder($saleId);
     }
 
+    /** Margen antes de dar por «no encontrada» una venta que el proveedor aún puede no haber indexado (4 h). */
+    private const NOT_FOUND_GRACE_SECONDS = 4 * 3600;
+
+    /** Pasado este tiempo pendiente, una venta deja de darse por «en curso» y pasa a incierta (COMR-260). */
+    private const MAX_PENDING_AGE_SECONDS = 24 * 3600;
+
     public function checkStatusOrder(int $saleId): void
     {
         $sale = $this->em->getRepository(CommunicationSaleInfo::class)->find($saleId);
@@ -1370,7 +1389,9 @@ class CommunicationSaleService extends CommonService
             return;
         }
 
-        $isRecharge = $sale instanceof CommunicationSaleRecharge;
+        $isRecharge = SaleSubtype::saleTypeOf($sale) === SaleSubtype::SALE_TYPE_RECHARGE;
+
+        $this->markUncertainIfPendingTooLong($sale);
 
         try {
             $provider = $this->providerResolver->resolveForSale($sale);
@@ -1423,7 +1444,9 @@ class CommunicationSaleService extends CommonService
                     CommunicationStateEnum::COMPLETED,
                     $statusEnvelope
                 );
-            } elseif ($statusResult->outcome === ProviderOutcomeEnum::REJECTED) {
+            } elseif ($statusResult->outcome === ProviderOutcomeEnum::REJECTED && !$sale->isUncertain()) {
+                // Una venta incierta (COMR-257) no se rechaza ni pasa a otro proveedor por un «no la conozco»:
+                // el saldo sigue comprometido hasta que alguien la resuelva.
                 // Camino habitual de ETECSA: solo devuelve ACCEPTED en el
                 // dispatch y confirma el rechazo aquí — mismo failover que
                 // el rechazo síncrono de CSQ/DTOne en invokeRechargeCommunication()/
@@ -1455,62 +1478,46 @@ class CommunicationSaleService extends CommonService
                     $statusResult->recordHistoryWithoutData ? [] : $statusEnvelope
                 );
             }
+            $this->recordCheckOutcome($sale);
             $this->em->flush();
         } catch (\Exception $e) {
             $message = $e->getMessage();
             $this->logger->error($message);
             if ($e->getCode() === 404) {
+                // COMR-257: un 404 es «el proveedor no la conoce», no «nunca se envió». Ya no se reenvía ni se
+                // rechaza (liberaría el saldo): pasado el margen de indexación, la venta queda incierta.
                 $currentStatus = $sale->getTransactionStatus();
-                $retryCount = TransactionStatus::retryCountOf($currentStatus);
+                $now = new \DateTimeImmutable();
+                $lastRetryAtRaw = TransactionStatus::lastRetryAtOf($currentStatus);
+                $referenceTime = $lastRetryAtRaw !== null ? new \DateTimeImmutable($lastRetryAtRaw) : $sale->getCreatedAt();
 
-                if ($sale instanceof CommunicationSaleRecharge && $retryCount < 3) {
-                    $now = new \DateTimeImmutable();
-                    $lastRetryAtRaw = TransactionStatus::lastRetryAtOf($currentStatus);
-                    $lastRetryAt = $lastRetryAtRaw !== null ? new \DateTimeImmutable($lastRetryAtRaw) : null;
-                    $referenceTime = $lastRetryAt ?? $sale->getCreatedAt();
-                    $secondsElapsed = $now->getTimestamp() - $referenceTime->getTimestamp();
-
-                    if ($secondsElapsed >= 4 * 3600) {
-                        $nextRetryCount = $retryCount + 1;
-                        $sale->setTransactionStatus(TransactionStatus::withRetry(
-                            $currentStatus,
-                            ProviderOutcomeEnum::RETRYABLE,
-                            'INTERNAL_GATEWAY_NOT_FOUND_RETRY',
-                            'Not found in ApiComm, resending',
-                            ['count' => $nextRetryCount, 'lastAttemptAt' => $now->format(\DateTimeInterface::ATOM)],
-                        ));
-                        $sale->setStateProcess(CommunicationStateEnum::CREATED->value);
-                        $this->em->flush();
-                        $this->messageBus->dispatch(new SaleRechargeMessage($sale->getId()));
-                        $this->logger->info("Sale {$saleId}: not found in ApiComm, resending (attempt {$nextRetryCount})");
-                    }
+                if ($sale->isUncertain() || $now->getTimestamp() - $referenceTime->getTimestamp() < self::NOT_FOUND_GRACE_SECONDS) {
+                    $sale->recordCheckAttempt();
+                    $this->em->flush();
                 } else {
-                    $now = new \DateTimeImmutable();
-                    $reason = $sale instanceof CommunicationSaleRecharge
-                        ? 'Not found in ApiComm after max retries'
-                        : 'Not found in ApiComm';
-                    $retryEnvelope = TransactionStatus::withRetry(
+                    $reason = 'Not found in the provider; resolve manually, never resend blindly';
+                    $uncertainEnvelope = TransactionStatus::withRetry(
                         $currentStatus,
-                        ProviderOutcomeEnum::REJECTED,
-                        'INTERNAL_GATEWAY_MISSING',
+                        ProviderOutcomeEnum::UNKNOWN,
+                        'INTERNAL_PROVIDER_NOT_FOUND_UNCERTAIN',
                         $reason,
                         [
-                            'count' => $retryCount,
-                            'gatewayMissing' => true,
-                            'markedRejectedAt' => $now->format(\DateTimeInterface::ATOM),
+                            'count' => TransactionStatus::retryCountOf($currentStatus),
+                            'uncertain' => true,
+                            'markedUncertainAt' => $now->format(\DateTimeInterface::ATOM),
                             'reason' => $reason,
                         ],
                     );
-                    $sale->setState(CommunicationStateEnum::REJECTED);
-                    $sale->setStateProcess(CommunicationStateEnum::REJECTED->value);
-                    $sale->setTransactionStatus($retryEnvelope);
+                    $sale->markUncertain();
+                    $sale->setTransactionStatus($uncertainEnvelope);
+                    $sale->recordCheckAttempt();
                     $this->historicalSaleService->createHistoricalCommunication(
                         $sale->getId(),
-                        CommunicationStateEnum::REJECTED,
-                        $retryEnvelope
+                        CommunicationStateEnum::PENDING,
+                        $uncertainEnvelope
                     );
                     $this->em->flush();
-                    $this->logger->critical("Sale {$saleId}: not found in ApiComm, marked REJECTED for manual review.");
+                    $this->logger->critical("Sale {$saleId}: not found in the provider, marked UNCERTAIN (balance stays reserved) for manual review.");
                 }
             } elseif ($e->getCode() === 400) {
                 // internalPreserving(): un 400 durante el polling no debe
@@ -1523,13 +1530,15 @@ class CommunicationSaleService extends CommonService
                     'La orden aun esta en procesamiento',
                 );
                 $sale->setTransactionStatus($httpErrorEnvelope);
+                $sale->recordCheckAttempt();
                 $this->historicalSaleService->createHistoricalCommunication(
                     $sale->getId(),
                     CommunicationStateEnum::PENDING,
                     $httpErrorEnvelope
                 );
                 $this->em->flush();
-                $this->messageBus->dispatch(new CheckSaleMessage($saleId), [new DelayStamp(2000)]);
+                // Sin re-despacho (COMR-260 paso 2): la siguiente consulta la dirige next_check_at, con espera
+                // creciente. Antes se encolaba otro CheckSaleMessage a 2 s: una cadena sin tope.
             } else {
                 // Solo histórico, no transactionStatus — mismo comportamiento
                 // que antes de homologar (el catch genérico nunca tocó la
@@ -1539,6 +1548,7 @@ class CommunicationSaleService extends CommonService
                     CommunicationStateEnum::PENDING,
                     TransactionStatus::internal(ProviderOutcomeEnum::UNKNOWN, 'INTERNAL_STATUS_QUERY_ERROR', $message)
                 );
+                $sale->recordCheckAttempt();
                 $this->em->flush();
             }
             $this->logger->info($message);
@@ -1546,21 +1556,122 @@ class CommunicationSaleService extends CommonService
     }
 
     /**
-     * @return void
-     * @throws \Symfony\Component\Messenger\Exception\ExceptionInterface
-     * @throws \Symfony\Contracts\HttpClient\Exception\ClientExceptionInterface
-     * @throws \Symfony\Contracts\HttpClient\Exception\DecodingExceptionInterface
-     * @throws \Symfony\Contracts\HttpClient\Exception\RedirectionExceptionInterface
-     * @throws \Symfony\Contracts\HttpClient\Exception\ServerExceptionInterface
-     * @throws \Symfony\Contracts\HttpClient\Exception\TransportExceptionInterface
+     * COMR-257: las ventas que llevan más de $olderThanMinutes minutos en SENDING (el proceso murió tras el
+     * reclamo) pasan a «inciertas» y se consultan por nuestro transactionId. NUNCA se reenvían: si el
+     * proveedor sí las recibió, reenviar cobraría dos veces. Su importe sigue comprometido (state PENDING).
+     *
+     * @return int ventas rescatadas en esta pasada
      */
-    public function unprocessed(): void
+    public function rescueStuckSendingSales(int $olderThanMinutes = 15, int $limit = 100): int
+    {
+        /** @var \App\Repository\CommunicationSaleInfoRepository $repository */
+        $repository = $this->em->getRepository(CommunicationSaleInfo::class);
+        $table = $this->em->getClassMetadata(CommunicationSaleInfo::class)->getTableName();
+        $stuck = $repository->findStuckSending(new \DateTimeImmutable(sprintf('-%d minutes', $olderThanMinutes)), $limit);
+
+        $rescued = 0;
+        foreach ($stuck as $sale) {
+            // Condicional: si el envío terminó entre la lectura y ahora, state_process ya no es SENDING y no se toca.
+            $affected = $this->em->getConnection()->executeStatement(
+                "UPDATE {$table} SET state_process = :uncertain WHERE id = :id AND state_process = :sending",
+                [
+                    'uncertain' => CommunicationSaleInfo::STATE_PROCESS_UNCERTAIN,
+                    'sending'   => 'SENDING',
+                    'id'        => $sale->getId(),
+                ]
+            );
+            if ($affected === 0) {
+                continue;
+            }
+            $this->em->refresh($sale);
+            $envelope = TransactionStatus::internal(
+                ProviderOutcomeEnum::UNKNOWN,
+                'INTERNAL_SENDING_STUCK_UNCERTAIN',
+                sprintf('Stuck in SENDING for more than %d minutes; checking the provider by transactionId, never resending', $olderThanMinutes),
+            );
+            $sale->setTransactionStatus($envelope);
+            $this->historicalSaleService->createHistoricalCommunication($sale->getId(), CommunicationStateEnum::PENDING, $envelope);
+            $this->em->flush();
+            $this->messageBus->dispatch(new CheckSaleMessage($sale->getId()));
+            $this->logger->critical("Sale {$sale->getId()}: stuck in SENDING, marked UNCERTAIN (balance stays reserved) and queued for a status check.");
+            ++$rescued;
+        }
+
+        return $rescued;
+    }
+
+    /**
+     * COMR-260 paso 2: una venta que lleva más de 24 h pendiente pasa a «incierta». Sigue en PENDING (su importe
+     * continúa comprometido) y se sigue consultando, así que si el proveedor la confirma, se completa; lo que cambia
+     * es que deja de tratarse como una venta normal en curso y aparece en la pantalla de revisión (COMR-258). Se
+     * marca una sola vez: las que ya son inciertas conservan su motivo.
+     */
+    private function markUncertainIfPendingTooLong(CommunicationSaleInfo $sale): void
+    {
+        if ($sale->isUncertain() || $sale->getStateProcess() !== CommunicationStateEnum::PENDING->value) {
+            return;
+        }
+        $createdAt = $sale->getCreatedAt();
+        if ($createdAt === null || time() - $createdAt->getTimestamp() < self::MAX_PENDING_AGE_SECONDS) {
+            return;
+        }
+
+        $reason = 'Pending for more than 24 hours without a final answer from the provider; resolve manually, never resend blindly';
+        $status = $sale->getTransactionStatus();
+        $envelope = TransactionStatus::withRetry(
+            $status,
+            ProviderOutcomeEnum::UNKNOWN,
+            'INTERNAL_PENDING_TOO_LONG_UNCERTAIN',
+            $reason,
+            [
+                'count' => TransactionStatus::retryCountOf($status),
+                'uncertain' => true,
+                'markedUncertainAt' => (new \DateTimeImmutable())->format(\DateTimeInterface::ATOM),
+                'reason' => $reason,
+            ],
+        );
+        $sale->markUncertain();
+        $sale->setTransactionStatus($envelope);
+        $this->historicalSaleService->createHistoricalCommunication($sale->getId(), CommunicationStateEnum::PENDING, $envelope);
+        // Se guarda ya: una confirmación COMPLETED a continuación hace un refresh() que descartaría cambios sin guardar.
+        $this->em->flush();
+        $this->logger->critical("Sale {$sale->getId()}: pending for more than 24 h, marked UNCERTAIN (balance stays reserved) for manual review.");
+    }
+
+    /**
+     * COMR-260 (paso 1): tras una consulta que no falló, la venta pendiente cuenta un intento y programa la
+     * siguiente; si ya terminó (completada o rechazada), deja de tener consulta programada. Solo se escribe.
+     */
+    private function recordCheckOutcome(CommunicationSaleInfo $sale): void
+    {
+        if ($sale->getState() === CommunicationStateEnum::PENDING) {
+            $sale->recordCheckAttempt();
+
+            return;
+        }
+        $sale->clearNextCheck();
+    }
+
+    /**
+     * COMR-260 paso 2: único mecanismo de consulta periódica. Reclama las ventas cuya consulta toca (next_check_at
+     * vencido o nulo), con tope por proveedor y arrendamiento, y encola un CheckSaleMessage por cada una. Cada consulta
+     * reprograma next_check_at con la espera creciente de SaleCheckBackoff, así que una venta no se vuelve a consultar
+     * hasta entonces y no hay cadenas de reintentos.
+     *
+     * @return int ventas encoladas en esta pasada
+     */
+    public function dispatchDueStatusChecks(int $perProviderLimit = 20, int $leaseSeconds = 90, ?\DateTimeImmutable $now = null): int
     {
         /** @var \App\Repository\CommunicationSaleInfoRepository $saleInfoRepo */
         $saleInfoRepo = $this->em->getRepository(CommunicationSaleInfo::class);
-        $sales = $saleInfoRepo->getLastPending();
-        foreach ($sales as $sale) {
-            $this->checkStatusOrder($sale->getId());
+        $ids = $saleInfoRepo->claimDueForCheck($now ?? new \DateTimeImmutable(), $perProviderLimit, $leaseSeconds);
+        foreach ($ids as $id) {
+            $this->messageBus->dispatch(new CheckSaleMessage($id));
         }
+        if ($ids !== []) {
+            $this->logger->info(sprintf('Consultas de estado encoladas: %d', count($ids)));
+        }
+
+        return count($ids);
     }
 }

@@ -305,10 +305,30 @@ vendor/bin/phpunit --filter testNombreDelCaso tests/Service/Pricing/MiServicioTe
 
 ---
 
+### 13. Código nuevo del mercado y de geolocalización: arquitectura hexagonal
+
+Todo lo que se escriba en `src/Market/<Contexto>/` y `src/Delivery/` sigue [ADR-001](docs/arquitectura/adr-001-monolito-modular-hexagonal.md). Las reglas 3, 4 y 5 de arriba describen el código **existente** (comunicaciones, promociones, contratos, que no se migran); para lo nuevo rige esto:
+
+- Tres capas por contexto: `Domain`, `Application`, `Infrastructure`.
+- `Domain` no importa Symfony, Doctrine (salvo los atributos de `Doctrine\ORM\Mapping`) ni `App\Service`; `Application` no importa `Infrastructure`; un contexto no importa `Infrastructure` de otro.
+- La lógica va en casos de uso de `Application`; el controlador solo traduce HTTP (DTO `IInput` validado por el resolver → caso de uso → DTO de salida).
+- **No se extiende `CommonService`** ni se usa `MyCurrentException` dentro de `Domain`: se lanzan excepciones de dominio y se traducen a HTTP en `Infrastructure`.
+- Entre contextos solo hay eventos de dominio (publicados en la misma transacción) o puertos síncronos explícitos.
+- **Entidades:** viven en `Domain` y se mapean con atributos de `Doctrine\ORM\Mapping` (lo único de Doctrine permitido ahí; `EntityManager`, repositorios y `QueryBuilder` siguen prohibidos). Cada contexto registra su carpeta `Domain` en `config/packages/doctrine.yaml` (`type: attribute`, `dir` y `prefix` del `Domain`).
+- **Controladores:** en `Infrastructure/Http`, con `#[AsController]` y `#[Route]`. Se importan solos bajo `/dashboard/api` (`config/routes/contextos_http.php`), detrás del firewall del dashboard; no se añaden a `config/routes.yaml`. Un prefijo nuevo fuera de `/api` y `/dashboard/api` necesita regla explícita en `access_control`: por defecto se deniega.
+- **Eventos:** se publican con el puerto `App\Shared\Application\Event\EventBus` (outbox en la misma transacción) y se consumen con `IdempotentConsumer` (deduplica por `eventId`). Cada evento nuevo lleva su test de contrato (`AssertsEventContract`). Los consume el `worker-events`.
+- TDD y pantalla de administración con pruebas (reglas 11 y 12) siguen siendo obligatorios.
+
+---
+
 ## Archivos de referencia
 
 | Propósito | Archivo |
 |---|---|
+| Decisión de arquitectura de lo nuevo | `docs/arquitectura/adr-001-monolito-modular-hexagonal.md` |
+| Ejemplo de entidad de Domain mapeada con atributos | `tests/Examples/Pedido/Domain/Pedido.php` |
+| Ejemplo de controlador de Infrastructure/Http | `tests/Examples/Pedido/Infrastructure/Http/PedidoEjemploController.php` |
+| Bus de eventos y consumidor idempotente | `src/Shared/Application/Event/EventBus.php`, `src/Shared/Infrastructure/Event/IdempotentConsumer.php` |
 | Interfaz marcadora de DTOs de entrada | `src/DTO/IInput.php` |
 | Resolver que hidrata y valida DTOs desde el body | `src/OpenApi/InputValueResolver.php` |
 | Listener que convierte excepciones a JSON | `src/EventListener/ExceptionListener.php` |

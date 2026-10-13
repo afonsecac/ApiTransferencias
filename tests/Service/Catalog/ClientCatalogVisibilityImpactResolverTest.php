@@ -181,4 +181,31 @@ class ClientCatalogVisibilityImpactResolverTest extends TestCase
 
         $this->assertSame([], $seenRowSets[1]);
     }
+
+    // ---- COMR-264 (C1): area opcional ----
+
+    public function testTheProposedRowCarriesItsAreaIntoTheSimulatedScenario(): void
+    {
+        $package = $this->packageWithId(1);
+        $this->stubUniverse($package);
+        $this->routingRepo->method('findActiveRouteScopesForClient')->willReturn([]);
+
+        $seen = [];
+        $this->coverageResolver->method('isCoveredByRows')->willReturnCallback(function (array $rows) use (&$seen): bool {
+            $seen[] = $rows;
+
+            return $rows === [];
+        });
+
+        $this->resolver->countNewlyHiddenPackages(
+            clientId: 1,
+            excludeRoutingId: null,
+            proposedServiceName: 'Gift',
+            proposedSubserviceName: 'Card',
+            proposedIsActive: true,
+            proposedAreaName: 'Retail',
+        );
+
+        $this->assertSame('Retail', $seen[1][0]['areaName'], 'El escenario «después» lleva el área propuesta.');
+    }
 }

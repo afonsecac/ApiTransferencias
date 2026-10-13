@@ -20,3 +20,17 @@ dtone_webhook:
 recharge_verification:
     resource: ../src/Controller/RechargeVerificationController.php
     type: attribute
+
+when@test:
+    ejemplo_pedido_http:
+        resource: ../tests/Examples/Pedido/Infrastructure/Http/PedidoEjemploController.php
+        type: attribute
+        prefix: /dashboard/api
+
+    ejemplo_mercado_roles:
+        resource: ../tests/Examples/Mercado/Infrastructure/Http/RolesEjemploController.php
+        type: attribute
+
+    ejemplo_pedido_fuera_de_prefijo:
+        resource: ../tests/Examples/Pedido/Infrastructure/Http/FueraDePrefijoEjemploController.php
+        type: attribute

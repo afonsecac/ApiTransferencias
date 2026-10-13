@@ -3,7 +3,8 @@
 #   */5 * * * * /opt/api-transferencias/monitor.sh
 #
 # Comprueba que la API responde (200 con "status":"ok" por HTTPS, vía
-# scripts/health-check.sh), que el disco no pasa del 85 % y la RAM del 90 %.
+# scripts/health-check.sh), que el disco no pasa del 85 % y la RAM del 90 %, y que la
+# cola `failed` de Messenger no se llena ni guarda mensajes viejos (app:monitor:failed-queue).
 #
 # Avisa por el correo de la propia app (comando app:monitor:alert): el host no
 # tiene MTA (ni mail, mailx ni sendmail) y `deploy` no puede escribir en /var/log,
@@ -62,6 +63,23 @@ send_alert() {
             run --rm -T --no-deps php-fpm php bin/console app:monitor:alert \
             --to "$MAILTO" "$1" "$2"
     ) >> "$LOG_FILE" 2>&1 9>&-
+}
+
+# run_console <comando...>: ejecuta un comando de Symfony en un contenedor propio (sin dependencias), con
+# el mismo timeout que send_alert. Devuelve el código del comando.
+run_console() {
+    if command -v timeout >/dev/null 2>&1; then
+        TIMEOUT="timeout 180"
+    else
+        TIMEOUT=""
+    fi
+    (
+        cd "$APP_DIR" 2>/dev/null || true
+        $TIMEOUT docker compose \
+            -f "$APP_DIR/docker-compose.vps.yaml" -f "$APP_DIR/docker-compose.vps.prod.yaml" \
+            --env-file "$APP_DIR/.env.vps" \
+            run --rm -T --no-deps php-fpm php bin/console "$@"
+    ) 9>&-
 }
 
 # evaluate <clave> <etiqueta> <problema|""> : gestiona alerta, repetición y recuperación.
@@ -138,5 +156,16 @@ case "$mem" in ''|*[!0-9]*) ;; *)
     [ "$mem" -gt "$MEM_MAX" ] && mem_problem="RAM al ${mem}% (umbral ${MEM_MAX}%)."
 esac
 evaluate mem RAM "$mem_problem"
+
+# --- Cola de mensajes fallidos ---
+# Códigos del comando: 0 sana, 1 problema (el informe sale por stdout), otro = no se pudo comprobar.
+# Si no se pudo comprobar no se llama a evaluate: ni alerta falsa ni "recuperado" falso.
+failed_out=$(run_console app:monitor:failed-queue 2>&1)
+failed_code=$?
+case "$failed_code" in
+    0) evaluate failed "COLA FAILED" "" ;;
+    1) evaluate failed "COLA FAILED" "$failed_out" ;;
+    *) log "no se pudo comprobar la cola failed (código $failed_code): $failed_out" ;;
+esac
 
 exit 0

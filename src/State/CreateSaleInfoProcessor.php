@@ -11,6 +11,7 @@ use App\Entity\CommunicationSalePackage;
 use App\Entity\CommunicationSaleRecharge;
 use App\Exception\MyCurrentException;
 use App\Service\CommunicationSaleService;
+use App\Service\SaleSubtype;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\SecurityBundle\Security;
 use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
@@ -74,6 +75,8 @@ class CreateSaleInfoProcessor implements ProcessorInterface
             $communicationSale = $this->saleService->executeSale($data);
         } else if ($data instanceof ReserveRecharge) {
             $communicationSale = $this->saleService->processReserve($data);
+        } else {
+            throw SaleSubtype::unsupported($data);
         }
         return $communicationSale;
     }

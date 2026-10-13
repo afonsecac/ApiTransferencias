@@ -47,7 +47,7 @@ class ProviderRoutingAdminService
         }
 
         $environment = $this->resolveEnvironmentOrFail($dto->getEnvironmentId());
-        $serviceKey = ServiceCategoryKey::of($dto->getServiceName(), $dto->getSubserviceName());
+        $serviceKey = ServiceCategoryKey::of($dto->getServiceName(), $dto->getSubserviceName(), $dto->getAreaName());
 
         $this->assertScopeIsFree($client->getId(), $dto->getEnvironmentId(), $dto->getSaleType(), $serviceKey);
         $this->assertProviderIsEnabled($dto->getProvider(), $environment?->getType());
@@ -58,7 +58,7 @@ class ProviderRoutingAdminService
         $routing->setSaleType($dto->getSaleType());
         $routing->setProvider($dto->getProvider());
         $routing->setFallbackProvider($dto->getFallbackProvider());
-        $routing->setServiceCategory($dto->getServiceName(), $dto->getSubserviceName());
+        $routing->setServiceCategory($dto->getServiceName(), $dto->getSubserviceName(), $dto->getAreaName());
         $routing->setNotes($dto->getNotes());
 
         $user = $this->security->getUser();
@@ -81,7 +81,7 @@ class ProviderRoutingAdminService
     {
         $providerChanged = $dto->getProvider() !== null && $dto->getProvider() !== $routing->getProvider();
         $scopeTouched = $dto->getEnvironmentId() !== null || $dto->getSaleType() !== null
-            || $dto->getServiceName() !== null || $dto->getSubserviceName() !== null;
+            || $dto->getServiceName() !== null || $dto->getSubserviceName() !== null || $dto->getAreaName() !== null;
 
         $effectiveEnvironment = $routing->getEnvironment();
 
@@ -106,17 +106,22 @@ class ProviderRoutingAdminService
                 $subserviceName = null;
             }
 
+            // Mismo convenio para el área: null = no tocar, '' = volver a comodín. Es independiente del servicio.
+            $areaName = $dto->getAreaName() !== null
+                ? ($dto->getAreaName() === '' ? null : $dto->getAreaName())
+                : $routing->getAreaName();
+
             $this->assertScopeIsFree(
                 $routing->getClient()->getId(),
                 $environment?->getId(),
                 $saleType,
-                ServiceCategoryKey::of($serviceName, $subserviceName),
+                ServiceCategoryKey::of($serviceName, $subserviceName, $areaName),
                 excludeId: $routing->getId(),
             );
 
             $routing->setEnvironment($environment);
             $routing->setSaleType($saleType);
-            $routing->setServiceCategory($serviceName, $subserviceName);
+            $routing->setServiceCategory($serviceName, $subserviceName, $areaName);
             $effectiveEnvironment = $environment;
         }
 

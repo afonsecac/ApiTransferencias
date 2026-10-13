@@ -9,6 +9,9 @@ framework:
         failure_transport: failed
 
         transports:
+            # UN EXCHANGE POR TRANSPORTE. El transporte AMQP los crea como fanout, que copia cada mensaje a todas
+            # sus colas e ignora binding_keys: si dos transportes comparten exchange, el worker (que consume todas las
+            # colas) procesa cada mensaje dos veces. Lo vigila tests/Config/MessengerTopologyTest.php.
             # https://symfony.com/doc/current/messenger.html#transport-configuration
             # async: '%env(MESSENGER_TRANSPORT_DSN)%'
             failed: '%env(MESSENGER_TRANSPORT_FAILURE)%'
@@ -19,7 +22,7 @@ framework:
               options:
                   vhost: '%env(MESSENGER_TRANSPORT_VHOST)%'
                   exchange:
-                    name: high
+                    name: high_notifications
                   queues:
                     notifications_send_emails:
                       binding_keys: [ notifications_send_emails ]
@@ -33,7 +36,7 @@ framework:
                options:
                    vhost: '%env(MESSENGER_TRANSPORT_VHOST)%'
                    exchange:
-                     name: high
+                     name: high_clients
                    queues:
                      recharge_mobile_send:
                        binding_keys: [ recharge_mobile_send ]
@@ -48,7 +51,7 @@ framework:
                options:
                    vhost: '%env(MESSENGER_TRANSPORT_VHOST)%'
                    exchange:
-                     name: highest
+                     name: highest_package
                    queues:
                      send_sale_package:
                         binding_keys: [ send_sale_package ]
@@ -63,7 +66,7 @@ framework:
                options:
                    vhost: '%env(MESSENGER_TRANSPORT_VHOST)%'
                    exchange:
-                     name: highest
+                     name: highest_check_status
                    queues:
                       check_status_recharge:
                         binding_keys: [ check_status_recharge ]
@@ -86,6 +89,16 @@ framework:
                   max_retries: 1
                   delay: 1000
                   multiplier: 2
+            # Outbox de eventos de dominio (ADR-001): la tabla messenger_messages ya existe (la usa
+            # `failed`), por eso auto_setup=false. Comparte conexión con Doctrine, luego el envío
+            # entra en la transacción de quien publica.
+            domain_events:
+              dsn: 'doctrine://default?queue_name=domain_events&auto_setup=false'
+              serializer: messenger.transport.symfony_serializer
+              retry_strategy:
+                  max_retries: 5
+                  delay: 1000
+                  multiplier: 3
         routing:
             # Route your messages to the transports
              'App\Message\SaleRechargeMessage': async_clients_high
@@ -99,6 +112,7 @@ framework:
              'App\Message\Provider\SyncProviderProductsMessage': async_clients_high
              'App\Message\DispatchPendingEmailMessage': async_notifications_high
              'App\Message\ClientCreatedMessage': async_notifications_high
+             'App\Shared\Domain\Event\DomainEvent': domain_events
 
 when@test:
     framework:

@@ -50,6 +50,8 @@ use Symfony\Bundle\SecurityBundle\Security;
 use Symfony\Component\DependencyInjection\ParameterBag\ParameterBagInterface;
 use Symfony\Component\Mailer\MailerInterface;
 use Symfony\Component\Messenger\MessageBusInterface;
+use Symfony\Component\Messenger\Stamp\DelayStamp;
+use App\Message\CheckSaleMessage;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 use Symfony\Component\Serializer\SerializerInterface;
 
@@ -72,6 +74,14 @@ class CommunicationSaleServiceTransactionStatusTest extends TestCase
     private PackageCatalogResolver&MockObject $packageCatalogResolver;
     private CommunicationSaleService $service;
     private CommunicationSaleRecharge $saleRecharge;
+    /** Código de la excepción cruda que lanza el fake de ETECSA al consultar el estado. */
+    private int $etecsaStatusErrorCode = 404;
+    /** Si el fake de ETECSA acepta el envío (ACCEPTED) en vez de fallar. */
+    private bool $etecsaRechargeAccepted = false;
+    /** Si no es null, el fake de ETECSA responde la consulta de estado con este resultado en vez de lanzar. */
+    private ?\App\Enums\ProviderOutcomeEnum $etecsaStatusOutcome = null;
+    /** @var list<array{object, list<object>}> mensajes despachados al bus, con sus sellos */
+    private array $dispatched = [];
 
     protected function setUp(): void
     {
@@ -95,7 +105,11 @@ class CommunicationSaleServiceTransactionStatusTest extends TestCase
         $messageBus = $this->createMock(MessageBusInterface::class);
         // Envelope es `final` — sin este stub, PHPUnit intenta generar un
         // valor de retorno automático para dispatch() y falla al doblarla.
-        $messageBus->method('dispatch')->willReturn(new \Symfony\Component\Messenger\Envelope(new \stdClass()));
+        $messageBus->method('dispatch')->willReturnCallback(function (object $message, array $stamps = []): \Symfony\Component\Messenger\Envelope {
+            $this->dispatched[] = [$message, $stamps];
+
+            return new \Symfony\Component\Messenger\Envelope(new \stdClass());
+        });
         $this->historicalSaleService = $this->createMock(HistoricalSaleService::class);
         $this->balanceService = $this->createMock(BalanceService::class);
         $notificationCenter = $this->createMock(NotificationCenterService::class);
@@ -151,7 +165,18 @@ class CommunicationSaleServiceTransactionStatusTest extends TestCase
      */
     private function fakeEtecsaProviderThatThrows404(): RechargeProviderInterface&CommunicationProviderInterface
     {
-        return new class implements RechargeProviderInterface {
+        $errorCode = fn (): int => $this->etecsaStatusErrorCode;
+        $accepts = fn (): bool => $this->etecsaRechargeAccepted;
+        $statusOutcome = fn (): ?\App\Enums\ProviderOutcomeEnum => $this->etecsaStatusOutcome;
+
+        return new class($errorCode, $accepts, $statusOutcome) implements RechargeProviderInterface {
+            public function __construct(
+                private readonly \Closure $errorCode,
+                private readonly \Closure $accepts,
+                private readonly \Closure $statusOutcome,
+            ) {
+            }
+
             public function getCode(): CommunicationProviderEnum
             {
                 return CommunicationProviderEnum::ETECSA;
@@ -171,12 +196,21 @@ class CommunicationSaleServiceTransactionStatusTest extends TestCase
 
             public function recharge(ProviderContext $context, RechargeRequest $request): ProviderDispatchResult
             {
+                if (($this->accepts)()) {
+                    return new ProviderDispatchResult(outcome: \App\Enums\ProviderOutcomeEnum::ACCEPTED);
+                }
+
                 throw new \RuntimeException('not used in this test');
             }
 
             public function fetchRechargeStatus(ProviderContext $context, ProviderStatusQuery $query): ProviderStatusResult
             {
-                throw new \Exception('Not Found', 404);
+                $outcome = ($this->statusOutcome)();
+                if (null !== $outcome) {
+                    return new ProviderStatusResult(outcome: $outcome, message: 'respuesta simulada');
+                }
+
+                throw new \Exception('Provider error', ($this->errorCode)());
             }
         };
     }
@@ -321,15 +355,10 @@ class CommunicationSaleServiceTransactionStatusTest extends TestCase
 
     // ---- regresión CRÍTICA: contador de reintentos en formato legacy ----
 
-    public function testRetryCounterInLegacyRootFormatIsHonoredNotResetToZero(): void
+    public function testRetryCounterInLegacyRootFormatIsKeptAndTheSaleIsNotResentOn404(): void
     {
-        // Reutiliza la venta ya cableada por setUp() (mismos mocks de
-        // repositorio) — solo cambia lo necesario: proveedor ETECSA (para
-        // que resuelva al fake que lanza 404), transactionStatus con 2
-        // reintentos registrados con la clave EN LA RAÍZ (formato escrito
-        // por el código ANTES de homologar). Si el lector nuevo solo
-        // mirara 'retry.count', el contador se reiniciaría a 0 y la venta
-        // reenviaría el envío original cada 4h indefinidamente.
+        // Ventas con el contador en la RAÍZ (formato anterior a homologar): el lector debe seguir viéndolo y,
+        // desde COMR-257, un 404 ya no reenvía la recarga aunque hayan pasado más de 4 h: queda incierta.
         $this->saleRecharge->setProvider('ETECSA');
         $this->saleRecharge->setStateProcess('PENDING');
         $this->saleRecharge->setCreatedAt(new \DateTimeImmutable('-10 days'));
@@ -342,8 +371,288 @@ class CommunicationSaleServiceTransactionStatusTest extends TestCase
         $this->service->checkStatusOrder(555);
 
         $status = $this->saleRecharge->getTransactionStatus();
-        $this->assertSame(3, TransactionStatus::retryCountOf($status), 'El contador debía seguir en 2 y avanzar a 3, no reiniciarse a 0->1.');
-        $this->assertSame('RETRYABLE', $status['outcome']);
-        $this->assertSame(CommunicationStateEnum::CREATED->value, $this->saleRecharge->getStateProcess());
+        $this->assertSame(2, TransactionStatus::retryCountOf($status), 'El contador heredado se conserva: no se reinicia ni avanza.');
+        $this->assertSame([], $this->dispatched, 'No se reenvía.');
+        $this->assertTrue($this->saleRecharge->isUncertain());
+        $this->assertSame(CommunicationStateEnum::PENDING, $this->saleRecharge->getState());
+    }
+
+    // ---- COMR-260 paso 2: la cadena del HTTP 400 ya no existe ----
+
+    private function prepareEtecsaSaleReturning(int $errorCode): void
+    {
+        $this->saleRecharge->setProvider('ETECSA');
+        $this->saleRecharge->setStateProcess('PENDING');
+        $this->etecsaStatusErrorCode = $errorCode;
+    }
+
+    public function testHttp400OnTheStatusQueryDoesNotDispatchAnotherCheck(): void
+    {
+        $this->prepareEtecsaSaleReturning(400);
+
+        $this->service->checkStatusOrder(555);
+
+        // COMR-260 paso 2: la siguiente consulta la programa next_check_at (y la lanza el cron), no un
+        // re-despacho de 2 s desde aquí que, repetido, formaba una cadena sin tope.
+        $this->assertSame([], $this->dispatched);
+        $this->assertSame(CommunicationStateEnum::PENDING, $this->saleRecharge->getState());
+        $this->assertSame('INTERNAL_PROVIDER_HTTP_400', $this->saleRecharge->getTransactionStatus()['providerCode']);
+    }
+
+    public function testHttp400ChainIsBoundedBecauseNothingIsRequeuedAndTheWaitGrowsUpToTheCap(): void
+    {
+        $this->prepareEtecsaSaleReturning(400);
+
+        for ($i = 0; $i < 25; ++$i) {
+            $this->service->checkStatusOrder(555);
+        }
+
+        $this->assertSame([], $this->dispatched, 'Veinticinco 400 seguidos no encolan ni un mensaje.');
+        $this->assertSame(25, $this->saleRecharge->getCheckAttempts());
+        $this->assertSame(CommunicationStateEnum::PENDING, $this->saleRecharge->getState());
+        $secondsUntilNextCheck = $this->saleRecharge->getNextCheckAt()->getTimestamp() - time();
+        $this->assertGreaterThan(3500, $secondsUntilNextCheck, 'La espera llega al tope de 1 h.');
+        $this->assertLessThanOrEqual(3600, $secondsUntilNextCheck);
+    }
+
+    // ---- COMR-260 paso 1: la consulta escribe next_check_at y check_attempts (todavía nadie los lee) ----
+
+    public function testHttp400RecordsTheAttemptAndSchedulesTheNextCheck(): void
+    {
+        $this->prepareEtecsaSaleReturning(400);
+        $before = new \DateTimeImmutable();
+
+        $this->service->checkStatusOrder(555);
+
+        $this->assertSame(1, $this->saleRecharge->getCheckAttempts());
+        $this->assertNextCheckIsAbout(15, $before);
+    }
+
+    public function testOtherErrorsOnTheStatusQueryAlsoRecordTheAttempt(): void
+    {
+        $this->prepareEtecsaSaleReturning(500);
+        $before = new \DateTimeImmutable();
+
+        $this->service->checkStatusOrder(555);
+
+        $this->assertSame(1, $this->saleRecharge->getCheckAttempts());
+        $this->assertNextCheckIsAbout(15, $before);
+    }
+
+    public function testEachFurtherAttemptLengthensTheWait(): void
+    {
+        $this->prepareEtecsaSaleReturning(500);
+
+        for ($i = 0; $i < 3; ++$i) {
+            $before = new \DateTimeImmutable();
+            $this->service->checkStatusOrder(555);
+        }
+
+        $this->assertSame(3, $this->saleRecharge->getCheckAttempts());
+        $this->assertNextCheckIsAbout(300, $before);
+    }
+
+    public function testHttp404BeforeFourHoursStillRecordsTheAttempt(): void
+    {
+        $this->prepareEtecsaSaleReturning(404);
+        $this->saleRecharge->setCreatedAt(new \DateTimeImmutable('-1 hour'));
+        $before = new \DateTimeImmutable();
+
+        $this->service->checkStatusOrder(555);
+
+        $this->assertSame(1, $this->saleRecharge->getCheckAttempts());
+        $this->assertNextCheckIsAbout(15, $before);
+    }
+
+    private function assertNextCheckIsAbout(int $seconds, \DateTimeImmutable $before): void
+    {
+        $next = $this->saleRecharge->getNextCheckAt();
+        $this->assertNotNull($next);
+        $this->assertGreaterThanOrEqual($before->getTimestamp() + $seconds, $next->getTimestamp());
+        $this->assertLessThanOrEqual($before->getTimestamp() + $seconds + 5, $next->getTimestamp());
+    }
+
+    public function testOtherErrorCodesOnTheStatusQueryRecordHistoryButDispatchNothing(): void
+    {
+        $this->prepareEtecsaSaleReturning(500);
+        $this->historicalSaleService->expects($this->once())->method('createHistoricalCommunication');
+
+        $this->service->checkStatusOrder(555);
+
+        $this->assertSame([], $this->dispatched);
+        $this->assertSame(CommunicationStateEnum::PENDING, $this->saleRecharge->getState());
+    }
+
+    public function testHttp404BeforeFourHoursDoesNotResendNorChangeTheSale(): void
+    {
+        $this->prepareEtecsaSaleReturning(404);
+        $this->saleRecharge->setCreatedAt(new \DateTimeImmutable('-1 hour'));
+
+        $this->service->checkStatusOrder(555);
+
+        $this->assertSame([], $this->dispatched);
+        $this->assertSame('PENDING', $this->saleRecharge->getStateProcess());
+        $this->assertSame(CommunicationStateEnum::PENDING, $this->saleRecharge->getState());
+    }
+
+    // ---- COMR-257: un 404 nunca reenvía ni libera saldo; la venta queda «incierta» ----
+
+    public function testHttp404AfterTheGracePeriodMarksTheSaleUncertainWithoutResendingNorReleasingBalance(): void
+    {
+        $this->prepareEtecsaSaleReturning(404);
+        $this->saleRecharge->setCreatedAt(new \DateTimeImmutable('-5 hours'));
+
+        $this->service->checkStatusOrder(555);
+
+        $this->assertSame([], $this->dispatched, 'Un 404 no reenvía la recarga.');
+        $this->assertSame(CommunicationStateEnum::PENDING, $this->saleRecharge->getState(), 'Sigue PENDING: cuenta como saldo comprometido.');
+        $this->assertSame(\App\Entity\CommunicationSaleInfo::STATE_PROCESS_UNCERTAIN, $this->saleRecharge->getStateProcess());
+        $this->assertTrue($this->saleRecharge->isUncertain());
+        $this->assertSame('INTERNAL_PROVIDER_NOT_FOUND_UNCERTAIN', $this->saleRecharge->getTransactionStatus()['providerCode']);
+    }
+
+    public function testHttp404WithTheLegacyRetryCounterAlsoGoesUncertainInsteadOfRejected(): void
+    {
+        $this->prepareEtecsaSaleReturning(404);
+        $this->saleRecharge->setCreatedAt(new \DateTimeImmutable('-10 hours'));
+        $this->saleRecharge->setTransactionStatus(['orderId' => 1, 'retryCount' => 3]);
+
+        $this->service->checkStatusOrder(555);
+
+        $this->assertSame([], $this->dispatched);
+        $this->assertSame(CommunicationStateEnum::PENDING, $this->saleRecharge->getState());
+        $this->assertTrue($this->saleRecharge->isUncertain());
+    }
+
+    public function testUncertainSaleKeepsItsScheduledCheckSoItIsQueriedAgainNeverResent(): void
+    {
+        $this->prepareEtecsaSaleReturning(404);
+        $this->saleRecharge->setCreatedAt(new \DateTimeImmutable('-5 hours'));
+
+        $this->service->checkStatusOrder(555);
+
+        $this->assertNotNull($this->saleRecharge->getNextCheckAt());
+    }
+
+    public function testHttp404OnAPackageSaleAlsoGoesUncertainInsteadOfRejected(): void
+    {
+        $this->prepareEtecsaSaleReturning(404);
+        $this->saleRecharge->setCreatedAt(new \DateTimeImmutable('-5 hours'));
+
+        $this->service->checkStatusOrder(555);
+
+        $this->assertNotSame(CommunicationStateEnum::REJECTED, $this->saleRecharge->getState());
+    }
+
+    public function testProviderRejectionOnAnUncertainSaleDoesNotRejectNorFailOver(): void
+    {
+        $this->prepareEtecsaSaleReturning(404);
+        $this->saleRecharge->markUncertain();
+        $this->etecsaStatusOutcome = \App\Enums\ProviderOutcomeEnum::REJECTED;
+
+        $this->service->checkStatusOrder(555);
+
+        $this->assertSame([], $this->dispatched, 'Sin envío a un proveedor secundario.');
+        $this->assertSame(CommunicationStateEnum::PENDING, $this->saleRecharge->getState(), 'Un «no la conozco» no es un rechazo confirmado: el saldo sigue reservado.');
+        $this->assertTrue($this->saleRecharge->isUncertain());
+    }
+
+    // ---- COMR-257: el reclamo SENDING marca la hora, para poder rescatar las ventas que se quedan colgadas ----
+
+    public function testClaimingASaleForSendingStampsUpdatedAtSoItsAgeCanBeMeasured(): void
+    {
+        $statements = [];
+        $this->connection->method('executeStatement')->willReturnCallback(static function (string $sql) use (&$statements): int {
+            $statements[] = $sql;
+
+            return 1;
+        });
+        $this->availabilityService->method('canDispatchTo')->willReturn(true);
+        $this->balanceService->method('balance')->willReturn(new AccountBalanceDto('USD', 1000.0));
+        $this->saleRecharge->setStateProcess(CommunicationStateEnum::CREATED->value);
+
+        $this->service->invokeRechargeCommunication(555);
+
+        $claims = array_filter($statements, static fn (string $sql): bool => str_contains($sql, 'state_process = :sending'));
+        $this->assertNotSame([], $claims, 'El reclamo de SENDING debe ejecutarse.');
+        $this->assertStringContainsString('updated_at', array_values($claims)[0], 'Sin updated_at, una venta antigua reclamada hoy parecería colgada al instante.');
+    }
+
+    // ---- COMR-260 paso 2: una venta pendiente más de 24 h pasa a «incierta» ----
+
+    private function pendingCsqSaleCreated(string $ago): void
+    {
+        $this->saleRecharge->setStateProcess(CommunicationStateEnum::PENDING->value);
+        $this->saleRecharge->setCreatedAt(new \DateTimeImmutable($ago));
+        // El proveedor no responde: la venta sigue pendiente tras la consulta.
+        $this->csqClient->method('getTransactionInfo')->willThrowException(new \App\Exception\MyCurrentException('CSQ_DOWN', 'sin respuesta', 503));
+    }
+
+    public function testASaleStillPendingAfter24HoursBecomesUncertainButKeepsItsReservedBalance(): void
+    {
+        $this->pendingCsqSaleCreated('-25 hours');
+        $this->historicalSaleService->expects($this->atLeastOnce())->method('createHistoricalCommunication');
+
+        $this->service->checkStatusOrder(555);
+
+        $this->assertTrue($this->saleRecharge->isUncertain());
+        $this->assertSame(CommunicationStateEnum::PENDING, $this->saleRecharge->getState(), 'Sigue PENDING: el importe sigue comprometido.');
+        // La consulta que sigue reescribe el sobre de estado, pero el bloque de reintento conserva el motivo.
+        $this->assertStringContainsString('more than 24 hours', $this->saleRecharge->getTransactionStatus()['retry']['reason']);
+        $this->assertTrue($this->saleRecharge->getTransactionStatus()['retry']['uncertain']);
+        $this->assertSame([], $this->dispatched, 'No se reenvía nada.');
+        $this->assertNotNull($this->saleRecharge->getNextCheckAt(), 'Se sigue consultando.');
+    }
+
+    public function testASaleYoungerThan24HoursIsNotMarkedUncertain(): void
+    {
+        $this->pendingCsqSaleCreated('-23 hours');
+
+        $this->service->checkStatusOrder(555);
+
+        $this->assertFalse($this->saleRecharge->isUncertain());
+        $this->assertSame(CommunicationStateEnum::PENDING->value, $this->saleRecharge->getStateProcess());
+    }
+
+    public function testAnAlreadyUncertainSaleIsNotMarkedAgainForBeingOld(): void
+    {
+        $this->pendingCsqSaleCreated('-30 hours');
+        $this->saleRecharge->markUncertain();
+
+        $this->service->checkStatusOrder(555);
+
+        $this->assertTrue($this->saleRecharge->isUncertain());
+        $this->assertArrayNotHasKey('retry', $this->saleRecharge->getTransactionStatus(), 'No se vuelve a marcar (ni a escribir el motivo) cada hora.');
+    }
+
+    public function testAnOldSaleThatTheProviderConfirmsAsCompletedIsStillCompleted(): void
+    {
+        $this->saleRecharge->setStateProcess(CommunicationStateEnum::PENDING->value);
+        $this->saleRecharge->setCreatedAt(new \DateTimeImmutable('-40 hours'));
+        $this->csqClient->method('getTransactionInfo')->willReturn(['rc' => 0, 'items' => [['resultcode' => '10', 'supplierreference' => '999', 'resultmessage' => 'ok']]]);
+        $this->connection->method('executeStatement')->willReturn(1);
+        $this->balanceService->expects($this->once())->method('createSaleBalance');
+
+        $this->service->checkStatusOrder(555);
+    }
+
+    // ---- COMR-261: un rechazo síncrono debe dejar state process coherente con state ----
+
+    public function testSynchronousProviderRejectionLeavesStateProcessRejectedToo(): void
+    {
+        $this->availabilityService->method('canDispatchTo')->willReturn(true);
+        $this->balanceService->method('balance')->willReturn(new AccountBalanceDto('USD', 1000.0));
+        $this->connection->method('executeStatement')->willReturn(1);
+        // Rechazo determinista de CSQ (importe incorrecto) y sin proveedor secundario al que pasar.
+        $this->csqClient->method('purchase')->willReturn(['rc' => -1, 'items' => [['resultcode' => '927', 'resultmessage' => 'Importe incorrecto']]]);
+
+        $this->service->invokeRechargeCommunication(555);
+
+        $this->assertSame(CommunicationStateEnum::REJECTED, $this->saleRecharge->getState());
+        $this->assertSame(
+            CommunicationStateEnum::REJECTED->value,
+            $this->saleRecharge->getStateProcess(),
+            'Una venta rechazada no puede seguir con state process Pending (caso de la venta 5387 de producción).',
+        );
     }
 }

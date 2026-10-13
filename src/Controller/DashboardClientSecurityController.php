@@ -7,6 +7,7 @@ use App\DTO\Out\ClientSecOutDto;
 use App\DTO\Out\DeletedOutDto;
 use App\DTO\Out\RegenerateTokenOutDto;
 use App\DTO\Out\ToggleOutDto;
+use App\DTO\SetAccountMarketDto;
 use App\DTO\UpdateAccountSecurityDto;
 use App\Entity\Account;
 use App\Entity\Client;
@@ -136,6 +137,26 @@ class DashboardClientSecurityController extends AbstractController
         ]);
     }
 
+    #[Route('/{clientId}/accounts/{accountId}/market', name: 'dashboard_client_sec_market', methods: ['PATCH'], requirements: ['clientId' => '\d+', 'accountId' => '\d+'])]
+    #[DashboardEndpoint(summary: 'Abrir o cerrar el mercado de una cuenta', tag: 'Client Security', requestDto: SetAccountMarketDto::class, responseDto: AccountSecOutDto::class)]
+    #[IsGranted('ROLE_ADMIN')]
+    public function setMarket(int $clientId, int $accountId, SetAccountMarketDto $dto): JsonResponse
+    {
+        $client = $this->findClientWithAccess($clientId);
+        if ($client instanceof JsonResponse) {
+            return $client;
+        }
+
+        $account = $this->em->getRepository(Account::class)->find($accountId);
+        if ($account === null || $account->getClient()?->getId() !== $clientId) {
+            return $this->json(['error' => ['message' => 'Account not found for this client']], Response::HTTP_NOT_FOUND);
+        }
+
+        $account = $this->accountSecurityService->setMarketEnabled($account, (bool) $dto->getEnabled(), $this->getAuthUser());
+
+        return $this->json($this->serializeAccount($account));
+    }
+
     // ─── Helpers ────────────────────────────────
 
     private function getAuthUser(): ?User
@@ -212,6 +233,10 @@ class DashboardClientSecurityController extends AbstractController
             $data['isActive'] = $account->isActive();
             $data['discount'] = $account->getDiscount();
             $data['commission'] = $account->getCommission();
+            $data['marketEnabled'] = $account->isMarketEnabled();
+            $data['marketOpen'] = $this->accountSecurityService->isMarketOpen($account);
+            $data['marketChangedAt'] = $account->getMarketChangedAt()?->format('c');
+            $data['marketChangedBy'] = $account->getMarketChangedBy()?->getEmail();
         }
 
         return $data;

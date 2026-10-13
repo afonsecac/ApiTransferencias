@@ -212,6 +212,33 @@ class CommunicationInfoServiceTest extends TestCase
         $this->assertSame(1, $this->fakeProvider->packageStatusCalls);
     }
 
+    public function testThrowsForAnUnknownSubtypeInsteadOfQueryingItAsARecharge(): void
+    {
+        $this->stubAdmin();
+
+        $sale = new \App\Entity\CommunicationSaleInfo();
+        $this->assignId($sale, 3);
+        $sale->setTransactionId('TX-3');
+        $sale->setCreatedAt(new \DateTimeImmutable('now'));
+        $sale->setTenant($this->accountWithEnvironment());
+        $sale->setState(CommunicationStateEnum::PENDING);
+        $sale->setProvider(CommunicationProviderEnum::ETECSA->value);
+
+        $repo = $this->createMock(CommunicationSaleRechargeRepository::class);
+        $repo->method('findOneBy')->willReturn($sale);
+        $this->em->method('getRepository')->with(CommunicationSaleRecharge::class)->willReturn($repo);
+
+        try {
+            $this->service->querySale($this->requestInfo(1));
+            $this->fail('Un subtipo desconocido debe lanzar.');
+        } catch (\App\Exception\MyCurrentException $e) {
+            $this->assertSame('UNSUPPORTED_SALE_SUBTYPE', $e->getCodeWork());
+        }
+
+        $this->assertSame(0, $this->fakeProvider->rechargeStatusCalls);
+        $this->assertSame(0, $this->fakeProvider->packageStatusCalls);
+    }
+
     public function testReturnsNullWithoutQueryingProviderWhenTenantIsNull(): void
     {
         $this->stubAdmin();

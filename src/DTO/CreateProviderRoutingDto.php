@@ -24,11 +24,11 @@ class CreateProviderRoutingDto implements IInput
 
     #[OAProperty(schema: ['type' => 'string', 'enum' => ['ETECSA', 'DTONE']], description: 'Proveedor a usar')]
     #[Assert\NotBlank]
-    #[Assert\Choice(callback: [CommunicationProviderEnum::class, 'values'])]
+    #[Assert\Choice(callback: [CommunicationProviderEnum::class, 'communicationsValues'])]
     protected ?string $provider;
 
     #[OAProperty(schema: ['type' => 'string', 'enum' => ['ETECSA', 'DTONE'], 'nullable' => true], description: 'Proveedor de respaldo: si el proveedor principal no puede despachar (no disponible) o rechaza el envío, se intenta este')]
-    #[Assert\Choice(callback: [CommunicationProviderEnum::class, 'values'])]
+    #[Assert\Choice(callback: [CommunicationProviderEnum::class, 'communicationsValues'])]
     protected ?string $fallbackProvider;
 
     #[OAProperty(schema: ['type' => 'string', 'enum' => ['Mobile', 'uSIM', 'Devices', 'Utilities'], 'nullable' => true], description: 'Servicio al que aplica este enrutado. null = cualquier servicio')]
@@ -38,6 +38,10 @@ class CreateProviderRoutingDto implements IInput
     #[OAProperty(schema: ['type' => 'string', 'enum' => ['AIRTIME', 'BUNDLE', 'DATA', 'SMS', 'INTERNET', 'LANDLINE', 'uSIM'], 'nullable' => true], description: 'Subservicio al que aplica. Solo válido junto con serviceName. null = cualquier subservicio de esa categoría')]
     #[Assert\Length(max: 255)]
     protected ?string $subserviceName;
+
+    #[OAProperty(description: 'Área a la que aplica este enrutado (p. ej. Gift Cards, Retail). null = cualquier área. Es independiente de serviceName: puede indicarse sola')]
+    #[Assert\Length(max: 255)]
+    protected ?string $areaName;
 
     #[OAProperty(description: 'Nota interna sobre el motivo de este enrutado')]
     #[Assert\Length(max: 255)]
@@ -52,6 +56,7 @@ class CreateProviderRoutingDto implements IInput
         ?string $serviceName = null,
         ?string $subserviceName = null,
         ?string $notes = null,
+        ?string $areaName = null,
     ) {
         $this->clientId = $clientId;
         $this->environmentId = $environmentId;
@@ -61,6 +66,7 @@ class CreateProviderRoutingDto implements IInput
         $this->serviceName = $serviceName;
         $this->subserviceName = $subserviceName;
         $this->notes = $notes;
+        $this->areaName = $areaName;
     }
 
     #[Assert\Callback]
@@ -77,6 +83,9 @@ class CreateProviderRoutingDto implements IInput
         }
         if ($this->subserviceName !== null && str_contains($this->subserviceName, '|')) {
             $context->buildViolation('subserviceName no puede contener "|"')->atPath('subserviceName')->addViolation();
+        }
+        if ($this->areaName !== null && str_contains($this->areaName, '|')) {
+            $context->buildViolation('areaName no puede contener "|"')->atPath('areaName')->addViolation();
         }
     }
 
@@ -100,6 +109,9 @@ class CreateProviderRoutingDto implements IInput
 
     public function getSubserviceName(): ?string { return $this->subserviceName; }
     public function setSubserviceName(?string $v): void { $this->subserviceName = $v; }
+
+    public function getAreaName(): ?string { return $this->areaName; }
+    public function setAreaName(?string $v): void { $this->areaName = $v; }
 
     public function getNotes(): ?string { return $this->notes; }
     public function setNotes(?string $v): void { $this->notes = $v; }

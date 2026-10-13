@@ -339,8 +339,12 @@ class DashboardCommunicationPackagesController extends AbstractController
                 // columna plana ("{name}|{subserviceName}", ver
                 // ServiceCategoryKey), a diferencia de tags no necesita SQL
                 // crudo para comparar.
-                $qb->andWhere('p.serviceKey = :serviceKey')
-                    ->setParameter('serviceKey', ServiceCategoryKey::of($service, $subservice));
+                // También los paquetes de esa categoría que lleven área ("{categoría}|{área}"): ver
+                // ServiceCategoryKey::isInCategory().
+                $categoryKey = ServiceCategoryKey::of($service, $subservice);
+                $qb->andWhere('p.serviceKey = :serviceKey OR p.serviceKey LIKE :serviceKeyAreaPrefix')
+                    ->setParameter('serviceKey', $categoryKey)
+                    ->setParameter('serviceKeyAreaPrefix', addcslashes($categoryKey, '%_\\') . '|%');
             } else {
                 // Solo service — cualquier subservicio de esa categoría.
                 $qb->andWhere('p.serviceKey LIKE :serviceKeyPrefix')

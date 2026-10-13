@@ -14,7 +14,8 @@ use Symfony\Component\Validator\Context\ExecutionContextInterface;
  * Convención de limpieza para serviceName/subserviceName: `null` = no
  * tocar el campo, `''` (cadena vacía) = limpiarlo a comodín. Es la única
  * forma de distinguir "no viene en el PATCH" de "se quiere volver a
- * comodín" cuando ambos casos parten de un valor no-null en la fila.
+ * comodín" cuando ambos casos parten de un valor no-null en la fila. Lo
+ * mismo vale para areaName.
  */
 class UpdateProviderRoutingDto implements IInput
 {
@@ -27,11 +28,11 @@ class UpdateProviderRoutingDto implements IInput
     protected ?string $saleType;
 
     #[OAProperty(schema: ['type' => 'string', 'enum' => ['ETECSA', 'DTONE']], description: 'Proveedor a usar')]
-    #[Assert\Choice(callback: [CommunicationProviderEnum::class, 'values'])]
+    #[Assert\Choice(callback: [CommunicationProviderEnum::class, 'communicationsValues'])]
     protected ?string $provider;
 
     #[OAProperty(schema: ['type' => 'string', 'enum' => ['ETECSA', 'DTONE'], 'nullable' => true], description: 'Proveedor de respaldo: si el proveedor principal no puede despachar o rechaza el envío, se intenta este')]
-    #[Assert\Choice(callback: [CommunicationProviderEnum::class, 'values'])]
+    #[Assert\Choice(callback: [CommunicationProviderEnum::class, 'communicationsValues'])]
     protected ?string $fallbackProvider;
 
     #[OAProperty(schema: ['type' => 'string', 'enum' => ['Mobile', 'uSIM', 'Devices', 'Utilities'], 'nullable' => true], description: 'Servicio al que aplica. null = no tocar, "" = volver a comodín (cualquier servicio)')]
@@ -41,6 +42,10 @@ class UpdateProviderRoutingDto implements IInput
     #[OAProperty(schema: ['type' => 'string', 'enum' => ['AIRTIME', 'BUNDLE', 'DATA', 'SMS', 'INTERNET', 'LANDLINE', 'uSIM'], 'nullable' => true], description: 'Subservicio. null = no tocar, "" = volver a comodín. Solo válido junto con serviceName')]
     #[Assert\Length(max: 255)]
     protected ?string $subserviceName;
+
+    #[OAProperty(description: 'Área a la que aplica. null = no tocar, "" = volver a comodín (cualquier área)')]
+    #[Assert\Length(max: 255)]
+    protected ?string $areaName;
 
     #[OAProperty(description: 'Nota interna sobre el motivo de este enrutado')]
     #[Assert\Length(max: 255)]
@@ -58,6 +63,7 @@ class UpdateProviderRoutingDto implements IInput
         ?string $subserviceName = null,
         ?string $notes = null,
         ?bool $isActive = null,
+        ?string $areaName = null,
     ) {
         $this->environmentId = $environmentId;
         $this->saleType = $saleType;
@@ -67,6 +73,7 @@ class UpdateProviderRoutingDto implements IInput
         $this->subserviceName = $subserviceName;
         $this->notes = $notes;
         $this->isActive = $isActive;
+        $this->areaName = $areaName;
     }
 
     #[Assert\Callback]
@@ -85,6 +92,9 @@ class UpdateProviderRoutingDto implements IInput
         }
         if ($this->subserviceName !== null && str_contains($this->subserviceName, '|')) {
             $context->buildViolation('subserviceName no puede contener "|"')->atPath('subserviceName')->addViolation();
+        }
+        if ($this->areaName !== null && str_contains($this->areaName, '|')) {
+            $context->buildViolation('areaName no puede contener "|"')->atPath('areaName')->addViolation();
         }
     }
 
@@ -105,6 +115,9 @@ class UpdateProviderRoutingDto implements IInput
 
     public function getSubserviceName(): ?string { return $this->subserviceName; }
     public function setSubserviceName(?string $v): void { $this->subserviceName = $v; }
+
+    public function getAreaName(): ?string { return $this->areaName; }
+    public function setAreaName(?string $v): void { $this->areaName = $v; }
 
     public function getNotes(): ?string { return $this->notes; }
     public function setNotes(?string $v): void { $this->notes = $v; }

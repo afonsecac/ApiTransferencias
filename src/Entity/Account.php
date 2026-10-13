@@ -28,6 +28,27 @@ class Account implements UserInterface
     #[ORM\Column]
     private array $roles = [];
 
+    /**
+     * Interruptor de mercado de esta cuenta (ADR-001): apagado por defecto. Por sí solo no concede nada; el
+     * autenticador concede ROLE_MARKET_API_USER cuando además está encendido el interruptor global
+     * (App\Security\MarketAccess). Patrón reutilizable para activar una función nueva cuenta a cuenta.
+     */
+    #[ORM\Column(options: ['default' => false])]
+    private bool $marketEnabled = false;
+
+    /** Auditoría del último cambio del interruptor de mercado: cuándo y quién (NULL si nunca se tocó). */
+    #[ORM\Column(nullable: true)]
+    private ?DateTimeImmutable $marketChangedAt = null;
+
+    #[ORM\ManyToOne(targetEntity: User::class)]
+    #[ORM\JoinColumn(nullable: true)]
+    private ?User $marketChangedBy = null;
+
+    /**
+     * Concesión del rol de mercado para ESTA petición: la fija el autenticador y no se persiste (no está mapeada).
+     */
+    private bool $marketRoleGranted = false;
+
     #[ORM\Column(type: UuidType::NAME, unique: true)]
     private ?Uuid $accessToken = null;
 
@@ -126,8 +147,55 @@ class Account implements UserInterface
         $roles = $this->roles;
         // guarantee every user at least has ROLE_USER
         $roles[] = 'ROLE_API_USER';
+        if ($this->marketRoleGranted) {
+            $roles[] = 'ROLE_MARKET_API_USER';
+        }
 
         return array_unique($roles);
+    }
+
+    public function isMarketEnabled(): bool
+    {
+        return $this->marketEnabled;
+    }
+
+    public function setMarketEnabled(bool $marketEnabled): static
+    {
+        $this->marketEnabled = $marketEnabled;
+
+        return $this;
+    }
+
+    public function getMarketChangedAt(): ?DateTimeImmutable
+    {
+        return $this->marketChangedAt;
+    }
+
+    public function getMarketChangedBy(): ?User
+    {
+        return $this->marketChangedBy;
+    }
+
+    /**
+     * Registra el cambio del interruptor de mercado: cuándo y quién.
+     */
+    public function markMarketChanged(?User $by, DateTimeImmutable $at): static
+    {
+        $this->marketChangedBy = $by;
+        $this->marketChangedAt = $at;
+
+        return $this;
+    }
+
+    /**
+     * Lo llama ApiTokenAuthenticator, tras comprobar con MarketAccess que la cuenta y el interruptor global lo
+     * permiten. No se persiste: vale solo para esta petición.
+     */
+    public function grantMarketRole(): static
+    {
+        $this->marketRoleGranted = true;
+
+        return $this;
     }
 
     public function setRoles(array $roles): static

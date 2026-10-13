@@ -3,6 +3,7 @@
 namespace App\Provider\DTOne;
 
 use App\Enums\CommunicationProviderEnum;
+use App\Enums\ProviderDomainEnum;
 use App\Enums\ProviderCapabilityEnum;
 use App\Enums\ProviderOutcomeEnum;
 use App\Exception\MyCurrentException;
@@ -12,6 +13,7 @@ use App\Provider\Contract\ProviderBalanceInterface;
 use App\Provider\Contract\ProviderBalanceResult;
 use App\Provider\Contract\ProviderCatalogInterface;
 use App\Provider\Contract\ProviderConfigField;
+use App\Provider\Contract\ProviderDomainAwareInterface;
 use App\Provider\Contract\ProviderContext;
 use App\Provider\Contract\ProviderDispatchResult;
 use App\Provider\Contract\ProviderProductDto;
@@ -56,7 +58,8 @@ final class DTOneCommunicationProvider implements
     PackageSaleProviderInterface,
     ProviderBalanceInterface,
     ProviderCatalogInterface,
-    ProviderPromotionCatalogInterface
+    ProviderPromotionCatalogInterface,
+    ProviderDomainAwareInterface
 {
     /**
      * Valores de `type` (clasificación de producto de DTOne) soportados hoy
@@ -114,6 +117,14 @@ final class DTOneCommunicationProvider implements
         #[Autowire('@monolog.logger.dtone')]
         private readonly LoggerInterface $dtoneLogger,
     ) {
+    }
+
+    /**
+     * @return list<ProviderDomainEnum>
+     */
+    public function getDomains(): array
+    {
+        return [ProviderDomainEnum::Communications];
     }
 
     public function getCode(): CommunicationProviderEnum

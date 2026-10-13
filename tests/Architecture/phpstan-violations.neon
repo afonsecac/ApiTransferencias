@@ -1,0 +1,15 @@
+# Configuración usada solo por RulesDetectViolationsTest: analiza fixtures que
+# rompen a propósito cada regla de MarketLayersTest.
+includes:
+    - ../../vendor/phpat/phpat/extension.neon
+
+parameters:
+    level: 0
+    paths:
+        - Fixtures
+
+services:
+    -
+        class: App\Tests\Architecture\MarketLayersTest
+        tags:
+            - phpat.test

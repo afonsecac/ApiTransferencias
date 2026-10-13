@@ -28,6 +28,7 @@ class ApiTokenAuthenticator extends AbstractAuthenticator
         LoggerInterface $logger,
         AccountRepository $permissionRepo,
         IpMatcherService $ipMatcherService,
+        private readonly MarketAccess $marketAccess,
     )
     {
         $this->permission = $permissionRepo;
@@ -69,9 +70,9 @@ class ApiTokenAuthenticator extends AbstractAuthenticator
         // es falsificable; con ella, getClientIp() ignora las cabeceras que no
         // provengan de un proxy de confianza.
         $clientIp = $request->getClientIp();
-        $referer = $request->headers->get("Referer");
-        $host = $request->headers->get("host");
-        $isWebPage = !is_null($referer) && !is_null($host) && str_contains($referer, $host);
+        // Ya no se admite «venir de una página web» (Referer que contiene el Host) como alternativa a la lista de IP:
+        // ambas cabeceras las controla quien llama, así que con solo conocer un token cualquiera se saltaba la lista
+        // de origen de la cuenta (COMR-184).
 
         $isLocal = in_array($clientIp, ['127.0.0.1', '::1'], true);
         $origin = $permission->getOrigin();
@@ -81,11 +82,10 @@ class ApiTokenAuthenticator extends AbstractAuthenticator
             $isOriginMatch = $this->ipMatcherService->isIpAllowed($clientIp, $origin);
         }
         $isRemote = $isWildcard || $isOriginMatch;
-        if (!$isLocal && !$isRemote && !$isWebPage) {
-            $this->logger->debug('The logger in reques URL {url} info Local: {isLocal}, IsRemote: {isRemote}, IPs: {ips}, IsWebPage: {isWebPage}', [
+        if (!$isLocal && !$isRemote) {
+            $this->logger->debug('The logger in reques URL {url} info Local: {isLocal}, IsRemote: {isRemote}, IPs: {ips}', [
                 'isLocal' => $isLocal,
                 'isRemote' => $isRemote,
-                'isWebPage' => $isWebPage,
                 'ips' => $clientIp,
                 'url' => $request->getPathInfo(),
                 'headers' => $request->headers->all(),
@@ -93,6 +93,12 @@ class ApiTokenAuthenticator extends AbstractAuthenticator
                 'allIps' => $request->getClientIps()
             ]);
             throw new CustomUserMessageAuthenticationException('Access not allowed from this IP address');
+        }
+
+        // Mercado (ADR-001): la cuenta habilitada recibe además ROLE_MARKET_API_USER, y solo si el interruptor
+        // global está encendido. Las cuentas actuales no cambian de roles.
+        if ($this->marketAccess->isOpenFor($permission)) {
+            $permission->grantMarketRole();
         }
 
         return new SelfValidatingPassport(new UserBadge($permission->getUserIdentifier()));

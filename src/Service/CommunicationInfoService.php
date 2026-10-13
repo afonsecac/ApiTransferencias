@@ -99,9 +99,11 @@ class CommunicationInfoService extends CommonService
         if ($operationSale instanceof CommunicationSalePackage) {
             $adapter = $this->providerRegistry->getFor($context->provider, PackageSaleProviderInterface::class);
             $statusResult = $adapter->fetchPackageSaleStatus($context, $query);
-        } else {
+        } elseif ($operationSale instanceof CommunicationSaleRecharge) {
             $adapter = $this->providerRegistry->getFor($context->provider, RechargeProviderInterface::class);
             $statusResult = $adapter->fetchRechargeStatus($context, $query);
+        } else {
+            throw SaleSubtype::unsupported($operationSale);
         }
 
         $result = $statusResult->raw;

@@ -74,4 +74,30 @@ class UpdateProviderRoutingDtoTest extends TestCase
 
         $this->assertCount(0, $violations);
     }
+
+    // ---- COMR-264 (C1): area opcional; null = no tocar, '' = volver a comodín ----
+
+    public function testClearingTheAreaWithAnEmptyStringIsValid(): void
+    {
+        $this->assertCount(0, $this->validator->validate(new UpdateProviderRoutingDto(areaName: '')));
+    }
+
+    public function testAreaNameCannotContainThePipeSeparator(): void
+    {
+        $violations = $this->validator->validate(new UpdateProviderRoutingDto(areaName: 'Gift|Cards'));
+
+        $this->assertGreaterThan(0, count($violations));
+        $this->assertSame('areaName', $violations[0]->getPropertyPath());
+    }
+
+    // ---- COMR-71 (C2) ----
+
+    public function testTheOwnMarketProviderCannotBeChosenAsProviderOrFallback(): void
+    {
+        $asProvider = $this->validator->validate(new UpdateProviderRoutingDto(provider: 'OWN'));
+        $asFallback = $this->validator->validate(new UpdateProviderRoutingDto(fallbackProvider: 'OWN'));
+
+        $this->assertSame('provider', $asProvider[0]->getPropertyPath());
+        $this->assertSame('fallbackProvider', $asFallback[0]->getPropertyPath());
+    }
 }
