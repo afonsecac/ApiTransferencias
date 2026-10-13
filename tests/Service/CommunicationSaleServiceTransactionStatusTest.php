@@ -377,7 +377,7 @@ class CommunicationSaleServiceTransactionStatusTest extends TestCase
         $this->assertSame(CommunicationStateEnum::PENDING, $this->saleRecharge->getState());
     }
 
-    // ---- caracterización (COMR-255): cadena de reintentos del HTTP 400, hoy sin tope ----
+    // ---- COMR-260 paso 2: la cadena del HTTP 400 ya no existe ----
 
     private function prepareEtecsaSaleReturning(int $errorCode): void
     {
@@ -386,28 +386,20 @@ class CommunicationSaleServiceTransactionStatusTest extends TestCase
         $this->etecsaStatusErrorCode = $errorCode;
     }
 
-    public function testHttp400OnTheStatusQueryRedispatchesACheckWithATwoSecondDelay(): void
+    public function testHttp400OnTheStatusQueryDoesNotDispatchAnotherCheck(): void
     {
         $this->prepareEtecsaSaleReturning(400);
 
         $this->service->checkStatusOrder(555);
 
-        $this->assertCount(1, $this->dispatched);
-        [$message, $stamps] = $this->dispatched[0];
-        $this->assertInstanceOf(CheckSaleMessage::class, $message);
-        $this->assertSame(555, $message->getSaleId());
-        $this->assertSame(2000, $stamps[0]->getDelay());
-        $this->assertInstanceOf(DelayStamp::class, $stamps[0]);
+        // COMR-260 paso 2: la siguiente consulta la programa next_check_at (y la lanza el cron), no un
+        // re-despacho de 2 s desde aquí que, repetido, formaba una cadena sin tope.
+        $this->assertSame([], $this->dispatched);
         $this->assertSame(CommunicationStateEnum::PENDING, $this->saleRecharge->getState());
         $this->assertSame('INTERNAL_PROVIDER_HTTP_400', $this->saleRecharge->getTransactionStatus()['providerCode']);
     }
 
-    /**
-     * Documenta el defecto actual: nada limita cuántas veces se vuelve a encolar. Cada consulta que
-     * recibe un 400 despacha otra, siempre con la misma espera de 2 s, sin contador ni antigüedad máxima.
-     * Cuando se añada el tope (backoff, next_check_at) este test debe cambiar a propósito.
-     */
-    public function testHttp400ChainHasNoCapAndNeverChangesItsDelay(): void
+    public function testHttp400ChainIsBoundedBecauseNothingIsRequeuedAndTheWaitGrowsUpToTheCap(): void
     {
         $this->prepareEtecsaSaleReturning(400);
 
@@ -415,10 +407,12 @@ class CommunicationSaleServiceTransactionStatusTest extends TestCase
             $this->service->checkStatusOrder(555);
         }
 
-        $this->assertCount(25, $this->dispatched);
-        $delays = array_unique(array_map(static fn (array $d): int => $d[1][0]->getDelay(), $this->dispatched));
-        $this->assertSame([2000], array_values($delays));
+        $this->assertSame([], $this->dispatched, 'Veinticinco 400 seguidos no encolan ni un mensaje.');
+        $this->assertSame(25, $this->saleRecharge->getCheckAttempts());
         $this->assertSame(CommunicationStateEnum::PENDING, $this->saleRecharge->getState());
+        $secondsUntilNextCheck = $this->saleRecharge->getNextCheckAt()->getTimestamp() - time();
+        $this->assertGreaterThan(3500, $secondsUntilNextCheck, 'La espera llega al tope de 1 h.');
+        $this->assertLessThanOrEqual(3600, $secondsUntilNextCheck);
     }
 
     // ---- COMR-260 paso 1: la consulta escribe next_check_at y check_attempts (todavía nadie los lee) ----

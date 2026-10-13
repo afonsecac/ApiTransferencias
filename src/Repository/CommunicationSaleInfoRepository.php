@@ -7,6 +7,8 @@ use App\Entity\CommunicationSalePackage;
 use App\Entity\CommunicationSaleRecharge;
 use App\Enums\CommunicationStateEnum;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
+use Doctrine\DBAL\ArrayParameterType;
+use Doctrine\DBAL\Connection;
 use Doctrine\ORM\QueryBuilder;
 use Doctrine\Persistence\ManagerRegistry;
 
@@ -183,6 +185,71 @@ class CommunicationSaleInfoRepository extends ServiceEntityRepository
      * @return CommunicationSaleInfo[]
      * @throws \DateMalformedStringException
      */
+    /**
+     * COMR-260 paso 2: reclama las ventas cuya consulta de estado toca ya (`next_check_at` vencido, o nulo en las
+     * anteriores al paso 1) y las «arrienda»: adelanta su `next_check_at` `$leaseSeconds` segundos para que otro
+     * worker no las reciba a la vez. Si el worker que las consulta muere, el arrendamiento caduca y la venta vuelve
+     * a tocar. La consulta real reprograma `next_check_at` con la espera creciente.
+     *
+     * Tope POR PROVEEDOR (`$perProviderLimit`) para que uno con muchas pendientes no deje sin turno a los demás, y
+     * `FOR UPDATE SKIP LOCKED` para que dos pasadas concurrentes no esperen una a la otra ni repitan filas. Solo
+     * lee identificadores: la pasada no carga entidades, así que su memoria no crece con el histórico.
+     *
+     * @return list<int> ids reclamados
+     */
+    public function claimDueForCheck(\DateTimeImmutable $now, int $perProviderLimit, int $leaseSeconds): array
+    {
+        $connection = $this->getEntityManager()->getConnection();
+        $table = $this->getClassMetadata()->getTableName();
+        $subtypes = array_keys(array_filter(
+            $this->getClassMetadata()->discriminatorMap,
+            static fn (string $class): bool => in_array($class, self::DISPATCHABLE_SUBTYPES, true),
+        ));
+        $leasedUntil = $now->modify(sprintf('+%d seconds', $leaseSeconds));
+
+        return $connection->transactional(function (Connection $connection) use ($table, $subtypes, $now, $leasedUntil, $perProviderLimit): array {
+            $ids = $connection->fetchFirstColumn(
+                <<<SQL
+                    SELECT s.id
+                    FROM {$table} s
+                    WHERE s.id IN (
+                        SELECT d.id
+                        FROM (
+                            SELECT id, row_number() OVER (PARTITION BY provider ORDER BY next_check_at ASC NULLS FIRST, id ASC) AS rn
+                            FROM {$table}
+                            WHERE state = :state
+                              AND state_process IN (:processes)
+                              AND type IN (:subtypes)
+                              AND (next_check_at IS NULL OR next_check_at <= :now)
+                        ) d
+                        WHERE d.rn <= :perProvider
+                    )
+                    ORDER BY s.id
+                    FOR UPDATE SKIP LOCKED
+                    SQL,
+                [
+                    'state' => CommunicationStateEnum::PENDING->value,
+                    'processes' => [CommunicationStateEnum::PENDING->value, CommunicationSaleInfo::STATE_PROCESS_UNCERTAIN],
+                    'subtypes' => $subtypes,
+                    'now' => $now->format('Y-m-d H:i:s'),
+                    'perProvider' => $perProviderLimit,
+                ],
+                ['processes' => ArrayParameterType::STRING, 'subtypes' => ArrayParameterType::STRING],
+            );
+            if ($ids === []) {
+                return [];
+            }
+            $ids = array_map('intval', $ids);
+            $connection->executeStatement(
+                "UPDATE {$table} SET next_check_at = :leasedUntil WHERE id IN (:ids)",
+                ['leasedUntil' => $leasedUntil->format('Y-m-d H:i:s'), 'ids' => $ids],
+                ['ids' => ArrayParameterType::INTEGER],
+            );
+
+            return $ids;
+        });
+    }
+
     /**
      * Ventas inciertas (COMR-258), las más antiguas primero.
      *

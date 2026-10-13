@@ -87,7 +87,7 @@ class SalePollingCharacterizationFunctionalTest extends ProviderFunctionalTestCa
         return $ids;
     }
 
-    // ---- getLastPending: lo que recorre cada hora CheckStatusTask ----
+    // ---- getLastPending: ventas pendientes (desde COMR-260 paso 2 las consulta CheckDueSalesTask por next_check_at, no este barrido) ----
 
     public function testLastPendingOnlySelectsPendingSalesWhoseStateProcessIsPending(): void
     {
