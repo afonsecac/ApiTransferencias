@@ -305,6 +305,39 @@ final class TransactionStatus
     }
 
     /**
+     * ¿El proveedor pudo llegar a ver ya esta venta? (COMR-266) Cierto si el envío anterior fue a ESE
+     * proveedor y terminó en un resultado que no descarta que la tenga (aceptada, pendiente, completada
+     * o desconocida por un timeout). Falso si fue rechazada, fallida o reintentable (credencial rechazada
+     * o failover): entonces el proveedor nunca la tuvo y un nuevo rechazo es legítimo.
+     *
+     * Una respuesta v1 (cruda de ETECSA, histórica) no trae resultado: se da por enviada si es de ETECSA
+     * y no está vacía — ante la duda se consulta, nunca se rechaza a ciegas.
+     *
+     * @param array<string, mixed> $status
+     */
+    public static function wasSentTo(array $status, string $provider): bool
+    {
+        if ($status === []) {
+            return false;
+        }
+
+        if (!self::isV2($status)) {
+            return $provider === 'ETECSA';
+        }
+
+        if (($status['source'] ?? null) !== self::SOURCE_PROVIDER || ($status['provider'] ?? null) !== $provider) {
+            return false;
+        }
+
+        return in_array(self::outcomeOf($status), [
+            ProviderOutcomeEnum::ACCEPTED,
+            ProviderOutcomeEnum::PENDING,
+            ProviderOutcomeEnum::COMPLETED,
+            ProviderOutcomeEnum::UNKNOWN,
+        ], true);
+    }
+
+    /**
      * @param array<string, mixed> $status
      */
     public static function lastRetryAtOf(array $status): ?string

@@ -34,3 +34,13 @@ Pruebas hechas el 2026-10-12 contra el sandbox de TEST de cada proveedor, llaman
 - **Tratar 401 y 403 al crear como indisponibilidad del proveedor, no como rechazo de la venta.** Hoy, con DTOne, un 401 en la creación se mapea a `REJECTED` (4xx definitivo) y, con proveedor secundario, la venta pasaría a failover por un problema de nuestras credenciales.
 - **No tratar el rechazo por duplicado de CSQ («Ticket duplicado») ni el de ETECSA («Unexpected message during the sale») como un rechazo de la venta.** Debe consultarse el estado de la venta original. Con ETECSA el mensaje es genérico, así que lo seguro es consultar siempre antes de aplicar un `REJECTED` a un reenvío.
 - **Confirmar en producción, de solo lectura, qué responde DTOne a una referencia que no existe** (404 o listado vacío): de eso depende si «no encontrada» llega como `UNKNOWN` o como `REJECTED`.
+
+## Estado de implementación (COMR-266, 2026-10-14)
+
+Un reenvío rechazado ya no se aplica a la venta cuando el proveedor pudo haberla recibido antes.
+
+- **Cómo se decide:** `TransactionStatus::wasSentTo()` mira el estado del envío anterior: cierto si fue al mismo proveedor y terminó en aceptada, pendiente, completada o desconocida (un timeout); falso si fue rechazada, fallida o reintentable (credencial rechazada o failover), porque entonces el proveedor nunca tuvo la venta. Una respuesta histórica cruda de ETECSA se da por enviada.
+- **Qué hace:** ante un `REJECTED` (recargas) o `FAILED` (paquetes) de un reenvío, la venta ni se rechaza ni prueba otro proveedor (un failover duplicaría el cobro si el original existe). Conserva el estado de la original, el rechazo queda solo en el histórico y se programa la consulta de estado (`next_check_at`), que resuelve la venta con lo que diga el proveedor. Si el proveedor no la conoce, la consulta la deja incierta y se resuelve a mano (COMR-258).
+- **Qué no cambia:** el `REJECTED` de un primer envío, o de un reenvío cuyo envío anterior ya había sido rechazado, sigue rechazando la venta.
+- **Sin migraciones.** Reversa: desplegar la versión anterior.
+- **Pendiente (del cambio propuesto):** valorar impedir el reenvío manual de ventas ya enviadas en `POST /sales/{id}/retry` para DTOne/CSQ y paquetes (hoy solo las inciertas devuelven 409).

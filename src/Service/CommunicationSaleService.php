@@ -713,6 +713,10 @@ class CommunicationSaleService extends CommonService
                     accountIdentifier: $saleRecharge->getAccountIdentifier(),
                 );
 
+                // Estado del envío ANTERIOR, antes de que este lo pise: si el proveedor ya pudo ver la venta,
+                // un REJECTED de este reenvío no habla de ella (COMR-266).
+                $previousStatus = $saleRecharge->getTransactionStatus();
+                $alreadySent = TransactionStatus::wasSentTo($previousStatus, $provider->value);
                 $dispatchResult = $adapter->recharge($context, $request);
                 // carryRetryBlock() preserva el marcador de un failover
                 // previo (o el contador de GATEWAY_MISSING) — fromDispatch()
@@ -726,6 +730,12 @@ class CommunicationSaleService extends CommonService
 
                 if ($this->isCredentialsRejected($dispatchResult)) {
                     $this->releaseSaleForRejectedCredentials($saleRecharge, $provider, $environment->getType(), $dispatchResult, $dispatchEnvelope);
+
+                    return;
+                }
+
+                if ($alreadySent && $dispatchResult->outcome === ProviderOutcomeEnum::REJECTED) {
+                    $this->keepOriginalStatusAfterRejectedResend($saleRecharge, $previousStatus, $dispatchEnvelope);
 
                     return;
                 }
@@ -1004,7 +1014,20 @@ class CommunicationSaleService extends CommonService
                 ),
             );
 
+            $previousStatus = $sale->getTransactionStatus();
+            $alreadySent = TransactionStatus::wasSentTo($previousStatus, $provider->value);
             $dispatchResult = $adapter->sellPackage($context, $request);
+
+            if ($alreadySent && $dispatchResult->outcome === ProviderOutcomeEnum::FAILED) {
+                // Reenvío rechazado: la venta original puede existir en el proveedor (COMR-266).
+                $this->keepOriginalStatusAfterRejectedResend(
+                    $sale,
+                    $previousStatus,
+                    TransactionStatus::carryRetryBlock($previousStatus, TransactionStatus::fromDispatch($dispatchResult, $provider->value)),
+                );
+
+                return;
+            }
 
             if ($this->isCredentialsRejected($dispatchResult)) {
                 $this->releaseSaleForRejectedCredentials(
@@ -1064,6 +1087,31 @@ class CommunicationSaleService extends CommonService
             $this->em->flush();
             $this->logger->error("Sale {$saleId} execution error: " . $exc->getMessage());
         }
+    }
+
+    /**
+     * El proveedor rechazó el REENVÍO de una venta que ya pudo haber recibido (COMR-266). CSQ ("Ticket
+     * duplicado") y ETECSA (un mensaje genérico) rechazan una referencia ya usada aunque la venta
+     * ORIGINAL exista, esté completada o con orden: aplicar ese rechazo la rechazaría y liberaría su
+     * saldo aunque el proveedor la tenga procesada. Por eso ni se rechaza ni se prueba otro proveedor:
+     * la venta conserva el estado de la original, el rechazo queda solo en el histórico y se
+     * programa la consulta de estado, que resuelve la venta con lo que diga el proveedor.
+     *
+     * @param array<string, mixed> $previousStatus
+     * @param array<string, mixed> $rejectionEnvelope
+     */
+    private function keepOriginalStatusAfterRejectedResend(
+        CommunicationSaleInfo $sale,
+        array $previousStatus,
+        array $rejectionEnvelope,
+    ): void {
+        $sale->setTransactionStatus($previousStatus);
+        $sale->setState(CommunicationStateEnum::PENDING);
+        $sale->setStateProcess(CommunicationStateEnum::PENDING->value);
+        $sale->scheduleNextCheck();
+        $this->historicalSaleService->createHistoricalCommunication($sale->getId(), CommunicationStateEnum::PENDING, $rejectionEnvelope);
+        $this->em->flush();
+        $this->logger->warning("Sale {$sale->getId()}: provider rejected a resend of a sale it may already have; keeping the original status and checking it.");
     }
 
     /**
