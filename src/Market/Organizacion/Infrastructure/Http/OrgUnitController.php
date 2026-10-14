@@ -9,13 +9,13 @@ use App\Market\Organizacion\Application\CostCenterInput;
 use App\Market\Organizacion\Application\CreateOrgUnit;
 use App\Market\Organizacion\Application\GetOrgUnit;
 use App\Market\Organizacion\Application\ListOrgUnits;
+use App\Market\Organizacion\Application\OrgUnitDetails;
 use App\Market\Organizacion\Application\OrgUnitInput;
 use App\Market\Organizacion\Application\SetPrincipalCostCenter;
 use App\Market\Organizacion\Application\UpdateCostCenter;
 use App\Market\Organizacion\Application\UpdateOrgUnit;
 use App\Market\Organizacion\Domain\InvalidFiscalData;
 use App\Market\Organizacion\Domain\InvalidOrgUnit;
-use App\Market\Organizacion\Domain\OrgUnit;
 use App\Market\Organizacion\Domain\OrgUnitAlreadyExists;
 use App\Market\Organizacion\Domain\OrgUnitNotFound;
 use App\Market\Organizacion\Domain\OrgUnitType;
@@ -56,7 +56,7 @@ final class OrgUnitController
         $query = $request->query->get('q');
 
         return new JsonResponse(array_map(
-            static fn (OrgUnit $u) => OrgUnitOutDto::from($u),
+            static fn (OrgUnitDetails $d) => OrgUnitOutDto::from($d),
             ($this->listUnits)($type, is_string($query) ? $query : null),
         ));
     }
@@ -133,7 +133,7 @@ final class OrgUnitController
     }
 
     /**
-     * @param callable(): OrgUnit $action
+     * @param callable(): OrgUnitDetails $action
      */
     private function respond(callable $action, int $status = Response::HTTP_OK): JsonResponse
     {

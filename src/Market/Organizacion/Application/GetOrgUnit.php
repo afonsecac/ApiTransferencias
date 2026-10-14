@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Market\Organizacion\Application;
 
-use App\Market\Organizacion\Domain\OrgUnit;
 use App\Market\Organizacion\Domain\OrgUnitNotFound;
 use App\Market\Organizacion\Domain\OrgUnitRepository;
 
@@ -17,8 +16,10 @@ final class GetOrgUnit
     /**
      * @throws OrgUnitNotFound
      */
-    public function __invoke(int $id): OrgUnit
+    public function __invoke(int $id): OrgUnitDetails
     {
-        return $this->units->findById($id) ?? throw OrgUnitNotFound::forId($id);
+        $unit = $this->units->findById($id) ?? throw OrgUnitNotFound::forId($id);
+
+        return new OrgUnitDetails($unit, $this->units->costCentersOf($unit));
     }
 }

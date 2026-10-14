@@ -54,10 +54,6 @@ class OrgUnit
     #[ORM\Column(name: 'fiscal_data', type: 'json')]
     private array $fiscalData = [];
 
-    /** @var list<array<string, mixed>> */
-    #[ORM\Column(name: 'cost_centers', type: 'json')]
-    private array $costCenters = [];
-
     #[ORM\Column(name: 'created_at', type: 'datetime_immutable')]
     private \DateTimeImmutable $createdAt;
 
@@ -67,7 +63,6 @@ class OrgUnit
     /**
      * @param list<OrgUnitType> $types
      * @param array<string, mixed> $fiscalData
-     * @param list<CostCenter> $costCenters
      */
     public function __construct(
         string $name,
@@ -78,14 +73,12 @@ class OrgUnit
         string $billingEmail,
         array $types,
         array $fiscalData,
-        array $costCenters,
     ) {
         if (preg_match('/^[A-Z]{2}$/', $countryCode) !== 1 || $countryCode === 'ZZ') {
             throw new InvalidOrgUnit(sprintf('El país "%s" no es válido: dos letras mayúsculas (ZZ está reservado al registro fiscal genérico).', $countryCode));
         }
         $this->countryCode = $countryCode;
         $this->applyData($name, $legalName, $taxId, $address, $billingEmail, $types, $fiscalData);
-        $this->setCostCenters($costCenters);
         $this->createdAt = new \DateTimeImmutable();
         $this->updatedAt = $this->createdAt;
     }
@@ -166,131 +159,6 @@ class OrgUnit
     ): void {
         $this->applyData($name, $legalName, $taxId, $address, $billingEmail, $types, $fiscalData);
         $this->touch();
-    }
-
-    // ---- centros de costo ----
-
-    /**
-     * @return list<CostCenter>
-     */
-    public function costCenters(): array
-    {
-        return array_map(static fn (array $c) => CostCenter::fromArray($c), $this->costCenters);
-    }
-
-    public function costCenter(string $code): CostCenter
-    {
-        $code = strtoupper(trim($code));
-        foreach ($this->costCenters() as $center) {
-            if ($center->code === $code) {
-                return $center;
-            }
-        }
-
-        throw new InvalidOrgUnit(sprintf('La unidad no tiene el centro de costo "%s".', $code));
-    }
-
-    public function principalCostCenter(): CostCenter
-    {
-        foreach ($this->costCenters() as $center) {
-            if ($center->principal) {
-                return $center;
-            }
-        }
-
-        throw new InvalidOrgUnit('La unidad no tiene centro de costo principal.');
-    }
-
-    public function addCostCenter(string $code, string $name): CostCenter
-    {
-        $new = new CostCenter($code, $name, false, true);
-        foreach ($this->costCenters() as $center) {
-            if ($center->code === $new->code) {
-                throw new InvalidOrgUnit(sprintf('El centro de costo "%s" ya existe en la unidad.', $new->code));
-            }
-        }
-
-        $this->setCostCenters([...$this->costCenters(), $new]);
-        $this->touch();
-
-        return $new;
-    }
-
-    public function renameCostCenter(string $code, string $name): void
-    {
-        $this->replaceCostCenter($code, static fn (CostCenter $c) => $c->withName($name));
-    }
-
-    public function makePrincipal(string $code): void
-    {
-        $target = $this->costCenter($code);
-        if (!$target->active) {
-            throw new InvalidOrgUnit(sprintf('El centro de costo "%s" está desactivado: no puede ser el principal.', $target->code));
-        }
-
-        $this->setCostCenters(array_map(
-            static fn (CostCenter $c) => $c->withPrincipal($c->code === $target->code),
-            $this->costCenters(),
-        ));
-        $this->touch();
-    }
-
-    public function deactivateCostCenter(string $code): void
-    {
-        if ($this->costCenter($code)->principal) {
-            throw new InvalidOrgUnit('El centro de costo principal no se puede desactivar: antes hay que elegir otro principal.');
-        }
-
-        $this->replaceCostCenter($code, static fn (CostCenter $c) => $c->withActive(false));
-    }
-
-    public function activateCostCenter(string $code): void
-    {
-        $this->replaceCostCenter($code, static fn (CostCenter $c) => $c->withActive(true));
-    }
-
-    /**
-     * @param callable(CostCenter): CostCenter $change
-     */
-    private function replaceCostCenter(string $code, callable $change): void
-    {
-        $target = $this->costCenter($code);
-
-        $this->setCostCenters(array_map(
-            static fn (CostCenter $c) => $c->code === $target->code ? $change($c) : $c,
-            $this->costCenters(),
-        ));
-        $this->touch();
-    }
-
-    /**
-     * @param list<CostCenter> $costCenters
-     */
-    private function setCostCenters(array $costCenters): void
-    {
-        if ($costCenters === []) {
-            throw new InvalidOrgUnit('La unidad necesita al menos un centro de costo.');
-        }
-
-        $codes = [];
-        $principals = 0;
-        foreach ($costCenters as $center) {
-            if (isset($codes[$center->code])) {
-                throw new InvalidOrgUnit(sprintf('El código de centro de costo "%s" está repetido.', $center->code));
-            }
-            $codes[$center->code] = true;
-            if ($center->principal) {
-                ++$principals;
-                if (!$center->active) {
-                    throw new InvalidOrgUnit('El centro de costo principal debe estar activo.');
-                }
-            }
-        }
-        if ($principals !== 1) {
-            throw new InvalidOrgUnit('La unidad necesita exactamente un centro de costo principal.');
-        }
-
-        $this->costCenters = array_map(static fn (CostCenter $c) => $c->toArray(), $costCenters);
     }
 
     /**

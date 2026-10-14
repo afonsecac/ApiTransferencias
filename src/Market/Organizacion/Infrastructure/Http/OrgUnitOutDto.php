@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace App\Market\Organizacion\Infrastructure\Http;
 
+use App\Market\Organizacion\Application\OrgUnitDetails;
 use App\Market\Organizacion\Domain\CostCenter;
-use App\Market\Organizacion\Domain\OrgUnit;
 use App\Market\Organizacion\Domain\OrgUnitType;
 
 /**
@@ -34,8 +34,10 @@ class OrgUnitOutDto
     ) {
     }
 
-    public static function from(OrgUnit $unit): self
+    public static function from(OrgUnitDetails $details): self
     {
+        $unit = $details->unit;
+
         return new self(
             (int) $unit->id(),
             $unit->name(),
@@ -46,7 +48,12 @@ class OrgUnitOutDto
             $unit->billingEmail(),
             array_map(static fn (OrgUnitType $t) => $t->value, $unit->types()),
             $unit->fiscalData(),
-            array_map(static fn (CostCenter $c) => $c->toArray(), $unit->costCenters()),
+            array_map(static fn (CostCenter $c) => [
+                'code' => $c->code(),
+                'name' => $c->name(),
+                'principal' => $c->isPrincipal(),
+                'active' => $c->isActive(),
+            ], $details->costCenters),
             $unit->createdAt()->format(DATE_ATOM),
             $unit->updatedAt()->format(DATE_ATOM),
         );

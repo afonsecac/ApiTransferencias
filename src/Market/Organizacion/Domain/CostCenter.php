@@ -4,69 +4,109 @@ declare(strict_types=1);
 
 namespace App\Market\Organizacion\Domain;
 
+use Doctrine\ORM\Mapping as ORM;
+
 /**
- * Centro de costo de una unidad organizativa (COMR-271). Se identifica por su código dentro de la unidad.
- * Inmutable: cambiar algo es sustituirlo (OrgUnit lo hace). Un centro no se borra, se desactiva: lo que
- * se impute a él después debe seguir teniendo a quién apuntar.
+ * Centro de costo de una unidad organizativa (COMR-271), una fila por centro para poder buscarlos y hacer
+ * reportes por ellos. Se identifica por su código dentro de la unidad. Un centro no se borra, se desactiva:
+ * lo que se impute a él después debe seguir teniendo a quién apuntar.
+ *
+ * Las reglas entre los centros de una unidad (uno principal, códigos únicos) las aplica CostCenterSet; la
+ * base lo refuerza con un índice único por código y una restricción de un solo principal por unidad.
  */
-final readonly class CostCenter
+#[ORM\Entity]
+#[ORM\Table(name: 'market_cost_center')]
+#[ORM\UniqueConstraint(name: 'uniq_market_cost_center_code', columns: ['org_unit_id', 'code'])]
+#[ORM\Index(name: 'idx_market_cost_center_code', columns: ['code'])]
+class CostCenter
 {
-    private const CODE_PATTERN = '/^[A-Z0-9][A-Z0-9_-]{0,29}$/';
+    #[ORM\Id]
+    #[ORM\GeneratedValue]
+    #[ORM\Column(type: 'integer')]
+    private ?int $id = null;
 
-    public string $code;
-    public string $name;
+    #[ORM\ManyToOne(targetEntity: OrgUnit::class)]
+    #[ORM\JoinColumn(name: 'org_unit_id', nullable: false, onDelete: 'RESTRICT')]
+    private OrgUnit $orgUnit;
 
-    public function __construct(
-        string $code,
-        string $name,
-        public bool $principal = false,
-        public bool $active = true,
-    ) {
-        $code = strtoupper(trim($code));
-        if (preg_match(self::CODE_PATTERN, $code) !== 1) {
-            throw new InvalidOrgUnit(sprintf('El código "%s" del centro de costo no es válido: letras, números, guion y guion bajo (máx. 30).', $code));
-        }
+    #[ORM\Column(type: 'string', length: 30)]
+    private string $code;
+
+    #[ORM\Column(type: 'string', length: 120)]
+    private string $name;
+
+    #[ORM\Column(type: 'boolean')]
+    private bool $principal;
+
+    #[ORM\Column(type: 'boolean')]
+    private bool $active;
+
+    #[ORM\Column(name: 'created_at', type: 'datetime_immutable')]
+    private \DateTimeImmutable $createdAt;
+
+    public function __construct(OrgUnit $orgUnit, CostCenterDraft $draft, bool $principal, bool $active = true)
+    {
+        $this->orgUnit = $orgUnit;
+        $this->code = $draft->code;
+        $this->name = $draft->name;
+        $this->principal = $principal;
+        $this->active = $active;
+        $this->createdAt = new \DateTimeImmutable();
+    }
+
+    public function id(): ?int
+    {
+        return $this->id;
+    }
+
+    public function orgUnit(): OrgUnit
+    {
+        return $this->orgUnit;
+    }
+
+    public function code(): string
+    {
+        return $this->code;
+    }
+
+    public function name(): string
+    {
+        return $this->name;
+    }
+
+    public function isPrincipal(): bool
+    {
+        return $this->principal;
+    }
+
+    public function isActive(): bool
+    {
+        return $this->active;
+    }
+
+    public function createdAt(): \DateTimeImmutable
+    {
+        return $this->createdAt;
+    }
+
+    /** @internal solo CostCenterSet, que es quien conoce las reglas entre los centros de la unidad */
+    public function rename(string $name): void
+    {
         if (trim($name) === '') {
-            throw new InvalidOrgUnit(sprintf('El centro de costo "%s" necesita un nombre.', $code));
+            throw new InvalidOrgUnit(sprintf('El centro de costo "%s" necesita un nombre.', $this->code));
         }
-
-        $this->code = $code;
         $this->name = trim($name);
     }
 
-    /**
-     * @param array<string, mixed> $data
-     */
-    public static function fromArray(array $data): self
+    /** @internal solo CostCenterSet */
+    public function setPrincipal(bool $principal): void
     {
-        return new self(
-            (string) ($data['code'] ?? ''),
-            (string) ($data['name'] ?? ''),
-            (bool) ($data['principal'] ?? false),
-            (bool) ($data['active'] ?? true),
-        );
+        $this->principal = $principal;
     }
 
-    /**
-     * @return array<string, mixed>
-     */
-    public function toArray(): array
+    /** @internal solo CostCenterSet */
+    public function setActive(bool $active): void
     {
-        return ['code' => $this->code, 'name' => $this->name, 'principal' => $this->principal, 'active' => $this->active];
-    }
-
-    public function withName(string $name): self
-    {
-        return new self($this->code, $name, $this->principal, $this->active);
-    }
-
-    public function withPrincipal(bool $principal): self
-    {
-        return new self($this->code, $this->name, $principal, $this->active);
-    }
-
-    public function withActive(bool $active): self
-    {
-        return new self($this->code, $this->name, $this->principal, $active);
+        $this->active = $active;
     }
 }

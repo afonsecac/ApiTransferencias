@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Tests\Market\Organizacion\Domain;
 
-use App\Market\Organizacion\Domain\CostCenter;
 use App\Market\Organizacion\Domain\InvalidOrgUnit;
 use App\Market\Organizacion\Domain\OrgUnit;
 use App\Market\Organizacion\Domain\OrgUnitType;
@@ -12,15 +11,13 @@ use PHPUnit\Framework\TestCase;
 
 /**
  * @covers \App\Market\Organizacion\Domain\OrgUnit
- * @covers \App\Market\Organizacion\Domain\CostCenter
  */
 final class OrgUnitTest extends TestCase
 {
     /**
      * @param list<OrgUnitType>|null $types
-     * @param list<CostCenter>|null $costCenters
      */
-    private function unit(?array $types = null, ?array $costCenters = null, string $country = 'ES', string $taxId = ' b12345678 '): OrgUnit
+    private function unit(?array $types = null, string $country = 'ES', string $taxId = ' b12345678 '): OrgUnit
     {
         return new OrgUnit(
             name: 'Distribuidora Sol',
@@ -31,7 +28,6 @@ final class OrgUnitTest extends TestCase
             billingEmail: 'facturas@sol.example',
             types: $types ?? [OrgUnitType::SELLER],
             fiscalData: ['nif' => 'B12345678'],
-            costCenters: $costCenters ?? [new CostCenter('GEN', 'General', true)],
         );
     }
 
@@ -80,10 +76,10 @@ final class OrgUnitTest extends TestCase
     public function testItRejectsABlankNameOrTaxIdAndAnInvalidEmail(): void
     {
         foreach ([
-            fn () => new OrgUnit('  ', 'Legal', 'ES', 'B1', 'Dir', 'a@b.example', [OrgUnitType::SELLER], [], [new CostCenter('GEN', 'General', true)]),
-            fn () => new OrgUnit('Nombre', '', 'ES', 'B1', 'Dir', 'a@b.example', [OrgUnitType::SELLER], [], [new CostCenter('GEN', 'General', true)]),
-            fn () => new OrgUnit('Nombre', 'Legal', 'ES', '   ', 'Dir', 'a@b.example', [OrgUnitType::SELLER], [], [new CostCenter('GEN', 'General', true)]),
-            fn () => new OrgUnit('Nombre', 'Legal', 'ES', 'B1', 'Dir', 'no-es-un-correo', [OrgUnitType::SELLER], [], [new CostCenter('GEN', 'General', true)]),
+            fn () => new OrgUnit('  ', 'Legal', 'ES', 'B1', 'Dir', 'a@b.example', [OrgUnitType::SELLER], [], []),
+            fn () => new OrgUnit('Nombre', '', 'ES', 'B1', 'Dir', 'a@b.example', [OrgUnitType::SELLER], [], []),
+            fn () => new OrgUnit('Nombre', 'Legal', 'ES', '   ', 'Dir', 'a@b.example', [OrgUnitType::SELLER], [], []),
+            fn () => new OrgUnit('Nombre', 'Legal', 'ES', 'B1', 'Dir', 'no-es-un-correo', [OrgUnitType::SELLER], [], []),
         ] as $build) {
             try {
                 $build();
@@ -92,123 +88,6 @@ final class OrgUnitTest extends TestCase
                 $this->addToAssertionCount(1);
             }
         }
-    }
-
-    // ---- centros de costo ----
-
-    public function testItNeedsAtLeastOneCostCenter(): void
-    {
-        $this->expectException(InvalidOrgUnit::class);
-
-        $this->unit(costCenters: []);
-    }
-
-    public function testItNeedsExactlyOnePrincipalCostCenterFromTheStart(): void
-    {
-        foreach ([
-            [new CostCenter('A', 'A', false)],
-            [new CostCenter('A', 'A', true), new CostCenter('B', 'B', true)],
-        ] as $centers) {
-            try {
-                $this->unit(costCenters: $centers);
-                $this->fail('Debía lanzar InvalidOrgUnit');
-            } catch (InvalidOrgUnit) {
-                $this->addToAssertionCount(1);
-            }
-        }
-    }
-
-    public function testItRejectsRepeatedCostCenterCodes(): void
-    {
-        $this->expectException(InvalidOrgUnit::class);
-
-        $this->unit(costCenters: [new CostCenter('A', 'A', true), new CostCenter('a', 'Otra A', false)]);
-    }
-
-    public function testACostCenterCodeIsNormalizedAndValidated(): void
-    {
-        $this->assertSame('CC-01', (new CostCenter(' cc-01 ', 'Uno', true))->code);
-
-        $this->expectException(InvalidOrgUnit::class);
-        new CostCenter('con espacios', 'Uno', true);
-    }
-
-    public function testItAddsAnotherCostCenterThatIsNotThePrincipal(): void
-    {
-        $unit = $this->unit();
-
-        $unit->addCostCenter('almacen', 'Almacén central');
-
-        $this->assertCount(2, $unit->costCenters());
-        $this->assertSame('GEN', $unit->principalCostCenter()->code);
-    }
-
-    public function testItDoesNotAddARepeatedCostCenter(): void
-    {
-        $unit = $this->unit();
-
-        $this->expectException(InvalidOrgUnit::class);
-        $unit->addCostCenter('gen', 'Repetido');
-    }
-
-    public function testItChangesThePrincipalWithoutEverHavingTwoOrNone(): void
-    {
-        $unit = $this->unit();
-        $unit->addCostCenter('ALM', 'Almacén');
-
-        $unit->makePrincipal('ALM');
-
-        $principals = array_filter($unit->costCenters(), static fn (CostCenter $c) => $c->principal);
-        $this->assertCount(1, $principals);
-        $this->assertSame('ALM', $unit->principalCostCenter()->code);
-    }
-
-    public function testThePrincipalCannotBeDeactivated(): void
-    {
-        $unit = $this->unit();
-
-        $this->expectException(InvalidOrgUnit::class);
-        $unit->deactivateCostCenter('GEN');
-    }
-
-    public function testASecondaryCostCenterCanBeDeactivatedAndReactivated(): void
-    {
-        $unit = $this->unit();
-        $unit->addCostCenter('ALM', 'Almacén');
-
-        $unit->deactivateCostCenter('ALM');
-        $this->assertFalse($unit->costCenter('ALM')->active);
-
-        $unit->activateCostCenter('ALM');
-        $this->assertTrue($unit->costCenter('ALM')->active);
-    }
-
-    public function testAnInactiveCostCenterCannotBecomeThePrincipal(): void
-    {
-        $unit = $this->unit();
-        $unit->addCostCenter('ALM', 'Almacén');
-        $unit->deactivateCostCenter('ALM');
-
-        $this->expectException(InvalidOrgUnit::class);
-        $unit->makePrincipal('ALM');
-    }
-
-    public function testItRenamesACostCenterKeepingItsCode(): void
-    {
-        $unit = $this->unit();
-
-        $unit->renameCostCenter('GEN', 'Central');
-
-        $this->assertSame('Central', $unit->costCenter('GEN')->name);
-        $this->assertTrue($unit->costCenter('GEN')->principal);
-    }
-
-    public function testAnUnknownCostCenterFails(): void
-    {
-        $unit = $this->unit();
-
-        $this->expectException(InvalidOrgUnit::class);
-        $unit->makePrincipal('NOPE');
     }
 
     // ---- edición ----

@@ -4,7 +4,8 @@ declare(strict_types=1);
 
 namespace App\Market\Organizacion\Application;
 
-use App\Market\Organizacion\Domain\CostCenter;
+use App\Market\Organizacion\Domain\CostCenterDraft;
+use App\Market\Organizacion\Domain\CostCenterSet;
 use App\Market\Organizacion\Domain\InvalidFiscalData;
 use App\Market\Organizacion\Domain\InvalidOrgUnit;
 use App\Market\Organizacion\Domain\OrgUnit;
@@ -25,7 +26,7 @@ final class CreateOrgUnit
      * @throws InvalidFiscalData
      * @throws OrgUnitAlreadyExists
      */
-    public function __invoke(string $countryCode, OrgUnitInput $input, array $costCenters): OrgUnit
+    public function __invoke(string $countryCode, OrgUnitInput $input, array $costCenters): OrgUnitDetails
     {
         $unit = new OrgUnit(
             $input->name,
@@ -36,7 +37,10 @@ final class CreateOrgUnit
             $input->billingEmail,
             OrgUnitTypes::fromValues($input->types),
             $input->fiscalData,
-            array_map(static fn (CostCenterInput $c) => new CostCenter($c->code, $c->name, $c->principal), $costCenters),
+        );
+        $set = CostCenterSet::start(
+            $unit,
+            array_map(static fn (CostCenterInput $c) => new CostCenterDraft($c->code, $c->name, $c->principal), $costCenters),
         );
 
         $errors = ($this->validateFiscalData)($unit->countryCode(), $unit->fiscalData());
@@ -47,8 +51,8 @@ final class CreateOrgUnit
             throw OrgUnitAlreadyExists::forTaxId($unit->countryCode(), $unit->taxId());
         }
 
-        $this->units->save($unit);
+        $this->units->save($unit, $set->all());
 
-        return $unit;
+        return new OrgUnitDetails($unit, $set->all());
     }
 }

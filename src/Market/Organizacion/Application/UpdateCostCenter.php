@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace App\Market\Organizacion\Application;
 
+use App\Market\Organizacion\Domain\CostCenterSet;
 use App\Market\Organizacion\Domain\InvalidOrgUnit;
-use App\Market\Organizacion\Domain\OrgUnit;
 use App\Market\Organizacion\Domain\OrgUnitNotFound;
 use App\Market\Organizacion\Domain\OrgUnitRepository;
 
@@ -21,15 +21,16 @@ final class UpdateCostCenter
      * @throws OrgUnitNotFound
      * @throws InvalidOrgUnit
      */
-    public function __invoke(int $unitId, string $code, string $name, bool $active): OrgUnit
+    public function __invoke(int $unitId, string $code, string $name, bool $active): OrgUnitDetails
     {
         $unit = $this->units->findById($unitId) ?? throw OrgUnitNotFound::forId($unitId);
+        $set = new CostCenterSet($unit, $this->units->costCentersOf($unit));
 
-        // Se valida todo antes de guardar: si desactivar falla, el nombre tampoco se cambia.
-        $unit->renameCostCenter($code, $name);
-        $active ? $unit->activateCostCenter($code) : $unit->deactivateCostCenter($code);
-        $this->units->save($unit);
+        // Todo se valida antes de guardar: si desactivar falla, el nombre tampoco se guarda.
+        $center = $set->rename($code, $name);
+        $active ? $set->activate($code) : $set->deactivate($code);
+        $this->units->save($unit, [$center]);
 
-        return $unit;
+        return new OrgUnitDetails($unit, $set->all());
     }
 }

@@ -87,7 +87,10 @@ final class OrgUnitFunctionalTest extends ProviderFunctionalTestCase
         $this->assertNotNull($unit);
         $this->assertSame('12-3456789', $unit->taxId());
         $this->assertCount(2, $unit->types());
-        $this->assertSame('GEN', $unit->principalCostCenter()->code);
+        $centers = $this->repository()->costCentersOf($unit);
+        $this->assertCount(1, $centers);
+        $this->assertSame('GEN', $centers[0]->code());
+        $this->assertTrue($centers[0]->isPrincipal());
         $this->assertSame('NY', $unit->fiscalData()['estado']);
     }
 
@@ -140,6 +143,64 @@ final class OrgUnitFunctionalTest extends ProviderFunctionalTestCase
         $this->assertCount(1, $carriers);
         $this->assertSame('98-7654321', $carriers[0]['taxId']);
         $this->assertCount(1, $text);
+    }
+
+    public function testTheTextSearchAlsoFindsUnitsByTheCodeOrNameOfTheirCostCenters(): void
+    {
+        $this->admin();
+        $id = $this->body($this->controller()->create($this->createDto()))['id'];
+        $this->controller()->addCostCenter($id, new AddCostCenterDto('ruta-norte', 'Flota del norte'));
+        $this->controller()->create($this->createDto('98-7654321', fiscal: ['ein' => '98-7654321', 'estado' => 'CA']));
+
+        $byCode = $this->body($this->controller()->list(new Request(['q' => 'ruta-n'])));
+        $byName = $this->body($this->controller()->list(new Request(['q' => 'flota'])));
+
+        $this->assertSame([$id], array_column($byCode, 'id'));
+        $this->assertSame([$id], array_column($byName, 'id'));
+        $this->assertSame(['GEN', 'RUTA-NORTE'], array_column($byCode[0]['costCenters'], 'code'));
+    }
+
+    public function testTheListCarriesTheCostCentersOfEachUnitInOneGo(): void
+    {
+        $this->admin();
+        $a = $this->body($this->controller()->create($this->createDto()))['id'];
+        $b = $this->body($this->controller()->create($this->createDto('98-7654321', fiscal: ['ein' => '98-7654321', 'estado' => 'CA'])))['id'];
+        $this->controller()->addCostCenter($b, new AddCostCenterDto('ALM', 'Almacén'));
+
+        $byId = [];
+        foreach ($this->body($this->controller()->list(new Request())) as $unit) {
+            $byId[$unit['id']] = array_column($unit['costCenters'], 'code');
+        }
+
+        $this->assertSame(['GEN'], $byId[$a]);
+        $this->assertSame(['ALM', 'GEN'], $byId[$b]);
+    }
+
+    public function testTheDatabaseItselfRefusesASecondPrincipalCenterInTheSameUnit(): void
+    {
+        $this->admin();
+        $id = $this->body($this->controller()->create($this->createDto()))['id'];
+        $this->controller()->addCostCenter($id, new AddCostCenterDto('ALM', 'Almacén'));
+        $connection = $this->em->getConnection();
+
+        // La restricción es diferida: se comprueba al confirmar la transacción, no al escribir.
+        $this->expectException(\Doctrine\DBAL\Exception\DriverException::class);
+        $connection->executeStatement("UPDATE market_cost_center SET principal = TRUE WHERE org_unit_id = ?", [$id]);
+        $connection->executeStatement('SET CONSTRAINTS ALL IMMEDIATE');
+    }
+
+    public function testChangingThePrincipalSwapsBothFlagsInOneTransactionWithoutTrippingTheConstraint(): void
+    {
+        $this->admin();
+        $id = $this->body($this->controller()->create($this->createDto()))['id'];
+        $this->controller()->addCostCenter($id, new AddCostCenterDto('ALM', 'Almacén'));
+
+        $response = $this->controller()->setPrincipal($id, 'ALM');
+        $this->em->getConnection()->executeStatement('SET CONSTRAINTS ALL IMMEDIATE');
+
+        $this->assertSame(Response::HTTP_OK, $response->getStatusCode());
+        $principals = $this->em->getConnection()->fetchFirstColumn('SELECT code FROM market_cost_center WHERE org_unit_id = ? AND principal', [$id]);
+        $this->assertSame(['ALM'], $principals);
     }
 
     public function testGetAndUpdateAndNotFound(): void

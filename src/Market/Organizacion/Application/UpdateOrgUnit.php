@@ -6,7 +6,6 @@ namespace App\Market\Organizacion\Application;
 
 use App\Market\Organizacion\Domain\InvalidFiscalData;
 use App\Market\Organizacion\Domain\InvalidOrgUnit;
-use App\Market\Organizacion\Domain\OrgUnit;
 use App\Market\Organizacion\Domain\OrgUnitAlreadyExists;
 use App\Market\Organizacion\Domain\OrgUnitNotFound;
 use App\Market\Organizacion\Domain\OrgUnitRepository;
@@ -27,7 +26,7 @@ final class UpdateOrgUnit
      * @throws InvalidFiscalData
      * @throws OrgUnitAlreadyExists
      */
-    public function __invoke(int $id, OrgUnitInput $input): OrgUnit
+    public function __invoke(int $id, OrgUnitInput $input): OrgUnitDetails
     {
         $unit = $this->units->findById($id) ?? throw OrgUnitNotFound::forId($id);
 
@@ -52,6 +51,6 @@ final class UpdateOrgUnit
 
         $this->units->save($unit);
 
-        return $unit;
+        return new OrgUnitDetails($unit, $this->units->costCentersOf($unit));
     }
 }
