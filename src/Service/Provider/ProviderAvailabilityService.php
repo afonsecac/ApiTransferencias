@@ -182,6 +182,54 @@ class ProviderAvailabilityService
     }
 
     /**
+     * El proveedor rechazó NUESTRA credencial (401/403) al crear una venta (COMR-265): apaga AUTO para
+     * ese entorno y avisa a los administradores, para que alguien reponga la credencial. Las ventas no
+     * se pierden: quedan liberadas y se reencolan cuando un ping bueno recupere el proveedor
+     * (recordPing() devuelve true y el llamador llama a redispatchPendingFor()).
+     *
+     * No avisa de nuevo si AUTO ya estaba apagado: sin esto, cada venta que llegue con la credencial
+     * mala generaría su propia notificación.
+     */
+    public function markCredentialsRejected(CommunicationProviderEnum $provider, string $environmentType, string $reason): void
+    {
+        $row = $this->repository->findOneByProviderAndType($provider->value, $environmentType);
+        if ($row === null) {
+            $row = (new ProviderAvailability())
+                ->setProvider($provider->value)
+                ->setEnvironmentType($environmentType);
+            $this->em->persist($row);
+        }
+
+        $wasAutoEnabled = $row->isAutoEnabled();
+
+        $row->setAutoEnabled(false)
+            ->setLastActionType(ProviderActionTypeEnum::AUTO)
+            ->setLastActionBy(null)
+            ->setLastActionAt(new \DateTimeImmutable('now'))
+            ->setLastActionReason('Credencial rechazada por el proveedor al crear una venta: ' . $reason)
+            ->touch();
+
+        $this->logger->error('Proveedor deshabilitado automáticamente: credencial rechazada', [
+            'provider' => $provider->value,
+            'environmentType' => $environmentType,
+            'error' => $reason,
+        ]);
+
+        if ($wasAutoEnabled) {
+            $this->notifyAdmins(
+                NotificationTypeEnum::PROVIDER_UNAVAILABLE,
+                NotificationLevelEnum::CRITICAL,
+                sprintf('Proveedor %s (%s): credencial rechazada, despacho detenido', $provider->value, $environmentType),
+                $reason,
+                $provider,
+                $environmentType,
+            );
+        }
+
+        $this->flushSafely($provider, $environmentType);
+    }
+
+    /**
      * Interruptor MANUAL, auditado. Un enable resetea AUTO (el siguiente
      * ping lo volverá a apagar si de verdad sigue caído) para que un falso
      * positivo del ping nunca le impida a un admin encender el proveedor —

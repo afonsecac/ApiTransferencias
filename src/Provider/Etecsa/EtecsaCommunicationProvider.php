@@ -127,10 +127,29 @@ final class EtecsaCommunicationProvider implements
                 $request->transactionId,
             );
         } catch (MyCurrentException $e) {
-            return new ProviderDispatchResult(outcome: ProviderOutcomeEnum::UNKNOWN, message: $e->getMessage());
+            return $this->mapDispatchException($e);
         }
 
         return $this->statusMapper->mapRechargeDispatch($raw);
+    }
+
+    /**
+     * 401/403 del gateway (COMR-265): nuestra clave caducó, se rotó o no tiene el permiso; la
+     * transacción nunca llegó a procesarse, así que es un envío que se puede reintentar, no un
+     * resultado desconocido. Cualquier otro error sigue siendo UNKNOWN: no sabemos si el gateway lo
+     * procesó, y jamás se reenvía por ello.
+     */
+    private function mapDispatchException(MyCurrentException $e): ProviderDispatchResult
+    {
+        if ($e->getCodeWork() === 'ETECSA_CLIENT_ERROR' && in_array($e->getCode(), [401, 403], true)) {
+            return new ProviderDispatchResult(
+                outcome: ProviderOutcomeEnum::RETRYABLE,
+                providerCode: ProviderDispatchResult::CODE_CREDENTIALS_REJECTED,
+                message: $e->getMessage(),
+            );
+        }
+
+        return new ProviderDispatchResult(outcome: ProviderOutcomeEnum::UNKNOWN, message: $e->getMessage());
     }
 
     public function fetchRechargeStatus(ProviderContext $context, ProviderStatusQuery $query): ProviderStatusResult
@@ -166,7 +185,7 @@ final class EtecsaCommunicationProvider implements
         try {
             $raw = $this->client->sellPackage($env, $request->transactionId, $packageInfo, $client, $request->phoneNumber);
         } catch (MyCurrentException $e) {
-            return new ProviderDispatchResult(outcome: ProviderOutcomeEnum::UNKNOWN, message: $e->getMessage());
+            return $this->mapDispatchException($e);
         }
 
         return $this->statusMapper->mapSaleDispatch($raw);

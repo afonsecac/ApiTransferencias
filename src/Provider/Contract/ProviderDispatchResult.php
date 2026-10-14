@@ -12,6 +12,13 @@ use App\Enums\ProviderOutcomeEnum;
 final readonly class ProviderDispatchResult
 {
     /**
+     * `providerCode` de un envío que el proveedor rechazó por NUESTRA credencial (401/403:
+     * caducada, rotada o sin permisos), no por la venta. Va con RETRYABLE: la transacción nunca
+     * se creó, así que ni se rechaza la venta ni se cambia de proveedor, y reintentar el envío es seguro.
+     */
+    public const CODE_CREDENTIALS_REJECTED = 'PROVIDER_CREDENTIALS_REJECTED';
+
+    /**
      * @param array<string, mixed> $raw
      */
     public function __construct(

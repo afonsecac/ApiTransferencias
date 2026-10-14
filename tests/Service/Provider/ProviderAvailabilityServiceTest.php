@@ -174,6 +174,67 @@ class ProviderAvailabilityServiceTest extends TestCase
         $this->assertSame('timeout', $row->getLastPingError());
     }
 
+    // ---- COMR-265: el proveedor rechazó NUESTRA credencial al crear una venta ----
+
+    public function testMarkCredentialsRejectedDisablesAutoAndNotifiesOnce(): void
+    {
+        $row = (new ProviderAvailability())->setProvider('CSQ')->setEnvironmentType('TEST')->setAutoEnabled(true);
+
+        $em = $this->createMock(EntityManagerInterface::class);
+        $em->expects($this->once())->method('flush');
+
+        $notificationCenter = $this->createMock(NotificationCenterService::class);
+        $notificationCenter->expects($this->once())->method('bumpGroup');
+
+        $service = $this->makeService(
+            [],
+            repository: $this->repositoryReturning($row),
+            em: $em,
+            notificationCenter: $notificationCenter,
+        );
+
+        $service->markCredentialsRejected(CommunicationProviderEnum::CSQ, 'TEST', 'Unauthorized');
+
+        $this->assertFalse($row->isAutoEnabled());
+        $this->assertSame(ProviderActionTypeEnum::AUTO, $row->getLastActionType());
+        $this->assertStringContainsString('Unauthorized', (string) $row->getLastActionReason());
+    }
+
+    public function testMarkCredentialsRejectedDoesNotNotifyAgainWhenAlreadyDisabled(): void
+    {
+        $row = (new ProviderAvailability())->setProvider('CSQ')->setEnvironmentType('TEST')->setAutoEnabled(false);
+
+        $notificationCenter = $this->createMock(NotificationCenterService::class);
+        $notificationCenter->expects($this->never())->method('bumpGroup');
+
+        $service = $this->makeService(
+            [],
+            repository: $this->repositoryReturning($row),
+            notificationCenter: $notificationCenter,
+        );
+
+        $service->markCredentialsRejected(CommunicationProviderEnum::CSQ, 'TEST', 'Unauthorized');
+
+        $this->assertFalse($row->isAutoEnabled());
+    }
+
+    public function testMarkCredentialsRejectedCreatesTheRowWhenNoneExistsYet(): void
+    {
+        $persisted = null;
+        $em = $this->createMock(EntityManagerInterface::class);
+        $em->expects($this->once())->method('persist')
+            ->willReturnCallback(function ($row) use (&$persisted): void {
+                $persisted = $row;
+            });
+
+        $service = $this->makeService([], repository: $this->repositoryReturning(null), em: $em);
+
+        $service->markCredentialsRejected(CommunicationProviderEnum::CSQ, 'TEST', 'Forbidden');
+
+        $this->assertInstanceOf(ProviderAvailability::class, $persisted);
+        $this->assertFalse($persisted->isAutoEnabled());
+    }
+
     public function testRecordPingReturnsTrueWhenRecoveryMakesItDispatchableAgain(): void
     {
         $row = (new ProviderAvailability())->setProvider('CSQ')->setEnvironmentType('TEST')->setAutoEnabled(false);

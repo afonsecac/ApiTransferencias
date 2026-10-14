@@ -30,6 +30,7 @@ use App\Provider\Contract\PackageCustomer;
 use App\Provider\Contract\PackageSaleProviderInterface;
 use App\Provider\Contract\PackageSalePoint;
 use App\Provider\Contract\PackageSaleRequest;
+use App\Provider\Contract\ProviderDispatchResult;
 use App\Provider\Contract\ProviderStatusQuery;
 use App\Provider\Contract\RechargeProviderInterface;
 use App\Provider\Contract\RechargeRequest;
@@ -723,6 +724,12 @@ class CommunicationSaleService extends CommonService
                 $saleRecharge->setTransactionStatus($dispatchEnvelope);
                 $saleRecharge->setStateProcess(CommunicationStateEnum::PENDING->value);
 
+                if ($this->isCredentialsRejected($dispatchResult)) {
+                    $this->releaseSaleForRejectedCredentials($saleRecharge, $provider, $environment->getType(), $dispatchResult, $dispatchEnvelope);
+
+                    return;
+                }
+
                 if ($dispatchResult->outcome === ProviderOutcomeEnum::REJECTED) {
                     // Rechazo determinista del proveedor (no un timeout/error
                     // de transporte, que ya llega como UNKNOWN) — único punto
@@ -999,6 +1006,21 @@ class CommunicationSaleService extends CommonService
 
             $dispatchResult = $adapter->sellPackage($context, $request);
 
+            if ($this->isCredentialsRejected($dispatchResult)) {
+                $this->releaseSaleForRejectedCredentials(
+                    $sale,
+                    $provider,
+                    $user->getEnvironment()?->getType(),
+                    $dispatchResult,
+                    TransactionStatus::carryRetryBlock(
+                        $sale->getTransactionStatus(),
+                        TransactionStatus::fromDispatch($dispatchResult, $provider->value),
+                    ),
+                );
+
+                return;
+            }
+
             if ($dispatchResult->outcome === ProviderOutcomeEnum::ACCEPTED) {
                 $sale->setState(CommunicationStateEnum::PENDING);
             } elseif ($dispatchResult->outcome === ProviderOutcomeEnum::FAILED) {
@@ -1042,6 +1064,43 @@ class CommunicationSaleService extends CommonService
             $this->em->flush();
             $this->logger->error("Sale {$saleId} execution error: " . $exc->getMessage());
         }
+    }
+
+    /**
+     * ¿El proveedor rechazó NUESTRA credencial (401/403) al crear la venta? (COMR-265)
+     */
+    private function isCredentialsRejected(ProviderDispatchResult $result): bool
+    {
+        return $result->outcome === ProviderOutcomeEnum::RETRYABLE
+            && $result->providerCode === ProviderDispatchResult::CODE_CREDENTIALS_REJECTED;
+    }
+
+    /**
+     * Un 401/403 al crear no habla de la venta sino de nuestra credencial, y la transacción nunca se
+     * creó: ni se rechaza ni se cambia de proveedor. Se libera la venta (queda lista para reenviarse,
+     * sin riesgo de doble cobro) y se apaga el proveedor en ese entorno hasta que un ping bueno lo
+     * recupere, momento en que dispatchPending() la reencola. No se programa ninguna consulta de
+     * estado: no hay nada que consultar.
+     *
+     * @param array<string, mixed> $envelope
+     */
+    private function releaseSaleForRejectedCredentials(
+        CommunicationSaleInfo $sale,
+        CommunicationProviderEnum $provider,
+        ?string $environmentType,
+        ProviderDispatchResult $result,
+        array $envelope,
+    ): void {
+        $sale->setTransactionStatus($envelope);
+        $sale->setState(CommunicationStateEnum::PENDING);
+        $sale->setStateProcess(CommunicationStateEnum::CREATED->value);
+        $this->historicalSaleService->createHistoricalCommunication($sale->getId(), CommunicationStateEnum::CREATED, $envelope);
+        $this->em->flush();
+        $this->availabilityService->markCredentialsRejected(
+            $provider,
+            $environmentType ?? 'PROD',
+            $result->message ?? 'credencial rechazada',
+        );
     }
 
     /**
