@@ -4,9 +4,13 @@ declare(strict_types=1);
 
 namespace App\Market\Catalogo\Application;
 
+use App\Market\Catalogo\Domain\BrandRepository;
+use App\Market\Catalogo\Domain\CategoryRepository;
 use App\Market\Catalogo\Domain\InvalidProduct;
 use App\Market\Catalogo\Domain\Product;
 use App\Market\Catalogo\Domain\ProductAlreadyExists;
+use App\Market\Catalogo\Domain\ProductBrandInvalid;
+use App\Market\Catalogo\Domain\ProductCategoryInvalid;
 use App\Market\Catalogo\Domain\ProductRepository;
 use App\Market\Catalogo\Domain\ProductSellerInvalid;
 use App\Market\Catalogo\Domain\Seller;
@@ -16,10 +20,17 @@ use App\Market\Catalogo\Domain\Sku;
 
 final class CreateProduct
 {
+    private readonly ProductReferences $references;
+    private readonly ProductDetailsAssembler $assembler;
+
     public function __construct(
         private readonly ProductRepository $products,
         private readonly SellerRepository $sellers,
+        BrandRepository $brands,
+        CategoryRepository $categories,
     ) {
+        $this->references = new ProductReferences($brands, $categories);
+        $this->assembler = new ProductDetailsAssembler($sellers, $brands, $categories);
     }
 
     /**
@@ -28,6 +39,8 @@ final class CreateProduct
      * @throws InvalidProduct
      * @throws ProductSellerInvalid
      * @throws ProductAlreadyExists
+     * @throws ProductBrandInvalid la marca no existe, está desactivada o es de otro vendedor
+     * @throws ProductCategoryInvalid
      * @throws SellerNotFound si no se da vendedor y no existe el de plataforma
      */
     public function __invoke(string $sku, ?int $sellerId, ProductSpecInput $input): ProductDetails
@@ -40,10 +53,12 @@ final class CreateProduct
             throw ProductAlreadyExists::forSku($sku->value());
         }
 
-        $product = Product::create($sku, (int) $seller->id(), $spec);
+        $this->references->check((int) $seller->id(), $input->brandId, $input->categoryIds);
+
+        $product = Product::create($sku, (int) $seller->id(), $spec, $input->brandId, $input->categoryIds);
         $this->products->save($product);
 
-        return new ProductDetails($product, $seller);
+        return $this->assembler->one($product);
     }
 
     private function seller(?int $sellerId): Seller

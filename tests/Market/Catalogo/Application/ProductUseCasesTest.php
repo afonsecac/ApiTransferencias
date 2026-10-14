@@ -8,11 +8,16 @@ use App\Market\Catalogo\Application\ChangeProductStatus;
 use App\Market\Catalogo\Application\CreateProduct;
 use App\Market\Catalogo\Application\GetProduct;
 use App\Market\Catalogo\Application\ListProducts;
+use App\Market\Catalogo\Application\ProductDetailsAssembler;
 use App\Market\Catalogo\Application\ProductSpecInput;
 use App\Market\Catalogo\Application\UpdateProduct;
+use App\Market\Catalogo\Domain\Brand;
+use App\Market\Catalogo\Domain\Category;
 use App\Market\Catalogo\Domain\InvalidProduct;
 use App\Market\Catalogo\Domain\InvalidProductTransition;
 use App\Market\Catalogo\Domain\ProductAlreadyExists;
+use App\Market\Catalogo\Domain\ProductBrandInvalid;
+use App\Market\Catalogo\Domain\ProductCategoryInvalid;
 use App\Market\Catalogo\Domain\ProductNotFound;
 use App\Market\Catalogo\Domain\ProductSellerInvalid;
 use App\Market\Catalogo\Domain\ProductStatus;
@@ -31,6 +36,8 @@ final class ProductUseCasesTest extends TestCase
 {
     private InMemoryProductRepository $products;
     private InMemorySellerRepository $sellers;
+    private InMemoryBrandRepository $brands;
+    private InMemoryCategoryRepository $categories;
     private Seller $platform;
     private Seller $garajito;
 
@@ -42,6 +49,34 @@ final class ProductUseCasesTest extends TestCase
         $this->garajito = Seller::create(2, 20, new Slug('garajito'), 'Garajito');
         $this->sellers->save($this->platform);
         $this->sellers->save($this->garajito);
+        $this->brands = new InMemoryBrandRepository();
+        $this->categories = new InMemoryCategoryRepository();
+    }
+
+    private function assembler(): ProductDetailsAssembler
+    {
+        return new ProductDetailsAssembler($this->sellers, $this->brands, $this->categories);
+    }
+
+    private function update(): UpdateProduct
+    {
+        return new UpdateProduct($this->products, $this->sellers, $this->brands, $this->categories);
+    }
+
+    private function brand(Seller $seller, string $slug = 'cola-premium'): Brand
+    {
+        $brand = Brand::create((int) $seller->id(), new Slug($slug), ucfirst($slug));
+        $this->brands->save($brand);
+
+        return $brand;
+    }
+
+    private function category(string $slug, ?int $parentId = null): Category
+    {
+        $category = Category::create(new Slug($slug), $parentId, ucfirst($slug), null);
+        $this->categories->save($category);
+
+        return $category;
     }
 
     /**
@@ -71,7 +106,7 @@ final class ProductUseCasesTest extends TestCase
 
     private function create(): CreateProduct
     {
-        return new CreateProduct($this->products, $this->sellers);
+        return new CreateProduct($this->products, $this->sellers, $this->brands, $this->categories);
     }
 
     public function testItCreatesADraftForTheGivenSeller(): void
@@ -133,7 +168,7 @@ final class ProductUseCasesTest extends TestCase
         $created = ($this->create())('cola-330', (int) $this->garajito->id(), $this->input());
         $id = (int) $created->product->id();
 
-        $updated = (new UpdateProduct($this->products, $this->sellers))($id, $this->input([
+        $updated = ($this->update())($id, $this->input([
             'texts' => ['es' => ['name' => 'Refresco de cola light'], 'en' => ['name' => 'Light cola']],
             'contentValue' => 330.0,
         ]));
@@ -151,7 +186,7 @@ final class ProductUseCasesTest extends TestCase
         $saves = $this->products->saves;
 
         try {
-            (new UpdateProduct($this->products, $this->sellers))($id, $this->input(['deliveryUnit' => 'stone']));
+            ($this->update())($id, $this->input(['deliveryUnit' => 'stone']));
             $this->fail('Debió rechazar los datos');
         } catch (InvalidProduct) {
             $this->assertSame($saves, $this->products->saves);
@@ -190,7 +225,7 @@ final class ProductUseCasesTest extends TestCase
     {
         $id = (int) ($this->create())('amazon-25', null, $this->valueInput())->product->id();
 
-        $updated = (new UpdateProduct($this->products, $this->sellers))($id, $this->valueInput(['subservice' => 'Gaming']));
+        $updated = ($this->update())($id, $this->valueInput(['subservice' => 'Gaming']));
 
         $this->assertSame('Gaming', $updated->product->spec()->classification->subservice());
         $this->assertSame('AMAZON-25', $updated->product->sku()->value());
@@ -200,13 +235,14 @@ final class ProductUseCasesTest extends TestCase
     {
         $this->expectException(ProductNotFound::class);
 
-        (new UpdateProduct($this->products, $this->sellers))(99, $this->input());
+        ($this->update())(99, $this->input());
     }
 
     public function testItPublishesAndWithdraws(): void
     {
-        $id = (int) ($this->create())('cola-330', null, $this->input())->product->id();
-        $change = new ChangeProductStatus($this->products, $this->sellers);
+        $category = $this->category('bebidas');
+        $id = (int) ($this->create())('cola-330', null, $this->input(['categoryIds' => [(int) $category->id()]]))->product->id();
+        $change = new ChangeProductStatus($this->products, $this->assembler());
 
         $this->assertSame(ProductStatus::PUBLISHED, $change($id, ProductStatus::PUBLISHED)->product->status());
         $this->assertSame(ProductStatus::WITHDRAWN, $change($id, ProductStatus::WITHDRAWN)->product->status());
@@ -215,8 +251,9 @@ final class ProductUseCasesTest extends TestCase
 
     public function testAProductCannotGoBackToDraftNorBeWithdrawnFromDraft(): void
     {
-        $id = (int) ($this->create())('cola-330', null, $this->input())->product->id();
-        $change = new ChangeProductStatus($this->products, $this->sellers);
+        $category = $this->category('bebidas');
+        $id = (int) ($this->create())('cola-330', null, $this->input(['categoryIds' => [(int) $category->id()]]))->product->id();
+        $change = new ChangeProductStatus($this->products, $this->assembler());
 
         try {
             $change($id, ProductStatus::WITHDRAWN);
@@ -232,7 +269,7 @@ final class ProductUseCasesTest extends TestCase
     public function testItGetsAProductWithItsSellerOrFailsWhenUnknown(): void
     {
         $id = (int) ($this->create())('cola-330', (int) $this->garajito->id(), $this->input())->product->id();
-        $get = new GetProduct($this->products, $this->sellers);
+        $get = new GetProduct($this->products, $this->assembler());
 
         $this->assertSame('Garajito', $get($id)->seller?->name());
 
@@ -243,15 +280,163 @@ final class ProductUseCasesTest extends TestCase
     public function testItListsProductsFilteredByTextStatusAndSeller(): void
     {
         $create = $this->create();
-        $cola = (int) $create('cola-330', (int) $this->garajito->id(), $this->input())->product->id();
+        $category = $this->category('bebidas');
+        $cola = (int) $create('cola-330', (int) $this->garajito->id(), $this->input(['categoryIds' => [(int) $category->id()]]))->product->id();
         $create('agua-500', null, $this->input(['texts' => ['es' => ['name' => 'Agua mineral']]]));
-        (new ChangeProductStatus($this->products, $this->sellers))($cola, ProductStatus::PUBLISHED);
-        $list = new ListProducts($this->products, $this->sellers);
-        $skus = static fn (array $details) => array_map(static fn ($d) => $d->product->sku()->value(), $details);
+        (new ChangeProductStatus($this->products, $this->assembler()))($cola, ProductStatus::PUBLISHED);
+        $list = new ListProducts($this->products, $this->assembler(), $this->categories);
+        $skus = static fn ($page) => array_map(static fn ($d) => $d->product->sku()->value(), $page->items);
 
         $this->assertSame(['AGUA-500', 'COLA-330'], $skus($list(null, null, null)));
         $this->assertSame(['COLA-330'], $skus($list('refresco', null, null)));
         $this->assertSame(['COLA-330'], $skus($list(null, ProductStatus::PUBLISHED, null)));
         $this->assertSame(['AGUA-500'], $skus($list(null, null, (int) $this->platform->id())));
+    }
+
+    public function testItCreatesAProductWithItsBrandAndCategories(): void
+    {
+        $brand = $this->brand($this->garajito);
+        $food = $this->category('alimentos');
+        $rice = $this->category('arroz', $food->id());
+
+        $details = ($this->create())('arroz-1', (int) $this->garajito->id(), $this->input([
+            'brandId' => (int) $brand->id(),
+            'categoryIds' => [(int) $rice->id(), (int) $food->id()],
+        ]));
+
+        $this->assertSame($brand->id(), $details->product->brandId());
+        $this->assertSame('Cola-premium', $details->brand?->name());
+        $this->assertSame([(int) $food->id(), (int) $rice->id()], $details->product->categoryIds());
+        $this->assertSame(['Alimentos', 'Arroz'], array_map(static fn (Category $c) => $c->nameEs(), $details->categories));
+    }
+
+    public function testTheBrandIsOptional(): void
+    {
+        $details = ($this->create())('tarjeta-1', null, $this->input());
+
+        $this->assertNull($details->product->brandId());
+        $this->assertNull($details->brand);
+        $this->assertSame([], $details->categories);
+    }
+
+    public function testTheBrandMustBelongToTheProductsSeller(): void
+    {
+        $others = $this->brand($this->garajito);
+
+        try {
+            ($this->create())('cola-1', (int) $this->platform->id(), $this->input(['brandId' => (int) $others->id()]));
+            $this->fail('Una marca de otro vendedor no debe aceptarse');
+        } catch (ProductBrandInvalid $e) {
+            $this->assertSame('PRODUCT_BRAND_SELLER_MISMATCH', $e->reason());
+            $this->assertSame([], $this->products->products);
+        }
+    }
+
+    public function testTheBrandMustExistAndBeActive(): void
+    {
+        $brand = $this->brand($this->garajito);
+        $brand->deactivate();
+
+        foreach ([999, (int) $brand->id()] as $brandId) {
+            try {
+                ($this->create())('cola-' . $brandId, (int) $this->garajito->id(), $this->input(['brandId' => $brandId]));
+                $this->fail('Debió rechazar la marca');
+            } catch (ProductBrandInvalid $e) {
+                $this->assertSame('PRODUCT_BRAND_INVALID', $e->reason());
+            }
+        }
+    }
+
+    public function testTheCategoriesMustExistAndBeActive(): void
+    {
+        $inactive = $this->category('antigua');
+        $inactive->deactivate();
+
+        foreach ([999, (int) $inactive->id()] as $categoryId) {
+            try {
+                ($this->create())('cola-' . $categoryId, null, $this->input(['categoryIds' => [$categoryId]]));
+                $this->fail('Debió rechazar la categoría');
+            } catch (ProductCategoryInvalid) {
+                $this->assertSame([], $this->products->products);
+            }
+        }
+    }
+
+    public function testItUpdatesTheBrandAndReplacesTheCategories(): void
+    {
+        $brand = $this->brand($this->platform);
+        $food = $this->category('alimentos');
+        $drinks = $this->category('bebidas');
+        $id = (int) ($this->create())('cola-1', null, $this->input(['categoryIds' => [(int) $food->id()]]))->product->id();
+
+        $updated = ($this->update())($id, $this->input(['brandId' => (int) $brand->id(), 'categoryIds' => [(int) $drinks->id()]]));
+
+        $this->assertSame($brand->id(), $updated->product->brandId());
+        $this->assertSame([(int) $drinks->id()], $updated->product->categoryIds());
+
+        $cleared = ($this->update())($id, $this->input(['categoryIds' => [(int) $drinks->id()]]));
+        $this->assertNull($cleared->product->brandId());
+    }
+
+    public function testAnEditKeepsAnAlreadyAssignedBrandAndCategoryEvenIfTheyWereDeactivatedSince(): void
+    {
+        $brand = $this->brand($this->platform);
+        $food = $this->category('alimentos');
+        $id = (int) ($this->create())('cola-1', null, $this->input(['brandId' => (int) $brand->id(), 'categoryIds' => [(int) $food->id()]]))->product->id();
+        $brand->deactivate();
+        $food->deactivate();
+
+        $updated = ($this->update())($id, $this->input([
+            'texts' => ['es' => ['name' => 'Otro nombre']],
+            'brandId' => (int) $brand->id(),
+            'categoryIds' => [(int) $food->id()],
+        ]));
+
+        $this->assertSame($brand->id(), $updated->product->brandId());
+        $this->assertSame([(int) $food->id()], $updated->product->categoryIds());
+    }
+
+    public function testAProductCannotBePublishedWithoutACategory(): void
+    {
+        $id = (int) ($this->create())('cola-1', null, $this->input())->product->id();
+
+        $this->expectException(InvalidProduct::class);
+
+        (new ChangeProductStatus($this->products, $this->assembler()))($id, ProductStatus::PUBLISHED);
+    }
+
+    public function testItListsByBrandAndByCategoryIncludingItsSubcategories(): void
+    {
+        $brand = $this->brand($this->platform);
+        $food = $this->category('alimentos');
+        $rice = $this->category('arroz', $food->id());
+        $soap = $this->category('aseo');
+        $create = $this->create();
+        $create('arroz-1', null, $this->input(['brandId' => (int) $brand->id(), 'categoryIds' => [(int) $rice->id()]]));
+        $create('aceite-1', null, $this->input(['categoryIds' => [(int) $food->id()]]));
+        $create('jabon-1', null, $this->input(['categoryIds' => [(int) $soap->id()]]));
+        $list = new ListProducts($this->products, $this->assembler(), $this->categories);
+        $skus = static fn ($page) => array_map(static fn ($d) => $d->product->sku()->value(), $page->items);
+
+        $this->assertSame(['ARROZ-1'], $skus($list(null, null, null, (int) $brand->id())));
+        $this->assertSame(['ACEITE-1', 'ARROZ-1'], $skus($list(null, null, null, null, (int) $food->id())));
+        $this->assertSame(['ACEITE-1'], $skus($list(null, null, null, null, (int) $food->id(), false)));
+        $this->assertSame(['ARROZ-1'], $skus($list(null, null, null, null, (int) $rice->id())));
+    }
+
+    public function testItPagesTheListAndReportsTheTotal(): void
+    {
+        $create = $this->create();
+        foreach (['a-1', 'b-2', 'c-3', 'd-4', 'e-5'] as $sku) {
+            $create($sku, null, $this->input());
+        }
+        $list = new ListProducts($this->products, $this->assembler(), $this->categories);
+
+        $second = $list(null, null, null, null, null, true, 2, 2);
+
+        $this->assertSame(5, $second->total);
+        $this->assertSame(2, $second->page);
+        $this->assertSame(2, $second->perPage);
+        $this->assertSame(['C-3', 'D-4'], array_map(static fn ($d) => $d->product->sku()->value(), $second->items));
     }
 }

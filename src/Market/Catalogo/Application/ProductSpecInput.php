@@ -45,6 +45,9 @@ final readonly class ProductSpecInput
         public ?string $valueCurrency = null,
         public ?string $valueMin = null,
         public ?string $valueMax = null,
+        public ?int $brandId = null,
+        /** @var list<int> */
+        public array $categoryIds = [],
     ) {
     }
 

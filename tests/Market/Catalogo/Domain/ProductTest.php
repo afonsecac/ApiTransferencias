@@ -6,6 +6,7 @@ namespace App\Tests\Market\Catalogo\Domain;
 
 use App\Market\Catalogo\Domain\Classification;
 use App\Market\Catalogo\Domain\DeliveryBasis;
+use App\Market\Catalogo\Domain\InvalidProduct;
 use App\Market\Catalogo\Domain\InvalidProductTransition;
 use App\Market\Catalogo\Domain\MeasureKind;
 use App\Market\Catalogo\Domain\MeasureUnit;
@@ -35,9 +36,16 @@ final class ProductTest extends TestCase
         );
     }
 
-    private function product(): Product
+    /** Un producto sin marca ni categorías. */
+    private function bare(): Product
     {
         return Product::create(new Sku('cola-330'), 3, $this->spec());
+    }
+
+    /** Un producto con una categoría, que es lo mínimo para poder publicarse. */
+    private function product(): Product
+    {
+        return Product::create(new Sku('cola-330'), 3, $this->spec(), null, [5]);
     }
 
     public function testItIsBornAsADraftWithItsSkuAndSeller(): void
@@ -121,5 +129,67 @@ final class ProductTest extends TestCase
         $rebuilt = Product::create(new Sku('x'), 1, $original)->spec();
 
         $this->assertEquals($original, $rebuilt);
+    }
+
+    public function testItIsBornWithoutBrandNorCategories(): void
+    {
+        $product = $this->bare();
+
+        $this->assertNull($product->brandId());
+        $this->assertSame([], $product->categoryIds());
+    }
+
+    public function testItIsClassifiedWithABrandAndCategoriesWithoutDuplicates(): void
+    {
+        $product = $this->bare();
+
+        $product->classify(7, [12, 5, 12]);
+
+        $this->assertSame(7, $product->brandId());
+        $this->assertSame([5, 12], $product->categoryIds());
+    }
+
+    public function testItCanBeBornClassified(): void
+    {
+        $product = Product::create(new Sku('cola-330'), 3, $this->spec(), 7, [5]);
+
+        $this->assertSame(7, $product->brandId());
+        $this->assertSame([5], $product->categoryIds());
+    }
+
+    public function testTheBrandCanBeRemovedButTheCategoriesAreReplaced(): void
+    {
+        $product = Product::create(new Sku('cola-330'), 3, $this->spec(), 7, [5, 6]);
+
+        $product->classify(null, [6, 9]);
+
+        $this->assertNull($product->brandId());
+        $this->assertSame([6, 9], $product->categoryIds());
+    }
+
+    public function testACategoryIdMustBePositive(): void
+    {
+        $this->expectException(InvalidProduct::class);
+
+        $this->bare()->classify(null, [0]);
+    }
+
+    public function testItCannotBePublishedWithoutAtLeastOneCategory(): void
+    {
+        $product = $this->bare();
+
+        $this->expectException(InvalidProduct::class);
+
+        $product->publish();
+    }
+
+    public function testItIsPublishedOnceItHasACategory(): void
+    {
+        $product = $this->bare();
+        $product->classify(null, [5]);
+
+        $product->publish();
+
+        $this->assertTrue($product->isPublished());
     }
 }

@@ -82,8 +82,23 @@ abstract class ProductSpecDto implements IInput
     #[Assert\Regex(pattern: '/^\d{1,12}(\.\d{1,2})?$/', message: 'El importe es un número positivo con hasta dos decimales (punto decimal).')]
     protected ?string $valueMax;
 
+    /** La marca (opcional): tiene que ser del vendedor del producto. */
+    #[Assert\Positive]
+    protected ?int $brandId;
+
+    /**
+     * Las categorías del producto (al menos una para publicarlo).
+     *
+     * @var list<int>|null
+     */
+    #[Assert\Type('array')]
+    #[Assert\Count(max: 20)]
+    #[Assert\All([new Assert\Type('int'), new Assert\Positive()])]
+    protected ?array $categoryIds;
+
     /**
      * @param array<string, array{name?: string|null, description?: string|null}>|null $texts
+     * @param list<int>|null $categoryIds
      */
     public function __construct(
         ?array $texts = null,
@@ -105,7 +120,11 @@ abstract class ProductSpecDto implements IInput
         ?string $valueCurrency = null,
         ?string $valueMin = null,
         ?string $valueMax = null,
+        ?int $brandId = null,
+        ?array $categoryIds = null,
     ) {
+        $this->brandId = $brandId;
+        $this->categoryIds = $categoryIds;
         $this->texts = $texts;
         $this->service = $service;
         $this->subservice = $subservice;
@@ -317,4 +336,30 @@ abstract class ProductSpecDto implements IInput
         $this->valueMax = $valueMax;
     }
 
+
+    public function getBrandId(): ?int
+    {
+        return $this->brandId;
+    }
+
+    public function setBrandId(?int $brandId): void
+    {
+        $this->brandId = $brandId;
+    }
+
+    /**
+     * @return list<int>|null
+     */
+    public function getCategoryIds(): ?array
+    {
+        return $this->categoryIds;
+    }
+
+    /**
+     * @param list<int>|null $categoryIds
+     */
+    public function setCategoryIds(?array $categoryIds): void
+    {
+        $this->categoryIds = $categoryIds;
+    }
 }

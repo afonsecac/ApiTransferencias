@@ -22,6 +22,8 @@ class ProductOutDto
      * @param array<string, float>|null $dimensions
      * @param array{kind: string, unit: string}|null $deliveryBasis null en un producto con valor
      * @param array{kind: string, currency: string, min: string, max: string|null}|null $value solo en un producto con valor (digital)
+     * @param array{id: int, slug: string, name: string, isActive: bool}|null $brand
+     * @param list<array{id: int, slug: string, nameEs: string, nameEn: string|null, path: string, isActive: bool}> $categories
      */
     public function __construct(
         public int $id,
@@ -39,6 +41,8 @@ class ProductOutDto
         public ?array $deliveryBasis,
         public ?array $value,
         public ?string $barcode,
+        public ?array $brand,
+        public array $categories,
         public ?float $totalWeightG,
         public ?float $totalVolumeMl,
         public string $createdAt,
@@ -81,6 +85,20 @@ class ProductOutDto
                 'max' => $spec->value->maxAmount()?->toString(),
             ],
             $spec->barcode,
+            $details->brand === null ? null : [
+                'id' => (int) $details->brand->id(),
+                'slug' => $details->brand->slug()->value(),
+                'name' => $details->brand->name(),
+                'isActive' => $details->brand->isActive(),
+            ],
+            array_map(static fn ($category): array => [
+                'id' => (int) $category->id(),
+                'slug' => $category->slug()->value(),
+                'nameEs' => $category->nameEs(),
+                'nameEn' => $category->nameEn(),
+                'path' => $details->categoryPaths[(int) $category->id()] ?? $category->nameEs(),
+                'isActive' => $category->isActive(),
+            ], $details->categories),
             $product->totalWeightG(),
             $product->totalVolumeMl(),
             $product->createdAt()->format(DATE_ATOM),
