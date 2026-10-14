@@ -240,4 +240,49 @@ class DashboardClientSecurityControllerTest extends TestCase
 
         return $repo;
     }
+
+    // ---- COMR-272: la ficha del cliente muestra su unidad organizativa ----
+
+    public function testListExposesTheOrgUnitOfTheClient(): void
+    {
+        $unit = $this->createMock(\App\Market\Organizacion\Domain\OrgUnit::class);
+        $unit->method('id')->willReturn(7);
+        $unit->method('name')->willReturn('AWS Malta Ltd');
+        $unit->method('countryCode')->willReturn('MT');
+        $unit->method('taxId')->willReturn('C63841');
+        $unit->method('types')->willReturn([\App\Market\Organizacion\Domain\OrgUnitType::BUYER]);
+
+        $client = $this->createMock(Client::class);
+        $client->method('getId')->willReturn(2);
+        $client->method('getOrgUnit')->willReturn($unit);
+        $user = $this->createMock(User::class);
+        $user->method('getCompany')->willReturn($client);
+        $client->method('isActive')->willReturn(true);
+        $this->authenticateAs($user, false);
+        $this->accountRepoReturningEmpty();
+
+        $data = json_decode($this->controller->list()->getContent(), true);
+
+        $this->assertSame(
+            ['id' => 7, 'name' => 'AWS Malta Ltd', 'countryCode' => 'MT', 'countryCodeIso3' => 'MLT', 'taxId' => 'C63841', 'types' => ['buyer']],
+            $data[0]['orgUnit'],
+        );
+    }
+
+    public function testListReportsNoOrgUnitForAClientNotYetLinked(): void
+    {
+        $client = $this->createMock(Client::class);
+        $client->method('getId')->willReturn(2);
+        $client->method('getOrgUnit')->willReturn(null);
+        $client->method('isActive')->willReturn(true);
+        $user = $this->createMock(User::class);
+        $user->method('getCompany')->willReturn($client);
+        $this->authenticateAs($user, false);
+        $this->accountRepoReturningEmpty();
+
+        $data = json_decode($this->controller->list()->getContent(), true);
+
+        $this->assertArrayHasKey('orgUnit', $data[0]);
+        $this->assertNull($data[0]['orgUnit']);
+    }
 }

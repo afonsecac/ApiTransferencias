@@ -2,6 +2,7 @@
 
 namespace App\Entity;
 
+use App\Market\Organizacion\Domain\OrgUnit;
 use App\Repository\ClientRepository;
 use DateTimeImmutable;
 use Doctrine\Common\Collections\ArrayCollection;
@@ -106,6 +107,11 @@ class Client
 
     #[ORM\Column(length: 255, nullable: true)]
     private ?string $contractWith = null;
+
+    /** Unidad organizativa de tipo comprador a la que pertenece (COMR-272). */
+    #[ORM\ManyToOne(targetEntity: OrgUnit::class)]
+    #[ORM\JoinColumn(name: 'org_unit_id', nullable: true, onDelete: 'RESTRICT')]
+    private ?OrgUnit $orgUnit = null;
 
     public function __construct()
     {
@@ -412,6 +418,18 @@ class Client
     public function setContractWith(?string $contractWith): static
     {
         $this->contractWith = $contractWith;
+
+        return $this;
+    }
+
+    public function getOrgUnit(): ?OrgUnit
+    {
+        return $this->orgUnit;
+    }
+
+    public function setOrgUnit(?OrgUnit $orgUnit): static
+    {
+        $this->orgUnit = $orgUnit;
 
         return $this;
     }

@@ -70,6 +70,7 @@ final class OrgUnitFunctionalTest extends ProviderFunctionalTestCase
 
         $this->assertSame(Response::HTTP_CREATED, $response->getStatusCode(), (string) $response->getContent());
         $this->assertSame('US', $data['countryCode']);
+        $this->assertSame('USA', $data['countryCodeIso3']);
         $this->assertSame(['seller'], $data['types']);
         $this->assertSame('GEN', $data['costCenters'][0]['code']);
         $this->assertTrue($data['costCenters'][0]['principal']);
