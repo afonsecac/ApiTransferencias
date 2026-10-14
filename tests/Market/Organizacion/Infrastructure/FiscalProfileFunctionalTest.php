@@ -129,6 +129,22 @@ final class FiscalProfileFunctionalTest extends ProviderFunctionalTestCase
         $this->assertSame('INVALID_FISCAL_PROFILE', $this->body($response)['error']['code']);
     }
 
+    public function testReorderingTheFieldsOfAProfileSurvivesAReloadAndIsWhatTheApiAnswers(): void
+    {
+        $this->authenticateAsAdmin($this->createAdminUser());
+
+        $response = $this->controller()->update('PA', new UpdateFiscalProfileDto('Panamá', [
+            new FiscalFieldDto('dv', 'Dígito verificador', 'text', true, '^[0-9]{1,2}$', null, null, true, 1),
+            new FiscalFieldDto('ruc', 'RUC', 'text', true, null, null, null, true, 2),
+        ]));
+        $this->assertSame(Response::HTTP_OK, $response->getStatusCode());
+        $this->assertSame(['dv', 'ruc'], array_column($this->body($response)['fields'], 'key'));
+        $this->em->clear();
+
+        $this->assertSame(['dv', 'ruc'], array_map(static fn ($f) => $f->key, $this->repository()->findByCountry('PA')?->fields() ?? []));
+        $this->assertSame(['dv', 'ruc'], array_column($this->body($this->controller()->get('PA'))['fields'], 'key'));
+    }
+
     public function testUpdatingDeactivatesAFieldButRemovingOneIsRejected(): void
     {
         $this->authenticateAsAdmin($this->createAdminUser());
