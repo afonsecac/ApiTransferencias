@@ -52,6 +52,7 @@ class OrgUnitOutDto
             array_map(static fn (OrgUnitType $t) => $t->value, $unit->types()),
             $unit->fiscalData(),
             array_map(static fn (CostCenter $c) => [
+                'id' => $c->id(),
                 'code' => $c->code(),
                 'name' => $c->name(),
                 'principal' => $c->isPrincipal(),

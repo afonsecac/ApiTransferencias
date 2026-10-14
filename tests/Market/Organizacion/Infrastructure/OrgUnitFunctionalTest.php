@@ -73,6 +73,7 @@ final class OrgUnitFunctionalTest extends ProviderFunctionalTestCase
         $this->assertSame('USA', $data['countryCodeIso3']);
         $this->assertSame(['seller'], $data['types']);
         $this->assertSame('GEN', $data['costCenters'][0]['code']);
+        $this->assertIsInt($data['costCenters'][0]['id'], 'El id del centro permite referenciarlo desde otros contextos (vendedores).');
         $this->assertTrue($data['costCenters'][0]['principal']);
         $this->assertSame('NY', $data['fiscalData']['estado']);
     }
