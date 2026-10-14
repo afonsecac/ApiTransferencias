@@ -8,8 +8,10 @@ use App\DTO\IInput;
 use Symfony\Component\Validator\Constraints as Assert;
 
 /**
- * Los datos editables de un producto (COMR-273): lo que comparten el alta y la edición. Los valores van con el código de
- * su unidad (g, kg, oz, lb, ml, l, fl_oz, unit); la unidad original se conserva para mostrarla.
+ * Los datos editables de un producto (COMR-273): lo que comparten el alta y la edición. Un producto físico lleva su
+ * contenido y su base de tarifa; una gift card (COMR-276) lleva categoría, moneda y valor (importes como texto con punto
+ * decimal) y nada de lo físico. Las reglas entre los campos las valida el dominio. Los valores van con el código de su unidad
+ * (g, kg, oz, lb, ml, l, fl_oz, unit); la unidad original se conserva para mostrarla.
  */
 abstract class ProductSpecDto implements IInput
 {
@@ -22,11 +24,9 @@ abstract class ProductSpecDto implements IInput
     #[Assert\Type('array')]
     protected ?array $texts;
 
-    #[Assert\NotNull]
     #[Assert\Positive]
     protected ?float $contentValue;
 
-    #[Assert\NotBlank]
     #[Assert\Choice(choices: self::UNITS)]
     protected ?string $contentUnit;
 
@@ -51,19 +51,29 @@ abstract class ProductSpecDto implements IInput
     #[Assert\Positive]
     protected ?float $heightMm;
 
-    #[Assert\NotBlank]
     #[Assert\Choice(choices: ['weight', 'volume'])]
     protected ?string $deliveryKind;
 
-    #[Assert\NotBlank]
     #[Assert\Choice(choices: self::UNITS)]
     protected ?string $deliveryUnit;
 
-    #[Assert\Choice(choices: ['gift_cards', 'retail', 'supermarket'])]
+    #[Assert\Choice(choices: ['supermarket'])]
     protected ?string $area;
 
     #[Assert\Regex(pattern: '/^[0-9]{8,14}$/', message: 'El código de barras son entre 8 y 14 dígitos.')]
     protected ?string $barcode;
+
+    #[Assert\Choice(choices: ['retail', 'gaming', 'cash_cards', 'food', 'entertainment', 'travel_transport'])]
+    protected ?string $giftCardCategory;
+
+    #[Assert\Length(max: 3)]
+    protected ?string $giftCardCurrency;
+
+    #[Assert\Regex(pattern: '/^\d{1,12}(\.\d{1,2})?$/', message: 'El importe es un número positivo con hasta dos decimales (punto decimal).')]
+    protected ?string $giftCardMin;
+
+    #[Assert\Regex(pattern: '/^\d{1,12}(\.\d{1,2})?$/', message: 'El importe es un número positivo con hasta dos decimales (punto decimal).')]
+    protected ?string $giftCardMax;
 
     /**
      * @param array<string, array{name?: string|null, description?: string|null}>|null $texts
@@ -83,6 +93,10 @@ abstract class ProductSpecDto implements IInput
         ?string $deliveryUnit = null,
         ?string $area = null,
         ?string $barcode = null,
+        ?string $giftCardCategory = null,
+        ?string $giftCardCurrency = null,
+        ?string $giftCardMin = null,
+        ?string $giftCardMax = null,
     ) {
         $this->texts = $texts;
         $this->contentValue = $contentValue;
@@ -98,6 +112,10 @@ abstract class ProductSpecDto implements IInput
         $this->deliveryUnit = $deliveryUnit;
         $this->area = $area;
         $this->barcode = $barcode;
+        $this->giftCardCategory = $giftCardCategory;
+        $this->giftCardCurrency = $giftCardCurrency;
+        $this->giftCardMin = $giftCardMin;
+        $this->giftCardMax = $giftCardMax;
     }
 
     public function getTexts(): ?array
@@ -238,6 +256,46 @@ abstract class ProductSpecDto implements IInput
     public function setBarcode(?string $barcode): void
     {
         $this->barcode = $barcode;
+    }
+
+    public function getGiftCardCategory(): ?string
+    {
+        return $this->giftCardCategory;
+    }
+
+    public function setGiftCardCategory(?string $giftCardCategory): void
+    {
+        $this->giftCardCategory = $giftCardCategory;
+    }
+
+    public function getGiftCardCurrency(): ?string
+    {
+        return $this->giftCardCurrency;
+    }
+
+    public function setGiftCardCurrency(?string $giftCardCurrency): void
+    {
+        $this->giftCardCurrency = $giftCardCurrency;
+    }
+
+    public function getGiftCardMin(): ?string
+    {
+        return $this->giftCardMin;
+    }
+
+    public function setGiftCardMin(?string $giftCardMin): void
+    {
+        $this->giftCardMin = $giftCardMin;
+    }
+
+    public function getGiftCardMax(): ?string
+    {
+        return $this->giftCardMax;
+    }
+
+    public function setGiftCardMax(?string $giftCardMax): void
+    {
+        $this->giftCardMax = $giftCardMax;
     }
 
 }

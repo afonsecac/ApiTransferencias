@@ -157,6 +157,66 @@ final class ProductUseCasesTest extends TestCase
         }
     }
 
+    public function testItCreatesAGiftCardAsADigitalProductForThePlatformSeller(): void
+    {
+        $details = ($this->create())('amazon-25', null, new ProductSpecInput(
+            texts: ['es' => ['name' => 'Tarjeta Amazon'], 'en' => ['name' => 'Amazon card']],
+            contentValue: null,
+            contentUnit: null,
+            unitWeightValue: null,
+            unitWeightUnit: null,
+            unitVolumeValue: null,
+            unitVolumeUnit: null,
+            lengthMm: null,
+            widthMm: null,
+            heightMm: null,
+            deliveryKind: null,
+            deliveryUnit: null,
+            area: null,
+            barcode: null,
+            giftCardCategory: 'retail',
+            giftCardCurrency: 'USD',
+            giftCardMin: '25',
+            giftCardMax: null,
+        ));
+
+        $this->assertTrue($details->product->spec()->isDigital());
+        $this->assertSame(ProductStatus::DRAFT, $details->product->status());
+        $this->assertTrue($details->seller?->isPlatform());
+    }
+
+    public function testTheKindOfProductDoesNotChangeAfterCreatingIt(): void
+    {
+        $id = (int) ($this->create())('cola-330', null, $this->input())->product->id();
+        $giftCard = new ProductSpecInput(
+            texts: ['es' => ['name' => 'Tarjeta']],
+            contentValue: null,
+            contentUnit: null,
+            unitWeightValue: null,
+            unitWeightUnit: null,
+            unitVolumeValue: null,
+            unitVolumeUnit: null,
+            lengthMm: null,
+            widthMm: null,
+            heightMm: null,
+            deliveryKind: null,
+            deliveryUnit: null,
+            area: null,
+            barcode: null,
+            giftCardCategory: 'retail',
+            giftCardCurrency: 'USD',
+            giftCardMin: '25',
+            giftCardMax: null,
+        );
+
+        try {
+            (new UpdateProduct($this->products, $this->sellers))($id, $giftCard);
+            $this->fail('Un producto físico no se convierte en gift card');
+        } catch (InvalidProduct) {
+            $this->assertFalse($this->products->findById($id)?->spec()->isDigital());
+        }
+    }
+
     public function testUpdatingAnUnknownProductFails(): void
     {
         $this->expectException(ProductNotFound::class);

@@ -16,24 +16,27 @@ class ProductOutDto
     /**
      * @param array{id: int, slug: string, name: string, isPlatform: bool}|null $seller
      * @param array<string, array{name: string, description: string|null}> $texts
-     * @param array<string, mixed> $content
+     * @param array<string, mixed>|null $content null en una gift card
      * @param array<string, mixed>|null $unitWeight
      * @param array<string, mixed>|null $unitVolume
      * @param array<string, float>|null $dimensions
-     * @param array{kind: string, unit: string} $deliveryBasis
+     * @param array{kind: string, unit: string}|null $deliveryBasis null en una gift card
+     * @param array{category: string, currency: string, kind: string, min: string, max: string|null}|null $giftCard solo en una gift card
      */
     public function __construct(
         public int $id,
         public string $sku,
+        public string $type,
         public string $status,
         public ?string $area,
         public ?array $seller,
         public array $texts,
-        public array $content,
+        public ?array $content,
         public ?array $unitWeight,
         public ?array $unitVolume,
         public ?array $dimensions,
-        public array $deliveryBasis,
+        public ?array $deliveryBasis,
+        public ?array $giftCard,
         public ?string $barcode,
         public ?float $totalWeightG,
         public ?float $totalVolumeMl,
@@ -54,11 +57,12 @@ class ProductOutDto
         return new self(
             (int) $product->id(),
             $product->sku()->value(),
+            $spec->isDigital() ? 'gift_card' : 'physical',
             $product->status()->value,
             $spec->area?->value,
             $seller === null ? null : ['id' => (int) $seller->id(), 'slug' => $seller->slug()->value(), 'name' => $seller->name(), 'isPlatform' => $seller->isPlatform()],
             $spec->texts->forLanguage($language),
-            self::quantity($spec->content),
+            $spec->content === null ? null : self::quantity($spec->content),
             $spec->unitWeight === null ? null : self::quantity($spec->unitWeight),
             $spec->unitVolume === null ? null : self::quantity($spec->unitVolume),
             $spec->dimensions === null ? null : [
@@ -67,7 +71,14 @@ class ProductOutDto
                 'heightMm' => $spec->dimensions->heightMm,
                 'volumeCm3' => $spec->dimensions->volumeCm3(),
             ],
-            ['kind' => $spec->deliveryBasis->kind()->value, 'unit' => $spec->deliveryBasis->unit()->value],
+            $spec->deliveryBasis === null ? null : ['kind' => $spec->deliveryBasis->kind()->value, 'unit' => $spec->deliveryBasis->unit()->value],
+            $spec->giftCard === null ? null : [
+                'category' => $spec->giftCard->category()->value,
+                'currency' => $spec->giftCard->currency(),
+                'kind' => $spec->giftCard->isFixed() ? 'fixed' : 'ranged',
+                'min' => $spec->giftCard->minAmount()->toString(),
+                'max' => $spec->giftCard->maxAmount()?->toString(),
+            ],
             $spec->barcode,
             $product->totalWeightG(),
             $product->totalVolumeMl(),

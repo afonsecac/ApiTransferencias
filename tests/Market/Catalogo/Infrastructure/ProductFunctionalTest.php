@@ -253,4 +253,141 @@ final class ProductFunctionalTest extends ProviderFunctionalTestCase
 
         $connection->executeStatement("INSERT INTO market_product (sku, seller_id, status, texts, content_base, content_original, content_unit, delivery_kind, delivery_unit, created_at, updated_at) SELECT 'COLA-330', seller_id, 'draft', '{}', 1, 1, 'g', 'weight', 'g', NOW(), NOW() FROM market_product LIMIT 1");
     }
+
+    // ---- Gift cards (COMR-276) ----
+
+    /**
+     * @param array<string, mixed> $overrides
+     */
+    private function giftCardDto(string $sku = 'AMAZON-25', array $overrides = []): CreateProductDto
+    {
+        return new CreateProductDto(...($overrides + [
+            'sku' => $sku,
+            'texts' => ['es' => ['name' => 'Tarjeta Amazon'], 'en' => ['name' => 'Amazon card']],
+            'giftCardCategory' => 'retail',
+            'giftCardCurrency' => 'USD',
+            'giftCardMin' => '25',
+        ]));
+    }
+
+    public function testItCreatesAFixedValueGiftCardWithoutPhysicalData(): void
+    {
+        $this->admin();
+
+        $response = $this->controller()->create($this->giftCardDto());
+        $data = $this->body($response);
+
+        $this->assertSame(Response::HTTP_CREATED, $response->getStatusCode(), (string) $response->getContent());
+        $this->assertSame('gift_card', $data['type']);
+        $this->assertSame(['category' => 'retail', 'currency' => 'USD', 'kind' => 'fixed', 'min' => '25.00', 'max' => null], $data['giftCard']);
+        $this->assertNull($data['content']);
+        $this->assertNull($data['deliveryBasis']);
+        $this->assertNull($data['totalWeightG']);
+        $this->assertTrue($data['seller']['isPlatform']);
+    }
+
+    public function testAPhysicalProductReportsItsTypeAndNoGiftCard(): void
+    {
+        $this->admin();
+
+        $data = $this->body($this->controller()->create($this->createDto()));
+
+        $this->assertSame('physical', $data['type']);
+        $this->assertNull($data['giftCard']);
+    }
+
+    public function testARangedGiftCardSurvivesAPersistenceRoundTripWithItsExactAmounts(): void
+    {
+        $this->admin();
+        $id = $this->body($this->controller()->create($this->giftCardDto('STEAM', [
+            'giftCardCategory' => 'gaming',
+            'giftCardMin' => '5.05',
+            'giftCardMax' => '100.10',
+        ])))['id'];
+        $this->em->clear();
+
+        $spec = $this->repository()->findById($id)?->spec();
+
+        $this->assertTrue($spec?->isDigital());
+        $this->assertSame('gaming', $spec?->giftCard?->category()->value);
+        $this->assertSame('5.05', $spec?->giftCard?->minAmount()->toString());
+        $this->assertSame('100.10', $spec?->giftCard?->maxAmount()?->toString());
+    }
+
+    public function testAGiftCardOfAnAreaFromAnotherSubserviceIsRejected(): void
+    {
+        $this->admin();
+
+        $response = $this->controller()->create($this->giftCardDto('STEAM', ['giftCardCategory' => 'gaming', 'area' => 'supermarket']));
+
+        $this->assertSame(Response::HTTP_UNPROCESSABLE_ENTITY, $response->getStatusCode());
+        $this->assertSame('INVALID_PRODUCT', $this->body($response)['error']['code']);
+    }
+
+    public function testAGiftCardCanHaveTheSupermarketAreaUnderRetail(): void
+    {
+        $this->admin();
+
+        $data = $this->body($this->controller()->create($this->giftCardDto('MERCADONA', ['area' => 'supermarket'])));
+
+        $this->assertSame('supermarket', $data['area']);
+    }
+
+    public function testInvalidGiftCardsAnswerUnprocessableEntity(): void
+    {
+        $this->admin();
+
+        foreach ([
+            ['A-1', ['giftCardMin' => '25,50']],
+            ['A-2', ['giftCardMin' => '50', 'giftCardMax' => '10']],
+            ['A-3', ['giftCardCurrency' => 'us']],
+            ['A-4', ['contentValue' => 500.0, 'contentUnit' => 'g']],
+        ] as [$sku, $overrides]) {
+            $response = $this->controller()->create($this->giftCardDto($sku, $overrides));
+
+            $this->assertSame(Response::HTTP_UNPROCESSABLE_ENTITY, $response->getStatusCode(), $sku);
+            $this->assertSame('INVALID_PRODUCT', $this->body($response)['error']['code'], $sku);
+        }
+    }
+
+    public function testAGiftCardPublishesLikeAnyProduct(): void
+    {
+        $this->admin();
+        $id = $this->body($this->controller()->create($this->giftCardDto()))['id'];
+
+        $published = $this->body($this->controller()->changeStatus($id, new ChangeProductStatusDto('published')));
+
+        $this->assertSame('published', $published['status']);
+        $this->assertSame('gift_card', $published['type']);
+    }
+
+    public function testTheKindOfProductCannotChangeOnUpdate(): void
+    {
+        $this->admin();
+        $id = $this->body($this->controller()->create($this->giftCardDto()))['id'];
+
+        $response = $this->controller()->update($id, new UpdateProductDto(
+            texts: ['es' => ['name' => 'Ahora físico']],
+            contentValue: 500.0,
+            contentUnit: 'g',
+            deliveryKind: 'weight',
+            deliveryUnit: 'g',
+        ));
+
+        $this->assertSame(Response::HTTP_UNPROCESSABLE_ENTITY, $response->getStatusCode());
+    }
+
+    public function testTheDatabaseDoesNotAllowAProductThatIsNeitherPhysicalNorAGiftCard(): void
+    {
+        $this->admin();
+        $sellerId = (int) $this->em->getConnection()->fetchOne('SELECT id FROM market_seller WHERE is_platform');
+
+        $this->expectException(\Doctrine\DBAL\Exception\DriverException::class);
+        $this->expectExceptionMessage('ck_market_product_type');
+
+        $this->em->getConnection()->executeStatement(
+            "INSERT INTO market_product (sku, seller_id, status, texts, created_at, updated_at) VALUES ('VACIO', :s, 'draft', '{}', NOW(), NOW())",
+            ['s' => $sellerId],
+        );
+    }
 }
