@@ -94,6 +94,35 @@ final class FiscalProfileUseCasesTest extends TestCase
         $this->assertFalse($updated->fields()[1]->active);
     }
 
+    public function testItReordersTheFieldsInTheOrderTheAdministratorGives(): void
+    {
+        (new CreateFiscalProfile($this->repository))('ES', 'España', $this->esFields());
+
+        $updated = (new UpdateFiscalProfile($this->repository))('ES', 'España', [
+            new FiscalFieldInput('iva_intracomunitario', 'IVA intracomunitario', 'text', position: 1),
+            new FiscalFieldInput('nif', 'NIF o CIF', 'text', required: true, pattern: '^[A-Za-z0-9]{9}$', position: 2),
+        ]);
+
+        $this->assertSame(['iva_intracomunitario', 'nif'], array_map(static fn ($f) => $f->key, $updated->fields()));
+        $this->assertSame(
+            ['iva_intracomunitario', 'nif'],
+            array_map(static fn ($f) => $f->key, $this->repository->findByCountry('ES')?->fields() ?? []),
+        );
+    }
+
+    public function testADeactivatedFieldKeepsItsPlaceInTheOrder(): void
+    {
+        (new CreateFiscalProfile($this->repository))('ES', 'España', $this->esFields());
+
+        $updated = (new UpdateFiscalProfile($this->repository))('ES', 'España', [
+            new FiscalFieldInput('iva_intracomunitario', 'IVA intracomunitario', 'text', active: false, position: 1),
+            new FiscalFieldInput('nif', 'NIF o CIF', 'text', position: 2),
+        ]);
+
+        $this->assertSame(['iva_intracomunitario', 'nif'], array_map(static fn ($f) => $f->key, $updated->fields()));
+        $this->assertFalse($updated->fields()[0]->active);
+    }
+
     public function testAFieldCannotBeRemovedAndTheNameStaysUntouched(): void
     {
         (new CreateFiscalProfile($this->repository))('ES', 'España', $this->esFields());
