@@ -7,6 +7,7 @@ use App\Enums\ProviderCapabilityEnum;
 use App\Enums\ProviderOutcomeEnum;
 use App\Exception\MyCurrentException;
 use App\Provider\Contract\ProviderContext;
+use App\Provider\Contract\ProviderDispatchResult;
 use App\Provider\Contract\ProviderStatusQuery;
 use App\Provider\Contract\PromotionCatalogQuery;
 use App\Provider\Contract\RechargeRequest;
@@ -199,6 +200,60 @@ class DTOneCommunicationProviderTest extends TestCase
 
         $this->assertSame(ProviderOutcomeEnum::REJECTED, $result->outcome);
         $this->assertSame('Product is not available in your account', $result->message);
+    }
+
+    /**
+     * Un 401/403 no habla de la venta sino de nuestra credencial (caducada, rotada o sin
+     * permisos): la transacción nunca se creó, así que no se rechaza ni se cambia de
+     * proveedor, y reintentar el envío es seguro (COMR-265).
+     *
+     * @dataProvider credentialsRejectedStatusProvider
+     */
+    public function testRechargeMapsRejectedCredentialsToRetryableNotRejected(int $httpStatus): void
+    {
+        $this->client->method('createTransaction')
+            ->willThrowException(new MyCurrentException('DTONE_CLIENT_ERROR', 'Unauthorized', $httpStatus));
+
+        $request = new RechargeRequest(
+            transactionId: 'TX-2c',
+            phoneNumber: '5550001234',
+            productExternalId: '555',
+            destinationAmount: 5.0,
+            destinationUnit: 'USD',
+        );
+
+        $result = $this->provider->recharge($this->context(), $request);
+
+        $this->assertSame(ProviderOutcomeEnum::RETRYABLE, $result->outcome);
+        $this->assertSame(ProviderDispatchResult::CODE_CREDENTIALS_REJECTED, $result->providerCode);
+    }
+
+    /**
+     * @return iterable<string, array{int}>
+     */
+    public static function credentialsRejectedStatusProvider(): iterable
+    {
+        yield '401' => [401];
+        yield '403' => [403];
+    }
+
+    /**
+     * Un 400 de validación del producto o de los datos sigue siendo un rechazo definitivo.
+     */
+    public function testRechargeKeepsValidationErrorAsRejected(): void
+    {
+        $this->client->method('createTransaction')
+            ->willThrowException(new MyCurrentException('DTONE_CLIENT_ERROR', 'Invalid credit party', 400));
+
+        $request = new RechargeRequest(
+            transactionId: 'TX-2d',
+            phoneNumber: '5550001234',
+            productExternalId: '555',
+            destinationAmount: 5.0,
+            destinationUnit: 'USD',
+        );
+
+        $this->assertSame(ProviderOutcomeEnum::REJECTED, $this->provider->recharge($this->context(), $request)->outcome);
     }
 
     /**

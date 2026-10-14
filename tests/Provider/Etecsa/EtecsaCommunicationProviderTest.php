@@ -4,8 +4,12 @@ namespace App\Tests\Provider\Etecsa;
 
 use App\Entity\Environment;
 use App\Enums\CommunicationProviderEnum;
+use App\Enums\ProviderOutcomeEnum;
+use App\Exception\MyCurrentException;
 use App\Provider\Contract\ProviderContext;
+use App\Provider\Contract\ProviderDispatchResult;
 use App\Provider\Contract\PromotionCatalogQuery;
+use App\Provider\Contract\RechargeRequest;
 use App\Provider\Etecsa\EtecsaCommunicationProvider;
 use App\Provider\Etecsa\EtecsaStatusMapper;
 use App\Repository\EnvironmentRepository;
@@ -133,5 +137,65 @@ class EtecsaCommunicationProviderTest extends TestCase
 
         $this->assertCount(1, $products);
         $this->assertSame('400', $products[0]->externalId);
+    }
+
+    /**
+     * COMR-265: un 401/403 del gateway al crear la venta habla de NUESTRA clave (caducada, rotada o
+     * sin el permiso `sale:*`), no de la venta; la transacción nunca se creó, así que no es un
+     * resultado desconocido sino un envío que se puede reintentar.
+     *
+     * @dataProvider credentialsRejectedStatusProvider
+     */
+    public function testRechargeMapsRejectedCredentialsToRetryable(int $httpStatus): void
+    {
+        $environment = $this->createMock(Environment::class);
+        $this->environmentRepository->method('find')->with(4)->willReturn($environment);
+        $this->client->method('recharge')
+            ->willThrowException(new MyCurrentException('ETECSA_CLIENT_ERROR', 'Forbidden', $httpStatus));
+
+        $context = new ProviderContext(provider: CommunicationProviderEnum::ETECSA, environmentType: 'TEST', environmentId: 4);
+        $request = new RechargeRequest(
+            transactionId: '2610140100001',
+            phoneNumber: '5350499960',
+            productExternalId: '100',
+            destinationAmount: 500.0,
+            destinationUnit: 'CUP',
+        );
+
+        $result = $this->provider->recharge($context, $request);
+
+        $this->assertSame(ProviderOutcomeEnum::RETRYABLE, $result->outcome);
+        $this->assertSame(ProviderDispatchResult::CODE_CREDENTIALS_REJECTED, $result->providerCode);
+    }
+
+    /**
+     * @return iterable<string, array{int}>
+     */
+    public static function credentialsRejectedStatusProvider(): iterable
+    {
+        yield '401' => [401];
+        yield '403' => [403];
+    }
+
+    /**
+     * Cualquier otro error del gateway sigue siendo un resultado desconocido (no sabemos si lo procesó).
+     */
+    public function testRechargeKeepsOtherGatewayErrorsAsUnknown(): void
+    {
+        $environment = $this->createMock(Environment::class);
+        $this->environmentRepository->method('find')->with(4)->willReturn($environment);
+        $this->client->method('recharge')
+            ->willThrowException(new MyCurrentException('ETECSA_GATEWAY_TIMEOUT', 'timeout', 503));
+
+        $context = new ProviderContext(provider: CommunicationProviderEnum::ETECSA, environmentType: 'TEST', environmentId: 4);
+        $request = new RechargeRequest(
+            transactionId: '2610140100002',
+            phoneNumber: '5350499960',
+            productExternalId: '100',
+            destinationAmount: 500.0,
+            destinationUnit: 'CUP',
+        );
+
+        $this->assertSame(ProviderOutcomeEnum::UNKNOWN, $this->provider->recharge($context, $request)->outcome);
     }
 }
