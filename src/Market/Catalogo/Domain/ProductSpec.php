@@ -12,35 +12,33 @@ namespace App\Market\Catalogo\Domain;
  *   peso o el volumen de UNA unidad (basta uno de los dos) y esas referencias solo existen en los de conteo (COMR-141).
  * - La base de tarifa elegida (peso o volumen) tiene que poder calcularse con lo que se sabe del producto (COMR-177).
  * - Las dimensiones son las del producto, o las de una unidad si es por conteo; con ellas el volumen se deriva (COMR-104).
- * - Una gift card (COMR-276) es un producto digital: lleva su valor y categoría y nada de lo físico.
+ * - Un producto lleva contenido o valor, no los dos: con valor (una gift card, COMR-276) es digital y no lleva nada de lo físico.
+ * - La clasificación (servicio, subservicio y área) es obligatoria y dice de qué tipo es; no hay un campo de tipo aparte.
  */
 final readonly class ProductSpec
 {
     public function __construct(
         public ProductTexts $texts,
+        public Classification $classification,
         public ?Quantity $content,
         public ?Quantity $unitWeight,
         public ?Quantity $unitVolume,
         public ?Dimensions $dimensions,
         public ?DeliveryBasis $deliveryBasis,
-        public ?ProductArea $area = null,
         public ?string $barcode = null,
-        public ?GiftCard $giftCard = null,
+        public ?ProductValue $value = null,
     ) {
         if ($barcode !== null && preg_match('/^[0-9]{8,14}$/', $barcode) !== 1) {
             throw new InvalidProduct('El código de barras son entre 8 y 14 dígitos.');
         }
 
-        if ($giftCard !== null) {
+        if ($value !== null) {
             $this->validateDigital();
-            if ($area !== null && $area->subservice() !== $giftCard->category()) {
-                throw new InvalidProduct(sprintf('El área "%s" solo existe bajo el subservicio "%s".', $area->value, $area->subservice()->value));
-            }
 
             return;
         }
         if ($content === null || $deliveryBasis === null) {
-            throw new InvalidProduct('Un producto físico necesita su contenido y la base de tarifa de la entrega.');
+            throw new InvalidProduct('Un producto lleva contenido y base de tarifa de la entrega, o un valor (si es digital).');
         }
 
         $this->validateReferences($content);
@@ -53,10 +51,10 @@ final readonly class ProductSpec
         }
     }
 
-    /** Una gift card es un producto digital: sin contenido físico ni entrega. */
+    /** Un producto con valor (una gift card) es digital: sin contenido físico ni entrega. */
     public function isDigital(): bool
     {
-        return $this->giftCard !== null;
+        return $this->value !== null;
     }
 
     /** Peso total en gramos, o null si no se puede saber (o si es digital). */
@@ -95,7 +93,7 @@ final readonly class ProductSpec
     {
         if ($this->content !== null || $this->unitWeight !== null || $this->unitVolume !== null || $this->dimensions !== null
             || $this->deliveryBasis !== null || $this->barcode !== null) {
-            throw new InvalidProduct('Una gift card es un producto digital: no lleva contenido, peso, volumen, dimensiones, base de entrega ni código de barras.');
+            throw new InvalidProduct('Un producto con valor es digital: no lleva contenido, peso, volumen, dimensiones, base de entrega ni código de barras.');
         }
     }
 

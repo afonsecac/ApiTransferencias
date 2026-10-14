@@ -4,12 +4,12 @@ declare(strict_types=1);
 
 namespace App\Tests\Market\Catalogo\Domain;
 
+use App\Market\Catalogo\Domain\Classification;
 use App\Market\Catalogo\Domain\DeliveryBasis;
 use App\Market\Catalogo\Domain\Dimensions;
 use App\Market\Catalogo\Domain\InvalidProduct;
 use App\Market\Catalogo\Domain\MeasureKind;
 use App\Market\Catalogo\Domain\MeasureUnit;
-use App\Market\Catalogo\Domain\ProductArea;
 use App\Market\Catalogo\Domain\ProductSpec;
 use App\Market\Catalogo\Domain\ProductTexts;
 use App\Market\Catalogo\Domain\Quantity;
@@ -32,10 +32,16 @@ final class ProductSpecTest extends TestCase
         return ProductTexts::fromArray(['es' => ['name' => 'Refresco de cola', 'description' => 'Lata de 330 ml'], 'en' => ['name' => 'Cola soda']]);
     }
 
+    private function classification(): Classification
+    {
+        return Classification::of('Gift Cards', 'Retail');
+    }
+
     private function weightSpec(?Dimensions $dimensions = null, ?DeliveryBasis $basis = null): ProductSpec
     {
         return new ProductSpec(
             $this->texts(),
+            $this->classification(),
             Quantity::of(1.1, MeasureUnit::LB),
             null,
             null,
@@ -166,13 +172,14 @@ final class ProductSpecTest extends TestCase
     {
         $this->expectException(InvalidProduct::class);
 
-        new ProductSpec($this->texts(), Quantity::of(12, MeasureUnit::UNIT), null, null, null, DeliveryBasis::of(MeasureKind::WEIGHT, MeasureUnit::KG));
+        new ProductSpec($this->texts(), $this->classification(), Quantity::of(12, MeasureUnit::UNIT), null, null, null, DeliveryBasis::of(MeasureKind::WEIGHT, MeasureUnit::KG));
     }
 
     public function testAProductByUnitsMultipliesTheReferenceByTheQuantity(): void
     {
         $spec = new ProductSpec(
             $this->texts(),
+            $this->classification(),
             Quantity::of(12, MeasureUnit::UNIT),
             Quantity::of(330, MeasureUnit::G),
             Quantity::of(0.33, MeasureUnit::L),
@@ -186,7 +193,7 @@ final class ProductSpecTest extends TestCase
 
     public function testOnlyOneOfTheTwoReferencesIsEnough(): void
     {
-        $spec = new ProductSpec($this->texts(), Quantity::of(6, MeasureUnit::UNIT), Quantity::of(200, MeasureUnit::G), null, null, DeliveryBasis::of(MeasureKind::WEIGHT, MeasureUnit::G));
+        $spec = new ProductSpec($this->texts(), $this->classification(), Quantity::of(6, MeasureUnit::UNIT), Quantity::of(200, MeasureUnit::G), null, null, DeliveryBasis::of(MeasureKind::WEIGHT, MeasureUnit::G));
 
         $this->assertEqualsWithDelta(1200.0, (float) $spec->totalWeightG(), 0.001);
         $this->assertNull($spec->totalVolumeMl());
@@ -196,14 +203,14 @@ final class ProductSpecTest extends TestCase
     {
         $this->expectException(InvalidProduct::class);
 
-        new ProductSpec($this->texts(), Quantity::of(500, MeasureUnit::G), Quantity::of(500, MeasureUnit::G), null, null, DeliveryBasis::of(MeasureKind::WEIGHT, MeasureUnit::G));
+        new ProductSpec($this->texts(), $this->classification(), Quantity::of(500, MeasureUnit::G), Quantity::of(500, MeasureUnit::G), null, null, DeliveryBasis::of(MeasureKind::WEIGHT, MeasureUnit::G));
     }
 
     public function testTheReferencesMustBeOfTheRightKind(): void
     {
         $this->expectException(InvalidProduct::class);
 
-        new ProductSpec($this->texts(), Quantity::of(6, MeasureUnit::UNIT), Quantity::of(1, MeasureUnit::L), null, null, DeliveryBasis::of(MeasureKind::WEIGHT, MeasureUnit::G));
+        new ProductSpec($this->texts(), $this->classification(), Quantity::of(6, MeasureUnit::UNIT), Quantity::of(1, MeasureUnit::L), null, null, DeliveryBasis::of(MeasureKind::WEIGHT, MeasureUnit::G));
     }
 
     public function testTheDeliveryBasisMustBeComputableFromTheProduct(): void
@@ -225,6 +232,7 @@ final class ProductSpecTest extends TestCase
     {
         $spec = new ProductSpec(
             $this->texts(),
+            $this->classification(),
             Quantity::of(10, MeasureUnit::UNIT),
             Quantity::of(100, MeasureUnit::G),
             null,
@@ -235,14 +243,12 @@ final class ProductSpecTest extends TestCase
         $this->assertEqualsWithDelta(1000.0, (float) $spec->totalVolumeMl(), 0.001);
     }
 
-    public function testItValidatesTheBarcodeAndKeepsTheArea(): void
+    public function testItValidatesTheBarcode(): void
     {
-        $spec = new ProductSpec($this->texts(), Quantity::of(500, MeasureUnit::G), null, null, null, DeliveryBasis::of(MeasureKind::WEIGHT, MeasureUnit::G), ProductArea::SUPERMARKET, '8410000123456');
-
-        $this->assertSame(ProductArea::SUPERMARKET, $spec->area);
+        $spec = new ProductSpec($this->texts(), $this->classification(), Quantity::of(500, MeasureUnit::G), null, null, null, DeliveryBasis::of(MeasureKind::WEIGHT, MeasureUnit::G), '8410000123456');
         $this->assertSame('8410000123456', $spec->barcode);
 
         $this->expectException(InvalidProduct::class);
-        new ProductSpec($this->texts(), Quantity::of(500, MeasureUnit::G), null, null, null, DeliveryBasis::of(MeasureKind::WEIGHT, MeasureUnit::G), null, 'ABC');
+        new ProductSpec($this->texts(), $this->classification(), Quantity::of(500, MeasureUnit::G), null, null, null, DeliveryBasis::of(MeasureKind::WEIGHT, MeasureUnit::G), 'ABC');
     }
 }

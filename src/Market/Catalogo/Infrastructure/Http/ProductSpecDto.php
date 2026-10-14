@@ -5,13 +5,15 @@ declare(strict_types=1);
 namespace App\Market\Catalogo\Infrastructure\Http;
 
 use App\DTO\IInput;
+use App\Market\Catalogo\Domain\Classification;
 use Symfony\Component\Validator\Constraints as Assert;
 
 /**
- * Los datos editables de un producto (COMR-273): lo que comparten el alta y la edición. Un producto físico lleva su
- * contenido y su base de tarifa; una gift card (COMR-276) lleva categoría, moneda y valor (importes como texto con punto
- * decimal) y nada de lo físico. Las reglas entre los campos las valida el dominio. Los valores van con el código de su unidad
- * (g, kg, oz, lb, ml, l, fl_oz, unit); la unidad original se conserva para mostrarla.
+ * Los datos editables de un producto (COMR-273): lo que comparten el alta y la edición. La clasificación (servicio,
+ * subservicio y área) dice de qué tipo es, sin un campo de tipo aparte. Lleva contenido y base de tarifa de la entrega, o un
+ * valor (digital, como las gift cards: moneda e importes como texto con punto decimal) y nada de lo físico. Las reglas entre
+ * los campos las valida el dominio. Los valores van con el código de su unidad (g, kg, oz, lb, ml, l, fl_oz, unit); la
+ * unidad original se conserva para mostrarla.
  */
 abstract class ProductSpecDto implements IInput
 {
@@ -23,6 +25,17 @@ abstract class ProductSpecDto implements IInput
     #[Assert\NotNull]
     #[Assert\Type('array')]
     protected ?array $texts;
+
+    #[Assert\NotBlank]
+    #[Assert\Choice(choices: Classification::SERVICES)]
+    protected ?string $service;
+
+    #[Assert\NotBlank]
+    #[Assert\Choice(choices: Classification::SUBSERVICES)]
+    protected ?string $subservice;
+
+    #[Assert\Choice(choices: ['Supermarket'])]
+    protected ?string $area;
 
     #[Assert\Positive]
     protected ?float $contentValue;
@@ -57,29 +70,26 @@ abstract class ProductSpecDto implements IInput
     #[Assert\Choice(choices: self::UNITS)]
     protected ?string $deliveryUnit;
 
-    #[Assert\Choice(choices: ['supermarket'])]
-    protected ?string $area;
-
     #[Assert\Regex(pattern: '/^[0-9]{8,14}$/', message: 'El código de barras son entre 8 y 14 dígitos.')]
     protected ?string $barcode;
 
-    #[Assert\Choice(choices: ['retail', 'gaming', 'cash_cards', 'food', 'entertainment', 'travel_transport'])]
-    protected ?string $giftCardCategory;
-
     #[Assert\Length(max: 3)]
-    protected ?string $giftCardCurrency;
+    protected ?string $valueCurrency;
 
     #[Assert\Regex(pattern: '/^\d{1,12}(\.\d{1,2})?$/', message: 'El importe es un número positivo con hasta dos decimales (punto decimal).')]
-    protected ?string $giftCardMin;
+    protected ?string $valueMin;
 
     #[Assert\Regex(pattern: '/^\d{1,12}(\.\d{1,2})?$/', message: 'El importe es un número positivo con hasta dos decimales (punto decimal).')]
-    protected ?string $giftCardMax;
+    protected ?string $valueMax;
 
     /**
      * @param array<string, array{name?: string|null, description?: string|null}>|null $texts
      */
     public function __construct(
         ?array $texts = null,
+        ?string $service = null,
+        ?string $subservice = null,
+        ?string $area = null,
         ?float $contentValue = null,
         ?string $contentUnit = null,
         ?float $unitWeightValue = null,
@@ -91,14 +101,15 @@ abstract class ProductSpecDto implements IInput
         ?float $heightMm = null,
         ?string $deliveryKind = null,
         ?string $deliveryUnit = null,
-        ?string $area = null,
         ?string $barcode = null,
-        ?string $giftCardCategory = null,
-        ?string $giftCardCurrency = null,
-        ?string $giftCardMin = null,
-        ?string $giftCardMax = null,
+        ?string $valueCurrency = null,
+        ?string $valueMin = null,
+        ?string $valueMax = null,
     ) {
         $this->texts = $texts;
+        $this->service = $service;
+        $this->subservice = $subservice;
+        $this->area = $area;
         $this->contentValue = $contentValue;
         $this->contentUnit = $contentUnit;
         $this->unitWeightValue = $unitWeightValue;
@@ -110,12 +121,10 @@ abstract class ProductSpecDto implements IInput
         $this->heightMm = $heightMm;
         $this->deliveryKind = $deliveryKind;
         $this->deliveryUnit = $deliveryUnit;
-        $this->area = $area;
         $this->barcode = $barcode;
-        $this->giftCardCategory = $giftCardCategory;
-        $this->giftCardCurrency = $giftCardCurrency;
-        $this->giftCardMin = $giftCardMin;
-        $this->giftCardMax = $giftCardMax;
+        $this->valueCurrency = $valueCurrency;
+        $this->valueMin = $valueMin;
+        $this->valueMax = $valueMax;
     }
 
     public function getTexts(): ?array
@@ -126,6 +135,36 @@ abstract class ProductSpecDto implements IInput
     public function setTexts(?array $texts): void
     {
         $this->texts = $texts;
+    }
+
+    public function getService(): ?string
+    {
+        return $this->service;
+    }
+
+    public function setService(?string $service): void
+    {
+        $this->service = $service;
+    }
+
+    public function getSubservice(): ?string
+    {
+        return $this->subservice;
+    }
+
+    public function setSubservice(?string $subservice): void
+    {
+        $this->subservice = $subservice;
+    }
+
+    public function getArea(): ?string
+    {
+        return $this->area;
+    }
+
+    public function setArea(?string $area): void
+    {
+        $this->area = $area;
     }
 
     public function getContentValue(): ?float
@@ -238,16 +277,6 @@ abstract class ProductSpecDto implements IInput
         $this->deliveryUnit = $deliveryUnit;
     }
 
-    public function getArea(): ?string
-    {
-        return $this->area;
-    }
-
-    public function setArea(?string $area): void
-    {
-        $this->area = $area;
-    }
-
     public function getBarcode(): ?string
     {
         return $this->barcode;
@@ -258,44 +287,34 @@ abstract class ProductSpecDto implements IInput
         $this->barcode = $barcode;
     }
 
-    public function getGiftCardCategory(): ?string
+    public function getValueCurrency(): ?string
     {
-        return $this->giftCardCategory;
+        return $this->valueCurrency;
     }
 
-    public function setGiftCardCategory(?string $giftCardCategory): void
+    public function setValueCurrency(?string $valueCurrency): void
     {
-        $this->giftCardCategory = $giftCardCategory;
+        $this->valueCurrency = $valueCurrency;
     }
 
-    public function getGiftCardCurrency(): ?string
+    public function getValueMin(): ?string
     {
-        return $this->giftCardCurrency;
+        return $this->valueMin;
     }
 
-    public function setGiftCardCurrency(?string $giftCardCurrency): void
+    public function setValueMin(?string $valueMin): void
     {
-        $this->giftCardCurrency = $giftCardCurrency;
+        $this->valueMin = $valueMin;
     }
 
-    public function getGiftCardMin(): ?string
+    public function getValueMax(): ?string
     {
-        return $this->giftCardMin;
+        return $this->valueMax;
     }
 
-    public function setGiftCardMin(?string $giftCardMin): void
+    public function setValueMax(?string $valueMax): void
     {
-        $this->giftCardMin = $giftCardMin;
-    }
-
-    public function getGiftCardMax(): ?string
-    {
-        return $this->giftCardMax;
-    }
-
-    public function setGiftCardMax(?string $giftCardMax): void
-    {
-        $this->giftCardMax = $giftCardMax;
+        $this->valueMax = $valueMax;
     }
 
 }
