@@ -78,6 +78,8 @@ services:
             - '../src/Delivery/*/Domain/'
             - '../src/Shared/Domain/'
 
+    App\Market\Organizacion\Domain\FiscalProfileRepository: '@App\Market\Organizacion\Infrastructure\Persistence\DoctrineFiscalProfileRepository'
+
     App\Shared\Application\Event\EventBus: '@App\Shared\Infrastructure\Event\MessengerEventBus'
     App\Shared\Application\Event\ProcessedEvents: '@App\Shared\Infrastructure\Event\DbalProcessedEvents'
 
