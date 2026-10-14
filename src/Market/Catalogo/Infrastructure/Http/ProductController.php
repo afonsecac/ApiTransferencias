@@ -69,7 +69,7 @@ final class ProductController
     }
 
     #[Route('', name: 'market_products_create', methods: ['POST'])]
-    #[DashboardEndpoint(summary: 'Crear un producto en borrador (sin vendedor, el de plataforma)', tag: 'Market', requestDto: CreateProductDto::class, responseDto: ProductOutDto::class, responseStatusCode: 201)]
+    #[DashboardEndpoint(summary: 'Crear un producto físico o una gift card en borrador (sin vendedor, el de plataforma)', tag: 'Market', requestDto: CreateProductDto::class, responseDto: ProductOutDto::class, responseStatusCode: 201)]
     public function create(CreateProductDto $dto): JsonResponse
     {
         return $this->respond(
@@ -97,8 +97,8 @@ final class ProductController
     {
         return new ProductSpecInput(
             $dto->getTexts() ?? [],
-            (float) $dto->getContentValue(),
-            (string) $dto->getContentUnit(),
+            $dto->getContentValue(),
+            $dto->getContentUnit(),
             $dto->getUnitWeightValue(),
             $dto->getUnitWeightUnit(),
             $dto->getUnitVolumeValue(),
@@ -106,10 +106,14 @@ final class ProductController
             $dto->getLengthMm(),
             $dto->getWidthMm(),
             $dto->getHeightMm(),
-            (string) $dto->getDeliveryKind(),
-            (string) $dto->getDeliveryUnit(),
+            $dto->getDeliveryKind(),
+            $dto->getDeliveryUnit(),
             $dto->getArea(),
             $dto->getBarcode(),
+            $dto->getGiftCardCategory(),
+            $dto->getGiftCardCurrency(),
+            $dto->getGiftCardMin(),
+            $dto->getGiftCardMax(),
         );
     }
 

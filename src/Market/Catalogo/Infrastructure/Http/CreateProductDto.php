@@ -39,8 +39,12 @@ class CreateProductDto extends ProductSpecDto
         ?string $deliveryUnit = null,
         ?string $area = null,
         ?string $barcode = null,
+        ?string $giftCardCategory = null,
+        ?string $giftCardCurrency = null,
+        ?string $giftCardMin = null,
+        ?string $giftCardMax = null,
     ) {
-        parent::__construct(texts: $texts, contentValue: $contentValue, contentUnit: $contentUnit, unitWeightValue: $unitWeightValue, unitWeightUnit: $unitWeightUnit, unitVolumeValue: $unitVolumeValue, unitVolumeUnit: $unitVolumeUnit, lengthMm: $lengthMm, widthMm: $widthMm, heightMm: $heightMm, deliveryKind: $deliveryKind, deliveryUnit: $deliveryUnit, area: $area, barcode: $barcode);
+        parent::__construct(texts: $texts, contentValue: $contentValue, contentUnit: $contentUnit, unitWeightValue: $unitWeightValue, unitWeightUnit: $unitWeightUnit, unitVolumeValue: $unitVolumeValue, unitVolumeUnit: $unitVolumeUnit, lengthMm: $lengthMm, widthMm: $widthMm, heightMm: $heightMm, deliveryKind: $deliveryKind, deliveryUnit: $deliveryUnit, area: $area, barcode: $barcode, giftCardCategory: $giftCardCategory, giftCardCurrency: $giftCardCurrency, giftCardMin: $giftCardMin, giftCardMax: $giftCardMax);
         $this->sku = $sku;
         $this->sellerId = $sellerId;
     }

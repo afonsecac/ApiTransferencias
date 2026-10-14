@@ -42,11 +42,11 @@ final class ProductSpecInputTest extends TestCase
 
     public function testItBuildsTheSpecKeepingTheOriginalUnit(): void
     {
-        $spec = $this->input(['area' => 'retail'])->toSpec();
+        $spec = $this->input(['area' => 'supermarket'])->toSpec();
 
         $this->assertSame(MeasureUnit::LB, $spec->content->unit());
         $this->assertEqualsWithDelta(1133.981, $spec->content->baseValue(), 0.001);
-        $this->assertSame(ProductArea::RETAIL, $spec->area);
+        $this->assertSame(ProductArea::SUPERMARKET, $spec->area);
         $this->assertSame(MeasureUnit::KG, $spec->deliveryBasis->unit());
     }
 
@@ -80,6 +80,8 @@ final class ProductSpecInputTest extends TestCase
         yield 'unidad de tarifa desconocida' => [['deliveryUnit' => 'stone']];
         yield 'tipo de tarifa desconocido' => [['deliveryKind' => 'count']];
         yield 'área desconocida' => [['area' => 'electronics']];
+        yield 'retail no es un área, es un subservicio' => [['area' => 'retail']];
+        yield 'gift_cards no es un área, es un servicio' => [['area' => 'gift_cards']];
         yield 'valor de referencia sin unidad' => [['contentValue' => 12.0, 'contentUnit' => 'unit', 'unitWeightValue' => 330.0, 'unitWeightUnit' => null]];
         yield 'unidad de referencia sin valor' => [['contentValue' => 12.0, 'contentUnit' => 'unit', 'unitWeightValue' => null, 'unitWeightUnit' => 'g']];
     }
@@ -93,5 +95,85 @@ final class ProductSpecInputTest extends TestCase
         $this->expectException(InvalidProduct::class);
 
         $this->input($overrides)->toSpec();
+    }
+
+    // ---- Gift cards (COMR-276) ----
+
+    /**
+     * @param array<string, mixed> $overrides
+     */
+    private function giftCard(array $overrides = []): ProductSpecInput
+    {
+        return new ProductSpecInput(...($overrides + [
+            'texts' => ['es' => ['name' => 'Tarjeta Amazon']],
+            'contentValue' => null,
+            'contentUnit' => null,
+            'unitWeightValue' => null,
+            'unitWeightUnit' => null,
+            'unitVolumeValue' => null,
+            'unitVolumeUnit' => null,
+            'lengthMm' => null,
+            'widthMm' => null,
+            'heightMm' => null,
+            'deliveryKind' => null,
+            'deliveryUnit' => null,
+            'area' => null,
+            'barcode' => null,
+            'giftCardCategory' => 'retail',
+            'giftCardCurrency' => 'usd',
+            'giftCardMin' => '25',
+            'giftCardMax' => null,
+        ]));
+    }
+
+    public function testItBuildsAFixedValueGiftCard(): void
+    {
+        $spec = $this->giftCard()->toSpec();
+
+        $this->assertTrue($spec->isDigital());
+        $this->assertTrue($spec->giftCard?->isFixed());
+        $this->assertSame('25.00', $spec->giftCard?->minAmount()->toString());
+        $this->assertSame('USD', $spec->giftCard?->currency());
+    }
+
+    public function testItBuildsARangedGiftCardWithItsAreaUnderRetail(): void
+    {
+        $spec = $this->giftCard(['giftCardMin' => '5', 'giftCardMax' => '100.50', 'area' => 'supermarket'])->toSpec();
+
+        $this->assertFalse($spec->giftCard?->isFixed());
+        $this->assertSame('100.50', $spec->giftCard?->maxAmount()?->toString());
+        $this->assertSame(ProductArea::SUPERMARKET, $spec->area);
+    }
+
+    /**
+     * @return iterable<string, array{array<string, mixed>}>
+     */
+    public static function invalidGiftCards(): iterable
+    {
+        yield 'categoría desconocida' => [['giftCardCategory' => 'electronics']];
+        yield 'sin importe' => [['giftCardMin' => null]];
+        yield 'importe con coma' => [['giftCardMin' => '25,50']];
+        yield 'sin moneda' => [['giftCardCurrency' => null]];
+        yield 'máximo menor que el mínimo' => [['giftCardMin' => '50', 'giftCardMax' => '10']];
+        yield 'con contenido físico' => [['contentValue' => 500.0, 'contentUnit' => 'g']];
+        yield 'área de otro subservicio' => [['giftCardCategory' => 'gaming', 'area' => 'supermarket']];
+    }
+
+    /**
+     * @param array<string, mixed> $overrides
+     * @dataProvider invalidGiftCards
+     */
+    public function testItRejectsAnInconsistentGiftCard(array $overrides): void
+    {
+        $this->expectException(InvalidProduct::class);
+
+        $this->giftCard($overrides)->toSpec();
+    }
+
+    public function testAPhysicalProductWithoutContentOrDeliveryIsRejected(): void
+    {
+        $this->expectException(InvalidProduct::class);
+
+        $this->giftCard(['giftCardCategory' => null, 'giftCardCurrency' => null, 'giftCardMin' => null])->toSpec();
     }
 }

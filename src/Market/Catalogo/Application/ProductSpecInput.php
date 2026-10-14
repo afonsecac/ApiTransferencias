@@ -4,8 +4,11 @@ declare(strict_types=1);
 
 namespace App\Market\Catalogo\Application;
 
+use App\Market\Catalogo\Domain\Amount;
 use App\Market\Catalogo\Domain\DeliveryBasis;
 use App\Market\Catalogo\Domain\Dimensions;
+use App\Market\Catalogo\Domain\GiftCard;
+use App\Market\Catalogo\Domain\GiftCardCategory;
 use App\Market\Catalogo\Domain\InvalidProduct;
 use App\Market\Catalogo\Domain\MeasureKind;
 use App\Market\Catalogo\Domain\MeasureUnit;
@@ -25,8 +28,8 @@ final readonly class ProductSpecInput
      */
     public function __construct(
         public array $texts,
-        public float $contentValue,
-        public string $contentUnit,
+        public ?float $contentValue,
+        public ?string $contentUnit,
         public ?float $unitWeightValue,
         public ?string $unitWeightUnit,
         public ?float $unitVolumeValue,
@@ -34,10 +37,14 @@ final readonly class ProductSpecInput
         public ?float $lengthMm,
         public ?float $widthMm,
         public ?float $heightMm,
-        public string $deliveryKind,
-        public string $deliveryUnit,
+        public ?string $deliveryKind,
+        public ?string $deliveryUnit,
         public ?string $area,
         public ?string $barcode,
+        public ?string $giftCardCategory = null,
+        public ?string $giftCardCurrency = null,
+        public ?string $giftCardMin = null,
+        public ?string $giftCardMax = null,
     ) {
     }
 
@@ -46,21 +53,53 @@ final readonly class ProductSpecInput
      */
     public function toSpec(): ProductSpec
     {
+        $giftCard = $this->giftCard();
+
         return new ProductSpec(
             ProductTexts::fromArray($this->texts),
-            Quantity::of($this->contentValue, self::unit($this->contentUnit)),
+            $this->contentValue === null && ($this->contentUnit === null || $this->contentUnit === '')
+                ? null
+                : Quantity::of((float) $this->contentValue, self::unit((string) $this->contentUnit)),
             self::optionalQuantity($this->unitWeightValue, $this->unitWeightUnit, 'el peso por unidad'),
             self::optionalQuantity($this->unitVolumeValue, $this->unitVolumeUnit, 'el volumen por unidad'),
             $this->dimensions(),
-            DeliveryBasis::of(
-                MeasureKind::tryFrom($this->deliveryKind) ?? throw new InvalidProduct(sprintf('La base de tarifa "%s" no es válida.', $this->deliveryKind)),
-                self::unit($this->deliveryUnit),
-            ),
+            $this->deliveryBasis(),
             $this->area === null || $this->area === ''
                 ? null
                 : (ProductArea::tryFrom($this->area) ?? throw new InvalidProduct(sprintf('El área "%s" no es válida.', $this->area))),
             $this->barcode === null || trim($this->barcode) === '' ? null : trim($this->barcode),
+            $giftCard,
         );
+    }
+
+    private function deliveryBasis(): ?DeliveryBasis
+    {
+        if (($this->deliveryKind === null || $this->deliveryKind === '') && ($this->deliveryUnit === null || $this->deliveryUnit === '')) {
+            return null;
+        }
+
+        return DeliveryBasis::of(
+            MeasureKind::tryFrom((string) $this->deliveryKind) ?? throw new InvalidProduct(sprintf('La base de tarifa "%s" no es válida.', (string) $this->deliveryKind)),
+            self::unit((string) $this->deliveryUnit),
+        );
+    }
+
+    /** Una gift card se indica con su categoría; el valor es fijo (solo mínimo) o variable (mínimo y máximo). */
+    private function giftCard(): ?GiftCard
+    {
+        if ($this->giftCardCategory === null || $this->giftCardCategory === '') {
+            return null;
+        }
+        $category = GiftCardCategory::tryFrom($this->giftCardCategory) ?? throw new InvalidProduct(sprintf('La categoría "%s" no es válida.', $this->giftCardCategory));
+        if ($this->giftCardMin === null || $this->giftCardMin === '') {
+            throw new InvalidProduct('Una gift card necesita su importe (o el mínimo, si es de valor variable).');
+        }
+        $min = Amount::fromString($this->giftCardMin);
+        $currency = (string) $this->giftCardCurrency;
+
+        return $this->giftCardMax === null || $this->giftCardMax === ''
+            ? GiftCard::fixed($category, $currency, $min)
+            : GiftCard::ranged($category, $currency, $min, Amount::fromString($this->giftCardMax));
     }
 
     private static function unit(string $code): MeasureUnit

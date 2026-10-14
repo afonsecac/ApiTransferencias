@@ -12,7 +12,8 @@ use Doctrine\ORM\Mapping as ORM;
  *
  * Las cantidades se guardan en columnas: el valor en la unidad base (g, ml, unidades), el original y su unidad, para
  * mostrarlas como las introdujo el vendedor. Los totales derivados (peso y volumen) también se guardan, para poder
- * ordenar y calcular la relación precio/peso (COMR-165) sin recalcular. Marca y categorías llegan con COMR-70.
+ * ordenar y calcular la relación precio/peso (COMR-165) sin recalcular. Una gift card (COMR-276) es un producto digital: sin
+ * contenido ni entrega, con su categoría, moneda y valor (en unidades menores). Marca y categorías llegan con COMR-70.
  */
 #[ORM\Entity]
 #[ORM\Table(name: 'market_product')]
@@ -42,14 +43,14 @@ class Product
     #[ORM\Column(type: 'json')]
     private array $texts = [];
 
-    #[ORM\Column(name: 'content_base', type: 'decimal', precision: 14, scale: 3)]
-    private string $contentBase;
+    #[ORM\Column(name: 'content_base', type: 'decimal', precision: 14, scale: 3, nullable: true)]
+    private ?string $contentBase = null;
 
-    #[ORM\Column(name: 'content_original', type: 'decimal', precision: 14, scale: 4)]
-    private string $contentOriginal;
+    #[ORM\Column(name: 'content_original', type: 'decimal', precision: 14, scale: 4, nullable: true)]
+    private ?string $contentOriginal = null;
 
-    #[ORM\Column(name: 'content_unit', type: 'string', length: 8)]
-    private string $contentUnit;
+    #[ORM\Column(name: 'content_unit', type: 'string', length: 8, nullable: true)]
+    private ?string $contentUnit = null;
 
     #[ORM\Column(name: 'unit_weight_base', type: 'decimal', precision: 14, scale: 3, nullable: true)]
     private ?string $unitWeightBase = null;
@@ -78,11 +79,25 @@ class Product
     #[ORM\Column(name: 'height_mm', type: 'decimal', precision: 10, scale: 2, nullable: true)]
     private ?string $heightMm = null;
 
-    #[ORM\Column(name: 'delivery_kind', type: 'string', length: 8)]
-    private string $deliveryKind;
+    #[ORM\Column(name: 'delivery_kind', type: 'string', length: 8, nullable: true)]
+    private ?string $deliveryKind = null;
 
-    #[ORM\Column(name: 'delivery_unit', type: 'string', length: 8)]
-    private string $deliveryUnit;
+    #[ORM\Column(name: 'delivery_unit', type: 'string', length: 8, nullable: true)]
+    private ?string $deliveryUnit = null;
+
+    /** Solo las gift cards (productos digitales, COMR-276): categoría, moneda y valor fijo o rango. */
+    #[ORM\Column(name: 'gift_card_category', type: 'string', length: 20, nullable: true)]
+    private ?string $giftCardCategory = null;
+
+    #[ORM\Column(name: 'gift_card_currency', type: 'string', length: 3, nullable: true)]
+    private ?string $giftCardCurrency = null;
+
+    /** En unidades menores (céntimos): el importe de una de valor fijo o el mínimo de una de valor variable. */
+    #[ORM\Column(name: 'gift_card_min_minor', type: 'bigint', nullable: true)]
+    private ?string $giftCardMinMinor = null;
+
+    #[ORM\Column(name: 'gift_card_max_minor', type: 'bigint', nullable: true)]
+    private ?string $giftCardMaxMinor = null;
 
     #[ORM\Column(type: 'string', length: 14, nullable: true)]
     private ?string $barcode = null;
@@ -161,21 +176,42 @@ class Product
 
     public function spec(): ProductSpec
     {
+        if ($this->giftCardCategory !== null) {
+            return new ProductSpec(
+                ProductTexts::fromArray($this->texts),
+                null,
+                null,
+                null,
+                null,
+                null,
+                $this->area === null ? null : ProductArea::from($this->area),
+                null,
+                $this->giftCard(),
+            );
+        }
+
         return new ProductSpec(
             ProductTexts::fromArray($this->texts),
-            $this->quantity($this->contentBase, $this->contentOriginal, $this->contentUnit),
+            $this->quantity((string) $this->contentBase, (string) $this->contentOriginal, (string) $this->contentUnit),
             $this->unitWeightBase === null ? null : $this->quantity($this->unitWeightBase, (string) $this->unitWeightOriginal, (string) $this->unitWeightUnit),
             $this->unitVolumeBase === null ? null : $this->quantity($this->unitVolumeBase, (string) $this->unitVolumeOriginal, (string) $this->unitVolumeUnit),
             $this->lengthMm === null ? null : Dimensions::of((float) $this->lengthMm, (float) $this->widthMm, (float) $this->heightMm),
-            DeliveryBasis::of(MeasureKind::from($this->deliveryKind), MeasureUnit::from($this->deliveryUnit)),
+            DeliveryBasis::of(MeasureKind::from((string) $this->deliveryKind), MeasureUnit::from((string) $this->deliveryUnit)),
             $this->area === null ? null : ProductArea::from($this->area),
             $this->barcode,
         );
     }
 
-    /** El sku y el vendedor no se tocan. */
+    /**
+     * El sku, el vendedor y el tipo de producto (físico o gift card) no se tocan.
+     *
+     * @throws InvalidProduct si se intenta convertir un físico en gift card o al revés
+     */
     public function update(ProductSpec $spec): void
     {
+        if ($spec->isDigital() !== ($this->giftCardCategory !== null)) {
+            throw new InvalidProduct('El tipo de producto (físico o gift card) no cambia después de crearlo.');
+        }
         $this->apply($spec);
         $this->touch();
     }
@@ -218,9 +254,9 @@ class Product
         $this->area = $spec->area?->value;
         $this->barcode = $spec->barcode;
 
-        $this->contentBase = self::decimal($spec->content->baseValue(), 3);
-        $this->contentOriginal = self::decimal($spec->content->originalValue(), 4);
-        $this->contentUnit = $spec->content->unit()->value;
+        $this->contentBase = $spec->content === null ? null : self::decimal($spec->content->baseValue(), 3);
+        $this->contentOriginal = $spec->content === null ? null : self::decimal($spec->content->originalValue(), 4);
+        $this->contentUnit = $spec->content?->unit()->value;
 
         $this->unitWeightBase = $spec->unitWeight === null ? null : self::decimal($spec->unitWeight->baseValue(), 3);
         $this->unitWeightOriginal = $spec->unitWeight === null ? null : self::decimal($spec->unitWeight->originalValue(), 4);
@@ -233,13 +269,28 @@ class Product
         $this->widthMm = $spec->dimensions === null ? null : self::decimal($spec->dimensions->widthMm, 2);
         $this->heightMm = $spec->dimensions === null ? null : self::decimal($spec->dimensions->heightMm, 2);
 
-        $this->deliveryKind = $spec->deliveryBasis->kind()->value;
-        $this->deliveryUnit = $spec->deliveryBasis->unit()->value;
+        $this->deliveryKind = $spec->deliveryBasis?->kind()->value;
+        $this->deliveryUnit = $spec->deliveryBasis?->unit()->value;
+
+        $this->giftCardCategory = $spec->giftCard?->category()->value;
+        $this->giftCardCurrency = $spec->giftCard?->currency();
+        $this->giftCardMinMinor = $spec->giftCard === null ? null : (string) $spec->giftCard->minAmount()->minorUnits();
+        $this->giftCardMaxMinor = $spec->giftCard?->maxAmount() === null ? null : (string) $spec->giftCard->maxAmount()->minorUnits();
 
         $weight = $spec->totalWeightG();
         $volume = $spec->totalVolumeMl();
         $this->totalWeightG = $weight === null ? null : self::decimal($weight, 3);
         $this->totalVolumeMl = $volume === null ? null : self::decimal($volume, 3);
+    }
+
+    private function giftCard(): GiftCard
+    {
+        $category = GiftCardCategory::from((string) $this->giftCardCategory);
+        $min = Amount::fromMinorUnits((int) $this->giftCardMinMinor);
+
+        return $this->giftCardMaxMinor === null
+            ? GiftCard::fixed($category, (string) $this->giftCardCurrency, $min)
+            : GiftCard::ranged($category, (string) $this->giftCardCurrency, $min, Amount::fromMinorUnits((int) $this->giftCardMaxMinor));
     }
 
     private function quantity(string $base, string $original, string $unit): Quantity
