@@ -9,6 +9,9 @@ use App\Entity\Client;
 use App\Entity\Environment;
 use App\EntityPaginator\PaginatorResponse;
 use App\Exception\MyCurrentException;
+use App\Market\Organizacion\Application\LinkBuyerToOrgUnit;
+use App\Market\Organizacion\Domain\CountryCodes;
+use App\Market\Organizacion\Domain\UnknownBuyerCountry;
 use App\Message\ClientCreatedMessage;
 use App\Repository\EnvironmentRepository;
 use App\Repository\SysConfigRepository;
@@ -36,6 +39,7 @@ class ClientService extends CommonService
         SysConfigRepository         $sysConfigRepo,
         SerializerInterface         $serializer,
         private readonly MessageBusInterface $messageBus,
+        private readonly LinkBuyerToOrgUnit $linkBuyerToOrgUnit,
     ) {
         parent::__construct($em, $security, $parameters, $mailer, $logger, $passwordHasher, $environmentRepository, $sysConfigRepo, $serializer);
     }
@@ -63,6 +67,12 @@ class ClientService extends CommonService
         $environment = $this->em->getRepository(Environment::class)->find($environmentId);
         if ($environment === null) {
             throw new MyCurrentException('ENVIRONMENT_NOT_FOUND', 'Environment not found', 404);
+        }
+
+        try {
+            CountryCodes::iso2FromIso3((string) $dto->getCompanyCountry());
+        } catch (UnknownBuyerCountry $e) {
+            throw new MyCurrentException('COMPANY_COUNTRY_NOT_SUPPORTED', $e->getMessage(), 422);
         }
 
         $client = new Client();
@@ -94,9 +104,13 @@ class ClientService extends CommonService
         }
 
         try {
-            $this->em->persist($client);
-            $this->em->persist($account);
-            $this->em->flush();
+            // Cliente, cuenta y su unidad organizativa de comprador (COMR-272) se guardan juntos o no se guarda nada.
+            $this->em->wrapInTransaction(function () use ($client, $account): void {
+                $this->em->persist($client);
+                $this->em->persist($account);
+                $this->em->flush();
+                ($this->linkBuyerToOrgUnit)((int) $client->getId());
+            });
         } catch (UniqueConstraintViolationException) {
             throw new MyCurrentException(
                 'CLIENT_DUPLICATE_IDENTIFICATION',

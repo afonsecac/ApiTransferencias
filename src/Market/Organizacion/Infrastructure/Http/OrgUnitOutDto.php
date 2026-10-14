@@ -6,6 +6,7 @@ namespace App\Market\Organizacion\Infrastructure\Http;
 
 use App\Market\Organizacion\Application\OrgUnitDetails;
 use App\Market\Organizacion\Domain\CostCenter;
+use App\Market\Organizacion\Domain\CountryCodes;
 use App\Market\Organizacion\Domain\OrgUnitType;
 
 /**
@@ -23,6 +24,7 @@ class OrgUnitOutDto
         public string $name,
         public string $legalName,
         public string $countryCode,
+        public ?string $countryCodeIso3,
         public string $taxId,
         public string $address,
         public string $billingEmail,
@@ -43,6 +45,7 @@ class OrgUnitOutDto
             $unit->name(),
             $unit->legalName(),
             $unit->countryCode(),
+            CountryCodes::iso3FromIso2($unit->countryCode()),
             $unit->taxId(),
             $unit->address(),
             $unit->billingEmail(),
