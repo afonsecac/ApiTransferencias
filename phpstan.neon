@@ -13,6 +13,9 @@ parameters:
           path: src/Entity/*
         - identifier: property.onlyRead
           path: src/Entity/*
+        # Las entidades de Domain de los contextos nuevos (ADR-001) las rellena Doctrine, igual que src/Entity.
+        - identifier: property.unusedType
+          path: src/Market/*/Domain/*
     symfony:
         containerXmlPath: var/cache/dev/App_KernelDevDebugContainer.xml
 
