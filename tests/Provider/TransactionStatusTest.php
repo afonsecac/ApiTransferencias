@@ -336,4 +336,67 @@ class TransactionStatusTest extends TestCase
         $this->assertSame(0, TransactionStatus::retryCountOf([]));
         $this->assertNull(TransactionStatus::lastRetryAtOf([]));
     }
+
+    // ---- wasSentTo (COMR-266): ¿el proveedor pudo llegar a ver ya esta venta? ----
+
+    /**
+     * @dataProvider outcomesThatMeanTheProviderMayHaveTheSaleProvider
+     */
+    public function testWasSentToIsTrueWhenThePreviousDispatchMayHaveReachedTheSameProvider(ProviderOutcomeEnum $outcome): void
+    {
+        $status = TransactionStatus::fromDispatch(new ProviderDispatchResult(outcome: $outcome), 'CSQ');
+
+        $this->assertTrue(TransactionStatus::wasSentTo($status, 'CSQ'));
+    }
+
+    /**
+     * @return iterable<string, array{ProviderOutcomeEnum}>
+     */
+    public static function outcomesThatMeanTheProviderMayHaveTheSaleProvider(): iterable
+    {
+        yield 'aceptada' => [ProviderOutcomeEnum::ACCEPTED];
+        yield 'pendiente' => [ProviderOutcomeEnum::PENDING];
+        yield 'completada' => [ProviderOutcomeEnum::COMPLETED];
+        yield 'desconocida (timeout)' => [ProviderOutcomeEnum::UNKNOWN];
+    }
+
+    /**
+     * @dataProvider outcomesThatMeanTheProviderNeverHadTheSaleProvider
+     */
+    public function testWasSentToIsFalseWhenThePreviousAttemptNeverCreatedTheSale(ProviderOutcomeEnum $outcome): void
+    {
+        $status = TransactionStatus::fromDispatch(new ProviderDispatchResult(outcome: $outcome), 'CSQ');
+
+        $this->assertFalse(TransactionStatus::wasSentTo($status, 'CSQ'));
+    }
+
+    /**
+     * @return iterable<string, array{ProviderOutcomeEnum}>
+     */
+    public static function outcomesThatMeanTheProviderNeverHadTheSaleProvider(): iterable
+    {
+        yield 'rechazada' => [ProviderOutcomeEnum::REJECTED];
+        yield 'fallida' => [ProviderOutcomeEnum::FAILED];
+        yield 'reintentable (credencial o failover)' => [ProviderOutcomeEnum::RETRYABLE];
+    }
+
+    public function testWasSentToIsFalseForAnotherProvider(): void
+    {
+        $status = TransactionStatus::fromDispatch(new ProviderDispatchResult(outcome: ProviderOutcomeEnum::ACCEPTED), 'DTONE');
+
+        $this->assertFalse(TransactionStatus::wasSentTo($status, 'CSQ'));
+    }
+
+    public function testWasSentToIsFalseForAnInternalStatusAndForAnEmptyOne(): void
+    {
+        $this->assertFalse(TransactionStatus::wasSentTo([], 'CSQ'));
+        $this->assertFalse(TransactionStatus::wasSentTo(TransactionStatus::internal(ProviderOutcomeEnum::UNKNOWN, 'X'), 'CSQ'));
+    }
+
+    public function testWasSentToTreatsALegacyEtecsaResponseAsSent(): void
+    {
+        // v1: la respuesta cruda de ETECSA tal cual — ante la duda se consulta, nunca se rechaza a ciegas.
+        $this->assertTrue(TransactionStatus::wasSentTo(['Order' => 123, 'Status' => 'Pending'], 'ETECSA'));
+        $this->assertFalse(TransactionStatus::wasSentTo(['Order' => 123], 'CSQ'));
+    }
 }
