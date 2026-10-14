@@ -75,8 +75,11 @@ services:
     # recrea el contenedor y borraría el respaldo; y no todo var/log, porque
     # info/security no rotan y crecerían sin límite. Se inicializa con el
     # propietario (www-data) del directorio de la imagen.
+    # Imágenes de los productos del mercado (COMR-274): volumen con nombre que comparten php-fpm (escribe) y nginx
+    # (sirve en /market-images/, solo lectura); sobrevive a los despliegues, que recrean los contenedores.
     volumes:
       - request_logs:/var/www/var/log/requests
+      - market_images:/var/www/var/market-images
     depends_on:
       database:
         condition: service_healthy
@@ -96,6 +99,8 @@ services:
       - traefik.http.routers.api.entrypoints=websecure
       - traefik.http.routers.api.tls.certresolver=letsencrypt
       - traefik.http.services.api.loadbalancer.server.port=80
+    volumes:
+      - market_images:/var/www/var/market-images:ro
     depends_on:
       - php-fpm
     restart: always
@@ -152,6 +157,7 @@ services:
 
 volumes:
   request_logs:
+  market_images:
   traefik_letsencrypt:
   database_data:
     external: true

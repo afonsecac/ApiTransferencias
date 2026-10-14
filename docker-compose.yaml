@@ -41,6 +41,7 @@ services:
       dockerfile: docker/nginx/Dockerfile
     volumes:
       - ./public:/var/www/public:ro
+      - ./var/market-images:/var/www/var/market-images:ro
     ports:
       - "16880:80"
     depends_on:
