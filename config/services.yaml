@@ -8,6 +8,9 @@ parameters:
     # docker-compose.vps.prod.yaml; el JSON de OpenAPI siempre queda disponible.
     env(API_DOCS_UI): '1'
     app.secret: '%env(APP_SECRET)%'
+    # Imágenes de los productos del mercado (COMR-274): dónde se guardan y bajo qué ruta las sirve nginx.
+    market.images.dir: '%kernel.project_dir%/var/market-images'
+    market.images.url_prefix: '/market-images'
     app.email.support: '%env(MAILER_DSN)%'
     app.microsoft.url: '%env(MICROSOFT_URL)%'
     app.phoneNumber: '%env(APP_TEST_PHONE)%'
@@ -78,6 +81,27 @@ services:
             - '../src/Delivery/*/Domain/'
             - '../src/Shared/Domain/'
 
+    App\Market\Organizacion\Domain\FiscalProfileRepository: '@App\Market\Organizacion\Infrastructure\Persistence\DoctrineFiscalProfileRepository'
+    App\Market\Organizacion\Domain\OrgUnitRepository: '@App\Market\Organizacion\Infrastructure\Persistence\DoctrineOrgUnitRepository'
+    App\Market\Organizacion\Domain\BuyerRegistry: '@App\Market\Organizacion\Infrastructure\Persistence\DoctrineBuyerRegistry'
+    App\Market\Catalogo\Domain\SellerRepository: '@App\Market\Catalogo\Infrastructure\Persistence\DoctrineSellerRepository'
+    App\Market\Catalogo\Domain\SellerOrgUnits: '@App\Market\Catalogo\Infrastructure\Persistence\OrganizacionSellerOrgUnits'
+    App\Market\Catalogo\Domain\ProductRepository: '@App\Market\Catalogo\Infrastructure\Persistence\DoctrineProductRepository'
+    App\Market\Catalogo\Domain\CategoryRepository: '@App\Market\Catalogo\Infrastructure\Persistence\DoctrineCategoryRepository'
+    App\Market\Catalogo\Domain\BrandRepository: '@App\Market\Catalogo\Infrastructure\Persistence\DoctrineBrandRepository'
+    App\Market\Catalogo\Domain\ProductImageRepository: '@App\Market\Catalogo\Infrastructure\Persistence\DoctrineProductImageRepository'
+    App\Market\Catalogo\Domain\ImageSettings: '@App\Market\Catalogo\Infrastructure\Persistence\SysConfigImageSettings'
+    App\Market\Catalogo\Domain\ImageStore: '@App\Market\Catalogo\Infrastructure\Storage\GdImageStore'
+
+    # Imágenes de los productos (COMR-274): un directorio que sirve nginx en /market-images/ (un volumen en los VPS).
+    App\Market\Catalogo\Infrastructure\Storage\GdImageStore:
+        arguments:
+            $directory: '%market.images.dir%'
+    App\Market\Catalogo\Infrastructure\Storage\ImageUrls:
+        arguments:
+            $prefix: '%market.images.url_prefix%'
+            $baseUrl: '%env(string:default::MARKET_IMAGES_BASE_URL)%'
+
     App\Shared\Application\Event\EventBus: '@App\Shared\Infrastructure\Event\MessengerEventBus'
     App\Shared\Application\Event\ProcessedEvents: '@App\Shared\Infrastructure\Event\DbalProcessedEvents'
 
@@ -122,6 +146,9 @@ services:
 
 
 when@test:
+    parameters:
+        # Los tests escriben imágenes de verdad: nunca en el directorio que sirve nginx.
+        market.images.dir: '%kernel.project_dir%/var/test-market-images'
     services:
         # Los tests funcionales piden estos servicios al contenedor; en la app solo se inyectan.
         App\Shared\Application\Event\EventBus:

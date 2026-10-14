@@ -18,15 +18,23 @@ doctrine:
                 dir: '%kernel.project_dir%/src/Entity'
                 prefix: 'App\Entity'
                 alias: App
+            # ADR-001: el contexto Organización (COMR-270).
+            MarketOrganizacion:
+                type: attribute
+                is_bundle: false
+                dir: '%kernel.project_dir%/src/Market/Organizacion/Domain'
+                prefix: 'App\Market\Organizacion\Domain'
+            # ADR-001: el contexto Catálogo (COMR-103).
+            MarketCatalogo:
+                type: attribute
+                is_bundle: false
+                dir: '%kernel.project_dir%/src/Market/Catalogo/Domain'
+                prefix: 'App\Market\Catalogo\Domain'
 
 # Entidades de los contextos nuevos (ADR-001): viven en Domain con atributos de Doctrine\ORM\Mapping.
 # Cada contexto registra aquí su carpeta Domain (en la clave `mappings` de arriba), por ejemplo:
 #
-#   Catalogo:
-#       type: attribute
-#       is_bundle: false
-#       dir: '%kernel.project_dir%/src/Market/Catalogo/Domain'
-#       prefix: 'App\Market\Catalogo\Domain'
+#   Catalogo:   (ya registrado arriba como MarketCatalogo)
 when@test:
     doctrine:
         orm:

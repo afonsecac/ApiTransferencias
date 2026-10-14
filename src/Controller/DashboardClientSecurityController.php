@@ -208,7 +208,28 @@ class DashboardClientSecurityController extends AbstractController
             'discountOfClient' => $client->getDiscountOfClient(),
             'currency' => $client->getCurrency(),
             'isActive' => $client->isActive(),
+            'orgUnit' => $this->serializeOrgUnit($client),
             'accounts' => array_map(fn(Account $a) => $this->serializeAccount($a), $accounts),
+        ];
+    }
+
+    /**
+     * @return array{id: int|null, name: string, countryCode: string, countryCodeIso3: string|null, taxId: string, types: list<string>}|null
+     */
+    private function serializeOrgUnit(Client $client): ?array
+    {
+        $unit = $client->getOrgUnit();
+        if ($unit === null) {
+            return null;
+        }
+
+        return [
+            'id' => $unit->id(),
+            'name' => $unit->name(),
+            'countryCode' => $unit->countryCode(),
+            'countryCodeIso3' => \App\Market\Organizacion\Domain\CountryCodes::iso3FromIso2($unit->countryCode()),
+            'taxId' => $unit->taxId(),
+            'types' => array_map(static fn (\App\Market\Organizacion\Domain\OrgUnitType $t) => $t->value, $unit->types()),
         ];
     }
 

@@ -22,7 +22,8 @@ RUN install-php-extensions \
     zip \
     sockets \
     amqp \
-    apcu
+    apcu \
+    gd
 
 COPY docker/php-fpm/php.ini $PHP_INI_DIR/conf.d/app.ini
 COPY docker/php-fpm/www.conf /usr/local/etc/php-fpm.d/www.conf
@@ -65,7 +66,7 @@ RUN printf '%s\n' \
 RUN composer dump-autoload --optimize \
     && php bin/console assets:install public --env=prod \
     && php bin/console cache:warmup --env=prod \
-    && mkdir -p var/log/requests \
+    && mkdir -p var/log/requests var/market-images \
     && chown -R www-data:www-data var/
 
 USER www-data

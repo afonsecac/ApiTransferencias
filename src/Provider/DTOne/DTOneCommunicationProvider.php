@@ -210,6 +210,17 @@ final class DTOneCommunicationProvider implements
     private function mapDispatchException(MyCurrentException $e): ProviderDispatchResult
     {
         if ($e->getCodeWork() === 'DTONE_CLIENT_ERROR') {
+            // 401/403: un problema nuestro (credencial caducada, rotada o sin permisos), no de la
+            // venta — la transacción nunca se creó, pero rechazarla (o cambiarla de proveedor) por
+            // esto sería castigar a la venta por un fallo ajeno a ella (COMR-265).
+            if (in_array($e->getCode(), [401, 403], true)) {
+                return new ProviderDispatchResult(
+                    outcome: ProviderOutcomeEnum::RETRYABLE,
+                    providerCode: ProviderDispatchResult::CODE_CREDENTIALS_REJECTED,
+                    message: $e->getMessage(),
+                );
+            }
+
             return new ProviderDispatchResult(outcome: ProviderOutcomeEnum::REJECTED, message: $e->getMessage());
         }
 

@@ -30,6 +30,7 @@ use App\Provider\Contract\PackageCustomer;
 use App\Provider\Contract\PackageSaleProviderInterface;
 use App\Provider\Contract\PackageSalePoint;
 use App\Provider\Contract\PackageSaleRequest;
+use App\Provider\Contract\ProviderDispatchResult;
 use App\Provider\Contract\ProviderStatusQuery;
 use App\Provider\Contract\RechargeProviderInterface;
 use App\Provider\Contract\RechargeRequest;
@@ -712,6 +713,10 @@ class CommunicationSaleService extends CommonService
                     accountIdentifier: $saleRecharge->getAccountIdentifier(),
                 );
 
+                // Estado del envío ANTERIOR, antes de que este lo pise: si el proveedor ya pudo ver la venta,
+                // un REJECTED de este reenvío no habla de ella (COMR-266).
+                $previousStatus = $saleRecharge->getTransactionStatus();
+                $alreadySent = TransactionStatus::wasSentTo($previousStatus, $provider->value);
                 $dispatchResult = $adapter->recharge($context, $request);
                 // carryRetryBlock() preserva el marcador de un failover
                 // previo (o el contador de GATEWAY_MISSING) — fromDispatch()
@@ -722,6 +727,18 @@ class CommunicationSaleService extends CommonService
                 );
                 $saleRecharge->setTransactionStatus($dispatchEnvelope);
                 $saleRecharge->setStateProcess(CommunicationStateEnum::PENDING->value);
+
+                if ($this->isCredentialsRejected($dispatchResult)) {
+                    $this->releaseSaleForRejectedCredentials($saleRecharge, $provider, $environment->getType(), $dispatchResult, $dispatchEnvelope);
+
+                    return;
+                }
+
+                if ($alreadySent && $dispatchResult->outcome === ProviderOutcomeEnum::REJECTED) {
+                    $this->keepOriginalStatusAfterRejectedResend($saleRecharge, $previousStatus, $dispatchEnvelope);
+
+                    return;
+                }
 
                 if ($dispatchResult->outcome === ProviderOutcomeEnum::REJECTED) {
                     // Rechazo determinista del proveedor (no un timeout/error
@@ -997,7 +1014,35 @@ class CommunicationSaleService extends CommonService
                 ),
             );
 
+            $previousStatus = $sale->getTransactionStatus();
+            $alreadySent = TransactionStatus::wasSentTo($previousStatus, $provider->value);
             $dispatchResult = $adapter->sellPackage($context, $request);
+
+            if ($alreadySent && $dispatchResult->outcome === ProviderOutcomeEnum::FAILED) {
+                // Reenvío rechazado: la venta original puede existir en el proveedor (COMR-266).
+                $this->keepOriginalStatusAfterRejectedResend(
+                    $sale,
+                    $previousStatus,
+                    TransactionStatus::carryRetryBlock($previousStatus, TransactionStatus::fromDispatch($dispatchResult, $provider->value)),
+                );
+
+                return;
+            }
+
+            if ($this->isCredentialsRejected($dispatchResult)) {
+                $this->releaseSaleForRejectedCredentials(
+                    $sale,
+                    $provider,
+                    $user->getEnvironment()?->getType(),
+                    $dispatchResult,
+                    TransactionStatus::carryRetryBlock(
+                        $sale->getTransactionStatus(),
+                        TransactionStatus::fromDispatch($dispatchResult, $provider->value),
+                    ),
+                );
+
+                return;
+            }
 
             if ($dispatchResult->outcome === ProviderOutcomeEnum::ACCEPTED) {
                 $sale->setState(CommunicationStateEnum::PENDING);
@@ -1042,6 +1087,68 @@ class CommunicationSaleService extends CommonService
             $this->em->flush();
             $this->logger->error("Sale {$saleId} execution error: " . $exc->getMessage());
         }
+    }
+
+    /**
+     * El proveedor rechazó el REENVÍO de una venta que ya pudo haber recibido (COMR-266). CSQ ("Ticket
+     * duplicado") y ETECSA (un mensaje genérico) rechazan una referencia ya usada aunque la venta
+     * ORIGINAL exista, esté completada o con orden: aplicar ese rechazo la rechazaría y liberaría su
+     * saldo aunque el proveedor la tenga procesada. Por eso ni se rechaza ni se prueba otro proveedor:
+     * la venta conserva el estado de la original, el rechazo queda solo en el histórico y se
+     * programa la consulta de estado, que resuelve la venta con lo que diga el proveedor.
+     *
+     * @param array<string, mixed> $previousStatus
+     * @param array<string, mixed> $rejectionEnvelope
+     */
+    private function keepOriginalStatusAfterRejectedResend(
+        CommunicationSaleInfo $sale,
+        array $previousStatus,
+        array $rejectionEnvelope,
+    ): void {
+        $sale->setTransactionStatus($previousStatus);
+        $sale->setState(CommunicationStateEnum::PENDING);
+        $sale->setStateProcess(CommunicationStateEnum::PENDING->value);
+        $sale->scheduleNextCheck();
+        $this->historicalSaleService->createHistoricalCommunication($sale->getId(), CommunicationStateEnum::PENDING, $rejectionEnvelope);
+        $this->em->flush();
+        $this->logger->warning("Sale {$sale->getId()}: provider rejected a resend of a sale it may already have; keeping the original status and checking it.");
+    }
+
+    /**
+     * ¿El proveedor rechazó NUESTRA credencial (401/403) al crear la venta? (COMR-265)
+     */
+    private function isCredentialsRejected(ProviderDispatchResult $result): bool
+    {
+        return $result->outcome === ProviderOutcomeEnum::RETRYABLE
+            && $result->providerCode === ProviderDispatchResult::CODE_CREDENTIALS_REJECTED;
+    }
+
+    /**
+     * Un 401/403 al crear no habla de la venta sino de nuestra credencial, y la transacción nunca se
+     * creó: ni se rechaza ni se cambia de proveedor. Se libera la venta (queda lista para reenviarse,
+     * sin riesgo de doble cobro) y se apaga el proveedor en ese entorno hasta que un ping bueno lo
+     * recupere, momento en que dispatchPending() la reencola. No se programa ninguna consulta de
+     * estado: no hay nada que consultar.
+     *
+     * @param array<string, mixed> $envelope
+     */
+    private function releaseSaleForRejectedCredentials(
+        CommunicationSaleInfo $sale,
+        CommunicationProviderEnum $provider,
+        ?string $environmentType,
+        ProviderDispatchResult $result,
+        array $envelope,
+    ): void {
+        $sale->setTransactionStatus($envelope);
+        $sale->setState(CommunicationStateEnum::PENDING);
+        $sale->setStateProcess(CommunicationStateEnum::CREATED->value);
+        $this->historicalSaleService->createHistoricalCommunication($sale->getId(), CommunicationStateEnum::CREATED, $envelope);
+        $this->em->flush();
+        $this->availabilityService->markCredentialsRejected(
+            $provider,
+            $environmentType ?? 'PROD',
+            $result->message ?? 'credencial rechazada',
+        );
     }
 
     /**
