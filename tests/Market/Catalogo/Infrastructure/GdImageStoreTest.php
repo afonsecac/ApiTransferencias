@@ -56,7 +56,6 @@ final class GdImageStoreTest extends TestCase
             'webp' => imagewebp($image, $path),
             'gif' => imagegif($image, $path),
         };
-        imagedestroy($image);
 
         return $path;
     }

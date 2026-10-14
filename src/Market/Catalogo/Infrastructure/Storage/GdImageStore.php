@@ -12,7 +12,8 @@ use App\Market\Catalogo\Domain\StoredImage;
  * Guarda las imágenes de los productos en un directorio (un volumen que sirve nginx) con GD (COMR-274). De cada una genera
  * tres tamaños por el lado largo (miniatura, listado y detalle), nunca ampliando, y los guarda en WebP con la
  * transparencia intacta: `<dir>/<ab>/<huella>-<tamaño>.webp`, donde `ab` son los dos primeros caracteres de la huella
- * (para no amontonar miles de archivos en una carpeta). La huella es aleatoria por subida: dos subidas de la misma imagen no
+ * (para no amontonar miles de archivos en una carpeta). Los recursos GD los libera el recolector (imagedestroy() no hace
+ * nada desde PHP 8.0 y está deprecada en 8.5). La huella es aleatoria por subida: dos subidas de la misma imagen no
  * comparten archivos y borrar una no toca la otra. No se conserva el original; el tamaño de detalle es el mayor. Solo acepta
  * JPEG, PNG y WebP (se mira el contenido, no la extensión) y rechaza imágenes con demasiados píxeles, que agotarían la memoria
  * al decodificarlas.
@@ -74,8 +75,6 @@ final class GdImageStore implements ImageStore
             }
 
             throw $e;
-        } finally {
-            imagedestroy($source);
         }
 
         return new StoredImage($file, $mime, (int) filesize($sourcePath), $width, $height);
@@ -111,13 +110,11 @@ final class GdImageStore implements ImageStore
 
         $directory = dirname($path);
         if (!is_dir($directory) && !@mkdir($directory, 0755, true) && !is_dir($directory)) {
-            imagedestroy($target);
             throw new \RuntimeException(sprintf('No se pudo crear el directorio de imágenes "%s".', $directory));
         }
         // Se escribe a un temporal y se renombra: nginx nunca sirve un archivo a medias.
         $temporary = $path . '.tmp';
         $ok = imagewebp($target, $temporary, self::QUALITY);
-        imagedestroy($target);
         if (!$ok || !@rename($temporary, $path)) {
             @unlink($temporary);
             throw new \RuntimeException('No se pudo guardar la imagen.');

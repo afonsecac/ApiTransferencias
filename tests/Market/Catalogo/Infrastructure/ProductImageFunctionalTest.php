@@ -89,7 +89,6 @@ final class ProductImageFunctionalTest extends ProviderFunctionalTestCase
         imagefill($image, 0, 0, (int) imagecolorallocate($image, 20, 120, 200));
         $path = sys_get_temp_dir() . '/func-' . bin2hex(random_bytes(4)) . '.' . $format;
         $format === 'png' ? imagepng($image, $path) : imagejpeg($image, $path);
-        imagedestroy($image);
         $this->temporary[] = $path;
 
         return $this->controller()->upload($productId, new Request(files: ['file' => new UploadedFile($path, $name, null, null, true)]));
