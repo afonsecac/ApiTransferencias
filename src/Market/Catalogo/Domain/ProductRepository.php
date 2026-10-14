@@ -14,10 +14,12 @@ interface ProductRepository
     public function findBySku(string $sku): ?Product;
 
     /**
-     * @param string|null $query texto libre sobre el sku y los nombres del producto
      * @return list<Product> por sku
      */
-    public function search(?string $query, ?ProductStatus $status, ?int $sellerId): array;
+    public function search(ProductFilter $filter, ?int $limit = null, int $offset = 0): array;
+
+    /** Cuántos productos cumplen el filtro (sin paginar). */
+    public function count(ProductFilter $filter): int;
 
     public function save(Product $product): void;
 }

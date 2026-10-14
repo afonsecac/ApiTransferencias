@@ -4,17 +4,17 @@ declare(strict_types=1);
 
 namespace App\Market\Catalogo\Application;
 
+use App\Market\Catalogo\Domain\InvalidProduct;
 use App\Market\Catalogo\Domain\InvalidProductTransition;
 use App\Market\Catalogo\Domain\ProductNotFound;
 use App\Market\Catalogo\Domain\ProductRepository;
 use App\Market\Catalogo\Domain\ProductStatus;
-use App\Market\Catalogo\Domain\SellerRepository;
 
 final class ChangeProductStatus
 {
     public function __construct(
         private readonly ProductRepository $products,
-        private readonly SellerRepository $sellers,
+        private readonly ProductDetailsAssembler $assembler,
     ) {
     }
 
@@ -23,6 +23,7 @@ final class ChangeProductStatus
      *
      * @throws ProductNotFound
      * @throws InvalidProductTransition
+     * @throws InvalidProduct publicar sin ninguna categoría
      */
     public function __invoke(int $id, ProductStatus $status): ProductDetails
     {
@@ -34,6 +35,6 @@ final class ChangeProductStatus
         };
         $this->products->save($product);
 
-        return new ProductDetails($product, $this->sellers->findById($product->sellerId()));
+        return $this->assembler->one($product);
     }
 }

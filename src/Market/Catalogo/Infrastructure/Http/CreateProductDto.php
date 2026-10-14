@@ -21,6 +21,7 @@ class CreateProductDto extends ProductSpecDto
 
     /**
      * @param array<string, array{name?: string|null, description?: string|null}>|null $texts
+     * @param list<int>|null $categoryIds
      */
     public function __construct(
         ?string $sku = null,
@@ -44,8 +45,10 @@ class CreateProductDto extends ProductSpecDto
         ?string $valueCurrency = null,
         ?string $valueMin = null,
         ?string $valueMax = null,
+        ?int $brandId = null,
+        ?array $categoryIds = null,
     ) {
-        parent::__construct(texts: $texts, service: $service, subservice: $subservice, area: $area, contentValue: $contentValue, contentUnit: $contentUnit, unitWeightValue: $unitWeightValue, unitWeightUnit: $unitWeightUnit, unitVolumeValue: $unitVolumeValue, unitVolumeUnit: $unitVolumeUnit, lengthMm: $lengthMm, widthMm: $widthMm, heightMm: $heightMm, deliveryKind: $deliveryKind, deliveryUnit: $deliveryUnit, barcode: $barcode, valueCurrency: $valueCurrency, valueMin: $valueMin, valueMax: $valueMax);
+        parent::__construct(texts: $texts, service: $service, subservice: $subservice, area: $area, contentValue: $contentValue, contentUnit: $contentUnit, unitWeightValue: $unitWeightValue, unitWeightUnit: $unitWeightUnit, unitVolumeValue: $unitVolumeValue, unitVolumeUnit: $unitVolumeUnit, lengthMm: $lengthMm, widthMm: $widthMm, heightMm: $heightMm, deliveryKind: $deliveryKind, deliveryUnit: $deliveryUnit, barcode: $barcode, valueCurrency: $valueCurrency, valueMin: $valueMin, valueMax: $valueMax, brandId: $brandId, categoryIds: $categoryIds);
         $this->sku = $sku;
         $this->sellerId = $sellerId;
     }

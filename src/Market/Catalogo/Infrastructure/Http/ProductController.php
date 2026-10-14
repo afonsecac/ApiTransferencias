@@ -14,6 +14,8 @@ use App\Market\Catalogo\Application\UpdateProduct;
 use App\Market\Catalogo\Domain\InvalidProduct;
 use App\Market\Catalogo\Domain\InvalidProductTransition;
 use App\Market\Catalogo\Domain\ProductAlreadyExists;
+use App\Market\Catalogo\Domain\ProductBrandInvalid;
+use App\Market\Catalogo\Domain\ProductCategoryInvalid;
 use App\Market\Catalogo\Domain\ProductNotFound;
 use App\Market\Catalogo\Domain\ProductSellerInvalid;
 use App\Market\Catalogo\Domain\ProductStatus;
@@ -45,20 +47,22 @@ final class ProductController
     }
 
     #[Route('', name: 'market_products_list', methods: ['GET'])]
-    #[DashboardEndpoint(summary: 'Listar los productos (filtros: q, status, seller, lang)', tag: 'Market', responseDto: ProductOutDto::class, responseIsArray: true)]
+    #[DashboardEndpoint(summary: 'Listar los productos, paginados (filtros: q, status, seller, brand, category, subcategories, page, perPage, lang)', tag: 'Market', responseDto: ProductPageOutDto::class)]
     public function list(Request $request): JsonResponse
     {
         $query = $request->query->get('q');
-        $seller = $request->query->get('seller');
+        $page = ($this->listProducts)(
+            is_string($query) && trim($query) !== '' ? trim($query) : null,
+            ProductStatus::tryFrom((string) $request->query->get('status', '')),
+            $this->id($request, 'seller'),
+            $this->id($request, 'brand'),
+            $this->id($request, 'category'),
+            $request->query->get('subcategories', '1') !== '0',
+            $this->id($request, 'page') ?? 1,
+            $this->id($request, 'perPage') ?? 25,
+        );
 
-        return new JsonResponse(array_map(
-            fn (ProductDetails $d) => ProductOutDto::from($d, $this->language($request)),
-            ($this->listProducts)(
-                is_string($query) ? $query : null,
-                ProductStatus::tryFrom((string) $request->query->get('status', '')),
-                is_string($seller) && ctype_digit($seller) ? (int) $seller : null,
-            ),
-        ));
+        return new JsonResponse(ProductPageOutDto::from($page, $this->language($request)));
     }
 
     #[Route('/{id}', name: 'market_products_get', methods: ['GET'], requirements: ['id' => '\d+'])]
@@ -115,7 +119,16 @@ final class ProductController
             $dto->getValueCurrency(),
             $dto->getValueMin(),
             $dto->getValueMax(),
+            $dto->getBrandId(),
+            $dto->getCategoryIds() ?? [],
         );
+    }
+
+    private function id(Request $request, string $name): ?int
+    {
+        $value = $request->query->get($name);
+
+        return is_string($value) && ctype_digit($value) && (int) $value > 0 ? (int) $value : null;
     }
 
     private function language(Request $request): ?string
@@ -140,6 +153,10 @@ final class ProductController
             return $this->error('PRODUCT_ALREADY_EXISTS', $e->getMessage(), Response::HTTP_CONFLICT);
         } catch (InvalidProductTransition $e) {
             return $this->error('INVALID_PRODUCT_TRANSITION', $e->getMessage(), Response::HTTP_CONFLICT);
+        } catch (ProductBrandInvalid $e) {
+            return $this->error($e->reason(), $e->getMessage(), Response::HTTP_UNPROCESSABLE_ENTITY);
+        } catch (ProductCategoryInvalid $e) {
+            return $this->error('PRODUCT_CATEGORY_INVALID', $e->getMessage(), Response::HTTP_UNPROCESSABLE_ENTITY);
         } catch (ProductSellerInvalid $e) {
             return $this->error('PRODUCT_SELLER_INVALID', $e->getMessage(), Response::HTTP_UNPROCESSABLE_ENTITY);
         } catch (InvalidProduct $e) {

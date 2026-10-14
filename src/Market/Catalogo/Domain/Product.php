@@ -14,7 +14,8 @@ use Doctrine\ORM\Mapping as ORM;
  * mostrarlas como las introdujo el vendedor. Los totales derivados (peso y volumen) también se guardan, para poder
  * ordenar y calcular la relación precio/peso (COMR-165) sin recalcular. El tipo lo dan el servicio, el subservicio y el área
  * (T1), no un campo aparte; con valor (una gift card, COMR-276) es digital: sin contenido ni entrega, con su moneda y valor
- * (en unidades menores). Marca y categorías llegan con COMR-70.
+ * (en unidades menores). La marca (opcional, de su mismo vendedor) y las categorías (al menos una para publicarlo) son referencias
+ * por id (COMR-70): quién las valida es el caso de uso, que ve las demás entidades.
  */
 #[ORM\Entity]
 #[ORM\Table(name: 'market_product')]
@@ -36,6 +37,17 @@ class Product
 
     #[ORM\Column(type: 'string', length: 12)]
     private string $status;
+
+    #[ORM\Column(name: 'brand_id', type: 'integer', nullable: true)]
+    private ?int $brandId = null;
+
+    /**
+     * Las categorías del producto, por id. No es una columna: viven en la tabla de unión market_product_category, que el
+     * repositorio lee y escribe.
+     *
+     * @var list<int>
+     */
+    private array $categoryIds = [];
 
     /** La clasificación del producto (T1): servicio, subservicio y área. El tipo lo dan ellos, no un campo aparte. */
     #[ORM\Column(type: 'string', length: 30)]
@@ -119,19 +131,28 @@ class Product
     #[ORM\Column(name: 'updated_at', type: 'datetime_immutable')]
     private \DateTimeImmutable $updatedAt;
 
-    private function __construct(Sku $sku, int $sellerId, ProductSpec $spec)
+    /**
+     * @param list<int> $categoryIds
+     */
+    private function __construct(Sku $sku, int $sellerId, ProductSpec $spec, ?int $brandId, array $categoryIds)
     {
         $this->sku = $sku->value();
         $this->sellerId = $sellerId;
         $this->status = ProductStatus::DRAFT->value;
         $this->apply($spec);
+        $this->classify($brandId, $categoryIds);
         $this->createdAt = new \DateTimeImmutable();
         $this->updatedAt = $this->createdAt;
     }
 
-    public static function create(Sku $sku, int $sellerId, ProductSpec $spec): self
+    /**
+     * @param list<int> $categoryIds
+     *
+     * @throws InvalidProduct
+     */
+    public static function create(Sku $sku, int $sellerId, ProductSpec $spec, ?int $brandId = null, array $categoryIds = []): self
     {
-        return new self($sku, $sellerId, $spec);
+        return new self($sku, $sellerId, $spec, $brandId, $categoryIds);
     }
 
     public function id(): ?int
@@ -152,6 +173,44 @@ class Product
     public function status(): ProductStatus
     {
         return ProductStatus::from($this->status);
+    }
+
+    public function brandId(): ?int
+    {
+        return $this->brandId;
+    }
+
+    /**
+     * @return list<int> sin repetidos y ordenados
+     */
+    public function categoryIds(): array
+    {
+        return $this->categoryIds;
+    }
+
+    /**
+     * Fija la marca (o la quita con null) y reemplaza las categorías. Que la marca sea del vendedor y que existan y estén
+     * activas lo comprueba el caso de uso.
+     *
+     * @param list<int> $categoryIds
+     *
+     * @throws InvalidProduct un id no positivo
+     */
+    public function classify(?int $brandId, array $categoryIds): void
+    {
+        foreach ([...$categoryIds, ...($brandId === null ? [] : [$brandId])] as $id) {
+            if ($id < 1) {
+                throw new InvalidProduct('Una marca o categoría no es válida.');
+            }
+        }
+        $ids = array_unique($categoryIds);
+        sort($ids);
+
+        $this->brandId = $brandId;
+        $this->categoryIds = $ids;
+        if ($this->id !== null) {
+            $this->touch();
+        }
     }
 
     public function isPublished(): bool
@@ -216,9 +275,13 @@ class Product
 
     /**
      * @throws InvalidProductTransition
+     * @throws InvalidProduct sin ninguna categoría
      */
     public function publish(): void
     {
+        if ($this->status() !== ProductStatus::PUBLISHED && $this->categoryIds === []) {
+            throw new InvalidProduct('Un producto necesita al menos una categoría para publicarse.');
+        }
         $this->transitionTo(ProductStatus::PUBLISHED, [ProductStatus::DRAFT, ProductStatus::WITHDRAWN]);
     }
 

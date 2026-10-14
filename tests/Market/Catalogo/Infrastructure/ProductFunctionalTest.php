@@ -4,12 +4,22 @@ declare(strict_types=1);
 
 namespace App\Tests\Market\Catalogo\Infrastructure;
 
+use App\Market\Catalogo\Domain\Brand;
+use App\Market\Catalogo\Domain\BrandRepository;
+use App\Market\Catalogo\Domain\Category;
+use App\Market\Catalogo\Domain\CategoryRepository;
 use App\Market\Catalogo\Domain\ProductRepository;
 use App\Market\Catalogo\Domain\SellerRepository;
+use App\Market\Catalogo\Domain\Slug;
 use App\Market\Catalogo\Infrastructure\Http\ChangeProductStatusDto;
 use App\Market\Catalogo\Infrastructure\Http\CreateProductDto;
 use App\Market\Catalogo\Infrastructure\Http\ProductController;
 use App\Market\Catalogo\Infrastructure\Http\UpdateProductDto;
+use App\Market\Organizacion\Infrastructure\Http\CostCenterDto;
+use App\Market\Organizacion\Infrastructure\Http\CreateOrgUnitDto;
+use App\Market\Organizacion\Infrastructure\Http\OrgUnitController;
+use App\Market\Catalogo\Infrastructure\Http\SellerController;
+use App\Market\Catalogo\Infrastructure\Http\CreateSellerDto;
 use App\Tests\Functional\Provider\ProviderFunctionalTestCase;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -46,6 +56,7 @@ final class ProductFunctionalTest extends ProviderFunctionalTestCase
     private function createDto(string $sku = 'COLA-330', array $overrides = []): CreateProductDto
     {
         return new CreateProductDto(...($overrides + [
+            'categoryIds' => [$this->defaultCategoryId()],
             'sku' => $sku,
             'sellerId' => null,
             'texts' => ['es' => ['name' => 'Refresco de cola', 'description' => 'Lata'], 'en' => ['name' => 'Cola soda']],
@@ -61,6 +72,49 @@ final class ProductFunctionalTest extends ProviderFunctionalTestCase
     private function admin(): void
     {
         $this->authenticateAsAdmin($this->createAdminUser());
+    }
+
+    private ?int $defaultCategory = null;
+
+    /** La categoría con la que se crean los productos de estas pruebas (publicar exige al menos una). */
+    private function defaultCategoryId(): int
+    {
+        return $this->defaultCategory ??= $this->categoryId('General');
+    }
+
+    private function categoryId(string $name, ?int $parentId = null): int
+    {
+        $category = Category::create(new Slug(strtolower($name)), $parentId, $name, null);
+        self::getContainer()->get(CategoryRepository::class)->save($category);
+
+        return (int) $category->id();
+    }
+
+    /** Un vendedor que no es el de plataforma (con su unidad organizativa y su centro de costo). */
+    private function otherSellerId(): int
+    {
+        $unit = $this->body(self::getContainer()->get(OrgUnitController::class)->create(new CreateOrgUnitDto(
+            countryCode: 'PA',
+            name: 'La Jabalina SA',
+            legalName: 'La Jabalina SA',
+            taxId: 'JAB-1',
+            address: 'Calle 50, Ciudad de Panamá',
+            billingEmail: 'billing@jabalina.example',
+            types: ['seller'],
+            fiscalData: ['ruc' => 'JAB-1', 'dv' => '12'],
+            costCenters: [new CostCenterDto('PRINCIPAL', 'Principal', true)],
+        )));
+
+        return (int) $this->body(self::getContainer()->get(SellerController::class)->create(new CreateSellerDto($unit['id'], 'La Jabalina')))['id'];
+    }
+
+    private function brandId(?int $sellerId = null, string $name = 'Cola Premium'): int
+    {
+        $sellerId ??= (int) self::getContainer()->get(SellerRepository::class)->findPlatform()?->id();
+        $brand = Brand::create($sellerId, new Slug(strtolower(str_replace(' ', '-', $name))), $name);
+        self::getContainer()->get(BrandRepository::class)->save($brand);
+
+        return (int) $brand->id();
     }
 
     public function testItCreatesADraftForThePlatformSellerAndKeepsTheOriginalUnit(): void
@@ -243,7 +297,7 @@ final class ProductFunctionalTest extends ProviderFunctionalTestCase
         $this->controller()->changeStatus($cola, new ChangeProductStatusDto('published'));
         $platform = self::getContainer()->get(SellerRepository::class)->findPlatform();
 
-        $skus = fn (Request $request) => array_column($this->body($this->controller()->list($request)), 'sku');
+        $skus = fn (Request $request) => array_column($this->body($this->controller()->list($request))['items'], 'sku');
 
         $this->assertSame(['AGUA-500', 'COLA-330'], array_values(array_intersect(['AGUA-500', 'COLA-330'], $skus(new Request()))));
         $this->assertSame(['COLA-330'], array_values(array_intersect(['AGUA-500', 'COLA-330'], $skus(new Request(['q' => 'refresco'])))));
@@ -273,6 +327,7 @@ final class ProductFunctionalTest extends ProviderFunctionalTestCase
     private function valueDto(string $sku = 'AMAZON-25', array $overrides = []): CreateProductDto
     {
         return new CreateProductDto(...($overrides + [
+            'categoryIds' => [$this->defaultCategoryId()],
             'sku' => $sku,
             'texts' => ['es' => ['name' => 'Tarjeta Amazon'], 'en' => ['name' => 'Amazon card']],
             'service' => 'Gift Cards',
@@ -417,5 +472,168 @@ final class ProductFunctionalTest extends ProviderFunctionalTestCase
             "INSERT INTO market_product (sku, seller_id, status, service, subservice, area, texts, value_currency, value_min_minor, created_at, updated_at) VALUES ('MAL', :s, 'draft', 'Gift Cards', 'Gaming', 'Supermarket', '{}', 'USD', 100, NOW(), NOW())",
             ['s' => $sellerId],
         );
+    }
+
+    // ---- Marca y categorías del producto (COMR-70) ----
+
+    public function testItCreatesAProductWithItsBrandAndCategoriesAndAnswersThem(): void
+    {
+        $this->admin();
+        $food = $this->categoryId('Alimentos');
+        $rice = $this->categoryId('Arroz', $food);
+        $brand = $this->brandId();
+
+        $response = $this->controller()->create($this->createDto('ARROZ-1', ['brandId' => $brand, 'categoryIds' => [$rice, $food]]));
+        $data = $this->body($response);
+
+        $this->assertSame(Response::HTTP_CREATED, $response->getStatusCode(), (string) $response->getContent());
+        $this->assertSame($brand, $data['brand']['id']);
+        $this->assertSame('Cola Premium', $data['brand']['name']);
+        $this->assertSame([$food, $rice], array_column($data['categories'], 'id'));
+        $this->assertSame(['Alimentos', 'Arroz'], array_column($data['categories'], 'nameEs'));
+        $this->assertSame('Alimentos › Arroz', $data['categories'][1]['path']);
+    }
+
+    public function testTheBrandAndCategoriesSurviveAPersistenceRoundTrip(): void
+    {
+        $this->admin();
+        $food = $this->categoryId('Alimentos');
+        $brand = $this->brandId();
+        $id = $this->body($this->controller()->create($this->createDto('ARROZ-1', ['brandId' => $brand, 'categoryIds' => [$food]])))['id'];
+        $this->em->clear();
+
+        $product = $this->repository()->findById($id);
+
+        $this->assertSame($brand, $product?->brandId());
+        $this->assertSame([$food], $product?->categoryIds());
+    }
+
+    public function testUpdatingReplacesTheCategoriesAndCanRemoveTheBrand(): void
+    {
+        $this->admin();
+        $food = $this->categoryId('Alimentos');
+        $drinks = $this->categoryId('Bebidas');
+        $id = $this->body($this->controller()->create($this->createDto('ARROZ-1', ['brandId' => $this->brandId(), 'categoryIds' => [$food]])))['id'];
+
+        $response = $this->controller()->update($id, new UpdateProductDto(
+            texts: ['es' => ['name' => 'Arroz']],
+            service: 'Gift Cards',
+            subservice: 'Retail',
+            contentValue: 2.5,
+            contentUnit: 'lb',
+            deliveryKind: 'weight',
+            deliveryUnit: 'kg',
+            categoryIds: [$drinks],
+        ));
+        $data = $this->body($response);
+        $this->em->clear();
+
+        $this->assertSame(Response::HTTP_OK, $response->getStatusCode(), (string) $response->getContent());
+        $this->assertNull($data['brand']);
+        $this->assertSame([$drinks], array_column($data['categories'], 'id'));
+        $this->assertSame([$drinks], $this->repository()->findById($id)?->categoryIds());
+        $this->assertSame(0, (int) $this->em->getConnection()->fetchOne('SELECT count(*) FROM market_product_category WHERE product_id = ? AND category_id = ?', [$id, $food]));
+    }
+
+    public function testABrandOfAnotherSellerAnswersUnprocessableEntityWithItsCode(): void
+    {
+        $this->admin();
+        $other = $this->otherSellerId();
+        $foreignBrand = $this->brandId($other, 'Marca ajena');
+
+        $response = $this->controller()->create($this->createDto('ARROZ-1', ['brandId' => $foreignBrand]));
+
+        $this->assertSame(Response::HTTP_UNPROCESSABLE_ENTITY, $response->getStatusCode());
+        $this->assertSame('PRODUCT_BRAND_SELLER_MISMATCH', $this->body($response)['error']['code']);
+    }
+
+    public function testAnUnknownBrandOrCategoryAnswersUnprocessableEntity(): void
+    {
+        $this->admin();
+
+        $brand = $this->controller()->create($this->createDto('ARROZ-1', ['brandId' => 987654]));
+        $category = $this->controller()->create($this->createDto('ARROZ-2', ['categoryIds' => [987654]]));
+
+        $this->assertSame('PRODUCT_BRAND_INVALID', $this->body($brand)['error']['code']);
+        $this->assertSame(Response::HTTP_UNPROCESSABLE_ENTITY, $brand->getStatusCode());
+        $this->assertSame('PRODUCT_CATEGORY_INVALID', $this->body($category)['error']['code']);
+        $this->assertSame(Response::HTTP_UNPROCESSABLE_ENTITY, $category->getStatusCode());
+    }
+
+    public function testAProductWithoutACategoryIsADraftThatCannotBePublished(): void
+    {
+        $this->admin();
+        $id = $this->body($this->controller()->create($this->createDto('ARROZ-1', ['categoryIds' => []])))['id'];
+
+        $response = $this->controller()->changeStatus($id, new ChangeProductStatusDto('published'));
+
+        $this->assertSame(Response::HTTP_UNPROCESSABLE_ENTITY, $response->getStatusCode());
+        $this->assertSame('INVALID_PRODUCT', $this->body($response)['error']['code']);
+    }
+
+    public function testListFiltersByBrandAndByCategoryWithItsSubcategories(): void
+    {
+        $this->admin();
+        $food = $this->categoryId('Alimentos');
+        $rice = $this->categoryId('Arroz', $food);
+        $soap = $this->categoryId('Aseo');
+        $brand = $this->brandId();
+        $this->controller()->create($this->createDto('ARROZ-1', ['brandId' => $brand, 'categoryIds' => [$rice]]));
+        $this->controller()->create($this->createDto('ACEITE-1', ['categoryIds' => [$food]]));
+        $this->controller()->create($this->createDto('JABON-1', ['categoryIds' => [$soap]]));
+        $skus = fn (array $query) => array_column($this->body($this->controller()->list(new Request($query)))['items'], 'sku');
+
+        $this->assertSame(['ARROZ-1'], $skus(['brand' => (string) $brand]));
+        $this->assertSame(['ACEITE-1', 'ARROZ-1'], $skus(['category' => (string) $food]));
+        $this->assertSame(['ACEITE-1'], $skus(['category' => (string) $food, 'subcategories' => '0']));
+        $this->assertSame(['ARROZ-1'], $skus(['category' => (string) $rice]));
+    }
+
+    public function testListIsPagedAndAnswersTheTotal(): void
+    {
+        $this->admin();
+        foreach (['P-1', 'P-2', 'P-3', 'P-4', 'P-5'] as $sku) {
+            $this->controller()->create($this->createDto($sku));
+        }
+
+        $data = $this->body($this->controller()->list(new Request(['q' => 'P-', 'page' => '2', 'perPage' => '2'])));
+
+        $this->assertSame(['P-3', 'P-4'], array_column($data['items'], 'sku'));
+        $this->assertSame(5, $data['total']);
+        $this->assertSame(2, $data['page']);
+        $this->assertSame(2, $data['perPage']);
+    }
+
+    public function testListSearchesByBarcodeToo(): void
+    {
+        $this->admin();
+        $this->controller()->create($this->createDto('ARROZ-1', ['barcode' => '7501234567890']));
+        $this->controller()->create($this->createDto('ARROZ-2'));
+
+        $skus = array_column($this->body($this->controller()->list(new Request(['q' => '75012345'])))['items'], 'sku');
+
+        $this->assertSame(['ARROZ-1'], $skus);
+    }
+
+    public function testTheDatabaseDoesNotAllowDeletingACategoryThatAProductUses(): void
+    {
+        $this->admin();
+        $category = $this->categoryId('Alimentos');
+        $this->controller()->create($this->createDto('ARROZ-1', ['categoryIds' => [$category]]));
+
+        $this->expectException(\Doctrine\DBAL\Exception\DriverException::class);
+
+        $this->em->getConnection()->executeStatement('DELETE FROM market_category WHERE id = ?', [$category]);
+    }
+
+    public function testDeletingAProductDeletesItsCategoryLinks(): void
+    {
+        $this->admin();
+        $id = $this->body($this->controller()->create($this->createDto('ARROZ-1')))['id'];
+        $connection = $this->em->getConnection();
+
+        $connection->executeStatement('DELETE FROM market_product WHERE id = ?', [$id]);
+
+        $this->assertSame(0, (int) $connection->fetchOne('SELECT count(*) FROM market_product_category WHERE product_id = ?', [$id]));
     }
 }
