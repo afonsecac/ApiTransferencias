@@ -84,6 +84,7 @@ services:
     App\Market\Catalogo\Domain\SellerRepository: '@App\Market\Catalogo\Infrastructure\Persistence\DoctrineSellerRepository'
     App\Market\Catalogo\Domain\SellerOrgUnits: '@App\Market\Catalogo\Infrastructure\Persistence\OrganizacionSellerOrgUnits'
     App\Market\Catalogo\Domain\ProductRepository: '@App\Market\Catalogo\Infrastructure\Persistence\DoctrineProductRepository'
+    App\Market\Catalogo\Domain\CategoryRepository: '@App\Market\Catalogo\Infrastructure\Persistence\DoctrineCategoryRepository'
 
     App\Shared\Application\Event\EventBus: '@App\Shared\Infrastructure\Event\MessengerEventBus'
     App\Shared\Application\Event\ProcessedEvents: '@App\Shared\Infrastructure\Event\DbalProcessedEvents'
