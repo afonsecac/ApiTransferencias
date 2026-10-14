@@ -26,6 +26,9 @@ class CreateProductDto extends ProductSpecDto
         ?string $sku = null,
         ?int $sellerId = null,
         ?array $texts = null,
+        ?string $service = null,
+        ?string $subservice = null,
+        ?string $area = null,
         ?float $contentValue = null,
         ?string $contentUnit = null,
         ?float $unitWeightValue = null,
@@ -37,14 +40,12 @@ class CreateProductDto extends ProductSpecDto
         ?float $heightMm = null,
         ?string $deliveryKind = null,
         ?string $deliveryUnit = null,
-        ?string $area = null,
         ?string $barcode = null,
-        ?string $giftCardCategory = null,
-        ?string $giftCardCurrency = null,
-        ?string $giftCardMin = null,
-        ?string $giftCardMax = null,
+        ?string $valueCurrency = null,
+        ?string $valueMin = null,
+        ?string $valueMax = null,
     ) {
-        parent::__construct(texts: $texts, contentValue: $contentValue, contentUnit: $contentUnit, unitWeightValue: $unitWeightValue, unitWeightUnit: $unitWeightUnit, unitVolumeValue: $unitVolumeValue, unitVolumeUnit: $unitVolumeUnit, lengthMm: $lengthMm, widthMm: $widthMm, heightMm: $heightMm, deliveryKind: $deliveryKind, deliveryUnit: $deliveryUnit, area: $area, barcode: $barcode, giftCardCategory: $giftCardCategory, giftCardCurrency: $giftCardCurrency, giftCardMin: $giftCardMin, giftCardMax: $giftCardMax);
+        parent::__construct(texts: $texts, service: $service, subservice: $subservice, area: $area, contentValue: $contentValue, contentUnit: $contentUnit, unitWeightValue: $unitWeightValue, unitWeightUnit: $unitWeightUnit, unitVolumeValue: $unitVolumeValue, unitVolumeUnit: $unitVolumeUnit, lengthMm: $lengthMm, widthMm: $widthMm, heightMm: $heightMm, deliveryKind: $deliveryKind, deliveryUnit: $deliveryUnit, barcode: $barcode, valueCurrency: $valueCurrency, valueMin: $valueMin, valueMax: $valueMax);
         $this->sku = $sku;
         $this->sellerId = $sellerId;
     }

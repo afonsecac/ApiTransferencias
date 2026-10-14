@@ -33,8 +33,8 @@ class Version20261014170000Test extends ProviderFunctionalTestCase
     {
         $sellerId ??= (int) $this->em->getConnection()->fetchOne('SELECT id FROM market_seller WHERE is_platform');
         $this->em->getConnection()->executeStatement(
-            "INSERT INTO market_product (sku, seller_id, status, texts, content_base, content_original, content_unit, delivery_kind, delivery_unit, created_at, updated_at)
-             VALUES (:sku, :seller, :status, '{}', :content, :content, 'g', 'weight', 'g', NOW(), NOW())",
+            "INSERT INTO market_product (sku, seller_id, status, service, subservice, texts, content_base, content_original, content_unit, delivery_kind, delivery_unit, created_at, updated_at)
+             VALUES (:sku, :seller, :status, 'Gift Cards', 'Retail', '{}', :content, :content, 'g', 'weight', 'g', NOW(), NOW())",
             ['sku' => $sku, 'seller' => $sellerId, 'status' => $status, 'content' => $content],
         );
     }

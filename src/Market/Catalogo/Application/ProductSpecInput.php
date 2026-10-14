@@ -5,16 +5,15 @@ declare(strict_types=1);
 namespace App\Market\Catalogo\Application;
 
 use App\Market\Catalogo\Domain\Amount;
+use App\Market\Catalogo\Domain\Classification;
 use App\Market\Catalogo\Domain\DeliveryBasis;
 use App\Market\Catalogo\Domain\Dimensions;
-use App\Market\Catalogo\Domain\GiftCard;
-use App\Market\Catalogo\Domain\GiftCardCategory;
 use App\Market\Catalogo\Domain\InvalidProduct;
 use App\Market\Catalogo\Domain\MeasureKind;
 use App\Market\Catalogo\Domain\MeasureUnit;
-use App\Market\Catalogo\Domain\ProductArea;
 use App\Market\Catalogo\Domain\ProductSpec;
 use App\Market\Catalogo\Domain\ProductTexts;
+use App\Market\Catalogo\Domain\ProductValue;
 use App\Market\Catalogo\Domain\Quantity;
 
 /**
@@ -28,6 +27,9 @@ final readonly class ProductSpecInput
      */
     public function __construct(
         public array $texts,
+        public string $service,
+        public string $subservice,
+        public ?string $area,
         public ?float $contentValue,
         public ?string $contentUnit,
         public ?float $unitWeightValue,
@@ -39,12 +41,10 @@ final readonly class ProductSpecInput
         public ?float $heightMm,
         public ?string $deliveryKind,
         public ?string $deliveryUnit,
-        public ?string $area,
         public ?string $barcode,
-        public ?string $giftCardCategory = null,
-        public ?string $giftCardCurrency = null,
-        public ?string $giftCardMin = null,
-        public ?string $giftCardMax = null,
+        public ?string $valueCurrency = null,
+        public ?string $valueMin = null,
+        public ?string $valueMax = null,
     ) {
     }
 
@@ -53,10 +53,9 @@ final readonly class ProductSpecInput
      */
     public function toSpec(): ProductSpec
     {
-        $giftCard = $this->giftCard();
-
         return new ProductSpec(
             ProductTexts::fromArray($this->texts),
+            Classification::of($this->service, $this->subservice, $this->area),
             $this->contentValue === null && ($this->contentUnit === null || $this->contentUnit === '')
                 ? null
                 : Quantity::of((float) $this->contentValue, self::unit((string) $this->contentUnit)),
@@ -64,11 +63,8 @@ final readonly class ProductSpecInput
             self::optionalQuantity($this->unitVolumeValue, $this->unitVolumeUnit, 'el volumen por unidad'),
             $this->dimensions(),
             $this->deliveryBasis(),
-            $this->area === null || $this->area === ''
-                ? null
-                : (ProductArea::tryFrom($this->area) ?? throw new InvalidProduct(sprintf('El área "%s" no es válida.', $this->area))),
             $this->barcode === null || trim($this->barcode) === '' ? null : trim($this->barcode),
-            $giftCard,
+            $this->value(),
         );
     }
 
@@ -84,22 +80,23 @@ final readonly class ProductSpecInput
         );
     }
 
-    /** Una gift card se indica con su categoría; el valor es fijo (solo mínimo) o variable (mínimo y máximo). */
-    private function giftCard(): ?GiftCard
+    /** Un producto con valor (digital) se indica con su moneda; el valor es fijo (solo mínimo) o variable (mínimo y máximo). */
+    private function value(): ?ProductValue
     {
-        if ($this->giftCardCategory === null || $this->giftCardCategory === '') {
+        $currency = $this->valueCurrency === null || trim($this->valueCurrency) === '' ? null : $this->valueCurrency;
+        $min = $this->valueMin === null || trim($this->valueMin) === '' ? null : $this->valueMin;
+        $max = $this->valueMax === null || trim($this->valueMax) === '' ? null : $this->valueMax;
+        if ($currency === null && $min === null && $max === null) {
             return null;
         }
-        $category = GiftCardCategory::tryFrom($this->giftCardCategory) ?? throw new InvalidProduct(sprintf('La categoría "%s" no es válida.', $this->giftCardCategory));
-        if ($this->giftCardMin === null || $this->giftCardMin === '') {
-            throw new InvalidProduct('Una gift card necesita su importe (o el mínimo, si es de valor variable).');
+        if ($currency === null || $min === null) {
+            throw new InvalidProduct('Un valor necesita su moneda y su importe (o el mínimo, si es de valor variable).');
         }
-        $min = Amount::fromString($this->giftCardMin);
-        $currency = (string) $this->giftCardCurrency;
+        $minAmount = Amount::fromString($min);
 
-        return $this->giftCardMax === null || $this->giftCardMax === ''
-            ? GiftCard::fixed($category, $currency, $min)
-            : GiftCard::ranged($category, $currency, $min, Amount::fromString($this->giftCardMax));
+        return $max === null
+            ? ProductValue::fixed($currency, $minAmount)
+            : ProductValue::ranged($currency, $minAmount, Amount::fromString($max));
     }
 
     private static function unit(string $code): MeasureUnit

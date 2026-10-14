@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Market\Catalogo\Domain;
 
+use App\Market\Catalogo\Domain\Classification;
 use App\Market\Catalogo\Domain\DeliveryBasis;
 use App\Market\Catalogo\Domain\InvalidProductTransition;
 use App\Market\Catalogo\Domain\MeasureKind;
@@ -25,6 +26,7 @@ final class ProductTest extends TestCase
     {
         return new ProductSpec(
             ProductTexts::fromArray(['es' => ['name' => $name]]),
+            Classification::of('Gift Cards', 'Retail', 'Supermarket'),
             Quantity::of($grams, MeasureUnit::G),
             null,
             null,
@@ -108,6 +110,7 @@ final class ProductTest extends TestCase
     {
         $original = new ProductSpec(
             ProductTexts::fromArray(['es' => ['name' => 'Cola', 'description' => 'Lata'], 'en' => ['name' => 'Cola soda']]),
+            Classification::of('Gift Cards', 'Retail'),
             Quantity::of(12, MeasureUnit::UNIT),
             Quantity::of(11.64, MeasureUnit::OZ),
             null,

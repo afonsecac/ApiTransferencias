@@ -5,14 +5,13 @@ declare(strict_types=1);
 namespace App\Market\Catalogo\Domain;
 
 /**
- * Lo que hace de un producto una gift card propia (COMR-276), como las de DTOne: digital (sin peso, contenido,
- * dimensiones ni entrega), de valor fijo o variable entre un mínimo y un máximo, y de una categoría. Quien la recibe
- * canjea un PIN con su número de serie; esa emisión y canje llegan con COMR-276.
+ * El valor de un producto digital (una gift card propia, COMR-276), como el de las de DTOne: fijo, o variable entre un
+ * mínimo y un máximo. Un producto lleva contenido (peso, volumen o unidades) o valor, no los dos: con valor es digital, sin
+ * dimensiones ni entrega. Quien la recibe canjea un PIN con su número de serie; esa emisión y canje llegan con COMR-276.
  */
-final readonly class GiftCard
+final readonly class ProductValue
 {
     private function __construct(
-        private GiftCardCategory $category,
         private string $currency,
         private Amount $min,
         private ?Amount $max,
@@ -22,26 +21,21 @@ final readonly class GiftCard
     /**
      * @throws InvalidProduct
      */
-    public static function fixed(GiftCardCategory $category, string $currency, Amount $amount): self
+    public static function fixed(string $currency, Amount $amount): self
     {
-        return new self($category, self::currencyOf($currency), $amount, null);
+        return new self(self::currencyOf($currency), $amount, null);
     }
 
     /**
      * @throws InvalidProduct si el máximo no es mayor que el mínimo
      */
-    public static function ranged(GiftCardCategory $category, string $currency, Amount $min, Amount $max): self
+    public static function ranged(string $currency, Amount $min, Amount $max): self
     {
         if (!$min->isLessThan($max)) {
             throw new InvalidProduct('En una gift card de valor variable el máximo debe ser mayor que el mínimo.');
         }
 
-        return new self($category, self::currencyOf($currency), $min, $max);
-    }
-
-    public function category(): GiftCardCategory
-    {
-        return $this->category;
+        return new self(self::currencyOf($currency), $min, $max);
     }
 
     public function currency(): string

@@ -51,6 +51,9 @@ final class ProductUseCasesTest extends TestCase
     {
         return new ProductSpecInput(...($overrides + [
             'texts' => ['es' => ['name' => 'Refresco de cola']],
+            'service' => 'Gift Cards',
+            'subservice' => 'Retail',
+            'area' => null,
             'contentValue' => 500.0,
             'contentUnit' => 'g',
             'unitWeightValue' => null,
@@ -62,7 +65,6 @@ final class ProductUseCasesTest extends TestCase
             'heightMm' => null,
             'deliveryKind' => 'weight',
             'deliveryUnit' => 'kg',
-            'area' => null,
             'barcode' => null,
         ]));
     }
@@ -157,64 +159,41 @@ final class ProductUseCasesTest extends TestCase
         }
     }
 
-    public function testItCreatesAGiftCardAsADigitalProductForThePlatformSeller(): void
+    /**
+     * @param array<string, mixed> $overrides
+     */
+    private function valueInput(array $overrides = []): ProductSpecInput
     {
-        $details = ($this->create())('amazon-25', null, new ProductSpecInput(
-            texts: ['es' => ['name' => 'Tarjeta Amazon'], 'en' => ['name' => 'Amazon card']],
-            contentValue: null,
-            contentUnit: null,
-            unitWeightValue: null,
-            unitWeightUnit: null,
-            unitVolumeValue: null,
-            unitVolumeUnit: null,
-            lengthMm: null,
-            widthMm: null,
-            heightMm: null,
-            deliveryKind: null,
-            deliveryUnit: null,
-            area: null,
-            barcode: null,
-            giftCardCategory: 'retail',
-            giftCardCurrency: 'USD',
-            giftCardMin: '25',
-            giftCardMax: null,
-        ));
+        return $this->input($overrides + [
+            'texts' => ['es' => ['name' => 'Tarjeta Amazon'], 'en' => ['name' => 'Amazon card']],
+            'contentValue' => null,
+            'contentUnit' => null,
+            'deliveryKind' => null,
+            'deliveryUnit' => null,
+            'valueCurrency' => 'USD',
+            'valueMin' => '25',
+            'valueMax' => null,
+        ]);
+    }
+
+    public function testItCreatesAProductWithValueAsADigitalProductForThePlatformSeller(): void
+    {
+        $details = ($this->create())('amazon-25', null, $this->valueInput());
 
         $this->assertTrue($details->product->spec()->isDigital());
         $this->assertSame(ProductStatus::DRAFT, $details->product->status());
         $this->assertTrue($details->seller?->isPlatform());
+        $this->assertSame('Gift Cards', $details->product->spec()->classification->service());
     }
 
-    public function testTheKindOfProductDoesNotChangeAfterCreatingIt(): void
+    public function testTheClassificationIsPartOfWhatCanBeUpdated(): void
     {
-        $id = (int) ($this->create())('cola-330', null, $this->input())->product->id();
-        $giftCard = new ProductSpecInput(
-            texts: ['es' => ['name' => 'Tarjeta']],
-            contentValue: null,
-            contentUnit: null,
-            unitWeightValue: null,
-            unitWeightUnit: null,
-            unitVolumeValue: null,
-            unitVolumeUnit: null,
-            lengthMm: null,
-            widthMm: null,
-            heightMm: null,
-            deliveryKind: null,
-            deliveryUnit: null,
-            area: null,
-            barcode: null,
-            giftCardCategory: 'retail',
-            giftCardCurrency: 'USD',
-            giftCardMin: '25',
-            giftCardMax: null,
-        );
+        $id = (int) ($this->create())('amazon-25', null, $this->valueInput())->product->id();
 
-        try {
-            (new UpdateProduct($this->products, $this->sellers))($id, $giftCard);
-            $this->fail('Un producto físico no se convierte en gift card');
-        } catch (InvalidProduct) {
-            $this->assertFalse($this->products->findById($id)?->spec()->isDigital());
-        }
+        $updated = (new UpdateProduct($this->products, $this->sellers))($id, $this->valueInput(['subservice' => 'Gaming']));
+
+        $this->assertSame('Gaming', $updated->product->spec()->classification->subservice());
+        $this->assertSame('AMAZON-25', $updated->product->sku()->value());
     }
 
     public function testUpdatingAnUnknownProductFails(): void
