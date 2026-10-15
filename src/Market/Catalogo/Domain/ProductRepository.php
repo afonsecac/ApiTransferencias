@@ -36,6 +36,20 @@ interface ProductRepository
     public function productIdsByCategory(): array;
 
     /**
+     * Cuántos productos tiene cada marca, de cualquier estado: id de marca → cantidad (solo las que tienen alguno).
+     *
+     * @return array<int, int>
+     */
+    public function countsByBrand(): array;
+
+    /**
+     * Cuántos productos tiene cada vendedor, de cualquier estado: id de vendedor → cantidad (solo los que tienen alguno).
+     *
+     * @return array<int, int>
+     */
+    public function countsBySeller(): array;
+
+    /**
      * Los sku (en mayúsculas) que empiezan por ese prefijo, para proponer el siguiente consecutivo.
      *
      * @return list<string>

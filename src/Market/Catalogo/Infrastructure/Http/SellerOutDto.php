@@ -25,6 +25,8 @@ class SellerOutDto
         public ?array $costCenter,
         public string $createdAt,
         public string $updatedAt,
+        public ?int $productCount = null,
+        public ?int $brandCount = null,
     ) {
     }
 
@@ -42,6 +44,8 @@ class SellerOutDto
             $details->costCenter === null ? null : ['id' => $details->costCenter->id, 'code' => $details->costCenter->code, 'name' => $details->costCenter->name],
             $seller->createdAt()->format(DATE_ATOM),
             $seller->updatedAt()->format(DATE_ATOM),
+            $details->productCount,
+            $details->brandCount,
         );
     }
 }

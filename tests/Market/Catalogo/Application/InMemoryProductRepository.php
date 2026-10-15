@@ -50,6 +50,28 @@ final class InMemoryProductRepository implements ProductRepository
         return $byCategory;
     }
 
+    public function countsByBrand(): array
+    {
+        $counts = [];
+        foreach ($this->products as $product) {
+            if ($product->brandId() !== null) {
+                $counts[$product->brandId()] = ($counts[$product->brandId()] ?? 0) + 1;
+            }
+        }
+
+        return $counts;
+    }
+
+    public function countsBySeller(): array
+    {
+        $counts = [];
+        foreach ($this->products as $product) {
+            $counts[$product->sellerId()] = ($counts[$product->sellerId()] ?? 0) + 1;
+        }
+
+        return $counts;
+    }
+
     public function skusStartingWith(string $prefix): array
     {
         $prefix = strtoupper($prefix);

@@ -8,6 +8,11 @@ use App\Market\Catalogo\Domain\BrandRepository;
 use App\Market\Catalogo\Domain\SellerRepository;
 use App\Market\Catalogo\Infrastructure\Http\BrandController;
 use App\Market\Catalogo\Infrastructure\Http\CreateBrandDto;
+use App\Market\Catalogo\Infrastructure\Http\CreateCategoryDto;
+use App\Market\Catalogo\Infrastructure\Http\CategoryController;
+use App\Market\Catalogo\Infrastructure\Http\CreateProductDto;
+use App\Market\Catalogo\Infrastructure\Http\ProductController;
+use App\Market\Catalogo\Infrastructure\Http\SellerController;
 use App\Market\Catalogo\Infrastructure\Http\SetBrandActiveDto;
 use App\Market\Catalogo\Infrastructure\Http\UpdateBrandDto;
 use App\Tests\Functional\Provider\ProviderFunctionalTestCase;
@@ -178,5 +183,42 @@ final class BrandFunctionalTest extends ProviderFunctionalTestCase
         $this->expectException(\Doctrine\DBAL\Exception\ForeignKeyConstraintViolationException::class);
 
         $this->em->getConnection()->executeStatement("INSERT INTO market_brand (seller_id, slug, name, is_active, created_at, updated_at) VALUES (987654, 'otra', 'Otra', TRUE, NOW(), NOW())");
+    }
+
+    public function testTheListAndTheDetailCarryTheProductCountOfEachBrandAndSeller(): void
+    {
+        $this->admin();
+        $brandId = $this->body($this->controller()->create(new CreateBrandDto($this->platformId(), 'Marca Cuenta')))['id'];
+        $emptyId = $this->body($this->controller()->create(new CreateBrandDto($this->platformId(), 'Marca Vacía Cuenta')))['id'];
+        $categoryId = $this->body(self::getContainer()->get(CategoryController::class)->create(new CreateCategoryDto(nameEs: 'Cuenta Marca')))['id'];
+        $products = self::getContainer()->get(ProductController::class);
+        foreach (['A', 'B'] as $letter) {
+            $created = $products->create(new CreateProductDto(
+                brandId: $brandId,
+                categoryIds: [$categoryId],
+                sku: 'BRC-' . $letter,
+                texts: ['es' => ['name' => 'Producto ' . $letter]],
+                service: 'Gift Cards',
+                subservice: 'Retail',
+                contentValue: 1.0,
+                contentUnit: 'kg',
+                deliveryKind: 'weight',
+                deliveryUnit: 'kg',
+            ));
+            $this->assertSame(Response::HTTP_CREATED, $created->getStatusCode(), (string) $created->getContent());
+        }
+
+        $byId = [];
+        foreach ($this->body($this->controller()->list(new Request())) as $row) {
+            $byId[$row['id']] = $row['productCount'];
+        }
+        $detail = $this->body($this->controller()->get($brandId));
+        $seller = $this->body(self::getContainer()->get(SellerController::class)->get($this->platformId()));
+
+        $this->assertSame(2, $byId[$brandId]);
+        $this->assertSame(0, $byId[$emptyId]);
+        $this->assertSame(2, $detail['productCount']);
+        $this->assertGreaterThanOrEqual(2, $seller['productCount']);
+        $this->assertGreaterThanOrEqual(2, $seller['brandCount']);
     }
 }
