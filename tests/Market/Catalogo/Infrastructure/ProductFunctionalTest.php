@@ -8,6 +8,9 @@ use App\Market\Catalogo\Domain\Brand;
 use App\Market\Catalogo\Domain\BrandRepository;
 use App\Market\Catalogo\Domain\Category;
 use App\Market\Catalogo\Domain\CategoryRepository;
+use App\Market\Catalogo\Domain\ProductGallery;
+use App\Market\Catalogo\Domain\ProductImage;
+use App\Market\Catalogo\Domain\ProductImageRepository;
 use App\Market\Catalogo\Domain\ProductRepository;
 use App\Market\Catalogo\Domain\SellerRepository;
 use App\Market\Catalogo\Domain\Slug;
@@ -723,5 +726,27 @@ final class ProductFunctionalTest extends ProviderFunctionalTestCase
         $this->assertSame('INVALID_PRODUCT', $this->body($noName)['error']['code']);
         $this->assertSame(Response::HTTP_NOT_FOUND, $unknown->getStatusCode());
         $this->assertSame('CATEGORY_NOT_FOUND', $this->body($unknown)['error']['code']);
+    }
+
+    public function testTheListAndTheDetailCarryTheUrlsOfTheReferenceImageOrNull(): void
+    {
+        $this->admin();
+        $with = $this->body($this->controller()->create($this->createDto('CON-FOTO')))['id'];
+        $this->controller()->create($this->createDto('SIN-FOTO'));
+        $file = str_repeat('a', 40);
+        $gallery = ProductGallery::of([], 8);
+        $gallery->add(ProductImage::create($with, $file, 'frente.png', 'image/png', 100, 10, 10));
+        self::getContainer()->get(ProductImageRepository::class)->saveAll($gallery->images());
+
+        $items = [];
+        foreach ($this->body($this->controller()->list(new Request()))['items'] as $item) {
+            $items[$item['sku']] = $item['image'];
+        }
+        $detail = $this->body($this->controller()->get($with, new Request()));
+
+        $this->assertSame(['thumb', 'list', 'detail'], array_keys($items['CON-FOTO']));
+        $this->assertStringContainsString($file, $items['CON-FOTO']['thumb']);
+        $this->assertNull($items['SIN-FOTO']);
+        $this->assertSame($items['CON-FOTO'], $detail['image']);
     }
 }

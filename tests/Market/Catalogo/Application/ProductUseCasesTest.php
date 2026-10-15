@@ -22,6 +22,8 @@ use App\Market\Catalogo\Domain\ProductCategoryInvalid;
 use App\Market\Catalogo\Domain\ProductNotFound;
 use App\Market\Catalogo\Domain\ProductSellerInvalid;
 use App\Market\Catalogo\Domain\ProductStatus;
+use App\Market\Catalogo\Domain\ProductGallery;
+use App\Market\Catalogo\Domain\ProductImage;
 use App\Market\Catalogo\Domain\Seller;
 use App\Market\Catalogo\Domain\Slug;
 use PHPUnit\Framework\TestCase;
@@ -39,12 +41,14 @@ final class ProductUseCasesTest extends TestCase
     private InMemorySellerRepository $sellers;
     private InMemoryBrandRepository $brands;
     private InMemoryCategoryRepository $categories;
+    private InMemoryProductImageRepository $images;
     private Seller $platform;
     private Seller $garajito;
 
     protected function setUp(): void
     {
         $this->products = new InMemoryProductRepository();
+        $this->images = new InMemoryProductImageRepository();
         $this->sellers = new InMemorySellerRepository();
         $this->platform = Seller::platform(1, 10, new Slug('plataforma'), 'Plataforma');
         $this->garajito = Seller::create(2, 20, new Slug('garajito'), 'Garajito');
@@ -56,7 +60,7 @@ final class ProductUseCasesTest extends TestCase
 
     private function assembler(): ProductDetailsAssembler
     {
-        return new ProductDetailsAssembler($this->sellers, $this->brands, $this->categories);
+        return new ProductDetailsAssembler($this->sellers, $this->brands, $this->categories, $this->images);
     }
 
     private function update(): UpdateProduct
@@ -519,5 +523,43 @@ final class ProductUseCasesTest extends TestCase
 
         $this->assertSame(['ACTIVO'], $skus($list(null, null, null, relevantOn: new \DateTimeImmutable('2026-10-15'))));
         $this->assertSame(['ACTIVO', 'FUTURO', 'NORMAL', 'VENCIDO'], $skus($list(null, null, null)));
+    }
+
+    private function addImages(int $productId, string ...$files): void
+    {
+        $gallery = ProductGallery::of([], 8);
+        foreach ($files as $file) {
+            $gallery->add(ProductImage::create($productId, $file, $file . '.png', 'image/png', 100, 10, 10));
+        }
+        $this->images->saveAll($gallery->images());
+    }
+
+    public function testEachProductOfTheListCarriesItsReferenceImageWhenItHasOne(): void
+    {
+        $create = $this->create();
+        $withImages = (int) $create('con-fotos', null, $this->input())->product->id();
+        $without = (int) $create('sin-fotos', null, $this->input())->product->id();
+        $this->addImages($withImages, 'aaa', 'bbb');
+        $list = new ListProducts($this->products, $this->assembler(), $this->categories);
+
+        $items = [];
+        foreach ($list(null, null, null)->items as $details) {
+            $items[$details->product->sku()->value()] = $details->referenceImage;
+        }
+
+        $this->assertSame('aaa', $items['CON-FOTOS']?->file(), 'La primera imagen subida es la de referencia.');
+        $this->assertTrue($items['CON-FOTOS']->isReference());
+        $this->assertNull($items['SIN-FOTOS']);
+        $this->assertNotSame($without, $withImages);
+    }
+
+    public function testReadingOneProductAlsoCarriesItsReferenceImage(): void
+    {
+        $id = (int) ($this->create())('con-fotos', null, $this->input())->product->id();
+        $this->addImages($id, 'aaa');
+
+        $details = (new GetProduct($this->products, $this->assembler()))($id);
+
+        $this->assertSame('aaa', $details->referenceImage?->file());
     }
 }

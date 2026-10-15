@@ -15,6 +15,7 @@ use App\Market\Catalogo\Domain\ProductRepository;
 use App\Market\Catalogo\Domain\ProductSellerInvalid;
 use App\Market\Catalogo\Domain\Seller;
 use App\Market\Catalogo\Domain\SellerNotFound;
+use App\Market\Catalogo\Domain\ProductImageRepository;
 use App\Market\Catalogo\Domain\SellerRepository;
 use App\Market\Catalogo\Domain\Sku;
 
@@ -28,9 +29,10 @@ final class CreateProduct
         private readonly SellerRepository $sellers,
         BrandRepository $brands,
         CategoryRepository $categories,
+        ?ProductImageRepository $images = null,
     ) {
         $this->references = new ProductReferences($brands, $categories);
-        $this->assembler = new ProductDetailsAssembler($sellers, $brands, $categories);
+        $this->assembler = new ProductDetailsAssembler($sellers, $brands, $categories, $images);
     }
 
     /**

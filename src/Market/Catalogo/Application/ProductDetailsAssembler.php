@@ -8,6 +8,8 @@ use App\Market\Catalogo\Domain\BrandRepository;
 use App\Market\Catalogo\Domain\Category;
 use App\Market\Catalogo\Domain\CategoryRepository;
 use App\Market\Catalogo\Domain\Product;
+use App\Market\Catalogo\Domain\ProductImage;
+use App\Market\Catalogo\Domain\ProductImageRepository;
 use App\Market\Catalogo\Domain\SellerRepository;
 
 /**
@@ -19,6 +21,7 @@ final class ProductDetailsAssembler
         private readonly SellerRepository $sellers,
         private readonly BrandRepository $brands,
         private readonly CategoryRepository $categories,
+        private readonly ?ProductImageRepository $images = null,
     ) {
     }
 
@@ -39,6 +42,8 @@ final class ProductDetailsAssembler
         /** @var array<int, Category>|null $categories */
         $categories = null;
         $details = [];
+        // La imagen de referencia de cada producto, en una sola consulta (la miniatura del listado).
+        $galleries = $this->images?->findByProducts(array_values(array_filter(array_map(static fn (Product $p): ?int => $p->id(), $products)))) ?? [];
         foreach ($products as $product) {
             $sellers[$product->sellerId()] ??= $this->sellers->findById($product->sellerId());
             $brandId = $product->brandId();
@@ -58,10 +63,25 @@ final class ProductDetailsAssembler
                 $brandId === null ? null : $brands[$brandId],
                 array_values(array_filter(array_map(static fn (int $id): ?Category => $categories[$id] ?? null, $ids))),
                 $ids === [] ? [] : array_combine($ids, array_map(static fn (int $id): string => self::path($categories ?? [], $id), $ids)),
+                self::reference($galleries[(int) $product->id()] ?? []),
             );
         }
 
         return $details;
+    }
+
+    /**
+     * @param list<ProductImage> $gallery por posición
+     */
+    private static function reference(array $gallery): ?ProductImage
+    {
+        foreach ($gallery as $image) {
+            if ($image->isReference()) {
+                return $image;
+            }
+        }
+
+        return null;
     }
 
     /**

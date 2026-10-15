@@ -11,6 +11,7 @@ use App\Market\Catalogo\Domain\ProductBrandInvalid;
 use App\Market\Catalogo\Domain\ProductCategoryInvalid;
 use App\Market\Catalogo\Domain\ProductNotFound;
 use App\Market\Catalogo\Domain\ProductRepository;
+use App\Market\Catalogo\Domain\ProductImageRepository;
 use App\Market\Catalogo\Domain\SellerRepository;
 
 final class UpdateProduct
@@ -23,9 +24,10 @@ final class UpdateProduct
         SellerRepository $sellers,
         BrandRepository $brands,
         CategoryRepository $categories,
+        ?ProductImageRepository $images = null,
     ) {
         $this->references = new ProductReferences($brands, $categories);
-        $this->assembler = new ProductDetailsAssembler($sellers, $brands, $categories);
+        $this->assembler = new ProductDetailsAssembler($sellers, $brands, $categories, $images);
     }
 
     /**
