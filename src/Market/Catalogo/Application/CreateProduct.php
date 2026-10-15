@@ -7,6 +7,8 @@ namespace App\Market\Catalogo\Application;
 use App\Market\Catalogo\Domain\BrandRepository;
 use App\Market\Catalogo\Domain\CategoryRepository;
 use App\Market\Catalogo\Domain\InvalidProduct;
+use App\Market\Catalogo\Domain\MeasureSettings;
+use App\Market\Catalogo\Domain\MeasureSystem;
 use App\Market\Catalogo\Domain\Product;
 use App\Market\Catalogo\Domain\ProductAlreadyExists;
 use App\Market\Catalogo\Domain\ProductBrandInvalid;
@@ -30,6 +32,7 @@ final class CreateProduct
         BrandRepository $brands,
         CategoryRepository $categories,
         ?ProductImageRepository $images = null,
+        private readonly ?MeasureSettings $measures = null,
     ) {
         $this->references = new ProductReferences($brands, $categories);
         $this->assembler = new ProductDetailsAssembler($sellers, $brands, $categories, $images);
@@ -48,7 +51,7 @@ final class CreateProduct
     public function __invoke(string $sku, ?int $sellerId, ProductSpecInput $input): ProductDetails
     {
         $sku = new Sku($sku);
-        $spec = $input->toSpec();
+        $spec = $input->toSpec($this->measures === null ? null : MeasureSystem::fromSettings($this->measures));
         $seller = $this->seller($sellerId);
 
         if ($this->products->findBySku($sku->value()) !== null) {

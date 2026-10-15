@@ -35,4 +35,10 @@ final readonly class Dimensions
     {
         return round($this->lengthMm * $this->widthMm * $this->heightMm / 1000, 3);
     }
+
+    /** Volumen expresado en la unidad base de volumen del sistema (por defecto litros: mm³ / 1.000.000). */
+    public function volume(MeasureSystem $system): float
+    {
+        return round($this->lengthMm * $this->widthMm * $this->heightMm / 1_000_000 / $system->volumeBase->factor(), 6);
+    }
 }

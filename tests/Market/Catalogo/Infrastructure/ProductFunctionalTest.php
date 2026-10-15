@@ -139,9 +139,9 @@ final class ProductFunctionalTest extends ProviderFunctionalTestCase
         $this->assertArrayNotHasKey('type', $data, 'El tipo lo dan el servicio y el subservicio, no un campo aparte.');
         $this->assertNull($data['value']);
         $this->assertTrue($data['seller']['isPlatform']);
-        $this->assertSame(['value' => 2.5, 'unit' => 'lb', 'base' => 1133.981, 'baseUnit' => 'g', 'kind' => 'weight'], $data['content']);
-        $this->assertSame(1133.981, $data['totalWeightG']);
-        $this->assertNull($data['totalVolumeMl']);
+        $this->assertSame(['value' => 2.5, 'unit' => 'lb', 'base' => 1.133981, 'baseUnit' => 'kg', 'kind' => 'weight'], $data['content']);
+        $this->assertSame(1.133981, $data['totalWeight']);
+        $this->assertNull($data['totalVolume']);
         $this->assertSame(['kind' => 'weight', 'unit' => 'kg'], $data['deliveryBasis']);
     }
 
@@ -170,12 +170,12 @@ final class ProductFunctionalTest extends ProviderFunctionalTestCase
         $this->assertSame(12.0, $spec->content->baseValue());
         $this->assertSame('oz', $spec->unitWeight?->unit()->value);
         $this->assertSame(11.64, $spec->unitWeight?->originalValue());
-        $this->assertEqualsWithDelta(329.988, (float) $spec->unitWeight?->baseValue(), 0.001);
+        $this->assertEqualsWithDelta(0.329988, (float) $spec->unitWeight?->baseValue(), 0.0000001);
         $this->assertSame('Supermarket', $spec->classification->area());
         $this->assertSame('8410000123456', $spec->barcode);
         $this->assertSame('es', array_key_first($spec->texts->all()));
-        $this->assertEqualsWithDelta(3959.856, (float) $product?->totalWeightG(), 0.01);
-        $this->assertEqualsWithDelta(12 * 100.0, (float) $product?->totalVolumeMl(), 0.01);
+        $this->assertEqualsWithDelta(3.959856, (float) $product?->totalWeight(), 0.00001);
+        $this->assertEqualsWithDelta(12 * 0.1, (float) $product?->totalVolume(), 0.00001);
     }
 
     public function testASkuIsUniqueRegardlessOfCase(): void
@@ -234,7 +234,7 @@ final class ProductFunctionalTest extends ProviderFunctionalTestCase
 
         $this->assertSame(Response::HTTP_OK, $response->getStatusCode(), (string) $response->getContent());
         $this->assertSame('COLA-330', $data['sku']);
-        $this->assertEquals(330.0, $data['content']['base']);
+        $this->assertEquals(0.33, $data['content']['base']);
         $this->assertSame(['es'], array_keys($data['texts']));
         $this->assertSame($created['seller']['id'], $data['seller']['id']);
     }
@@ -320,7 +320,7 @@ final class ProductFunctionalTest extends ProviderFunctionalTestCase
 
         $this->expectException(\Doctrine\DBAL\Exception\UniqueConstraintViolationException::class);
 
-        $connection->executeStatement("INSERT INTO market_product (sku, seller_id, status, service, subservice, texts, content_base, content_original, content_unit, delivery_kind, delivery_unit, created_at, updated_at) SELECT 'COLA-330', seller_id, 'draft', 'Gift Cards', 'Retail', '{}', 1, 1, 'g', 'weight', 'g', NOW(), NOW() FROM market_product LIMIT 1");
+        $connection->executeStatement("INSERT INTO market_product (sku, seller_id, status, service, subservice, texts, content_base, content_original, content_unit, delivery_kind, delivery_unit, created_at, updated_at) SELECT 'COLA-330', seller_id, 'draft', 'Gift Cards', 'Retail', '{}', 1, 1, 'kg', 'weight', 'g', NOW(), NOW() FROM market_product LIMIT 1");
     }
 
     // ---- Productos con valor, como las gift cards (COMR-276) ----
@@ -353,7 +353,7 @@ final class ProductFunctionalTest extends ProviderFunctionalTestCase
         $this->assertSame(['kind' => 'fixed', 'currency' => 'USD', 'min' => '25.00', 'max' => null], $data['value']);
         $this->assertNull($data['content']);
         $this->assertNull($data['deliveryBasis']);
-        $this->assertNull($data['totalWeightG']);
+        $this->assertNull($data['totalWeight']);
         $this->assertTrue($data['seller']['isPlatform']);
         $this->assertArrayNotHasKey('type', $data);
     }
