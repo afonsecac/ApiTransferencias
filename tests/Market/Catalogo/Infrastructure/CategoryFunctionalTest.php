@@ -7,6 +7,8 @@ namespace App\Tests\Market\Catalogo\Infrastructure;
 use App\Market\Catalogo\Domain\CategoryRepository;
 use App\Market\Catalogo\Infrastructure\Http\CategoryController;
 use App\Market\Catalogo\Infrastructure\Http\CreateCategoryDto;
+use App\Market\Catalogo\Infrastructure\Http\CreateProductDto;
+use App\Market\Catalogo\Infrastructure\Http\ProductController;
 use App\Market\Catalogo\Infrastructure\Http\MoveCategoryDto;
 use App\Market\Catalogo\Infrastructure\Http\SetCategoryActiveDto;
 use App\Market\Catalogo\Infrastructure\Http\UpdateCategoryDto;
@@ -259,5 +261,39 @@ final class CategoryFunctionalTest extends ProviderFunctionalTestCase
         $this->expectExceptionMessage('ck_market_category_not_own_parent');
 
         $this->em->getConnection()->executeStatement('UPDATE market_category SET parent_id = id WHERE id = :id', ['id' => $id]);
+    }
+
+    public function testTheListAndTheDetailCarryTheProductCountsOfEachCategoryAndItsSubcategories(): void
+    {
+        $this->admin();
+        $food = $this->make('Alimentos Cuenta');
+        $rice = $this->make('Arroz Cuenta', $food);
+        $empty = $this->make('Vacía Cuenta');
+        $products = self::getContainer()->get(ProductController::class);
+        foreach ([['P1', [$rice]], ['P2', [$food, $rice]], ['P3', [$food]]] as [$sku, $categoryIds]) {
+            $created = $products->create(new CreateProductDto(
+                categoryIds: $categoryIds,
+                sku: 'CNT-' . $sku,
+                texts: ['es' => ['name' => 'Producto ' . $sku]],
+                service: 'Gift Cards',
+                subservice: 'Retail',
+                contentValue: 1.0,
+                contentUnit: 'kg',
+                deliveryKind: 'weight',
+                deliveryUnit: 'kg',
+            ));
+            $this->assertSame(Response::HTTP_CREATED, $created->getStatusCode(), (string) $created->getContent());
+        }
+
+        $byId = [];
+        foreach ($this->body($this->controller()->list(new Request())) as $row) {
+            $byId[$row['id']] = [$row['productCount'], $row['totalProductCount']];
+        }
+        $detail = $this->body($this->controller()->get($food));
+
+        $this->assertSame([2, 3], $byId[$food]);
+        $this->assertSame([2, 2], $byId[$rice]);
+        $this->assertSame([0, 0], $byId[$empty]);
+        $this->assertSame([2, 3], [$detail['productCount'], $detail['totalProductCount']]);
     }
 }

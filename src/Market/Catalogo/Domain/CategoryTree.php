@@ -46,6 +46,24 @@ final class CategoryTree
         return $this->children[$parentId ?? 'root'] ?? [];
     }
 
+    /**
+     * @return list<int> los ids de todas sus descendientes (hijas, nietas…), sin incluirla
+     */
+    public function descendantsOf(int $id): array
+    {
+        $ids = [];
+        $pending = [$id];
+        $guard = 0;
+        while ($pending !== [] && $guard++ < 1000) {
+            foreach ($this->childrenOf(array_shift($pending)) as $child) {
+                $ids[] = (int) $child->id();
+                $pending[] = (int) $child->id();
+            }
+        }
+
+        return $ids;
+    }
+
     /** Nivel de una categoría: 1 para una raíz. */
     public function depthOf(int $id): int
     {

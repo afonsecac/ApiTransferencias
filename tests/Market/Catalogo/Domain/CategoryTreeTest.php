@@ -128,4 +128,18 @@ final class CategoryTreeTest extends TestCase
 
         $this->assertSame(1, (new CategoryTree([$orphan]))->depthOf(8));
     }
+
+    public function testItListsAllTheDescendantsOfACategory(): void
+    {
+        $tree = $this->tree();
+
+        $all = $tree->descendantsOf(1);
+        sort($all);
+
+        $this->assertSame([2, 3, 4], $all);
+        $this->assertSame([3], $tree->descendantsOf(2));
+        $this->assertSame([], $tree->descendantsOf(3));
+        $this->assertSame([], $tree->descendantsOf(5));
+        $this->assertSame([], $tree->descendantsOf(999));
+    }
 }

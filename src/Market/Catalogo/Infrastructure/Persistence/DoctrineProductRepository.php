@@ -49,6 +49,16 @@ final class DoctrineProductRepository implements ProductRepository
         return $products;
     }
 
+    public function productIdsByCategory(): array
+    {
+        $byCategory = [];
+        foreach ($this->em->getConnection()->fetchAllNumeric('SELECT category_id, product_id FROM market_product_category') as [$categoryId, $productId]) {
+            $byCategory[(int) $categoryId][] = (int) $productId;
+        }
+
+        return $byCategory;
+    }
+
     public function skusStartingWith(string $prefix): array
     {
         /** @var list<string> $skus */
