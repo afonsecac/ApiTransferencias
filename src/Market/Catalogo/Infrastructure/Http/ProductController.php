@@ -23,6 +23,7 @@ use App\Market\Catalogo\Domain\ProductNotFound;
 use App\Market\Catalogo\Domain\ProductSellerInvalid;
 use App\Market\Catalogo\Domain\ProductStatus;
 use App\Market\Catalogo\Domain\SellerNotFound;
+use App\Market\Catalogo\Infrastructure\Storage\ImageUrls;
 use App\OpenApi\Attribute\DashboardEndpoint;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -48,6 +49,7 @@ final class ProductController
         private readonly ChangeProductStatus $changeStatus,
         private readonly SetProductRelevance $setRelevance,
         private readonly SuggestSku $suggestSku,
+        private readonly ImageUrls $imageUrls,
     ) {
     }
 
@@ -68,7 +70,7 @@ final class ProductController
             $request->query->get('relevant') === '1' ? new \DateTimeImmutable('today') : null,
         );
 
-        return new JsonResponse(ProductPageOutDto::from($page, $this->language($request)));
+        return new JsonResponse(ProductPageOutDto::from($page, $this->language($request), $this->imageUrls));
     }
 
     #[Route('/sku-suggestion', name: 'market_products_sku_suggestion', methods: ['GET'])]
@@ -173,7 +175,7 @@ final class ProductController
     private function respond(callable $action, ?string $language = null, int $status = Response::HTTP_OK): JsonResponse
     {
         try {
-            return new JsonResponse(ProductOutDto::from($action(), $language), $status);
+            return new JsonResponse(ProductOutDto::from($action(), $language, $this->imageUrls), $status);
         } catch (ProductNotFound $e) {
             return $this->error('PRODUCT_NOT_FOUND', $e->getMessage(), Response::HTTP_NOT_FOUND);
         } catch (SellerNotFound $e) {
