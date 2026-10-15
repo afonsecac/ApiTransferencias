@@ -30,8 +30,8 @@ final readonly class Quantity
         if (!is_finite($value) || $value <= 0) {
             throw new InvalidProduct('La cantidad debe ser un número mayor que cero.');
         }
-        if ($unit === MeasureUnit::UNIT && floor($value) !== $value) {
-            throw new InvalidProduct('Las unidades son un número entero.');
+        if ($unit->kind() === MeasureKind::COUNT && floor($value) !== $value) {
+            throw new InvalidProduct('Las unidades, los pares y las docenas son un número entero.');
         }
         $base = round($value * ($system ?? MeasureSystem::standard())->factorOf($unit), self::BASE_DECIMALS);
         if ($base <= 0) {

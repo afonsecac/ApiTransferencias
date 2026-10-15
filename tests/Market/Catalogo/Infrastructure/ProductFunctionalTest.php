@@ -121,6 +121,24 @@ final class ProductFunctionalTest extends ProviderFunctionalTestCase
         return (int) $brand->id();
     }
 
+    public function testItAcceptsTheNewUnitsAndStoresThemInTheBase(): void
+    {
+        $this->admin();
+
+        $byTheDozen = $this->body($this->controller()->create($this->createDto('HUEVOS-DOC', [
+            'contentValue' => 2.0, 'contentUnit' => 'dozen', 'unitWeightValue' => 60.0, 'unitWeightUnit' => 'g',
+        ])));
+        $byTheTon = $this->body($this->controller()->create($this->createDto('ARROZ-TON', ['contentValue' => 1.5, 'contentUnit' => 't'])));
+        $byTheGallon = $this->body($this->controller()->create($this->createDto('AGUA-GAL', [
+            'contentValue' => 2.0, 'contentUnit' => 'gal', 'deliveryKind' => 'volume', 'deliveryUnit' => 'gal',
+        ])));
+
+        $this->assertEquals(['value' => 2.0, 'unit' => 'dozen', 'base' => 24.0, 'baseUnit' => 'unit', 'kind' => 'count'], $byTheDozen['content']);
+        $this->assertEqualsWithDelta(1.44, $byTheDozen['totalWeight'], 0.0000001);
+        $this->assertEquals(1500.0, $byTheTon['totalWeight']);
+        $this->assertEqualsWithDelta(7.570824, $byTheGallon['totalVolume'], 0.0000001);
+    }
+
     public function testItCreatesADraftForThePlatformSellerAndKeepsTheOriginalUnit(): void
     {
         $this->admin();
