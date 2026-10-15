@@ -74,10 +74,15 @@ final class ProductPackageUseCasesTest extends TestCase
         ]);
         $id = (int) (new CreateProduct($this->products, $this->sellers, $this->brands, $this->categories))('arr-001', null, $input)->product->id();
         if ($status === ProductStatus::PUBLISHED) {
-            (new ChangeProductStatus($this->products, $this->assembler()))($id, ProductStatus::PUBLISHED);
+            $this->changeStatus()($id, ProductStatus::PUBLISHED);
         }
 
         return $id;
+    }
+
+    private function changeStatus(): ChangeProductStatus
+    {
+        return new ChangeProductStatus($this->products, $this->assembler(), $this->packages);
     }
 
     private function publish(): PublishProductPackage
@@ -95,6 +100,39 @@ final class ProductPackageUseCasesTest extends TestCase
         $this->assertSame('USD', $offer->currency);
         $this->assertTrue($offer->isActive);
         $this->assertSame($offer->packageId, $this->packages->findFor($id)?->packageId);
+    }
+
+    public function testWithdrawingAProductAlsoRetiresItsOffer(): void
+    {
+        $id = $this->product();
+        $offer = ($this->publish())($id, '12.50', 'USD');
+
+        $this->changeStatus()($id, ProductStatus::WITHDRAWN);
+
+        $after = $this->packages->findFor($id);
+        $this->assertNotNull($after);
+        $this->assertFalse($after->isActive, 'La oferta del producto retirado deja de ofrecerse.');
+        $this->assertSame($offer->packageId, $after->packageId, 'El paquete no se borra.');
+    }
+
+    public function testWithdrawingAProductThatWasNeverOfferedCreatesNoOffer(): void
+    {
+        $id = $this->product();
+
+        $this->changeStatus()($id, ProductStatus::WITHDRAWN);
+
+        $this->assertNull($this->packages->findFor($id));
+    }
+
+    public function testPublishingAWithdrawnProductAgainDoesNotOfferItAgain(): void
+    {
+        $id = $this->product();
+        ($this->publish())($id, '12.50', 'USD');
+        $this->changeStatus()($id, ProductStatus::WITHDRAWN);
+
+        $this->changeStatus()($id, ProductStatus::PUBLISHED);
+
+        $this->assertFalse($this->packages->findFor($id)?->isActive, 'Volver a publicar el producto no reactiva la oferta: se ofrece de nuevo a propósito.');
     }
 
     public function testPublishingAgainChangesThePriceButKeepsThePackage(): void
