@@ -1,19 +1,100 @@
 name: Deploy Staging
 
+# Un push a `staging` (la rama protegida a la que se promueve desde `develop`) crea el
+# release candidate (tag vX.Y.Z-rc.N y pre-release de GitHub) y lo despliega en staging.
+# Fusionar en `develop` o en `master` NO despliega nada: develop solo integra y master
+# solo recibe lo ya probado en staging; producción se despliega con el release
+# (ver release.yaml y deploy-prod.yaml).
 on:
   push:
-    branches: [develop]
+    branches: [staging]
 
 concurrency:
   group: deploy-staging
   cancel-in-progress: false
 
 permissions:
+  contents: write
   statuses: write
 
 jobs:
+  release-candidate:
+    name: Create release candidate
+    runs-on: ubuntu-24.04
+    outputs:
+      tag: ${{ steps.rc.outputs.tag }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Versionado semver a partir de Conventional Commits desde el último release
+      # ESTABLE (los tags -rc.N no cuentan como base): BREAKING CHANGE / "!" => major,
+      # "feat:" => minor, resto => patch. El candidato es la versión que saldría si se
+      # publicara ahora, con un sufijo -rc.N que sube con cada push a staging.
+      - name: Compute release candidate
+        id: rc
+        run: |
+          set -euo pipefail
+
+          LAST_TAG=$(git tag --list 'v*' --sort=-v:refname | grep -Ev -- '-' | head -n1 || true)
+          if [ -z "$LAST_TAG" ]; then
+            echo "No hay tags estables previos (v*). Sembrar un tag inicial (ej. v1.0.0) antes de que este workflow pueda calcular versiones." >&2
+            exit 1
+          fi
+
+          COMMITS="$(git log "${LAST_TAG}..HEAD" --pretty=format:%s)"
+          if [ -z "$COMMITS" ]; then
+            echo "Sin commits nuevos desde $LAST_TAG: no se crea release candidate, solo se despliega."
+            echo "tag=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          BUMP="patch"
+          if echo "$COMMITS" | grep -qE '^[a-zA-Z]+(\([^)]*\))?!:|BREAKING CHANGE'; then
+            BUMP="major"
+          elif echo "$COMMITS" | grep -qE '^feat(\([^)]*\))?:'; then
+            BUMP="minor"
+          fi
+
+          VERSION="${LAST_TAG#v}"
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
+          case "$BUMP" in
+            major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
+            minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
+            patch) PATCH=$((PATCH + 1)) ;;
+          esac
+
+          BASE="v${MAJOR}.${MINOR}.${PATCH}"
+          N=$(( $(git tag --list "${BASE}-rc.*" | wc -l) + 1 ))
+          TAG="${BASE}-rc.${N}"
+          echo "Bump: $BUMP -> $TAG (desde $LAST_TAG)"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "last_tag=$LAST_TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Create tag and pre-release
+        if: steps.rc.outputs.tag != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag "${{ steps.rc.outputs.tag }}" "${{ github.sha }}"
+          git push origin "${{ steps.rc.outputs.tag }}"
+
+          gh release create "${{ steps.rc.outputs.tag }}" \
+            --title "${{ steps.rc.outputs.tag }}" \
+            --target "${{ github.sha }}" \
+            --prerelease \
+            --notes-start-tag "${{ steps.rc.outputs.last_tag }}" \
+            --generate-notes
+
   deploy:
     name: Deploy to Staging VPS
+    needs: release-candidate
     # Runner self-hosted en el propio VPS de staging: Hostinger bloquea a nivel
     # de red las conexiones entrantes desde los runners de GitHub-hosted
     # (rangos de IP de Azure), así que appleboy/ssh-action nunca podía
@@ -99,6 +180,6 @@ jobs:
               sha: context.sha,
               state: '${{ job.status }}' === 'success' ? 'success' : 'failure',
               target_url: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
-              description: `${status} Staging deploy ${sha}`,
+              description: `${status} Staging deploy ${'${{ needs.release-candidate.outputs.tag }}' || sha}`,
               context: 'deploy/staging'
             });

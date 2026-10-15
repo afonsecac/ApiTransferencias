@@ -1,26 +1,66 @@
 name: Deploy Production
 
+# Producción solo se despliega al publicar un release estable (vX.Y.Z): fusionar en
+# `master` no despliega nada. El release sale del workflow "Release" (que promueve un
+# release candidate ya probado en staging y dispara este workflow) o se publica a mano en
+# GitHub; un pre-release (-rc.N) nunca despliega. También se puede lanzar a mano con el tag.
 on:
-  push:
-    branches: [master]
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag del release estable a desplegar (ej. v1.18.0)'
+        required: true
+        type: string
 
 concurrency:
   group: deploy-prod
   cancel-in-progress: false
 
 permissions:
+  contents: read
   statuses: write
 
 jobs:
   deploy:
     name: Deploy to Production VPS
+    if: ${{ github.event_name == 'workflow_dispatch' || !github.event.release.prerelease }}
     runs-on: ubuntu-24.04
     environment: production
+    env:
+      DEPLOY_TAG: ${{ github.event.release.tag_name || inputs.tag }}
 
     steps:
+      # Solo se despliega un tag estable cuyo commit ya esté en master: lo que llega a
+      # producción pasó por staging y por la promoción a master.
+      - name: Checkout release
+        uses: actions/checkout@v4
+        with:
+          ref: refs/tags/${{ env.DEPLOY_TAG }}
+          fetch-depth: 0
+
+      - name: Check the release
+        id: release
+        run: |
+          set -euo pipefail
+          if ! echo "$DEPLOY_TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "El tag '$DEPLOY_TAG' no es un release estable (vX.Y.Z): no se despliega." >&2
+            exit 1
+          fi
+          git fetch origin master
+          if ! git merge-base --is-ancestor HEAD origin/master; then
+            echo "El commit de $DEPLOY_TAG no está en master: promover staging a master antes de publicar el release." >&2
+            exit 1
+          fi
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1
+        env:
+          DEPLOY_TAG: ${{ env.DEPLOY_TAG }}
         with:
+          envs: DEPLOY_TAG
           host: ${{ secrets.PROD_HOST }}
           username: ${{ secrets.PROD_USER }}
           key: ${{ secrets.PROD_SSH_KEY }}
@@ -40,10 +80,9 @@ jobs:
               | gzip > "backups/prod/db_${TIMESTAMP}.sql.gz"
             echo "Backup: backups/prod/db_${TIMESTAMP}.sql.gz"
 
-            echo "=== Pulling latest changes ==="
-            git fetch origin master
-            git checkout master
-            git pull origin master
+            echo "=== Checking out release ${DEPLOY_TAG} ==="
+            git fetch origin --tags --force
+            git checkout --force "refs/tags/${DEPLOY_TAG}"
 
             echo "=== Building images ==="
             docker compose -f docker-compose.vps.yaml -f docker-compose.vps.prod.yaml \
@@ -106,13 +145,14 @@ jobs:
         with:
           script: |
             const status = '${{ job.status }}' === 'success' ? '✅' : '❌';
-            const sha = context.sha.substring(0, 7);
+            const fullSha = '${{ steps.release.outputs.sha }}' || context.sha;
+            const sha = fullSha.substring(0, 7);
             await github.rest.repos.createCommitStatus({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              sha: context.sha,
+              sha: fullSha,
               state: '${{ job.status }}' === 'success' ? 'success' : 'failure',
               target_url: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
-              description: `${status} Production deploy ${sha}`,
+              description: `${status} Production deploy ${process.env.DEPLOY_TAG} (${sha})`,
               context: 'deploy/production'
             });
