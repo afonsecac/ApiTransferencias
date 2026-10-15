@@ -97,10 +97,53 @@ final class CommunicationPackageCatalogProvider implements ProviderInterface
         /** @var Request|null $request */
         $request = $context['request'] ?? null;
 
+        $visible = $this->filterByCategory($visible, $request);
         $visible = $this->filterByPriceRange($visible, $request);
         $visible = $this->sort($visible, $request);
 
         return $this->paginate($visible, $operation, $request);
+    }
+
+    /**
+     * `service`, `subservice` y `area` — el comprador acota lo que ya puede ver (el routing de su cuenta se aplicó antes,
+     * así que el filtro nunca muestra algo que la cuenta no cubre). Cada uno es opcional, independiente y se compara sin
+     * distinguir mayúsculas ni espacios laterales con `service.name`, `service.subservice.name` y `service.area.name`;
+     * uno vacío se ignora. Sin ninguno, devuelve todo. Es el mismo vocabulario que ServiceCategoryKey.
+     *
+     * @param list<CommunicationPackage> $packages
+     * @return list<CommunicationPackage>
+     */
+    private function filterByCategory(array $packages, ?Request $request): array
+    {
+        if ($request === null) {
+            return $packages;
+        }
+
+        $wanted = [];
+        foreach (['service' => ['name'], 'subservice' => ['subservice', 'name'], 'area' => ['area', 'name']] as $param => $path) {
+            $value = $request->query->get($param);
+            $value = is_string($value) ? mb_strtolower(trim($value)) : '';
+            if ($value !== '') {
+                $wanted[$param] = [$path, $value];
+            }
+        }
+        if ($wanted === []) {
+            return $packages;
+        }
+
+        return array_values(array_filter($packages, static function (CommunicationPackage $p) use ($wanted): bool {
+            foreach ($wanted as [$path, $value]) {
+                $actual = $p->getService();
+                foreach ($path as $key) {
+                    $actual = is_array($actual) ? ($actual[$key] ?? null) : null;
+                }
+                if (!is_string($actual) || mb_strtolower(trim($actual)) !== $value) {
+                    return false;
+                }
+            }
+
+            return true;
+        }));
     }
 
     /**
