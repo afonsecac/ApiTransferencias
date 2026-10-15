@@ -251,11 +251,12 @@ class CommunicationContract
      * mismo paso, no hay setServiceKey() independiente (ver docblock de la
      * propiedad).
      */
-    public function setServiceCategory(?string $serviceName, ?string $subserviceName): static
+    public function setServiceCategory(?string $serviceName, ?string $subserviceName, ?string $areaName = null): static
     {
         $this->serviceName = $serviceName;
         $this->subserviceName = $subserviceName;
-        $this->serviceKey = ServiceCategoryKey::of($serviceName, $subserviceName);
+        // El área (COMR-275) solo entra en la clave: un contrato del mercado cubre paquetes de su misma categoría con área.
+        $this->serviceKey = ServiceCategoryKey::of($serviceName, $subserviceName, $areaName);
 
         return $this;
     }

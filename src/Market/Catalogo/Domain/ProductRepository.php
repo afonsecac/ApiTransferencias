@@ -21,5 +21,12 @@ interface ProductRepository
     /** Cuántos productos cumplen el filtro (sin paginar). */
     public function count(ProductFilter $filter): int;
 
+    /**
+     * @param list<int> $ids
+     *
+     * @return list<Product> los que existen, por id
+     */
+    public function findByIds(array $ids): array;
+
     public function save(Product $product): void;
 }

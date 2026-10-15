@@ -22,6 +22,19 @@ final class DoctrineProductImageRepository implements ProductImageRepository
         return $images;
     }
 
+    public function findByProducts(array $productIds): array
+    {
+        if ($productIds === []) {
+            return [];
+        }
+        $byProduct = [];
+        foreach ($this->em->getRepository(ProductImage::class)->findBy(['productId' => $productIds], ['position' => 'ASC']) as $image) {
+            $byProduct[$image->productId()][] = $image;
+        }
+
+        return $byProduct;
+    }
+
     public function save(ProductImage $image): void
     {
         $this->saveAll([$image]);

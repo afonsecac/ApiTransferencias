@@ -9,6 +9,7 @@ use App\Entity\CommunicationPackage;
 use App\Entity\User;
 use App\Repository\CommunicationPackageProviderProductRepository;
 use App\Service\Catalog\ClientServiceProviderCoverageResolver;
+use App\Service\Catalog\MarketPackageEnricher;
 use App\Service\Pricing\BenefitOperationResolver;
 use App\Service\Pricing\PackageCatalogResolver;
 use App\Service\Pricing\PackageOfferSourceEnum;
@@ -409,5 +410,35 @@ class CommunicationPackageCatalogProviderTest extends TestCase
         $result = $this->provider->provide(new GetCollection(), [], $this->requestContext(['service' => 'Gift Cards', 'price' => ['gte' => '4']]));
 
         $this->assertSame([$c['supermarket']], iterator_to_array($result));
+    }
+
+    public function testAMarketPackageIsVisibleWithoutAnyProviderBinding(): void
+    {
+        $this->security->method('getUser')->willReturn($this->createMock(Account::class));
+        $market = $this->packageWithId(7, 'Arroz')->setMarketProductId(55);
+        $comms = $this->packageWithId(8, 'Recarga');
+        $this->catalogResolver->method('catalogFor')->willReturn([$this->offer($market, 3.0), $this->offer($comms, 4.0)]);
+        $this->bindingRepo->method('findPackageIdsWithBindings')->willReturn([]);
+
+        $result = $this->provider->provide(new GetCollection(), [], $this->requestContext([]));
+
+        $this->assertSame([$market], iterator_to_array($result), 'El paquete de mercado va por el proveedor propio; el de comunicaciones sin vínculo sigue oculto.');
+    }
+
+    public function testTheMarketEnricherReceivesOnlyThePageBeingReturned(): void
+    {
+        $this->security->method('getUser')->willReturn($this->createMock(Account::class));
+        $first = $this->packageWithId(1, 'A')->setMarketProductId(11);
+        $second = $this->packageWithId(2, 'B')->setMarketProductId(12);
+        $this->catalogResolver->method('catalogFor')->willReturn([$this->offer($first, 1.0), $this->offer($second, 2.0)]);
+        $this->bindingRepo->method('findPackageIdsWithBindings')->willReturn([]);
+        $enricher = $this->createMock(MarketPackageEnricher::class);
+        $enricher->expects($this->once())->method('enrich')->with([$first], $this->isInstanceOf(\DateTimeImmutable::class));
+        $this->provider = new CommunicationPackageCatalogProvider($this->catalogResolver, $this->bindingRepo, $this->security, $this->benefitResolver, $this->coverageResolver, $enricher);
+        $operation = new GetCollection(paginationItemsPerPage: 1);
+
+        $result = $this->provider->provide($operation, [], $this->requestContext(['page' => '1']));
+
+        $this->assertSame([$first], iterator_to_array($result));
     }
 }
