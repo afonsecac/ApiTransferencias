@@ -76,7 +76,32 @@ final class CommunicationPackageCatalogProvider implements ProviderInterface
         }
 
         $now = new \DateTimeImmutable();
+        $visible = $this->visibleFor($tenant, $now);
 
+        /** @var Request|null $request */
+        $request = $context['request'] ?? null;
+
+        $visible = $this->filterByCategory($visible, $request);
+        $visible = $this->filterByPriceRange($visible, $request);
+        $visible = $this->sort($visible, $request);
+
+        $page = $this->paginate($visible, $operation, $request);
+
+        // Los datos propios del mercado solo se leen para los paquetes de la página que se devuelve.
+        $this->marketEnricher?->enrich(is_array($page) ? $page : iterator_to_array($page, false), $now);
+
+        return $page;
+    }
+
+    /**
+     * Los paquetes que una cuenta puede ver, sin filtros del comprador ni orden ni paginación: el catálogo que le resuelve
+     * PackageCatalogResolver, con vínculo a un proveedor (o del mercado, que va por el propio), dentro de su ventana activa y
+     * cubiertos por el routing de la cuenta. Lo usa también la vista previa del dashboard.
+     *
+     * @return list<CommunicationPackage>
+     */
+    public function visibleFor(Account $tenant, \DateTimeImmutable $now): array
+    {
         $packages = array_map(
             static fn (ResolvedPackageOffer $offer): CommunicationPackage => $offer->package,
             $this->catalogResolver->catalogFor($tenant, $now),
@@ -99,19 +124,7 @@ final class CommunicationPackageCatalogProvider implements ProviderInterface
             $package->setBenefits($this->benefitResolver->resolve($package));
         }
 
-        /** @var Request|null $request */
-        $request = $context['request'] ?? null;
-
-        $visible = $this->filterByCategory($visible, $request);
-        $visible = $this->filterByPriceRange($visible, $request);
-        $visible = $this->sort($visible, $request);
-
-        $page = $this->paginate($visible, $operation, $request);
-
-        // Los datos propios del mercado solo se leen para los paquetes de la página que se devuelve.
-        $this->marketEnricher?->enrich(is_array($page) ? $page : iterator_to_array($page, false), $now);
-
-        return $page;
+        return $visible;
     }
 
     /**
@@ -129,9 +142,24 @@ final class CommunicationPackageCatalogProvider implements ProviderInterface
             return $packages;
         }
 
+        return $this->filterByCategoryOf(
+            $packages,
+            $request->query->get('service'),
+            $request->query->get('subservice'),
+            $request->query->get('area'),
+        );
+    }
+
+    /**
+     * El mismo filtro con los tres criterios ya leídos (uno nulo o vacío se ignora).
+     *
+     * @param list<CommunicationPackage> $packages
+     * @return list<CommunicationPackage>
+     */
+    public function filterByCategoryOf(array $packages, mixed $service, mixed $subservice, mixed $area): array
+    {
         $wanted = [];
-        foreach (['service' => ['name'], 'subservice' => ['subservice', 'name'], 'area' => ['area', 'name']] as $param => $path) {
-            $value = $request->query->get($param);
+        foreach ([['service', ['name'], $service], ['subservice', ['subservice', 'name'], $subservice], ['area', ['area', 'name'], $area]] as [$param, $path, $value]) {
             $value = is_string($value) ? mb_strtolower(trim($value)) : '';
             if ($value !== '') {
                 $wanted[$param] = [$path, $value];
