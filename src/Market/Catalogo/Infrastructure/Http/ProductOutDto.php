@@ -23,7 +23,7 @@ class ProductOutDto
      * @param array<string, mixed>|null $content null en un producto con valor
      * @param array<string, mixed>|null $unitWeight
      * @param array<string, mixed>|null $unitVolume
-     * @param array<string, float>|null $dimensions
+     * @param array<string, float|string>|null $dimensions en milímetros (y su volumen en cm³); `unit` es la unidad en que se escribieron
      * @param array{kind: string, unit: string}|null $deliveryBasis null en un producto con valor
      * @param array{kind: string, currency: string, min: string, max: string|null}|null $value solo en un producto con valor (digital)
      * @param array{id: int, slug: string, name: string, isActive: bool}|null $brand
@@ -87,6 +87,7 @@ class ProductOutDto
                 'widthMm' => $spec->dimensions->widthMm,
                 'heightMm' => $spec->dimensions->heightMm,
                 'volumeCm3' => $spec->dimensions->volumeCm3(),
+                'unit' => $spec->dimensions->unit->value,
             ],
             $spec->deliveryBasis === null ? null : ['kind' => $spec->deliveryBasis->kind()->value, 'unit' => $spec->deliveryBasis->unit()->value],
             $spec->value === null ? null : [

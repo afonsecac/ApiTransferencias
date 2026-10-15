@@ -155,6 +155,7 @@ final class ProductController
             $dto->getValueMax(),
             $dto->getBrandId(),
             $dto->getCategoryIds() ?? [],
+            $dto->getDimensionsUnit(),
         );
     }
 

@@ -99,6 +99,9 @@ class Product
     #[ORM\Column(name: 'height_mm', type: 'decimal', precision: 10, scale: 2, nullable: true)]
     private ?string $heightMm = null;
 
+    #[ORM\Column(name: 'dimensions_unit', type: 'string', length: 2, options: ['default' => 'mm'])]
+    private string $dimensionsUnit = 'mm';
+
     #[ORM\Column(name: 'delivery_kind', type: 'string', length: 8, nullable: true)]
     private ?string $deliveryKind = null;
 
@@ -293,7 +296,7 @@ class Product
             $this->quantity((string) $this->contentBase, (string) $this->contentOriginal, (string) $this->contentUnit),
             $this->unitWeightBase === null ? null : $this->quantity($this->unitWeightBase, (string) $this->unitWeightOriginal, (string) $this->unitWeightUnit),
             $this->unitVolumeBase === null ? null : $this->quantity($this->unitVolumeBase, (string) $this->unitVolumeOriginal, (string) $this->unitVolumeUnit),
-            $this->lengthMm === null ? null : Dimensions::of((float) $this->lengthMm, (float) $this->widthMm, (float) $this->heightMm),
+            $this->lengthMm === null ? null : Dimensions::of((float) $this->lengthMm, (float) $this->widthMm, (float) $this->heightMm, DimensionUnit::from($this->dimensionsUnit)),
             DeliveryBasis::of(MeasureKind::from((string) $this->deliveryKind), MeasureUnit::from((string) $this->deliveryUnit)),
             $this->barcode,
         );
@@ -364,6 +367,8 @@ class Product
         $this->lengthMm = $spec->dimensions === null ? null : self::decimal($spec->dimensions->lengthMm, 2);
         $this->widthMm = $spec->dimensions === null ? null : self::decimal($spec->dimensions->widthMm, 2);
         $this->heightMm = $spec->dimensions === null ? null : self::decimal($spec->dimensions->heightMm, 2);
+
+        $this->dimensionsUnit = $spec->dimensions?->unit->value ?? DimensionUnit::MM->value;
 
         $this->deliveryKind = $spec->deliveryBasis?->kind()->value;
         $this->deliveryUnit = $spec->deliveryBasis?->unit()->value;
