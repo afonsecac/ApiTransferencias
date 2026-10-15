@@ -30,6 +30,31 @@ final readonly class Slug
         return new self(substr($slug, 0, self::MAX_LENGTH) === '' ? '' : rtrim(substr($slug, 0, self::MAX_LENGTH), '-'));
     }
 
+    /**
+     * El identificador derivado de un texto que nada ocupa todavía: el del texto tal cual y, si ya está en uso, con -2, -3…
+     * (el sufijo siempre cabe en el máximo). Solo para los que se proponen solos; uno que escribe una persona nunca se cambia.
+     *
+     * @param callable(string): bool $taken
+     *
+     * @throws InvalidSeller si el texto no da un identificador válido o hay demasiadas colisiones
+     */
+    public static function free(string $text, callable $taken): self
+    {
+        $base = self::fromText($text);
+        if (!$taken($base->value())) {
+            return $base;
+        }
+        for ($number = 2; $number <= 99; ++$number) {
+            $suffix = '-' . $number;
+            $candidate = rtrim(substr($base->value(), 0, self::MAX_LENGTH - strlen($suffix)), '-') . $suffix;
+            if (!$taken($candidate)) {
+                return new self($candidate);
+            }
+        }
+
+        throw new InvalidSeller(sprintf('No se encontró un identificador libre para "%s": escribe uno a mano.', $text));
+    }
+
     public function value(): string
     {
         return $this->value;

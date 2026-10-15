@@ -22,7 +22,7 @@ final class CreateBrand
     }
 
     /**
-     * @param string|null $slug por defecto, derivado del nombre
+     * @param string|null $slug por defecto, derivado del nombre (con -2, -3… si ya está en uso)
      * @throws InvalidBrand
      * @throws InvalidSeller si el identificador no es válido
      * @throws BrandSellerInvalid
@@ -30,7 +30,7 @@ final class CreateBrand
      */
     public function __invoke(int $sellerId, string $name, ?string $slug = null): BrandDetails
     {
-        $slugValue = $slug !== null && trim($slug) !== '' ? new Slug(trim($slug)) : Slug::fromText($name);
+        $slugValue = $slug !== null && trim($slug) !== '' ? new Slug(trim($slug)) : Slug::free($name, fn (string $candidate): bool => $this->brands->findBySlug($candidate) !== null);
 
         $seller = $this->sellers->findById($sellerId) ?? throw BrandSellerInvalid::unknown($sellerId);
         if (!$seller->isActive()) {

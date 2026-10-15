@@ -49,6 +49,20 @@ final class DoctrineProductRepository implements ProductRepository
         return $products;
     }
 
+    public function skusStartingWith(string $prefix): array
+    {
+        /** @var list<string> $skus */
+        $skus = $this->em->createQueryBuilder()
+            ->select('p.sku')
+            ->from(Product::class, 'p')
+            ->where('p.sku LIKE :prefix')
+            ->setParameter('prefix', addcslashes(strtoupper($prefix), '%_\\') . '%')
+            ->getQuery()
+            ->getSingleColumnResult();
+
+        return $skus;
+    }
+
     public function search(ProductFilter $filter, ?int $limit = null, int $offset = 0): array
     {
         $qb = $this->filtered($filter)->select('p')->orderBy('p.sku', 'ASC');
