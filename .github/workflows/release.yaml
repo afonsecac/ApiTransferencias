@@ -1,16 +1,25 @@
 name: Release
 
-# Se dispara cuando "Deploy Production" (push a master) termina, y solo crea
-# tag + release si el deploy realmente tuvo éxito (health check incluido) —
-# así el release siempre representa código que quedó vivo en producción, no
-# solo código que se mergeó a master.
+# Publica el release estable (vX.Y.Z) a partir de un release candidate ya probado en
+# staging y despliega producción. Se lanza a mano (Actions › Release › Run workflow):
+#   1. Se promueve `staging` a `master` (PR). Fusionar en master no despliega nada.
+#   2. Se lanza este workflow: toma el último release candidate (o el indicado), comprueba
+#      que su commit ya está en master, crea el tag estable y el release sobre ESE commit
+#      (así sale justo lo que se probó, aunque master tenga después commits nuevos) y
+#      lanza "Deploy Production" con ese tag.
+# Un release publicado a mano en GitHub (sobre un commit de master) también despliega
+# producción: lo recoge el trigger `release` de deploy-prod.yaml.
 on:
-  workflow_run:
-    workflows: ["Deploy Production"]
-    types: [completed]
+  workflow_dispatch:
+    inputs:
+      rc_tag:
+        description: 'Release candidate a promover (ej. v1.18.0-rc.2). Vacío: el último.'
+        required: false
+        type: string
 
 permissions:
   contents: write
+  actions: write
 
 concurrency:
   group: release
@@ -18,62 +27,51 @@ concurrency:
 
 jobs:
   release:
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
           fetch-depth: 0
 
-      # Versionado semver a partir de Conventional Commits desde el último
-      # tag: BREAKING CHANGE / "!" => major, "feat:" => minor, resto => patch.
-      # Requiere un tag inicial (ver v1.0.0 sembrado manualmente) — sin tag
-      # previo no hay base desde la que calcular el bump.
-      - name: Compute next version
-        id: version
+      - name: Resolve the release candidate
+        id: rc
+        env:
+          INPUT_RC: ${{ inputs.rc_tag }}
         run: |
           set -euo pipefail
 
-          LAST_TAG=$(git tag --list 'v*' --sort=-v:refname | head -n1)
-          if [ -z "$LAST_TAG" ]; then
-            echo "No hay tags previos (v*). Sembrar un tag inicial (ej. v1.0.0) antes de que este workflow pueda calcular versiones." >&2
+          RC="${INPUT_RC:-}"
+          if [ -z "$RC" ]; then
+            RC=$(git tag --list 'v*-rc.*' --sort=-creatordate | head -n1)
+          fi
+          if [ -z "$RC" ] || ! echo "$RC" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+-rc\.[0-9]+$'; then
+            echo "No hay un release candidate válido (vX.Y.Z-rc.N): '${RC}'." >&2
+            exit 1
+          fi
+          git rev-parse --verify --quiet "refs/tags/${RC}" > /dev/null || { echo "No existe el tag ${RC}." >&2; exit 1; }
+
+          TAG="${RC%-rc.*}"
+          if git rev-parse --verify --quiet "refs/tags/${TAG}" > /dev/null; then
+            echo "El release ${TAG} ya existe." >&2
             exit 1
           fi
 
-          RANGE="${LAST_TAG}..HEAD"
-          COMMITS="$(git log "$RANGE" --pretty=format:%s)"
-
-          if [ -z "$COMMITS" ]; then
-            echo "Sin commits nuevos desde $LAST_TAG, no se crea release."
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-            exit 0
+          SHA=$(git rev-list -n1 "refs/tags/${RC}")
+          git fetch origin master
+          if ! git merge-base --is-ancestor "$SHA" origin/master; then
+            echo "El commit de ${RC} aún no está en master: promover staging a master antes de lanzar el release." >&2
+            exit 1
           fi
 
-          BUMP="patch"
-          if echo "$COMMITS" | grep -qE '^[a-zA-Z]+(\([^)]*\))?!:|BREAKING CHANGE'; then
-            BUMP="major"
-          elif echo "$COMMITS" | grep -qE '^feat(\([^)]*\))?:'; then
-            BUMP="minor"
-          fi
-
-          VERSION="${LAST_TAG#v}"
-          IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
-          case "$BUMP" in
-            major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
-            minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
-            patch) PATCH=$((PATCH + 1)) ;;
-          esac
-
-          NEW_TAG="v${MAJOR}.${MINOR}.${PATCH}"
-          echo "Bump: $BUMP -> $NEW_TAG (desde $LAST_TAG)"
-          echo "skip=false" >> "$GITHUB_OUTPUT"
-          echo "new_tag=$NEW_TAG" >> "$GITHUB_OUTPUT"
+          LAST_TAG=$(git tag --list 'v*' --sort=-v:refname | grep -Ev -- '-' | head -n1 || true)
+          echo "rc=$RC" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
           echo "last_tag=$LAST_TAG" >> "$GITHUB_OUTPUT"
+          echo "Release ${TAG} desde ${RC} (${SHA})"
 
       - name: Create tag and GitHub release
-        if: steps.version.outputs.skip == 'false'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -81,11 +79,23 @@ jobs:
 
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag "${{ steps.version.outputs.new_tag }}" "${{ github.event.workflow_run.head_sha }}"
-          git push origin "${{ steps.version.outputs.new_tag }}"
+          git tag "${{ steps.rc.outputs.tag }}" "${{ steps.rc.outputs.sha }}"
+          git push origin "${{ steps.rc.outputs.tag }}"
 
-          gh release create "${{ steps.version.outputs.new_tag }}" \
-            --title "${{ steps.version.outputs.new_tag }}" \
-            --target "${{ github.event.workflow_run.head_sha }}" \
-            --notes-start-tag "${{ steps.version.outputs.last_tag }}" \
+          NOTES_FROM=""
+          if [ -n "${{ steps.rc.outputs.last_tag }}" ]; then
+            NOTES_FROM="--notes-start-tag ${{ steps.rc.outputs.last_tag }}"
+          fi
+          gh release create "${{ steps.rc.outputs.tag }}" \
+            --title "${{ steps.rc.outputs.tag }}" \
+            --target "${{ steps.rc.outputs.sha }}" \
+            --latest \
+            $NOTES_FROM \
             --generate-notes
+
+      # Un release creado con el token del workflow no dispara el trigger `release` de
+      # otros workflows (límite de GitHub): se lanza el despliegue de forma explícita.
+      - name: Deploy production
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run deploy-prod.yaml -f tag="${{ steps.rc.outputs.tag }}"

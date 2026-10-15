@@ -2,5 +2,7 @@
 set -e
 
 echo "▶ PHPUnit tests..."
-docker compose exec -e APP_ENV=test worker php bin/phpunit --no-coverage
+# La suite acumula memoria en un solo proceso y ya roza los 256 MB del php.ini del contenedor (Fatal error en
+# GdImageStore al fusionar ramas con más pruebas): se amplía solo para esta ejecución.
+docker compose exec -e APP_ENV=test worker php -d memory_limit=1G bin/phpunit --no-coverage
 echo "✔ Tests OK"

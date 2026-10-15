@@ -24,6 +24,19 @@ final class InMemoryProductImageRepository implements ProductImageRepository
         return $found;
     }
 
+    public function findByProducts(array $productIds): array
+    {
+        $byProduct = [];
+        foreach ($productIds as $productId) {
+            $images = $this->findByProduct($productId);
+            if ($images !== []) {
+                $byProduct[$productId] = $images;
+            }
+        }
+
+        return $byProduct;
+    }
+
     public function save(ProductImage $image): void
     {
         $this->saveAll([$image]);

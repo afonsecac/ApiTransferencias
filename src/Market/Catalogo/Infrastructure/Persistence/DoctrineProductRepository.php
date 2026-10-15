@@ -37,6 +37,18 @@ final class DoctrineProductRepository implements ProductRepository
         return $product;
     }
 
+    public function findByIds(array $ids): array
+    {
+        if ($ids === []) {
+            return [];
+        }
+        /** @var list<Product> $products */
+        $products = $this->em->getRepository(Product::class)->findBy(['id' => $ids], ['id' => 'ASC']);
+        $this->loadCategories($products);
+
+        return $products;
+    }
+
     public function search(ProductFilter $filter, ?int $limit = null, int $offset = 0): array
     {
         $qb = $this->filtered($filter)->select('p')->orderBy('p.sku', 'ASC');
