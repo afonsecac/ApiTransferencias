@@ -2,6 +2,8 @@
 
 namespace App\Entity;
 
+use ApiPlatform\OpenApi\Model\Operation as OpenApiOperation;
+use ApiPlatform\OpenApi\Model\Parameter as OpenApiParameter;
 use ApiPlatform\Metadata\ApiProperty;
 use ApiPlatform\Metadata\ApiResource;
 use ApiPlatform\Metadata\Get;
@@ -44,7 +46,29 @@ use Symfony\Component\Validator\Constraints as Assert;
             uriTemplate: '/communication/packages',
             description: 'List all available packages',
             name: 'Packages',
-            provider: CommunicationClientPackageProvider::class
+            provider: CommunicationClientPackageProvider::class,
+            openapi: new OpenApiOperation(
+                parameters: [
+                    new OpenApiParameter(
+                        name: 'service',
+                        in: 'query',
+                        description: 'Filtra por servicio (por ejemplo, Mobile o Gift Cards), sin distinguir mayúsculas. Se aplica sobre lo que el routing de la cuenta ya cubre.',
+                        schema: ['type' => 'string'],
+                    ),
+                    new OpenApiParameter(
+                        name: 'subservice',
+                        in: 'query',
+                        description: 'Filtra por subservicio (por ejemplo, AIRTIME o Retail), sin distinguir mayúsculas.',
+                        schema: ['type' => 'string'],
+                    ),
+                    new OpenApiParameter(
+                        name: 'area',
+                        in: 'query',
+                        description: 'Filtra por área, una subdivisión de un subservicio (por ejemplo, Supermarket), sin distinguir mayúsculas.',
+                        schema: ['type' => 'string'],
+                    ),
+                ],
+            ),
         ),
         new GetCollection(
             uriTemplate: '/communication/packages/upcoming',

@@ -302,4 +302,112 @@ class CommunicationPackageCatalogProviderTest extends TestCase
         $this->assertInstanceOf(ArrayPaginator::class, $result);
         $this->assertSame(1.0, $result->getItemsPerPage());
     }
+
+    /**
+     * Cuatro paquetes de categorías distintas, todos visibles (con vínculo y sin restricción de routing).
+     *
+     * @return array{mobile: CommunicationPackage, bundle: CommunicationPackage, retail: CommunicationPackage, supermarket: CommunicationPackage}
+     */
+    private function categorizedCatalog(): array
+    {
+        $this->security->method('getUser')->willReturn($this->createMock(Account::class));
+        $mobile = $this->packageWithId(1, 'Recarga')->setService(['name' => 'Mobile', 'subservice' => ['name' => 'AIRTIME']]);
+        $bundle = $this->packageWithId(2, 'Bundle')->setService(['name' => 'Mobile', 'subservice' => ['name' => 'BUNDLE']]);
+        $retail = $this->packageWithId(3, 'Tarjeta')->setService(['name' => 'Gift Cards', 'subservice' => ['name' => 'Retail']]);
+        $supermarket = $this->packageWithId(4, 'Arroz')->setService(['name' => 'Gift Cards', 'subservice' => ['name' => 'Retail'], 'area' => ['name' => 'Supermarket']]);
+        $this->catalogResolver->method('catalogFor')->willReturn([
+            $this->offer($mobile, 1.0), $this->offer($bundle, 2.0), $this->offer($retail, 3.0), $this->offer($supermarket, 4.0),
+        ]);
+        $this->bindingRepo->method('findPackageIdsWithBindings')->willReturn([1, 2, 3, 4]);
+
+        return ['mobile' => $mobile, 'bundle' => $bundle, 'retail' => $retail, 'supermarket' => $supermarket];
+    }
+
+    public function testWithoutCategoryFiltersItReturnsEverything(): void
+    {
+        $c = $this->categorizedCatalog();
+
+        $result = $this->provider->provide(new GetCollection(), [], $this->requestContext([]));
+
+        $this->assertSame([$c['mobile'], $c['bundle'], $c['retail'], $c['supermarket']], iterator_to_array($result));
+    }
+
+    public function testFiltersByService(): void
+    {
+        $c = $this->categorizedCatalog();
+
+        $result = $this->provider->provide(new GetCollection(), [], $this->requestContext(['service' => 'Gift Cards']));
+
+        $this->assertSame([$c['retail'], $c['supermarket']], iterator_to_array($result));
+    }
+
+    public function testFiltersByServiceAndSubservice(): void
+    {
+        $c = $this->categorizedCatalog();
+
+        $result = $this->provider->provide(new GetCollection(), [], $this->requestContext(['service' => 'Mobile', 'subservice' => 'BUNDLE']));
+
+        $this->assertSame([$c['bundle']], iterator_to_array($result));
+    }
+
+    public function testFiltersByArea(): void
+    {
+        $c = $this->categorizedCatalog();
+
+        $result = $this->provider->provide(new GetCollection(), [], $this->requestContext(['service' => 'Gift Cards', 'subservice' => 'Retail', 'area' => 'Supermarket']));
+
+        $this->assertSame([$c['supermarket']], iterator_to_array($result));
+    }
+
+    public function testTheCategoryFiltersIgnoreCaseAndSurroundingSpaces(): void
+    {
+        $c = $this->categorizedCatalog();
+
+        $result = $this->provider->provide(new GetCollection(), [], $this->requestContext(['service' => ' gift cards ', 'area' => 'SUPERMARKET']));
+
+        $this->assertSame([$c['supermarket']], iterator_to_array($result));
+    }
+
+    public function testACategoryWithNoPackagesReturnsNothing(): void
+    {
+        $this->categorizedCatalog();
+
+        $result = $this->provider->provide(new GetCollection(), [], $this->requestContext(['service' => 'Utilities']));
+
+        $this->assertSame([], iterator_to_array($result));
+    }
+
+    public function testEmptyCategoryFiltersAreIgnored(): void
+    {
+        $c = $this->categorizedCatalog();
+
+        $result = $this->provider->provide(new GetCollection(), [], $this->requestContext(['service' => '', 'subservice' => '  ']));
+
+        $this->assertCount(4, iterator_to_array($result));
+        $this->assertSame($c['mobile'], iterator_to_array($result)[0]);
+    }
+
+    public function testTheCategoryFilterNeverShowsWhatTheRoutingDoesNotCover(): void
+    {
+        $this->security->method('getUser')->willReturn($this->createMock(Account::class));
+        $retail = $this->packageWithId(3, 'Tarjeta')->setService(['name' => 'Gift Cards', 'subservice' => ['name' => 'Retail']]);
+        $this->catalogResolver->method('catalogFor')->willReturn([$this->offer($retail, 3.0)]);
+        $this->bindingRepo->method('findPackageIdsWithBindings')->willReturn([3]);
+        $this->coverageResolver = $this->createMock(ClientServiceProviderCoverageResolver::class);
+        $this->coverageResolver->method('isCoveredFor')->willReturn(false);
+        $this->provider = new CommunicationPackageCatalogProvider($this->catalogResolver, $this->bindingRepo, $this->security, $this->benefitResolver, $this->coverageResolver);
+
+        $result = $this->provider->provide(new GetCollection(), [], $this->requestContext(['service' => 'Gift Cards']));
+
+        $this->assertSame([], iterator_to_array($result));
+    }
+
+    public function testTheCategoryFilterCombinesWithThePriceFilterAndPagination(): void
+    {
+        $c = $this->categorizedCatalog();
+
+        $result = $this->provider->provide(new GetCollection(), [], $this->requestContext(['service' => 'Gift Cards', 'price' => ['gte' => '4']]));
+
+        $this->assertSame([$c['supermarket']], iterator_to_array($result));
+    }
 }
