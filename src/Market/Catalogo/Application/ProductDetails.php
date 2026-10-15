@@ -7,6 +7,7 @@ namespace App\Market\Catalogo\Application;
 use App\Market\Catalogo\Domain\Brand;
 use App\Market\Catalogo\Domain\Category;
 use App\Market\Catalogo\Domain\Product;
+use App\Market\Catalogo\Domain\ProductImage;
 use App\Market\Catalogo\Domain\Seller;
 
 /**
@@ -17,6 +18,7 @@ final readonly class ProductDetails
     /**
      * @param list<Category> $categories en el orden del producto (por id)
      * @param array<int, string> $categoryPaths la ruta de cada categoría desde la raíz, como «Alimentos › Arroz»
+     * @param ProductImage|null $referenceImage la imagen de referencia de su galería (COMR-188), para la miniatura; null si no tiene
      */
     public function __construct(
         public Product $product,
@@ -24,6 +26,7 @@ final readonly class ProductDetails
         public ?Brand $brand = null,
         public array $categories = [],
         public array $categoryPaths = [],
+        public ?ProductImage $referenceImage = null,
     )
     {
     }

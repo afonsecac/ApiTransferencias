@@ -28,5 +28,19 @@ interface ProductRepository
      */
     public function findByIds(array $ids): array;
 
+    /**
+     * Los productos de cada categoría, de cualquier estado: id de categoría → ids de sus productos (solo las que tienen alguno).
+     *
+     * @return array<int, list<int>>
+     */
+    public function productIdsByCategory(): array;
+
+    /**
+     * Los sku (en mayúsculas) que empiezan por ese prefijo, para proponer el siguiente consecutivo.
+     *
+     * @return list<string>
+     */
+    public function skusStartingWith(string $prefix): array;
+
     public function save(Product $product): void;
 }

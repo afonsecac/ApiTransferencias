@@ -6,6 +6,7 @@ namespace App\Market\Catalogo\Infrastructure\Http;
 
 use App\Market\Catalogo\Application\ProductDetails;
 use App\Market\Catalogo\Domain\Quantity;
+use App\Market\Catalogo\Infrastructure\Storage\ImageUrls;
 
 /**
  * Respuesta de los endpoints de productos (estructura de presentación, no es de entrada). Cada cantidad lleva su valor
@@ -25,6 +26,7 @@ class ProductOutDto
      * @param array{id: int, slug: string, name: string, isActive: bool}|null $brand
      * @param array{level: int, from: string|null, until: string|null, active: bool} $relevance active = en vigor hoy
      * @param list<array{id: int, slug: string, nameEs: string, nameEn: string|null, path: string, isActive: bool}> $categories
+     * @param array<string, string>|null $image las URLs por tamaño (thumb, list, detail) de la imagen de referencia; null si no tiene
      */
     public function __construct(
         public int $id,
@@ -49,13 +51,14 @@ class ProductOutDto
         public ?float $totalVolumeMl,
         public string $createdAt,
         public string $updatedAt,
+        public ?array $image = null,
     ) {
     }
 
     /**
      * @param string|null $language con idioma, solo los textos de ese idioma (o el español si no hay traducción); sin él, todos
      */
-    public static function from(ProductDetails $details, ?string $language = null): self
+    public static function from(ProductDetails $details, ?string $language = null, ?ImageUrls $urls = null): self
     {
         $product = $details->product;
         $spec = $product->spec();
@@ -111,6 +114,7 @@ class ProductOutDto
             $product->totalVolumeMl(),
             $product->createdAt()->format(DATE_ATOM),
             $product->updatedAt()->format(DATE_ATOM),
+            $urls === null || $details->referenceImage === null ? null : $urls->for($details->referenceImage->file()),
         );
     }
 

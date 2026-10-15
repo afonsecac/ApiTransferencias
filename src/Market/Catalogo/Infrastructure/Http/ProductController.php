@@ -11,7 +11,9 @@ use App\Market\Catalogo\Application\ListProducts;
 use App\Market\Catalogo\Application\ProductDetails;
 use App\Market\Catalogo\Application\ProductSpecInput;
 use App\Market\Catalogo\Application\SetProductRelevance;
+use App\Market\Catalogo\Application\SuggestSku;
 use App\Market\Catalogo\Application\UpdateProduct;
+use App\Market\Catalogo\Domain\CategoryNotFound;
 use App\Market\Catalogo\Domain\InvalidProduct;
 use App\Market\Catalogo\Domain\InvalidProductTransition;
 use App\Market\Catalogo\Domain\ProductAlreadyExists;
@@ -21,6 +23,7 @@ use App\Market\Catalogo\Domain\ProductNotFound;
 use App\Market\Catalogo\Domain\ProductSellerInvalid;
 use App\Market\Catalogo\Domain\ProductStatus;
 use App\Market\Catalogo\Domain\SellerNotFound;
+use App\Market\Catalogo\Infrastructure\Storage\ImageUrls;
 use App\OpenApi\Attribute\DashboardEndpoint;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -45,6 +48,8 @@ final class ProductController
         private readonly UpdateProduct $updateProduct,
         private readonly ChangeProductStatus $changeStatus,
         private readonly SetProductRelevance $setRelevance,
+        private readonly SuggestSku $suggestSku,
+        private readonly ImageUrls $imageUrls,
     ) {
     }
 
@@ -65,7 +70,23 @@ final class ProductController
             $request->query->get('relevant') === '1' ? new \DateTimeImmutable('today') : null,
         );
 
-        return new JsonResponse(ProductPageOutDto::from($page, $this->language($request)));
+        return new JsonResponse(ProductPageOutDto::from($page, $this->language($request), $this->imageUrls));
+    }
+
+    #[Route('/sku-suggestion', name: 'market_products_sku_suggestion', methods: ['GET'])]
+    #[DashboardEndpoint(summary: 'Proponer el sku de un producto nuevo: CATEGORÍA-NOMBRE-NNN en mayúsculas, con el siguiente consecutivo libre (parámetros: name, category)', tag: 'Market', responseDto: SkuSuggestionOutDto::class)]
+    public function suggestSku(Request $request): JsonResponse
+    {
+        $name = $request->query->get('name');
+        try {
+            $sku = ($this->suggestSku)(is_string($name) ? $name : '', $this->id($request, 'category'));
+        } catch (CategoryNotFound $e) {
+            return $this->error('CATEGORY_NOT_FOUND', $e->getMessage(), Response::HTTP_NOT_FOUND);
+        } catch (InvalidProduct $e) {
+            return $this->error('INVALID_PRODUCT', $e->getMessage(), Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+
+        return new JsonResponse(new SkuSuggestionOutDto($sku->value()));
     }
 
     #[Route('/{id}', name: 'market_products_get', methods: ['GET'], requirements: ['id' => '\d+'])]
@@ -154,7 +175,7 @@ final class ProductController
     private function respond(callable $action, ?string $language = null, int $status = Response::HTTP_OK): JsonResponse
     {
         try {
-            return new JsonResponse(ProductOutDto::from($action(), $language), $status);
+            return new JsonResponse(ProductOutDto::from($action(), $language, $this->imageUrls), $status);
         } catch (ProductNotFound $e) {
             return $this->error('PRODUCT_NOT_FOUND', $e->getMessage(), Response::HTTP_NOT_FOUND);
         } catch (SellerNotFound $e) {

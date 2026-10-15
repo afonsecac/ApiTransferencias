@@ -8,6 +8,9 @@ use App\Market\Catalogo\Domain\Brand;
 use App\Market\Catalogo\Domain\BrandRepository;
 use App\Market\Catalogo\Domain\Category;
 use App\Market\Catalogo\Domain\CategoryRepository;
+use App\Market\Catalogo\Domain\ProductGallery;
+use App\Market\Catalogo\Domain\ProductImage;
+use App\Market\Catalogo\Domain\ProductImageRepository;
 use App\Market\Catalogo\Domain\ProductRepository;
 use App\Market\Catalogo\Domain\SellerRepository;
 use App\Market\Catalogo\Domain\Slug;
@@ -693,5 +696,57 @@ final class ProductFunctionalTest extends ProviderFunctionalTestCase
         $this->assertSame(Response::HTTP_UNPROCESSABLE_ENTITY, $invalid->getStatusCode());
         $this->assertSame('INVALID_PRODUCT', $this->body($invalid)['error']['code']);
         $this->assertSame(Response::HTTP_NOT_FOUND, $unknown->getStatusCode());
+    }
+
+    public function testItSuggestsTheSkuFromTheNameAndTheCategoryAndContinuesTheConsecutive(): void
+    {
+        $this->admin();
+        $categoryId = $this->categoryId('Alimentos');
+
+        $first = $this->controller()->suggestSku(new Request(['name' => 'Arroz blanco', 'category' => (string) $categoryId]));
+        $this->assertSame(Response::HTTP_OK, $first->getStatusCode());
+        $this->assertSame(['sku' => 'ALI-ARROZ-001'], $this->body($first));
+
+        $this->controller()->create($this->createDto('ALI-ARROZ-001', ['categoryIds' => [$categoryId]]));
+        $second = $this->body($this->controller()->suggestSku(new Request(['name' => 'Arroz integral', 'category' => (string) $categoryId])));
+
+        $this->assertSame(['sku' => 'ALI-ARROZ-002'], $second);
+    }
+
+    public function testTheSkuSuggestionWorksWithoutACategoryAndRejectsAMissingNameOrAnUnknownCategory(): void
+    {
+        $this->admin();
+
+        $generic = $this->body($this->controller()->suggestSku(new Request(['name' => 'Arroz'])));
+        $noName = $this->controller()->suggestSku(new Request(['category' => '1']));
+        $unknown = $this->controller()->suggestSku(new Request(['name' => 'Arroz', 'category' => '987654']));
+
+        $this->assertSame(['sku' => 'GEN-ARROZ-001'], $generic);
+        $this->assertSame(Response::HTTP_UNPROCESSABLE_ENTITY, $noName->getStatusCode());
+        $this->assertSame('INVALID_PRODUCT', $this->body($noName)['error']['code']);
+        $this->assertSame(Response::HTTP_NOT_FOUND, $unknown->getStatusCode());
+        $this->assertSame('CATEGORY_NOT_FOUND', $this->body($unknown)['error']['code']);
+    }
+
+    public function testTheListAndTheDetailCarryTheUrlsOfTheReferenceImageOrNull(): void
+    {
+        $this->admin();
+        $with = $this->body($this->controller()->create($this->createDto('CON-FOTO')))['id'];
+        $this->controller()->create($this->createDto('SIN-FOTO'));
+        $file = str_repeat('a', 40);
+        $gallery = ProductGallery::of([], 8);
+        $gallery->add(ProductImage::create($with, $file, 'frente.png', 'image/png', 100, 10, 10));
+        self::getContainer()->get(ProductImageRepository::class)->saveAll($gallery->images());
+
+        $items = [];
+        foreach ($this->body($this->controller()->list(new Request()))['items'] as $item) {
+            $items[$item['sku']] = $item['image'];
+        }
+        $detail = $this->body($this->controller()->get($with, new Request()));
+
+        $this->assertSame(['thumb', 'list', 'detail'], array_keys($items['CON-FOTO']));
+        $this->assertStringContainsString($file, $items['CON-FOTO']['thumb']);
+        $this->assertNull($items['SIN-FOTO']);
+        $this->assertSame($items['CON-FOTO'], $detail['image']);
     }
 }

@@ -247,4 +247,14 @@ final class SellerUseCasesTest extends TestCase
 
         (new GetPlatformSeller($this->sellers))();
     }
+
+    public function testADerivedSlugThatIsTakenGetsTheNextNumber(): void
+    {
+        $this->orgUnits->add(10, 'Otra empresa SL');
+        $first = ($this->create())(7, 'Garajito');
+        $second = ($this->create())(10, 'Garajito');
+
+        $this->assertSame('garajito', $first->seller->slug()->value());
+        $this->assertSame('garajito-2', $second->seller->slug()->value());
+    }
 }
