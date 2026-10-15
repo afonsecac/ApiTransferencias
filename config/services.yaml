@@ -89,6 +89,8 @@ services:
     App\Market\Catalogo\Domain\ProductRepository: '@App\Market\Catalogo\Infrastructure\Persistence\DoctrineProductRepository'
     App\Market\Catalogo\Domain\CategoryRepository: '@App\Market\Catalogo\Infrastructure\Persistence\DoctrineCategoryRepository'
     App\Market\Catalogo\Domain\BrandRepository: '@App\Market\Catalogo\Infrastructure\Persistence\DoctrineBrandRepository'
+    App\Service\Catalog\MarketPackageEnricher: '@App\Market\Catalogo\Infrastructure\Http\MarketPackageFacts'
+    App\Market\Catalogo\Domain\ProductPackages: '@App\Market\Catalogo\Infrastructure\Persistence\LegacyProductPackages'
     App\Market\Catalogo\Domain\ProductImageRepository: '@App\Market\Catalogo\Infrastructure\Persistence\DoctrineProductImageRepository'
     App\Market\Catalogo\Domain\ImageSettings: '@App\Market\Catalogo\Infrastructure\Persistence\SysConfigImageSettings'
     App\Market\Catalogo\Domain\ImageStore: '@App\Market\Catalogo\Infrastructure\Storage\GdImageStore'

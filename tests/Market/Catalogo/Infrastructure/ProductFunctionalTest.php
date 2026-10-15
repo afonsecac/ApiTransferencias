@@ -14,6 +14,7 @@ use App\Market\Catalogo\Domain\Slug;
 use App\Market\Catalogo\Infrastructure\Http\ChangeProductStatusDto;
 use App\Market\Catalogo\Infrastructure\Http\CreateProductDto;
 use App\Market\Catalogo\Infrastructure\Http\ProductController;
+use App\Market\Catalogo\Infrastructure\Http\SetProductRelevanceDto;
 use App\Market\Catalogo\Infrastructure\Http\UpdateProductDto;
 use App\Market\Organizacion\Infrastructure\Http\CostCenterDto;
 use App\Market\Organizacion\Infrastructure\Http\CreateOrgUnitDto;
@@ -635,5 +636,62 @@ final class ProductFunctionalTest extends ProviderFunctionalTestCase
         $connection->executeStatement('DELETE FROM market_product WHERE id = ?', [$id]);
 
         $this->assertSame(0, (int) $connection->fetchOne('SELECT count(*) FROM market_product_category WHERE product_id = ?', [$id]));
+    }
+
+    public function testARelevanceMarkIsSavedReturnedAndFilterable(): void
+    {
+        $this->admin();
+        $marked = $this->body($this->controller()->create($this->createDto('ARROZ-1')))['id'];
+        $this->controller()->create($this->createDto('ARROZ-2'));
+        $today = (new \DateTimeImmutable('today'))->format('Y-m-d');
+        $tomorrow = (new \DateTimeImmutable('tomorrow'))->format('Y-m-d');
+
+        $response = $this->controller()->setRelevance($marked, new SetProductRelevanceDto(2, $today, $tomorrow));
+
+        $this->assertSame(Response::HTTP_OK, $response->getStatusCode());
+        $this->assertSame(['level' => 2, 'from' => $today, 'until' => $tomorrow, 'active' => true], $this->body($response)['relevance']);
+        $this->assertSame(
+            ['level' => 2, 'from' => $today, 'until' => $tomorrow, 'active' => true],
+            $this->body($this->controller()->get($marked, new Request()))['relevance'],
+        );
+        $only = $this->body($this->controller()->list(new Request(['relevant' => '1'])));
+        $this->assertSame(1, $only['total']);
+        $this->assertSame('ARROZ-1', $only['items'][0]['sku']);
+        $this->assertSame(2, $this->body($this->controller()->list(new Request()))['total']);
+    }
+
+    public function testAnExpiredRelevanceIsKeptButNotListedAsRelevant(): void
+    {
+        $this->admin();
+        $id = $this->body($this->controller()->create($this->createDto('ARROZ-1')))['id'];
+
+        $this->controller()->setRelevance($id, new SetProductRelevanceDto(3, '2020-01-01', '2020-01-31'));
+
+        $this->assertSame(0, $this->body($this->controller()->list(new Request(['relevant' => '1'])))['total']);
+        $this->assertFalse($this->body($this->controller()->get($id, new Request()))['relevance']['active']);
+    }
+
+    public function testRelevanceIsRemovedWithLevelZero(): void
+    {
+        $this->admin();
+        $id = $this->body($this->controller()->create($this->createDto('ARROZ-1')))['id'];
+        $this->controller()->setRelevance($id, new SetProductRelevanceDto(2, null, null));
+
+        $body = $this->body($this->controller()->setRelevance($id, new SetProductRelevanceDto(0, null, null)));
+
+        $this->assertSame(['level' => 0, 'from' => null, 'until' => null, 'active' => false], $body['relevance']);
+    }
+
+    public function testAnInvalidRelevanceAnswersUnprocessableEntityAndAnUnknownProductNotFound(): void
+    {
+        $this->admin();
+        $id = $this->body($this->controller()->create($this->createDto('ARROZ-1')))['id'];
+
+        $invalid = $this->controller()->setRelevance($id, new SetProductRelevanceDto(2, '2026-10-31', '2026-10-12'));
+        $unknown = $this->controller()->setRelevance(987654, new SetProductRelevanceDto(1, null, null));
+
+        $this->assertSame(Response::HTTP_UNPROCESSABLE_ENTITY, $invalid->getStatusCode());
+        $this->assertSame('INVALID_PRODUCT', $this->body($invalid)['error']['code']);
+        $this->assertSame(Response::HTTP_NOT_FOUND, $unknown->getStatusCode());
     }
 }

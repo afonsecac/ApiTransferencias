@@ -15,6 +15,7 @@ use App\Market\Catalogo\Domain\ProductSpec;
 use App\Market\Catalogo\Domain\ProductStatus;
 use App\Market\Catalogo\Domain\ProductTexts;
 use App\Market\Catalogo\Domain\Quantity;
+use App\Market\Catalogo\Domain\Relevance;
 use App\Market\Catalogo\Domain\Sku;
 use PHPUnit\Framework\TestCase;
 
@@ -191,5 +192,32 @@ final class ProductTest extends TestCase
         $product->publish();
 
         $this->assertTrue($product->isPublished());
+    }
+
+    public function testItIsBornWithoutRelevance(): void
+    {
+        $product = $this->product();
+
+        $this->assertSame(0, $product->relevance()->level());
+        $this->assertFalse($product->isRelevantOn(new \DateTimeImmutable('2026-10-15')));
+    }
+
+    public function testItIsRelevantOnlyWhileItsMarkIsInForce(): void
+    {
+        $product = $this->product();
+        $product->setRelevance(Relevance::of(2, new \DateTimeImmutable('2026-10-12'), new \DateTimeImmutable('2026-10-31')));
+
+        $this->assertSame(2, $product->relevance()->level());
+        $this->assertTrue($product->isRelevantOn(new \DateTimeImmutable('2026-10-15')));
+        $this->assertFalse($product->isRelevantOn(new \DateTimeImmutable('2026-11-02')));
+    }
+
+    public function testRelevanceCanBeRemoved(): void
+    {
+        $product = $this->product();
+        $product->setRelevance(Relevance::of(3, null, null));
+        $product->setRelevance(Relevance::none());
+
+        $this->assertFalse($product->isRelevantOn(new \DateTimeImmutable('2026-10-15')));
     }
 }

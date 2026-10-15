@@ -37,6 +37,18 @@ final class DoctrineProductRepository implements ProductRepository
         return $product;
     }
 
+    public function findByIds(array $ids): array
+    {
+        if ($ids === []) {
+            return [];
+        }
+        /** @var list<Product> $products */
+        $products = $this->em->getRepository(Product::class)->findBy(['id' => $ids], ['id' => 'ASC']);
+        $this->loadCategories($products);
+
+        return $products;
+    }
+
     public function search(ProductFilter $filter, ?int $limit = null, int $offset = 0): array
     {
         $qb = $this->filtered($filter)->select('p')->orderBy('p.sku', 'ASC');
@@ -72,6 +84,12 @@ final class DoctrineProductRepository implements ProductRepository
         }
         if ($filter->brandId !== null) {
             $qb->andWhere('p.brandId = :brand')->setParameter('brand', $filter->brandId);
+        }
+        if ($filter->relevantOn !== null) {
+            $qb->andWhere('p.relevanceLevel > 0')
+                ->andWhere('p.relevanceFrom IS NULL OR p.relevanceFrom <= :day')
+                ->andWhere('p.relevanceUntil IS NULL OR p.relevanceUntil >= :day')
+                ->setParameter('day', $filter->relevantOn->setTime(0, 0), 'date_immutable');
         }
         if ($filter->categoryIds !== []) {
             // La tabla de unión no es una entidad: los ids de los productos de esas categorías se buscan en SQL.

@@ -35,6 +35,7 @@ class CatalogPackageVisibilityResolver
         private readonly CommunicationPackageProviderProductRepository $bindingRepo,
         private readonly BenefitOperationResolver $benefitResolver,
         private readonly ClientServiceProviderCoverageResolver $coverageResolver,
+        private readonly ?MarketPackageEnricher $marketEnricher = null,
     ) {
     }
 
@@ -51,7 +52,7 @@ class CatalogPackageVisibilityResolver
             return null;
         }
 
-        if ($this->bindingRepo->findAllForPackage($package) === []) {
+        if (!$package->isMarket() && $this->bindingRepo->findAllForPackage($package) === []) {
             return null;
         }
 
@@ -62,6 +63,7 @@ class CatalogPackageVisibilityResolver
         // Resuelve `operation` (MULTIPLY/ADD/SET) en vivo — nunca se
         // persiste, ver BenefitOperationResolver.
         $package->setBenefits($this->benefitResolver->resolve($package));
+        $this->marketEnricher?->enrich([$package], $now);
 
         return $package;
     }

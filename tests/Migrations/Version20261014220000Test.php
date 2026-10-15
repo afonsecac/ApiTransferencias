@@ -35,6 +35,10 @@ class Version20261014220000Test extends ProviderFunctionalTestCase
         // La base de pruebas solo trae el esquema: se siembra el estado anterior (pantallas sueltas bajo «Configuración
         // del sistema», cada una con su permiso). Todo dentro de la transacción del test.
         $connection = $this->em->getConnection();
+        // Las pantallas que otras migraciones posteriores cuelgan de estos contenedores (COMR-275) no son parte de este estado
+        // anterior, y le impedirían a la reversa borrarlos.
+        $connection->executeStatement("DELETE FROM user_permission WHERE item_id IN (SELECT id FROM navigation_item WHERE title = 'menu.apps.market-buyer-catalog.title')");
+        $connection->executeStatement("DELETE FROM navigation_item WHERE title = 'menu.apps.market-buyer-catalog.title'");
         $connection->executeStatement(<<<'SQL'
             INSERT INTO navigation_item (id, parent_id, title, type, icon, link, is_active, created_at, updated_at, order_value)
             VALUES (nextval('navigation_item_id_seq'), NULL, 'menu.apps.sys-config.title', 'collapsable', 'heroicons_outline:cog', NULL, TRUE, NOW(), NOW(), '00120')

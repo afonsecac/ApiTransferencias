@@ -8,9 +8,9 @@ entornos corren en VPS independientes con Docker Compose detrás de Traefik
 
 | | Staging | Producción |
 |---|---|---|
-| Rama | `develop` | `master` |
+| Rama de origen | `staging` (release candidate `vX.Y.Z-rc.N`) | `master`, pero solo despliega al publicar un release estable `vX.Y.Z` |
 | Dominio API | `staging-api.comremit.com` | `api.prod.comremit.com` (+ alias `api-tx.sendmundo.com`) |
-| Deploy automático | `.github/workflows/deploy-staging.yaml` (push a `develop`) | `.github/workflows/deploy-prod.yaml` (push a `master`) |
+| Deploy automático | `.github/workflows/deploy-staging.yaml` (push a `staging`) | `.github/workflows/deploy-prod.yaml` (release publicado; lo lanza `.github/workflows/release.yaml`) |
 | Base de datos | `postgres:18-alpine`, 1 réplica | `postgres:18-alpine`, 1 réplica |
 | Workers | 1 contenedor (`worker`) consumiendo todas las colas | 7 contenedores, uno por cola (`worker-notifications`, `worker-clients`, `worker-packages`, `worker-check-status`, `worker-balance`, `worker-events`, `worker-scheduler`) |
 | Extra | `mailcatcher` (captura correo, no envía real) | — (SMTP real vía `MAILER_DSN`) |
@@ -108,11 +108,27 @@ mailcatcher en staging).
 
 ### 4.1 Automático (recomendado)
 
-Un `git push` a `develop` (staging) o `master` (producción) dispara el
-workflow correspondiente, que por SSH:
+**Flujo de ramas y despliegues.** Fusionar en `develop` o en `master` **no
+despliega nada**. Solo despliegan dos eventos:
+
+1. **Staging**: un push a la rama protegida `staging` (se le llega con un PR
+   `develop → staging`). El workflow `Deploy Staging` crea primero el *release
+   candidate* (tag `vX.Y.Z-rc.N` y pre-release de GitHub, con la versión que
+   saldría por Conventional Commits desde el último release estable) y lo
+   despliega en staging.
+2. **Producción**: un release estable `vX.Y.Z`. Se promueve `staging → master`
+   (PR) y se lanza a mano el workflow `Release` (*Actions › Release › Run
+   workflow*): toma el último RC (o el indicado), comprueba que su commit ya
+   está en `master`, crea el tag y el release sobre **ese** commit y lanza
+   `Deploy Production` con el tag. Un release publicado a mano en GitHub sobre
+   un commit de `master` también lo despliega; un pre-release (`-rc.N`) nunca.
+   `Deploy Production` también se puede lanzar a mano con el tag
+   (*Actions › Deploy Production › Run workflow*).
+
+Cada despliegue, por SSH (staging: runner self-hosted y `rsync`):
 
 1. Backup de la base de datos (`pg_dump` comprimido en `backups/<env>/`).
-2. `git fetch` + `checkout` + `pull` de la rama del entorno.
+2. En producción, `git fetch --tags` + `checkout` del tag del release (queda en *detached HEAD*); en staging, `rsync` del commit del RC.
 3. `docker compose build` (imágenes `php-fpm`/`nginx`).
 4. **Solo en producción**: levanta `database`+`rabbitmq` con `--wait` y corre
    las migraciones *antes* de recrear la app, para no dejar una ventana con
@@ -140,8 +156,9 @@ workflow correspondiente, que por SSH:
 9. Publica el resultado como *commit status* (`deploy/staging` /
    `deploy/production`) en GitHub.
 
-No hace falta ejecutar nada a mano: basta con que el push a la rama
-correspondiente pase la CI (`ci.yaml`: tests, PHPStan, lint).
+Los PR hacia `develop`, `staging` y `master` pasan la CI (`ci.yaml`: tests,
+PHPStan, lint). `staging` y `master` están protegidas (solo por PR, sin
+force-push ni borrado).
 
 ### 4.2 Manual (`deploy.sh`)
 

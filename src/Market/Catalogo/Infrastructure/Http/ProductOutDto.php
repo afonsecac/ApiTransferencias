@@ -23,6 +23,7 @@ class ProductOutDto
      * @param array{kind: string, unit: string}|null $deliveryBasis null en un producto con valor
      * @param array{kind: string, currency: string, min: string, max: string|null}|null $value solo en un producto con valor (digital)
      * @param array{id: int, slug: string, name: string, isActive: bool}|null $brand
+     * @param array{level: int, from: string|null, until: string|null, active: bool} $relevance active = en vigor hoy
      * @param list<array{id: int, slug: string, nameEs: string, nameEn: string|null, path: string, isActive: bool}> $categories
      */
     public function __construct(
@@ -43,6 +44,7 @@ class ProductOutDto
         public ?string $barcode,
         public ?array $brand,
         public array $categories,
+        public array $relevance,
         public ?float $totalWeightG,
         public ?float $totalVolumeMl,
         public string $createdAt,
@@ -99,6 +101,12 @@ class ProductOutDto
                 'path' => $details->categoryPaths[(int) $category->id()] ?? $category->nameEs(),
                 'isActive' => $category->isActive(),
             ], $details->categories),
+            [
+                'level' => $product->relevance()->level(),
+                'from' => $product->relevance()->from()?->format('Y-m-d'),
+                'until' => $product->relevance()->until()?->format('Y-m-d'),
+                'active' => $product->isRelevantOn(new \DateTimeImmutable('today')),
+            ],
             $product->totalWeightG(),
             $product->totalVolumeMl(),
             $product->createdAt()->format(DATE_ATOM),

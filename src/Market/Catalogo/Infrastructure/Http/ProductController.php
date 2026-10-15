@@ -10,6 +10,7 @@ use App\Market\Catalogo\Application\GetProduct;
 use App\Market\Catalogo\Application\ListProducts;
 use App\Market\Catalogo\Application\ProductDetails;
 use App\Market\Catalogo\Application\ProductSpecInput;
+use App\Market\Catalogo\Application\SetProductRelevance;
 use App\Market\Catalogo\Application\UpdateProduct;
 use App\Market\Catalogo\Domain\InvalidProduct;
 use App\Market\Catalogo\Domain\InvalidProductTransition;
@@ -43,11 +44,12 @@ final class ProductController
         private readonly CreateProduct $createProduct,
         private readonly UpdateProduct $updateProduct,
         private readonly ChangeProductStatus $changeStatus,
+        private readonly SetProductRelevance $setRelevance,
     ) {
     }
 
     #[Route('', name: 'market_products_list', methods: ['GET'])]
-    #[DashboardEndpoint(summary: 'Listar los productos, paginados (filtros: q, status, seller, brand, category, subcategories, page, perPage, lang)', tag: 'Market', responseDto: ProductPageOutDto::class)]
+    #[DashboardEndpoint(summary: 'Listar los productos, paginados (filtros: q, status, seller, brand, category, subcategories, relevant, page, perPage, lang)', tag: 'Market', responseDto: ProductPageOutDto::class)]
     public function list(Request $request): JsonResponse
     {
         $query = $request->query->get('q');
@@ -60,6 +62,7 @@ final class ProductController
             $request->query->get('subcategories', '1') !== '0',
             $this->id($request, 'page') ?? 1,
             $this->id($request, 'perPage') ?? 25,
+            $request->query->get('relevant') === '1' ? new \DateTimeImmutable('today') : null,
         );
 
         return new JsonResponse(ProductPageOutDto::from($page, $this->language($request)));
@@ -95,6 +98,13 @@ final class ProductController
     public function changeStatus(int $id, ChangeProductStatusDto $dto): JsonResponse
     {
         return $this->respond(fn () => ($this->changeStatus)($id, ProductStatus::from((string) $dto->getStatus())));
+    }
+
+    #[Route('/{id}/relevance', name: 'market_products_relevance', methods: ['PUT'], requirements: ['id' => '\d+'])]
+    #[DashboardEndpoint(summary: 'Marcar un producto como relevante en las búsquedas (nivel 0 a 3, con vigencia opcional) o quitarle la marca (nivel 0)', tag: 'Market', requestDto: SetProductRelevanceDto::class, responseDto: ProductOutDto::class)]
+    public function setRelevance(int $id, SetProductRelevanceDto $dto): JsonResponse
+    {
+        return $this->respond(fn () => ($this->setRelevance)($id, (int) $dto->getLevel(), $dto->getFrom(), $dto->getUntil()));
     }
 
     private function input(ProductSpecDto $dto): ProductSpecInput

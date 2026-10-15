@@ -34,10 +34,11 @@ final class ListProducts
         bool $withSubcategories = true,
         int $page = 1,
         int $perPage = 25,
+        ?\DateTimeImmutable $relevantOn = null,
     ): ProductPage {
         $page = max(1, $page);
         $perPage = min(self::MAX_PER_PAGE, max(1, $perPage));
-        $filter = new ProductFilter($query, $status, $sellerId, $brandId, $this->categoryIds($categoryId, $withSubcategories));
+        $filter = new ProductFilter($query, $status, $sellerId, $brandId, $this->categoryIds($categoryId, $withSubcategories), $relevantOn);
 
         return new ProductPage(
             $this->assembler->many($this->products->search($filter, $perPage, ($page - 1) * $perPage)),

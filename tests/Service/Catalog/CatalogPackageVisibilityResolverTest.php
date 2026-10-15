@@ -8,6 +8,7 @@ use App\Entity\CommunicationPackageProviderProduct;
 use App\Repository\CommunicationPackageProviderProductRepository;
 use App\Service\Catalog\CatalogPackageVisibilityResolver;
 use App\Service\Catalog\ClientServiceProviderCoverageResolver;
+use App\Service\Catalog\MarketPackageEnricher;
 use App\Service\Pricing\BenefitOperationResolver;
 use App\Service\Pricing\PackageCatalogResolver;
 use App\Service\Pricing\PackageOfferSourceEnum;
@@ -120,5 +121,41 @@ class CatalogPackageVisibilityResolverTest extends TestCase
         );
 
         $this->assertSame($package, $this->resolver->visibleFor($package, $account));
+    }
+
+    public function testAMarketPackageIsVisibleWithoutAnyProviderBinding(): void
+    {
+        $package = $this->package()->setMarketProductId(55);
+        $account = $this->createMock(Account::class);
+        $this->catalogResolver->method('offerFor')->willReturn(new ResolvedPackageOffer($package, 5.0, 'USD', PackageOfferSourceEnum::DEFAULT_CONTRACT));
+        $this->bindingRepo = $this->createMock(CommunicationPackageProviderProductRepository::class);
+        $this->bindingRepo->method('findAllForPackage')->willReturn([]);
+        $this->resolver = new CatalogPackageVisibilityResolver($this->catalogResolver, $this->bindingRepo, $this->benefitResolver, $this->coverageResolver);
+
+        $this->assertSame($package, $this->resolver->visibleFor($package, $account));
+    }
+
+    public function testItEnrichesTheVisiblePackageWithItsMarketData(): void
+    {
+        $package = $this->package()->setMarketProductId(55);
+        $account = $this->createMock(Account::class);
+        $this->catalogResolver->method('offerFor')->willReturn(new ResolvedPackageOffer($package, 5.0, 'USD', PackageOfferSourceEnum::DEFAULT_CONTRACT));
+        $enricher = $this->createMock(MarketPackageEnricher::class);
+        $enricher->expects($this->once())->method('enrich')->with([$package]);
+        $this->resolver = new CatalogPackageVisibilityResolver($this->catalogResolver, $this->bindingRepo, $this->benefitResolver, $this->coverageResolver, $enricher);
+
+        $this->resolver->visibleFor($package, $account);
+    }
+
+    public function testItDoesNotEnrichAPackageThatIsNotVisible(): void
+    {
+        $package = $this->package()->setMarketProductId(55);
+        $account = $this->createMock(Account::class);
+        $this->catalogResolver->method('offerFor')->willReturn(null);
+        $enricher = $this->createMock(MarketPackageEnricher::class);
+        $enricher->expects($this->never())->method('enrich');
+        $this->resolver = new CatalogPackageVisibilityResolver($this->catalogResolver, $this->bindingRepo, $this->benefitResolver, $this->coverageResolver, $enricher);
+
+        $this->assertNull($this->resolver->visibleFor($package, $account));
     }
 }

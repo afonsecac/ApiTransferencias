@@ -33,6 +33,11 @@ final class InMemoryProductRepository implements ProductRepository
         return null;
     }
 
+    public function findByIds(array $ids): array
+    {
+        return array_values(array_filter($this->products, static fn (Product $p): bool => in_array($p->id(), $ids, true)));
+    }
+
     public function search(ProductFilter $filter, ?int $limit = null, int $offset = 0): array
     {
         $found = $this->matching($filter);
@@ -62,6 +67,9 @@ final class InMemoryProductRepository implements ProductRepository
                 return false;
             }
             if ($filter->categoryIds !== [] && array_intersect($filter->categoryIds, $p->categoryIds()) === []) {
+                return false;
+            }
+            if ($filter->relevantOn !== null && !$p->isRelevantOn($filter->relevantOn)) {
                 return false;
             }
             if ($query === null || $query === '') {
