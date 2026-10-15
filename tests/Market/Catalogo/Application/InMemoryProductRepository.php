@@ -33,6 +33,11 @@ final class InMemoryProductRepository implements ProductRepository
         return null;
     }
 
+    public function findByIds(array $ids): array
+    {
+        return array_values(array_filter($this->products, static fn (Product $p): bool => in_array($p->id(), $ids, true)));
+    }
+
     public function search(ProductFilter $filter, ?int $limit = null, int $offset = 0): array
     {
         $found = $this->matching($filter);

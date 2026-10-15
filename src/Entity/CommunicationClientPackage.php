@@ -16,6 +16,7 @@ use App\State\UpcomingPackagesProvider;
 use Doctrine\Common\Collections\ArrayCollection;
 use Doctrine\Common\Collections\Collection;
 use Doctrine\ORM\Mapping as ORM;
+use Symfony\Component\Serializer\Attribute\Context;
 use Symfony\Component\Serializer\Attribute\Groups;
 use Symfony\Component\Validator\Constraints as Assert;
 
@@ -274,6 +275,45 @@ class CommunicationClientPackage
     #[Groups(['comPackage:read'])]
     private ?array $validity = null;
 
+    /**
+     * Datos propios del mercado (COMR-275): contenido, peso, imágenes, relevancia vigente… Solo documentación: esta clase ya no se sirve (la URI
+     * histórica delega en CommunicationPackage), pero su esquema es el que muestra el Swagger de /communication/packages.
+     *
+     * @var array<string, mixed>|null
+     */
+    #[Groups(['comPackage:read'])]
+    #[Context(normalizationContext: ['skip_null_values' => true])]
+    #[ApiProperty(
+        required: false,
+        openapiContext: [
+            'type' => 'object',
+            'nullable' => false,
+            'description' => 'Opcional. Solo en los paquetes del mercado; cada dato aparece únicamente si tiene valor.',
+            'properties' => [
+                'sku' => ['type' => 'string'],
+                'texts' => ['type' => 'object', 'description' => 'Nombre y descripción por idioma (es, en).'],
+                'content' => ['type' => 'object', 'properties' => ['value' => ['type' => 'number'], 'unit' => ['type' => 'string']]],
+                'unitWeight' => ['type' => 'object', 'properties' => ['value' => ['type' => 'number'], 'unit' => ['type' => 'string']]],
+                'unitVolume' => ['type' => 'object', 'properties' => ['value' => ['type' => 'number'], 'unit' => ['type' => 'string']]],
+                'weight' => ['type' => 'object', 'properties' => ['g' => ['type' => 'number'], 'kg' => ['type' => 'number'], 'lb' => ['type' => 'number']]],
+                'pricePerLb' => ['type' => 'number', 'description' => 'Precio por libra, si el producto tiene peso.'],
+                'volume' => ['type' => 'number', 'description' => 'Volumen total en ml.'],
+                'dimensions' => ['type' => 'object', 'properties' => ['lengthMm' => ['type' => 'number'], 'widthMm' => ['type' => 'number'], 'heightMm' => ['type' => 'number']]],
+                'barcode' => ['type' => 'string'],
+                'brand' => ['type' => 'string'],
+                'categories' => ['type' => 'array', 'items' => ['type' => 'string']],
+                'images' => ['type' => 'array', 'items' => ['type' => 'object', 'properties' => [
+                    'urls' => ['type' => 'object', 'description' => 'URL por tamaño.'],
+                    'kind' => ['type' => 'string'],
+                    'alt' => ['type' => 'object'],
+                    'isReference' => ['type' => 'boolean'],
+                ]]],
+                'relevance' => ['type' => 'object', 'description' => 'Solo mientras la marca está en vigor.', 'properties' => ['level' => ['type' => 'integer'], 'from' => ['type' => 'string'], 'until' => ['type' => 'string']]],
+            ],
+        ]
+    )]
+    private ?array $market = null;
+
     #[ORM\Column(length: 500, nullable: true)]
     #[Groups(['comPackage:read'])]
     #[ApiProperty]
@@ -354,6 +394,14 @@ class CommunicationClientPackage
         $this->validity = [];
         $this->promotionItems = new ArrayCollection();
         $this->promotions = [];
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    public function getMarket(): ?array
+    {
+        return $this->market;
     }
 
     public function getId(): ?int

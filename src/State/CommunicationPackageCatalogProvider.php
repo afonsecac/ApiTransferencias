@@ -9,6 +9,7 @@ use App\Entity\Account;
 use App\Entity\CommunicationPackage;
 use App\Repository\CommunicationPackageProviderProductRepository;
 use App\Service\Catalog\ClientServiceProviderCoverageResolver;
+use App\Service\Catalog\MarketPackageEnricher;
 use App\Service\Pricing\BenefitOperationResolver;
 use App\Service\Pricing\PackageCatalogResolver;
 use App\Service\Pricing\ResolvedPackageOffer;
@@ -35,6 +36,9 @@ use Symfony\Component\HttpFoundation\Request;
  * dashboard (preview(), coverage()) sigue usando PackageCatalogResolver sin
  * este recorte, porque ahí el admin necesita ver el paquete PARA vincularlo.
  *
+ * Los paquetes del mercado (COMR-275) son la otra excepción: su proveedor es el propio (OWN) y no tienen producto de proveedor,
+ * así que cuentan como vinculados (CommunicationPackage::isMarket()) y MarketPackageEnricher les añade sus datos propios.
+ *
  * Mismo criterio para ClientServiceProviderCoverageResolver: un cliente que
  * ya tiene routing configurado (ClientProviderRouting) solo ve paquetes de
  * los service/subservice que tiene explícitamente cubiertos — ver docblock
@@ -57,6 +61,7 @@ final class CommunicationPackageCatalogProvider implements ProviderInterface
         private readonly Security $security,
         private readonly BenefitOperationResolver $benefitResolver,
         private readonly ClientServiceProviderCoverageResolver $coverageResolver,
+        private readonly ?MarketPackageEnricher $marketEnricher = null,
     ) {
     }
 
@@ -83,7 +88,7 @@ final class CommunicationPackageCatalogProvider implements ProviderInterface
 
         $visible = array_values(array_filter(
             $packages,
-            fn (CommunicationPackage $p) => in_array($p->getId(), $boundIds, true)
+            fn (CommunicationPackage $p) => (in_array($p->getId(), $boundIds, true) || $p->isMarket())
                 && $p->isActiveAt($now)
                 && $this->coverageResolver->isCoveredFor($tenant, $p)
         ));
@@ -101,7 +106,12 @@ final class CommunicationPackageCatalogProvider implements ProviderInterface
         $visible = $this->filterByPriceRange($visible, $request);
         $visible = $this->sort($visible, $request);
 
-        return $this->paginate($visible, $operation, $request);
+        $page = $this->paginate($visible, $operation, $request);
+
+        // Los datos propios del mercado solo se leen para los paquetes de la página que se devuelve.
+        $this->marketEnricher?->enrich(is_array($page) ? $page : iterator_to_array($page, false), $now);
+
+        return $page;
     }
 
     /**

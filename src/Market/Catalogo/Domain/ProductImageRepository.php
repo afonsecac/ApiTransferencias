@@ -11,6 +11,13 @@ interface ProductImageRepository
      */
     public function findByProduct(int $productId): array;
 
+    /**
+     * @param list<int> $productIds
+     *
+     * @return array<int, list<ProductImage>> por id de producto, cada lista por posición; solo los que tienen imágenes
+     */
+    public function findByProducts(array $productIds): array;
+
     public function save(ProductImage $image): void;
 
     /**
