@@ -95,6 +95,7 @@ services:
     App\Market\Catalogo\Domain\ProductImageRepository: '@App\Market\Catalogo\Infrastructure\Persistence\DoctrineProductImageRepository'
     App\Market\Catalogo\Domain\ImageSettings: '@App\Market\Catalogo\Infrastructure\Persistence\SysConfigImageSettings'
     App\Market\Catalogo\Domain\MeasureSettings: '@App\Market\Catalogo\Infrastructure\Persistence\SysConfigMeasureSettings'
+    App\Market\Catalogo\Domain\MeasureSettingsStore: '@App\Market\Catalogo\Infrastructure\Persistence\SysConfigMeasureSettingsStore'
     App\Market\Catalogo\Domain\ImageStore: '@App\Market\Catalogo\Infrastructure\Storage\GdImageStore'
 
     # Imágenes de los productos (COMR-274): un directorio que sirve nginx en /market-images/ (un volumen en los VPS).

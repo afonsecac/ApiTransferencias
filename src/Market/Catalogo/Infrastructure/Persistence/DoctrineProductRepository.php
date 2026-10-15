@@ -59,6 +59,11 @@ final class DoctrineProductRepository implements ProductRepository
         return $byCategory;
     }
 
+    public function hasPhysicalProducts(): bool
+    {
+        return $this->em->getConnection()->fetchOne('SELECT 1 FROM market_product WHERE content_base IS NOT NULL LIMIT 1') !== false;
+    }
+
     public function countsByBrand(): array
     {
         return $this->countsBy('brand_id');

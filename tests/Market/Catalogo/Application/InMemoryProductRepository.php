@@ -50,6 +50,17 @@ final class InMemoryProductRepository implements ProductRepository
         return $byCategory;
     }
 
+    public function hasPhysicalProducts(): bool
+    {
+        foreach ($this->products as $product) {
+            if ($product->spec()->content !== null) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     public function countsByBrand(): array
     {
         $counts = [];
