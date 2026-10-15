@@ -121,6 +121,29 @@ final class ProductFunctionalTest extends ProviderFunctionalTestCase
         return (int) $brand->id();
     }
 
+    public function testTheDimensionUnitIsRememberedAndTheDimensionsStayInMillimeters(): void
+    {
+        $this->admin();
+
+        $created = $this->body($this->controller()->create($this->createDto('CAJA-IN', [
+            'lengthMm' => 254.0, 'widthMm' => 127.0, 'heightMm' => 50.8, 'dimensionsUnit' => 'in',
+        ])));
+        $again = $this->body($this->controller()->get($created['id'], new Request()));
+
+        $this->assertSame('in', $again['dimensions']['unit']);
+        $this->assertEquals(254.0, $again['dimensions']['lengthMm']);
+        $this->assertEqualsWithDelta(1638.706, $again['dimensions']['volumeCm3'], 0.001, 'El volumen no depende de la unidad.');
+    }
+
+    public function testAnUnknownDimensionUnitIsRejectedByTheApi(): void
+    {
+        $this->admin();
+
+        $response = $this->controller()->create($this->createDto('CAJA-YD', ['lengthMm' => 100.0, 'widthMm' => 50.0, 'heightMm' => 20.0, 'dimensionsUnit' => 'yd']));
+
+        $this->assertSame(Response::HTTP_UNPROCESSABLE_ENTITY, $response->getStatusCode(), (string) $response->getContent());
+    }
+
     public function testItAcceptsTheNewUnitsAndStoresThemInTheBase(): void
     {
         $this->admin();

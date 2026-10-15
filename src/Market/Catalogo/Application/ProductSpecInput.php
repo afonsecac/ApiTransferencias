@@ -7,6 +7,7 @@ namespace App\Market\Catalogo\Application;
 use App\Market\Catalogo\Domain\Amount;
 use App\Market\Catalogo\Domain\Classification;
 use App\Market\Catalogo\Domain\DeliveryBasis;
+use App\Market\Catalogo\Domain\DimensionUnit;
 use App\Market\Catalogo\Domain\Dimensions;
 use App\Market\Catalogo\Domain\InvalidProduct;
 use App\Market\Catalogo\Domain\MeasureKind;
@@ -49,6 +50,8 @@ final readonly class ProductSpecInput
         public ?int $brandId = null,
         /** @var list<int> */
         public array $categoryIds = [],
+        /** La unidad en que se escribieron las dimensiones (mm, cm, m, in, ft); las medidas siempre llegan en milímetros. */
+        public ?string $dimensionsUnit = null,
     ) {
     }
 
@@ -133,6 +136,10 @@ final readonly class ProductSpecInput
             throw new InvalidProduct('Las dimensiones se indican las tres (largo, ancho y alto) o ninguna.');
         }
 
-        return Dimensions::of((float) $this->lengthMm, (float) $this->widthMm, (float) $this->heightMm);
+        $unit = $this->dimensionsUnit === null || $this->dimensionsUnit === ''
+            ? DimensionUnit::MM
+            : (DimensionUnit::tryFrom($this->dimensionsUnit) ?? throw new InvalidProduct(sprintf('La unidad de dimensiones "%s" no es válida.', $this->dimensionsUnit)));
+
+        return Dimensions::of((float) $this->lengthMm, (float) $this->widthMm, (float) $this->heightMm, $unit);
     }
 }

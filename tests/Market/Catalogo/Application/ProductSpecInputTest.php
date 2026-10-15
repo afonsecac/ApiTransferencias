@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Tests\Market\Catalogo\Application;
 
 use App\Market\Catalogo\Application\ProductSpecInput;
+use App\Market\Catalogo\Domain\DimensionUnit;
 use App\Market\Catalogo\Domain\InvalidProduct;
 use App\Market\Catalogo\Domain\MeasureUnit;
 use PHPUnit\Framework\TestCase;
@@ -85,6 +86,23 @@ final class ProductSpecInputTest extends TestCase
         ])->toSpec();
 
         $this->assertEqualsWithDelta(3.96, (float) $spec->totalWeight(), 0.0000001);
+    }
+
+    public function testTheDimensionsRememberTheUnitTheyWereWrittenIn(): void
+    {
+        $inches = $this->input(['lengthMm' => 254.0, 'widthMm' => 127.0, 'heightMm' => 50.8, 'dimensionsUnit' => 'in'])->toSpec();
+        $default = $this->input(['lengthMm' => 100.0, 'widthMm' => 50.0, 'heightMm' => 20.0])->toSpec();
+
+        $this->assertSame(DimensionUnit::IN, $inches->dimensions?->unit);
+        $this->assertSame(254.0, $inches->dimensions?->lengthMm, 'Siempre se guarda en milímetros.');
+        $this->assertSame(DimensionUnit::MM, $default->dimensions?->unit);
+    }
+
+    public function testAnUnknownDimensionUnitIsRejected(): void
+    {
+        $this->expectException(InvalidProduct::class);
+
+        $this->input(['lengthMm' => 100.0, 'widthMm' => 50.0, 'heightMm' => 20.0, 'dimensionsUnit' => 'yd'])->toSpec();
     }
 
     public function testItBuildsTheDimensionsOnlyWhenAllThreeComeTogether(): void

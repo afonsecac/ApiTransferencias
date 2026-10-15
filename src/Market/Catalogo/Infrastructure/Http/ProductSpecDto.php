@@ -64,6 +64,9 @@ abstract class ProductSpecDto implements IInput
     #[Assert\Positive]
     protected ?float $heightMm;
 
+    #[Assert\Choice(choices: ['mm', 'cm', 'm', 'in', 'ft'])]
+    protected ?string $dimensionsUnit;
+
     #[Assert\Choice(choices: ['weight', 'volume'])]
     protected ?string $deliveryKind;
 
@@ -122,7 +125,9 @@ abstract class ProductSpecDto implements IInput
         ?string $valueMax = null,
         ?int $brandId = null,
         ?array $categoryIds = null,
+        ?string $dimensionsUnit = null,
     ) {
+        $this->dimensionsUnit = $dimensionsUnit;
         $this->brandId = $brandId;
         $this->categoryIds = $categoryIds;
         $this->texts = $texts;
@@ -284,6 +289,17 @@ abstract class ProductSpecDto implements IInput
     public function setDeliveryKind(?string $deliveryKind): void
     {
         $this->deliveryKind = $deliveryKind;
+    }
+
+    /** La unidad en que se escribieron el largo, el ancho y el alto (que siempre llegan en milímetros); mm por defecto. */
+    public function getDimensionsUnit(): ?string
+    {
+        return $this->dimensionsUnit;
+    }
+
+    public function setDimensionsUnit(?string $dimensionsUnit): void
+    {
+        $this->dimensionsUnit = $dimensionsUnit;
     }
 
     public function getDeliveryUnit(): ?string
