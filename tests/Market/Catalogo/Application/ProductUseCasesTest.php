@@ -179,7 +179,7 @@ final class ProductUseCasesTest extends TestCase
         ]));
 
         $this->assertSame('Refresco de cola light', $updated->product->spec()->texts->all()['es']['name']);
-        $this->assertEqualsWithDelta(330.0, $updated->product->spec()->content->baseValue(), 0.001);
+        $this->assertEqualsWithDelta(0.33, $updated->product->spec()->content->baseValue(), 0.0000001);
         $this->assertSame('COLA-330', $updated->product->sku()->value());
         $this->assertSame($this->garajito->id(), $updated->product->sellerId());
     }
@@ -195,7 +195,7 @@ final class ProductUseCasesTest extends TestCase
             $this->fail('Debió rechazar los datos');
         } catch (InvalidProduct) {
             $this->assertSame($saves, $this->products->saves);
-            $this->assertEqualsWithDelta(500.0, $this->products->findById($id)?->spec()->content->baseValue(), 0.001);
+            $this->assertEqualsWithDelta(0.5, $this->products->findById($id)?->spec()->content->baseValue(), 0.0000001);
         }
     }
 
@@ -247,7 +247,7 @@ final class ProductUseCasesTest extends TestCase
     {
         $category = $this->category('bebidas');
         $id = (int) ($this->create())('cola-330', null, $this->input(['categoryIds' => [(int) $category->id()]]))->product->id();
-        $change = new ChangeProductStatus($this->products, $this->assembler());
+        $change = new ChangeProductStatus($this->products, $this->assembler(), new InMemoryProductPackages());
 
         $this->assertSame(ProductStatus::PUBLISHED, $change($id, ProductStatus::PUBLISHED)->product->status());
         $this->assertSame(ProductStatus::WITHDRAWN, $change($id, ProductStatus::WITHDRAWN)->product->status());
@@ -258,7 +258,7 @@ final class ProductUseCasesTest extends TestCase
     {
         $category = $this->category('bebidas');
         $id = (int) ($this->create())('cola-330', null, $this->input(['categoryIds' => [(int) $category->id()]]))->product->id();
-        $change = new ChangeProductStatus($this->products, $this->assembler());
+        $change = new ChangeProductStatus($this->products, $this->assembler(), new InMemoryProductPackages());
 
         try {
             $change($id, ProductStatus::WITHDRAWN);
@@ -288,7 +288,7 @@ final class ProductUseCasesTest extends TestCase
         $category = $this->category('bebidas');
         $cola = (int) $create('cola-330', (int) $this->garajito->id(), $this->input(['categoryIds' => [(int) $category->id()]]))->product->id();
         $create('agua-500', null, $this->input(['texts' => ['es' => ['name' => 'Agua mineral']]]));
-        (new ChangeProductStatus($this->products, $this->assembler()))($cola, ProductStatus::PUBLISHED);
+        (new ChangeProductStatus($this->products, $this->assembler(), new InMemoryProductPackages()))($cola, ProductStatus::PUBLISHED);
         $list = new ListProducts($this->products, $this->assembler(), $this->categories);
         $skus = static fn ($page) => array_map(static fn ($d) => $d->product->sku()->value(), $page->items);
 
@@ -407,7 +407,7 @@ final class ProductUseCasesTest extends TestCase
 
         $this->expectException(InvalidProduct::class);
 
-        (new ChangeProductStatus($this->products, $this->assembler()))($id, ProductStatus::PUBLISHED);
+        (new ChangeProductStatus($this->products, $this->assembler(), new InMemoryProductPackages()))($id, ProductStatus::PUBLISHED);
     }
 
     public function testItListsByBrandAndByCategoryIncludingItsSubcategories(): void

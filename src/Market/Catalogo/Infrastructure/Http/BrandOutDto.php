@@ -22,6 +22,7 @@ class BrandOutDto
         public ?array $seller,
         public string $createdAt,
         public string $updatedAt,
+        public ?int $productCount = null,
     ) {
     }
 
@@ -38,6 +39,7 @@ class BrandOutDto
             $seller === null ? null : ['id' => (int) $seller->id(), 'slug' => $seller->slug()->value(), 'name' => $seller->name(), 'isPlatform' => $seller->isPlatform()],
             $brand->createdAt()->format(DATE_ATOM),
             $brand->updatedAt()->format(DATE_ATOM),
+            $details->productCount,
         );
     }
 }

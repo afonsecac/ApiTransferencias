@@ -7,6 +7,9 @@ namespace App\Market\Catalogo\Infrastructure\Http;
 use App\Entity\CommunicationPackage;
 use App\Market\Catalogo\Application\ProductDetails;
 use App\Market\Catalogo\Application\ProductDetailsAssembler;
+use App\Market\Catalogo\Domain\MeasureSettings;
+use App\Market\Catalogo\Domain\MeasureSystem;
+use App\Market\Catalogo\Domain\MeasureUnit;
 use App\Market\Catalogo\Domain\ProductImage;
 use App\Market\Catalogo\Domain\ProductImageRepository;
 use App\Market\Catalogo\Domain\ProductRepository;
@@ -21,13 +24,13 @@ use App\Service\Catalog\MarketPackageEnricher;
  */
 final class MarketPackageFacts implements MarketPackageEnricher
 {
-    private const GRAMS_PER_POUND = 453.59237;
 
     public function __construct(
         private readonly ProductRepository $products,
         private readonly ProductDetailsAssembler $assembler,
         private readonly ProductImageRepository $images,
         private readonly ImageUrls $urls,
+        private readonly MeasureSettings $measureSettings,
     ) {
     }
 
@@ -69,20 +72,23 @@ final class MarketPackageFacts implements MarketPackageEnricher
     {
         $product = $details->product;
         $spec = $product->spec();
-        $weightG = $product->totalWeightG();
+        $measures = MeasureSystem::fromSettings($this->measureSettings);
+        // El contrato público no cambia: se entrega en g, kg y lb y en ml, sea cual sea la base con que se guarda.
+        $weightKg = $product->totalWeight() === null ? null : $product->totalWeight() * $measures->weightBase->factor();
+        $volumeMl = $product->totalVolume() === null ? null : $product->totalVolume() * $measures->volumeBase->factor() / MeasureUnit::ML->factor();
         $facts = [
             'sku' => $product->sku()->value(),
             'texts' => $this->texts($spec->texts->all()),
             'content' => $spec->content === null ? null : $this->quantity($spec->content),
             'unitWeight' => $spec->unitWeight === null ? null : $this->quantity($spec->unitWeight),
             'unitVolume' => $spec->unitVolume === null ? null : $this->quantity($spec->unitVolume),
-            'weight' => $weightG === null ? null : [
-                'g' => round($weightG, 3),
-                'kg' => round($weightG / 1000, 3),
-                'lb' => round($weightG / self::GRAMS_PER_POUND, 3),
+            'weight' => $weightKg === null ? null : [
+                'g' => round($weightKg / MeasureUnit::G->factor(), 3),
+                'kg' => round($weightKg, 3),
+                'lb' => round($weightKg / MeasureUnit::LB->factor(), 3),
             ],
-            'pricePerLb' => $weightG === null || $price === null || $weightG <= 0 ? null : round($price / ($weightG / self::GRAMS_PER_POUND), 2),
-            'volumeMl' => $product->totalVolumeMl() === null ? null : round((float) $product->totalVolumeMl(), 3),
+            'pricePerLb' => $weightKg === null || $price === null || $weightKg <= 0 ? null : round($price / ($weightKg / MeasureUnit::LB->factor()), 2),
+            'volumeMl' => $volumeMl === null ? null : round($volumeMl, 3),
             'dimensions' => $spec->dimensions === null ? null : [
                 'lengthMm' => $spec->dimensions->lengthMm,
                 'widthMm' => $spec->dimensions->widthMm,

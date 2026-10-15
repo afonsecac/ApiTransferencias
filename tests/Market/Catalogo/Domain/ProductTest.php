@@ -108,7 +108,7 @@ final class ProductTest extends TestCase
         $product->update($this->spec('Refresco de cola light', 330));
 
         $this->assertSame('Refresco de cola light', $product->spec()->texts->forLanguage('es')['es']['name']);
-        $this->assertEqualsWithDelta(330.0, $product->spec()->content->baseValue(), 0.001);
+        $this->assertEqualsWithDelta(0.33, $product->spec()->content->baseValue(), 0.0000001);
         $this->assertSame('COLA-330', $product->sku()->value());
         $this->assertSame(3, $product->sellerId());
         $this->assertFalse(method_exists($product, 'changeSku'));

@@ -9,6 +9,7 @@ use App\Market\Catalogo\Domain\DeliveryBasis;
 use App\Market\Catalogo\Domain\Dimensions;
 use App\Market\Catalogo\Domain\InvalidProduct;
 use App\Market\Catalogo\Domain\MeasureKind;
+use App\Market\Catalogo\Domain\MeasureSystem;
 use App\Market\Catalogo\Domain\MeasureUnit;
 use App\Market\Catalogo\Domain\ProductSpec;
 use App\Market\Catalogo\Domain\ProductTexts;
@@ -163,9 +164,9 @@ final class ProductSpecTest extends TestCase
 
         $this->assertEqualsWithDelta(1.1, $spec->content->originalValue(), 0.0001);
         $this->assertSame(MeasureUnit::LB, $spec->content->unit());
-        $this->assertEqualsWithDelta(498.952, $spec->content->baseValue(), 0.001);
-        $this->assertEqualsWithDelta(498.952, (float) $spec->totalWeightG(), 0.001);
-        $this->assertNull($spec->totalVolumeMl());
+        $this->assertEqualsWithDelta(0.498952, $spec->content->baseValue(), 0.0000001);
+        $this->assertEqualsWithDelta(0.498952, (float) $spec->totalWeight(), 0.0000001);
+        $this->assertNull($spec->totalVolume());
     }
 
     public function testAProductByUnitsNeedsAtLeastTheWeightOrTheVolumeOfOneUnit(): void
@@ -187,16 +188,16 @@ final class ProductSpecTest extends TestCase
             DeliveryBasis::of(MeasureKind::VOLUME, MeasureUnit::L),
         );
 
-        $this->assertEqualsWithDelta(3960.0, (float) $spec->totalWeightG(), 0.001);
-        $this->assertEqualsWithDelta(3960.0, (float) $spec->totalVolumeMl(), 0.001);
+        $this->assertEqualsWithDelta(3.96, (float) $spec->totalWeight(), 0.0000001);
+        $this->assertEqualsWithDelta(3.96, (float) $spec->totalVolume(), 0.0000001);
     }
 
     public function testOnlyOneOfTheTwoReferencesIsEnough(): void
     {
         $spec = new ProductSpec($this->texts(), $this->classification(), Quantity::of(6, MeasureUnit::UNIT), Quantity::of(200, MeasureUnit::G), null, null, DeliveryBasis::of(MeasureKind::WEIGHT, MeasureUnit::G));
 
-        $this->assertEqualsWithDelta(1200.0, (float) $spec->totalWeightG(), 0.001);
-        $this->assertNull($spec->totalVolumeMl());
+        $this->assertEqualsWithDelta(1.2, (float) $spec->totalWeight(), 0.0000001);
+        $this->assertNull($spec->totalVolume());
     }
 
     public function testTheReferencesOnlyApplyToProductsByUnits(): void
@@ -225,7 +226,7 @@ final class ProductSpecTest extends TestCase
 
         // ... salvo que lleve dimensiones: el volumen sale de ellas.
         $spec = $this->weightSpec(Dimensions::of(100, 50, 20), DeliveryBasis::of(MeasureKind::VOLUME, MeasureUnit::L));
-        $this->assertEqualsWithDelta(100.0, (float) $spec->totalVolumeMl(), 0.001);
+        $this->assertEqualsWithDelta(0.1, (float) $spec->totalVolume(), 0.0000001);
     }
 
     public function testTheDimensionsOfAProductByUnitsAreThoseOfOneUnit(): void
@@ -240,7 +241,50 @@ final class ProductSpecTest extends TestCase
             DeliveryBasis::of(MeasureKind::VOLUME, MeasureUnit::ML),
         );
 
-        $this->assertEqualsWithDelta(1000.0, (float) $spec->totalVolumeMl(), 0.001);
+        $this->assertEqualsWithDelta(1.0, (float) $spec->totalVolume(), 0.0000001);
+    }
+
+    public function testAProductByTheDozenWeighsTwelveTimesItsUnitWeightPerDozen(): void
+    {
+        $spec = new ProductSpec(
+            $this->texts(),
+            $this->classification(),
+            Quantity::of(2, MeasureUnit::DOZEN),
+            Quantity::of(100, MeasureUnit::G),
+            null,
+            null,
+            DeliveryBasis::of(MeasureKind::WEIGHT, MeasureUnit::KG),
+        );
+
+        $this->assertEqualsWithDelta(24.0, $spec->content?->baseValue(), 0.0000001, 'Dos docenas son 24 unidades.');
+        $this->assertEqualsWithDelta(2.4, (float) $spec->totalWeight(), 0.0000001);
+    }
+
+    public function testATonOfRiceWeighsAThousandKilograms(): void
+    {
+        $spec = new ProductSpec($this->texts(), $this->classification(), Quantity::of(1, MeasureUnit::T), null, null, null, DeliveryBasis::of(MeasureKind::WEIGHT, MeasureUnit::T));
+
+        $this->assertEqualsWithDelta(1000.0, (float) $spec->totalWeight(), 0.0000001);
+    }
+
+    public function testTheVolumeDerivedFromTheDimensionsIsExpressedInTheConfiguredBase(): void
+    {
+        $mililiters = new MeasureSystem(MeasureUnit::G, MeasureUnit::ML);
+        $spec = new ProductSpec(
+            $this->texts(),
+            $this->classification(),
+            Quantity::of(1, MeasureUnit::KG, $mililiters),
+            null,
+            null,
+            Dimensions::of(100, 50, 20),
+            DeliveryBasis::of(MeasureKind::VOLUME, MeasureUnit::L),
+            null,
+            null,
+            $mililiters,
+        );
+
+        $this->assertEqualsWithDelta(100.0, (float) $spec->totalVolume(), 0.0000001);
+        $this->assertEqualsWithDelta(1000.0, (float) $spec->totalWeight(), 0.0000001);
     }
 
     public function testItValidatesTheBarcode(): void

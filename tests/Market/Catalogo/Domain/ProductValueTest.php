@@ -109,8 +109,8 @@ final class ProductValueTest extends TestCase
         $this->assertTrue($spec->isDigital());
         $this->assertNull($spec->content);
         $this->assertNull($spec->deliveryBasis);
-        $this->assertNull($spec->totalWeightG());
-        $this->assertNull($spec->totalVolumeMl());
+        $this->assertNull($spec->totalWeight());
+        $this->assertNull($spec->totalVolume());
         $this->assertSame('Retail', $spec->classification->subservice());
     }
 
@@ -176,8 +176,8 @@ final class ProductValueTest extends TestCase
     {
         $product = Product::create(new Sku('amazon-25'), 1, $this->valueSpec($this->fixed()));
 
-        $this->assertNull($product->totalWeightG());
-        $this->assertNull($product->totalVolumeMl());
+        $this->assertNull($product->totalWeight());
+        $this->assertNull($product->totalVolume());
     }
 
     public function testTheClassificationOfAProductCanChange(): void

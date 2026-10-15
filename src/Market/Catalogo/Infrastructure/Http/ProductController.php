@@ -19,6 +19,8 @@ use App\Market\Catalogo\Domain\InvalidProductTransition;
 use App\Market\Catalogo\Domain\ProductAlreadyExists;
 use App\Market\Catalogo\Domain\ProductBrandInvalid;
 use App\Market\Catalogo\Domain\ProductCategoryInvalid;
+use App\Market\Catalogo\Domain\MeasureSettings;
+use App\Market\Catalogo\Domain\MeasureSystem;
 use App\Market\Catalogo\Domain\ProductNotFound;
 use App\Market\Catalogo\Domain\ProductSellerInvalid;
 use App\Market\Catalogo\Domain\ProductStatus;
@@ -50,6 +52,7 @@ final class ProductController
         private readonly SetProductRelevance $setRelevance,
         private readonly SuggestSku $suggestSku,
         private readonly ImageUrls $imageUrls,
+        private readonly MeasureSettings $measureSettings,
     ) {
     }
 
@@ -70,7 +73,7 @@ final class ProductController
             $request->query->get('relevant') === '1' ? new \DateTimeImmutable('today') : null,
         );
 
-        return new JsonResponse(ProductPageOutDto::from($page, $this->language($request), $this->imageUrls));
+        return new JsonResponse(ProductPageOutDto::from($page, $this->language($request), $this->imageUrls, MeasureSystem::fromSettings($this->measureSettings)));
     }
 
     #[Route('/sku-suggestion', name: 'market_products_sku_suggestion', methods: ['GET'])]
@@ -152,6 +155,7 @@ final class ProductController
             $dto->getValueMax(),
             $dto->getBrandId(),
             $dto->getCategoryIds() ?? [],
+            $dto->getDimensionsUnit(),
         );
     }
 
@@ -175,7 +179,7 @@ final class ProductController
     private function respond(callable $action, ?string $language = null, int $status = Response::HTTP_OK): JsonResponse
     {
         try {
-            return new JsonResponse(ProductOutDto::from($action(), $language, $this->imageUrls), $status);
+            return new JsonResponse(ProductOutDto::from($action(), $language, $this->imageUrls, MeasureSystem::fromSettings($this->measureSettings)), $status);
         } catch (ProductNotFound $e) {
             return $this->error('PRODUCT_NOT_FOUND', $e->getMessage(), Response::HTTP_NOT_FOUND);
         } catch (SellerNotFound $e) {

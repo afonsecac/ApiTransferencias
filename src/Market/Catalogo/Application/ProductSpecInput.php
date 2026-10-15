@@ -7,9 +7,11 @@ namespace App\Market\Catalogo\Application;
 use App\Market\Catalogo\Domain\Amount;
 use App\Market\Catalogo\Domain\Classification;
 use App\Market\Catalogo\Domain\DeliveryBasis;
+use App\Market\Catalogo\Domain\DimensionUnit;
 use App\Market\Catalogo\Domain\Dimensions;
 use App\Market\Catalogo\Domain\InvalidProduct;
 use App\Market\Catalogo\Domain\MeasureKind;
+use App\Market\Catalogo\Domain\MeasureSystem;
 use App\Market\Catalogo\Domain\MeasureUnit;
 use App\Market\Catalogo\Domain\ProductSpec;
 use App\Market\Catalogo\Domain\ProductTexts;
@@ -48,26 +50,31 @@ final readonly class ProductSpecInput
         public ?int $brandId = null,
         /** @var list<int> */
         public array $categoryIds = [],
+        /** La unidad en que se escribieron las dimensiones (mm, cm, m, in, ft); las medidas siempre llegan en milímetros. */
+        public ?string $dimensionsUnit = null,
     ) {
     }
 
     /**
+     * @param MeasureSystem|null $system las unidades base de la configuración; sin él, las estándar (kilogramos y litros)
+     *
      * @throws InvalidProduct
      */
-    public function toSpec(): ProductSpec
+    public function toSpec(?MeasureSystem $system = null): ProductSpec
     {
         return new ProductSpec(
             ProductTexts::fromArray($this->texts),
             Classification::of($this->service, $this->subservice, $this->area),
             $this->contentValue === null && ($this->contentUnit === null || $this->contentUnit === '')
                 ? null
-                : Quantity::of((float) $this->contentValue, self::unit((string) $this->contentUnit)),
-            self::optionalQuantity($this->unitWeightValue, $this->unitWeightUnit, 'el peso por unidad'),
-            self::optionalQuantity($this->unitVolumeValue, $this->unitVolumeUnit, 'el volumen por unidad'),
+                : Quantity::of((float) $this->contentValue, self::unit((string) $this->contentUnit), $system),
+            self::optionalQuantity($this->unitWeightValue, $this->unitWeightUnit, 'el peso por unidad', $system),
+            self::optionalQuantity($this->unitVolumeValue, $this->unitVolumeUnit, 'el volumen por unidad', $system),
             $this->dimensions(),
             $this->deliveryBasis(),
             $this->barcode === null || trim($this->barcode) === '' ? null : trim($this->barcode),
             $this->value(),
+            $system,
         );
     }
 
@@ -107,7 +114,7 @@ final readonly class ProductSpecInput
         return MeasureUnit::tryFrom($code) ?? throw new InvalidProduct(sprintf('La unidad "%s" no es válida.', $code));
     }
 
-    private static function optionalQuantity(?float $value, ?string $unit, string $what): ?Quantity
+    private static function optionalQuantity(?float $value, ?string $unit, string $what, ?MeasureSystem $system): ?Quantity
     {
         if ($value === null && ($unit === null || $unit === '')) {
             return null;
@@ -116,7 +123,7 @@ final readonly class ProductSpecInput
             throw new InvalidProduct(sprintf('Para indicar %s hacen falta el valor y la unidad.', $what));
         }
 
-        return Quantity::of($value, self::unit($unit));
+        return Quantity::of($value, self::unit($unit), $system);
     }
 
     private function dimensions(): ?Dimensions
@@ -129,6 +136,10 @@ final readonly class ProductSpecInput
             throw new InvalidProduct('Las dimensiones se indican las tres (largo, ancho y alto) o ninguna.');
         }
 
-        return Dimensions::of((float) $this->lengthMm, (float) $this->widthMm, (float) $this->heightMm);
+        $unit = $this->dimensionsUnit === null || $this->dimensionsUnit === ''
+            ? DimensionUnit::MM
+            : (DimensionUnit::tryFrom($this->dimensionsUnit) ?? throw new InvalidProduct(sprintf('La unidad de dimensiones "%s" no es válida.', $this->dimensionsUnit)));
+
+        return Dimensions::of((float) $this->lengthMm, (float) $this->widthMm, (float) $this->heightMm, $unit);
     }
 }
