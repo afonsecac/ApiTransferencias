@@ -7,7 +7,8 @@ namespace App\Market\Catalogo\Infrastructure\Http;
 use App\Market\Catalogo\Application\CategoryDetails;
 
 /**
- * Respuesta de los endpoints de categorías (estructura de presentación, no es de entrada).
+ * Respuesta de los endpoints de categorías (estructura de presentación, no es de entrada). `productCount` y `totalProductCount`
+ * (los productos de la categoría y los de ella con sus subcategorías) solo vienen al listar o leer; en las demás son null.
  */
 class CategoryOutDto
 {
@@ -23,6 +24,8 @@ class CategoryOutDto
         public int $childCount,
         public string $createdAt,
         public string $updatedAt,
+        public ?int $productCount = null,
+        public ?int $totalProductCount = null,
     ) {
     }
 
@@ -42,6 +45,8 @@ class CategoryOutDto
             $details->childCount,
             $category->createdAt()->format(DATE_ATOM),
             $category->updatedAt()->format(DATE_ATOM),
+            $details->productCount,
+            $details->totalProductCount,
         );
     }
 }

@@ -38,6 +38,18 @@ final class InMemoryProductRepository implements ProductRepository
         return array_values(array_filter($this->products, static fn (Product $p): bool => in_array($p->id(), $ids, true)));
     }
 
+    public function productIdsByCategory(): array
+    {
+        $byCategory = [];
+        foreach ($this->products as $product) {
+            foreach ($product->categoryIds() as $categoryId) {
+                $byCategory[$categoryId][] = (int) $product->id();
+            }
+        }
+
+        return $byCategory;
+    }
+
     public function skusStartingWith(string $prefix): array
     {
         $prefix = strtoupper($prefix);
