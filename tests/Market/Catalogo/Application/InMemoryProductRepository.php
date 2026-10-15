@@ -64,6 +64,9 @@ final class InMemoryProductRepository implements ProductRepository
             if ($filter->categoryIds !== [] && array_intersect($filter->categoryIds, $p->categoryIds()) === []) {
                 return false;
             }
+            if ($filter->relevantOn !== null && !$p->isRelevantOn($filter->relevantOn)) {
+                return false;
+            }
             if ($query === null || $query === '') {
                 return true;
             }

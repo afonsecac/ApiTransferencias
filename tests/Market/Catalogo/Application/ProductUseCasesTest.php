@@ -10,6 +10,7 @@ use App\Market\Catalogo\Application\GetProduct;
 use App\Market\Catalogo\Application\ListProducts;
 use App\Market\Catalogo\Application\ProductDetailsAssembler;
 use App\Market\Catalogo\Application\ProductSpecInput;
+use App\Market\Catalogo\Application\SetProductRelevance;
 use App\Market\Catalogo\Application\UpdateProduct;
 use App\Market\Catalogo\Domain\Brand;
 use App\Market\Catalogo\Domain\Category;
@@ -438,5 +439,85 @@ final class ProductUseCasesTest extends TestCase
         $this->assertSame(2, $second->page);
         $this->assertSame(2, $second->perPage);
         $this->assertSame(['C-3', 'D-4'], array_map(static fn ($d) => $d->product->sku()->value(), $second->items));
+    }
+
+    public function testItSetsAndClearsTheRelevanceOfAProduct(): void
+    {
+        $id = (int) ($this->create())('cola-330', null, $this->input())->product->id();
+        $set = new SetProductRelevance($this->products, $this->assembler());
+
+        $details = $set($id, 2, '2026-10-12', '2026-10-31');
+
+        $this->assertSame(2, $details->product->relevance()->level());
+        $this->assertSame('2026-10-12', $details->product->relevance()->from()?->format('Y-m-d'));
+        $this->assertSame('2026-10-31', $details->product->relevance()->until()?->format('Y-m-d'));
+
+        $this->assertSame(0, $set($id, 0, null, null)->product->relevance()->level());
+    }
+
+    public function testRelevanceWithoutDatesHasNoLimit(): void
+    {
+        $id = (int) ($this->create())('cola-330', null, $this->input())->product->id();
+
+        $details = (new SetProductRelevance($this->products, $this->assembler()))($id, 3, null, null);
+
+        $this->assertNull($details->product->relevance()->from());
+        $this->assertNull($details->product->relevance()->until());
+    }
+
+    /**
+     * @dataProvider invalidRelevance
+     */
+    public function testAnInvalidRelevanceLeavesTheProductAsItWas(int $level, ?string $from, ?string $until): void
+    {
+        $id = (int) ($this->create())('cola-330', null, $this->input())->product->id();
+        $set = new SetProductRelevance($this->products, $this->assembler());
+        $set($id, 1, null, null);
+        $saves = $this->products->saves;
+
+        try {
+            $set($id, $level, $from, $until);
+            $this->fail('Debía rechazar la relevancia.');
+        } catch (InvalidProduct) {
+        }
+
+        $this->assertSame(1, $this->products->findById($id)?->relevance()->level());
+        $this->assertSame($saves, $this->products->saves);
+    }
+
+    /**
+     * @return iterable<string, array{int, string|null, string|null}>
+     */
+    public static function invalidRelevance(): iterable
+    {
+        yield 'nivel 4' => [4, null, null];
+        yield 'fin antes del inicio' => [2, '2026-10-31', '2026-10-12'];
+        yield 'fecha mal escrita' => [2, '31/10/2026', null];
+        yield 'fecha imposible' => [2, '2026-02-30', null];
+    }
+
+    public function testRelevanceOfAnUnknownProductFails(): void
+    {
+        $this->expectException(ProductNotFound::class);
+
+        (new SetProductRelevance($this->products, $this->assembler()))(99, 1, null, null);
+    }
+
+    public function testItListsOnlyTheProductsWhoseRelevanceIsInForce(): void
+    {
+        $create = $this->create();
+        $set = new SetProductRelevance($this->products, $this->assembler());
+        $active = (int) $create('activo', null, $this->input())->product->id();
+        $expired = (int) $create('vencido', null, $this->input())->product->id();
+        $future = (int) $create('futuro', null, $this->input())->product->id();
+        $create('normal', null, $this->input());
+        $set($active, 2, '2026-10-01', '2026-10-31');
+        $set($expired, 3, '2026-09-01', '2026-09-30');
+        $set($future, 1, '2026-11-05', null);
+        $list = new ListProducts($this->products, $this->assembler(), $this->categories);
+        $skus = static fn ($page) => array_map(static fn ($d) => $d->product->sku()->value(), $page->items);
+
+        $this->assertSame(['ACTIVO'], $skus($list(null, null, null, relevantOn: new \DateTimeImmutable('2026-10-15'))));
+        $this->assertSame(['ACTIVO', 'FUTURO', 'NORMAL', 'VENCIDO'], $skus($list(null, null, null)));
     }
 }
