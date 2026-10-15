@@ -49,6 +49,9 @@ interface ProductRepository
      */
     public function countsBySeller(): array;
 
+    /** Si algún producto tiene cantidades guardadas (contenido de peso, volumen o unidades): los digitales no cuentan. */
+    public function hasPhysicalProducts(): bool;
+
     /**
      * Los sku (en mayúsculas) que empiezan por ese prefijo, para proponer el siguiente consecutivo.
      *

@@ -6,6 +6,7 @@ use App\DTO\CreateSysConfigDto;
 use App\DTO\UpdateSysConfigDto;
 use App\Entity\SysConfig;
 use App\Exception\MyCurrentException;
+use App\Market\Catalogo\Domain\ProductRepository;
 use App\Repository\SysConfigRepository;
 use App\Service\SysConfigCipher;
 use Doctrine\ORM\EntityManagerInterface;
@@ -17,6 +18,7 @@ class SysConfigAdminService
     public function __construct(
         private readonly EntityManagerInterface $em,
         private readonly SysConfigRepository $sysConfigRepo,
+        private readonly ProductRepository $marketProducts,
         #[Autowire('%env(string:default::SYS_CONFIG_ENCRYPTION_KEY)%')]
         private readonly string $encryptionKey = '',
     ) {}
@@ -55,6 +57,9 @@ class SysConfigAdminService
 
     public function update(SysConfig $config, UpdateSysConfigDto $dto): SysConfig
     {
+        if ($dto->getPropertyName() !== null || $dto->getPropertyValue() !== null || $dto->getIsActive() !== null || $dto->getIsEncrypted() !== null) {
+            $this->assertMeasureBaseNotLocked($config);
+        }
         if ($dto->getPropertyName() !== null && $dto->getPropertyName() !== $config->getPropertyName()) {
             $existing = $this->sysConfigRepo->findOneBy(['propertyName' => $dto->getPropertyName()]);
             if ($existing !== null) {
@@ -108,6 +113,7 @@ class SysConfigAdminService
 
     public function toggle(SysConfig $config): SysConfig
     {
+        $this->assertMeasureBaseNotLocked($config);
         $config->setIsActive(!$config->isActive());
         $this->em->flush();
         $this->sysConfigRepo->invalidateCache();
@@ -117,9 +123,28 @@ class SysConfigAdminService
 
     public function delete(SysConfig $config): void
     {
+        $this->assertMeasureBaseNotLocked($config);
         $config->setRemovedAt(new \DateTimeImmutable('now'));
         $this->em->flush();
         $this->sysConfigRepo->invalidateCache();
+    }
+
+    /**
+     * Las unidades base de las medidas del mercado (market.measure.weight_base y volume_base) no se tocan desde aquí mientras haya
+     * productos con cantidades: lo guardado se reinterpretaría. La pantalla «Unidades de medida» explica y aplica la misma regla.
+     */
+    private function assertMeasureBaseNotLocked(SysConfig $config): void
+    {
+        if (!in_array($config->getPropertyName(), ['market.measure.weight_base', 'market.measure.volume_base'], true)) {
+            return;
+        }
+        if ($this->marketProducts->hasPhysicalProducts()) {
+            throw new MyCurrentException(
+                'MEASURE_SETTINGS_LOCKED',
+                'Las unidades base no se pueden cambiar mientras haya productos con cantidades guardadas: sus datos se reinterpretarían.',
+                Response::HTTP_CONFLICT
+            );
+        }
     }
 
     private function assertEncryptionKeyAvailable(): void
