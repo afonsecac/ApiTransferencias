@@ -179,7 +179,7 @@ final class ProductUseCasesTest extends TestCase
         ]));
 
         $this->assertSame('Refresco de cola light', $updated->product->spec()->texts->all()['es']['name']);
-        $this->assertEqualsWithDelta(330.0, $updated->product->spec()->content->baseValue(), 0.001);
+        $this->assertEqualsWithDelta(0.33, $updated->product->spec()->content->baseValue(), 0.0000001);
         $this->assertSame('COLA-330', $updated->product->sku()->value());
         $this->assertSame($this->garajito->id(), $updated->product->sellerId());
     }
@@ -195,7 +195,7 @@ final class ProductUseCasesTest extends TestCase
             $this->fail('Debió rechazar los datos');
         } catch (InvalidProduct) {
             $this->assertSame($saves, $this->products->saves);
-            $this->assertEqualsWithDelta(500.0, $this->products->findById($id)?->spec()->content->baseValue(), 0.001);
+            $this->assertEqualsWithDelta(0.5, $this->products->findById($id)?->spec()->content->baseValue(), 0.0000001);
         }
     }
 

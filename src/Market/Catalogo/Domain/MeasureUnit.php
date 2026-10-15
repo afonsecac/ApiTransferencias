@@ -6,7 +6,8 @@ namespace App\Market\Catalogo\Domain;
 
 /**
  * Unidades en las que un vendedor puede introducir una cantidad (COMR-141). Solo se convierten entre unidades del
- * mismo tipo: peso con peso, volumen con volumen.
+ * mismo tipo: peso con peso, volumen con volumen. Lo que se guarda se expresa en la unidad base que dice la configuración
+ * (MeasureSystem); aquí cada unidad sabe cuánto vale en kilogramos, litros o unidades.
  */
 enum MeasureUnit: string
 {
@@ -28,15 +29,15 @@ enum MeasureUnit: string
         };
     }
 
-    /** Cuántas unidades base (g, ml, unidades) vale una de esta unidad. */
+    /** Cuánto vale una de esta unidad en kilogramos (peso), litros (volumen) o unidades (conteo). */
     public function factor(): float
     {
         return match ($this) {
-            self::G, self::ML, self::UNIT => 1.0,
-            self::KG, self::L => 1000.0,
-            self::OZ => 28.349523125,
-            self::LB => 453.59237,
-            self::FL_OZ => 29.5735295625,
+            self::KG, self::L, self::UNIT => 1.0,
+            self::G, self::ML => 0.001,
+            self::OZ => 0.028349523125,
+            self::LB => 0.45359237,
+            self::FL_OZ => 0.0295735295625,
         };
     }
 }

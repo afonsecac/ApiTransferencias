@@ -20,6 +20,13 @@ use App\Tests\Functional\Provider\ProviderFunctionalTestCase;
  */
 final class SysConfigMeasureSettingsTest extends ProviderFunctionalTestCase
 {
+    /** La caché de la configuración sobrevive al rollback de la prueba: se vacía para no dejar valores falsos a las demás. */
+    protected function tearDown(): void
+    {
+        parent::tearDown();
+        self::getContainer()->get(SysConfigRepository::class)->invalidateCache();
+    }
+
     private function settings(): MeasureSettings
     {
         return new SysConfigMeasureSettings(self::getContainer()->get(SysConfigRepository::class));

@@ -10,7 +10,7 @@ use Doctrine\ORM\Mapping as ORM;
  * Producto del mercado (COMR-273): la entidad propia, sin pasar por CommunicationPackage. El sku y el vendedor se fijan al
  * crear y no cambian; el resto (ProductSpec) se edita. Pasa por tres estados: borrador, publicado y retirado.
  *
- * Las cantidades se guardan en columnas: el valor en la unidad base (g, ml, unidades), el original y su unidad, para
+ * Las cantidades se guardan en columnas: el valor en la unidad base de la configuración (hoy kg, l, unidades), el original y su unidad, para
  * mostrarlas como las introdujo el vendedor. Los totales derivados (peso y volumen) también se guardan, para poder
  * ordenar y calcular la relación precio/peso (COMR-165) sin recalcular. El tipo lo dan el servicio, el subservicio y el área
  * (T1), no un campo aparte; con valor (una gift card, COMR-276) es digital: sin contenido ni entrega, con su moneda y valor
@@ -63,7 +63,7 @@ class Product
     #[ORM\Column(type: 'json')]
     private array $texts = [];
 
-    #[ORM\Column(name: 'content_base', type: 'decimal', precision: 14, scale: 3, nullable: true)]
+    #[ORM\Column(name: 'content_base', type: 'decimal', precision: 17, scale: 6, nullable: true)]
     private ?string $contentBase = null;
 
     #[ORM\Column(name: 'content_original', type: 'decimal', precision: 14, scale: 4, nullable: true)]
@@ -72,7 +72,7 @@ class Product
     #[ORM\Column(name: 'content_unit', type: 'string', length: 8, nullable: true)]
     private ?string $contentUnit = null;
 
-    #[ORM\Column(name: 'unit_weight_base', type: 'decimal', precision: 14, scale: 3, nullable: true)]
+    #[ORM\Column(name: 'unit_weight_base', type: 'decimal', precision: 17, scale: 6, nullable: true)]
     private ?string $unitWeightBase = null;
 
     #[ORM\Column(name: 'unit_weight_original', type: 'decimal', precision: 14, scale: 4, nullable: true)]
@@ -81,7 +81,7 @@ class Product
     #[ORM\Column(name: 'unit_weight_unit', type: 'string', length: 8, nullable: true)]
     private ?string $unitWeightUnit = null;
 
-    #[ORM\Column(name: 'unit_volume_base', type: 'decimal', precision: 14, scale: 3, nullable: true)]
+    #[ORM\Column(name: 'unit_volume_base', type: 'decimal', precision: 17, scale: 6, nullable: true)]
     private ?string $unitVolumeBase = null;
 
     #[ORM\Column(name: 'unit_volume_original', type: 'decimal', precision: 14, scale: 4, nullable: true)]
@@ -119,11 +119,11 @@ class Product
     #[ORM\Column(type: 'string', length: 14, nullable: true)]
     private ?string $barcode = null;
 
-    #[ORM\Column(name: 'total_weight_g', type: 'decimal', precision: 16, scale: 3, nullable: true)]
-    private ?string $totalWeightG = null;
+    #[ORM\Column(name: 'total_weight_base', type: 'decimal', precision: 19, scale: 6, nullable: true)]
+    private ?string $totalWeightBase = null;
 
-    #[ORM\Column(name: 'total_volume_ml', type: 'decimal', precision: 16, scale: 3, nullable: true)]
-    private ?string $totalVolumeMl = null;
+    #[ORM\Column(name: 'total_volume_base', type: 'decimal', precision: 19, scale: 6, nullable: true)]
+    private ?string $totalVolumeBase = null;
 
     /** Relevancia en las búsquedas (COMR-269): nivel 0 a 3 y vigencia por días; ver Relevance. */
     #[ORM\Column(name: 'relevance_level', type: 'smallint', options: ['default' => 0])]
@@ -259,14 +259,16 @@ class Product
         return $this->updatedAt;
     }
 
-    public function totalWeightG(): ?float
+    /** El peso total, en la unidad base de peso de la configuración (hoy kilogramos). */
+    public function totalWeight(): ?float
     {
-        return $this->totalWeightG === null ? null : (float) $this->totalWeightG;
+        return $this->totalWeightBase === null ? null : (float) $this->totalWeightBase;
     }
 
-    public function totalVolumeMl(): ?float
+    /** El volumen total, en la unidad base de volumen de la configuración (hoy litros). */
+    public function totalVolume(): ?float
     {
-        return $this->totalVolumeMl === null ? null : (float) $this->totalVolumeMl;
+        return $this->totalVolumeBase === null ? null : (float) $this->totalVolumeBase;
     }
 
     public function spec(): ProductSpec
@@ -348,14 +350,14 @@ class Product
         $this->area = $spec->classification->area();
         $this->barcode = $spec->barcode;
 
-        $this->contentBase = $spec->content === null ? null : self::decimal($spec->content->baseValue(), 3);
+        $this->contentBase = $spec->content === null ? null : self::decimal($spec->content->baseValue(), 6);
         $this->contentOriginal = $spec->content === null ? null : self::decimal($spec->content->originalValue(), 4);
         $this->contentUnit = $spec->content?->unit()->value;
 
-        $this->unitWeightBase = $spec->unitWeight === null ? null : self::decimal($spec->unitWeight->baseValue(), 3);
+        $this->unitWeightBase = $spec->unitWeight === null ? null : self::decimal($spec->unitWeight->baseValue(), 6);
         $this->unitWeightOriginal = $spec->unitWeight === null ? null : self::decimal($spec->unitWeight->originalValue(), 4);
         $this->unitWeightUnit = $spec->unitWeight?->unit()->value;
-        $this->unitVolumeBase = $spec->unitVolume === null ? null : self::decimal($spec->unitVolume->baseValue(), 3);
+        $this->unitVolumeBase = $spec->unitVolume === null ? null : self::decimal($spec->unitVolume->baseValue(), 6);
         $this->unitVolumeOriginal = $spec->unitVolume === null ? null : self::decimal($spec->unitVolume->originalValue(), 4);
         $this->unitVolumeUnit = $spec->unitVolume?->unit()->value;
 
@@ -370,10 +372,10 @@ class Product
         $this->valueMinMinor = $spec->value === null ? null : (string) $spec->value->minAmount()->minorUnits();
         $this->valueMaxMinor = $spec->value?->maxAmount() === null ? null : (string) $spec->value->maxAmount()->minorUnits();
 
-        $weight = $spec->totalWeightG();
-        $volume = $spec->totalVolumeMl();
-        $this->totalWeightG = $weight === null ? null : self::decimal($weight, 3);
-        $this->totalVolumeMl = $volume === null ? null : self::decimal($volume, 3);
+        $weight = $spec->totalWeight();
+        $volume = $spec->totalVolume();
+        $this->totalWeightBase = $weight === null ? null : self::decimal($weight, 6);
+        $this->totalVolumeBase = $volume === null ? null : self::decimal($volume, 6);
     }
 
     private function value(): ProductValue

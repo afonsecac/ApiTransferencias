@@ -6,16 +6,18 @@ namespace App\Tests\Market\Catalogo\Domain;
 
 use App\Market\Catalogo\Domain\InvalidProduct;
 use App\Market\Catalogo\Domain\MeasureKind;
+use App\Market\Catalogo\Domain\MeasureSystem;
 use App\Market\Catalogo\Domain\MeasureUnit;
 use App\Market\Catalogo\Domain\Quantity;
 use PHPUnit\Framework\TestCase;
 
 /**
- * COMR-141: todo se guarda en la unidad base (gramos, mililitros, unidades) y la unidad original se guarda aparte
- * solo para mostrarla y editarla.
+ * COMR-141 y COMR-281: todo se guarda en la unidad base (por defecto kilogramos, litros y unidades; la configuración puede
+ * decir otra) y la unidad original se guarda aparte solo para mostrarla y editarla.
  *
  * @covers \App\Market\Catalogo\Domain\Quantity
  * @covers \App\Market\Catalogo\Domain\MeasureUnit
+ * @covers \App\Market\Catalogo\Domain\MeasureSystem
  */
 final class QuantityTest extends TestCase
 {
@@ -24,12 +26,14 @@ final class QuantityTest extends TestCase
      */
     public static function conversions(): iterable
     {
-        yield '1 kg son 1000 g' => [1.0, MeasureUnit::KG, 1000.0];
-        yield '2,5 lb son 1133,981 g' => [2.5, MeasureUnit::LB, 1133.981];
-        yield '1 oz son 28,35 g (redondeado a 3 decimales)' => [1.0, MeasureUnit::OZ, 28.35];
-        yield '500 g quedan en 500 g' => [500.0, MeasureUnit::G, 500.0];
-        yield '0,5 l son 500 ml' => [0.5, MeasureUnit::L, 500.0];
-        yield '1 fl oz son 29,574 ml' => [1.0, MeasureUnit::FL_OZ, 29.574];
+        yield '1 kg es 1 kg' => [1.0, MeasureUnit::KG, 1.0];
+        yield '2,5 lb son 1,133981 kg' => [2.5, MeasureUnit::LB, 1.133981];
+        yield '1 oz son 0,02835 kg (6 decimales)' => [1.0, MeasureUnit::OZ, 0.02835];
+        yield '500 g son 0,5 kg' => [500.0, MeasureUnit::G, 0.5];
+        yield '2,5 g son 0,0025 kg: ya no se pierde' => [2.5, MeasureUnit::G, 0.0025];
+        yield '0,5 l quedan en 0,5 l' => [0.5, MeasureUnit::L, 0.5];
+        yield '330 ml son 0,33 l' => [330.0, MeasureUnit::ML, 0.33];
+        yield '1 fl oz son 0,029574 l' => [1.0, MeasureUnit::FL_OZ, 0.029574];
         yield '12 unidades quedan en 12' => [12.0, MeasureUnit::UNIT, 12.0];
     }
 
@@ -40,7 +44,7 @@ final class QuantityTest extends TestCase
     {
         $quantity = Quantity::of($value, $unit);
 
-        $this->assertEqualsWithDelta($base, $quantity->baseValue(), 0.0001);
+        $this->assertEqualsWithDelta($base, $quantity->baseValue(), 0.0000001);
         $this->assertSame($unit, $quantity->unit());
         $this->assertEqualsWithDelta($value, $quantity->originalValue(), 0.0001);
     }
@@ -50,9 +54,31 @@ final class QuantityTest extends TestCase
         $this->assertSame(MeasureKind::WEIGHT, MeasureUnit::LB->kind());
         $this->assertSame(MeasureKind::VOLUME, MeasureUnit::FL_OZ->kind());
         $this->assertSame(MeasureKind::COUNT, MeasureUnit::UNIT->kind());
-        $this->assertSame(MeasureUnit::G, MeasureKind::WEIGHT->baseUnit());
-        $this->assertSame(MeasureUnit::ML, MeasureKind::VOLUME->baseUnit());
-        $this->assertSame(MeasureUnit::UNIT, MeasureKind::COUNT->baseUnit());
+    }
+
+    public function testTheStandardSystemStoresKilogramsLitersAndUnits(): void
+    {
+        $system = MeasureSystem::standard();
+
+        $this->assertSame(MeasureUnit::KG, $system->baseUnit(MeasureKind::WEIGHT));
+        $this->assertSame(MeasureUnit::L, $system->baseUnit(MeasureKind::VOLUME));
+        $this->assertSame(MeasureUnit::UNIT, $system->baseUnit(MeasureKind::COUNT));
+    }
+
+    public function testASystemRefusesABaseOfTheWrongKind(): void
+    {
+        $this->expectException(InvalidProduct::class);
+
+        new MeasureSystem(MeasureUnit::L, MeasureUnit::L);
+    }
+
+    public function testTheConfiguredBaseDecidesWhatIsStored(): void
+    {
+        $grams = new MeasureSystem(MeasureUnit::G, MeasureUnit::ML);
+
+        $this->assertEqualsWithDelta(1133.981, Quantity::of(2.5, MeasureUnit::LB, $grams)->baseValue(), 0.0005);
+        $this->assertEqualsWithDelta(500.0, Quantity::of(0.5, MeasureUnit::L, $grams)->baseValue(), 0.0005);
+        $this->assertEqualsWithDelta(1.134, Quantity::of(2.5, MeasureUnit::LB, $grams)->in(MeasureUnit::KG, $grams), 0.0005);
     }
 
     public function testItConvertsBetweenUnitsOfTheSameKind(): void
@@ -96,9 +122,9 @@ final class QuantityTest extends TestCase
 
     public function testItIsRebuiltFromWhatWasStored(): void
     {
-        $quantity = Quantity::fromStored(1133.981, 2.5, MeasureUnit::LB);
+        $quantity = Quantity::fromStored(1.133981, 2.5, MeasureUnit::LB);
 
-        $this->assertSame(1133.981, $quantity->baseValue());
+        $this->assertSame(1.133981, $quantity->baseValue());
         $this->assertSame(2.5, $quantity->originalValue());
         $this->assertSame(MeasureUnit::LB, $quantity->unit());
     }

@@ -62,7 +62,7 @@ final class ProductSpecInputTest extends TestCase
         $spec = $this->input(['area' => 'Supermarket'])->toSpec();
 
         $this->assertSame(MeasureUnit::LB, $spec->content?->unit());
-        $this->assertEqualsWithDelta(1133.981, (float) $spec->content?->baseValue(), 0.001);
+        $this->assertEqualsWithDelta(1.133981, (float) $spec->content?->baseValue(), 0.0000001);
         $this->assertSame(MeasureUnit::KG, $spec->deliveryBasis?->unit());
     }
 
@@ -84,13 +84,13 @@ final class ProductSpecInputTest extends TestCase
             'unitWeightUnit' => 'g',
         ])->toSpec();
 
-        $this->assertEqualsWithDelta(3960.0, (float) $spec->totalWeightG(), 0.001);
+        $this->assertEqualsWithDelta(3.96, (float) $spec->totalWeight(), 0.0000001);
     }
 
     public function testItBuildsTheDimensionsOnlyWhenAllThreeComeTogether(): void
     {
         $spec = $this->input(['lengthMm' => 100.0, 'widthMm' => 50.0, 'heightMm' => 20.0])->toSpec();
-        $this->assertEqualsWithDelta(100.0, (float) $spec->totalVolumeMl(), 0.001);
+        $this->assertEqualsWithDelta(0.1, (float) $spec->totalVolume(), 0.0000001);
 
         $this->expectException(InvalidProduct::class);
         $this->input(['lengthMm' => 100.0, 'widthMm' => 50.0])->toSpec();
