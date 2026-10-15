@@ -12,14 +12,14 @@ use Symfony\Component\Validator\Constraints as Assert;
  * Los datos editables de un producto (COMR-273): lo que comparten el alta y la edición. La clasificación (servicio,
  * subservicio y área) dice de qué tipo es, sin un campo de tipo aparte. Lleva contenido y base de tarifa de la entrega, o un
  * valor (digital, como las gift cards: moneda e importes como texto con punto decimal) y nada de lo físico. Las reglas entre
- * los campos las valida el dominio. Los valores van con el código de su unidad (g, kg, oz, lb, ml, l, fl_oz, unit); la
+ * los campos las valida el dominio. Los valores van con el código de su unidad (g, kg, oz, lb, t, ml, l, fl_oz, gal, unit, pair, dozen); la
  * unidad original se conserva para mostrarla.
  */
 abstract class ProductSpecDto implements IInput
 {
-    protected const WEIGHT_UNITS = ['g', 'kg', 'oz', 'lb'];
-    protected const VOLUME_UNITS = ['ml', 'l', 'fl_oz'];
-    protected const UNITS = ['g', 'kg', 'oz', 'lb', 'ml', 'l', 'fl_oz', 'unit'];
+    protected const WEIGHT_UNITS = ['g', 'kg', 'oz', 'lb', 't'];
+    protected const VOLUME_UNITS = ['ml', 'l', 'fl_oz', 'gal'];
+    protected const UNITS = ['g', 'kg', 'oz', 'lb', 't', 'ml', 'l', 'fl_oz', 'gal', 'unit', 'pair', 'dozen'];
 
     /** @var array<string, array{name?: string|null, description?: string|null}>|null */
     #[Assert\NotNull]

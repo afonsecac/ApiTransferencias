@@ -244,6 +244,29 @@ final class ProductSpecTest extends TestCase
         $this->assertEqualsWithDelta(1.0, (float) $spec->totalVolume(), 0.0000001);
     }
 
+    public function testAProductByTheDozenWeighsTwelveTimesItsUnitWeightPerDozen(): void
+    {
+        $spec = new ProductSpec(
+            $this->texts(),
+            $this->classification(),
+            Quantity::of(2, MeasureUnit::DOZEN),
+            Quantity::of(100, MeasureUnit::G),
+            null,
+            null,
+            DeliveryBasis::of(MeasureKind::WEIGHT, MeasureUnit::KG),
+        );
+
+        $this->assertEqualsWithDelta(24.0, $spec->content?->baseValue(), 0.0000001, 'Dos docenas son 24 unidades.');
+        $this->assertEqualsWithDelta(2.4, (float) $spec->totalWeight(), 0.0000001);
+    }
+
+    public function testATonOfRiceWeighsAThousandKilograms(): void
+    {
+        $spec = new ProductSpec($this->texts(), $this->classification(), Quantity::of(1, MeasureUnit::T), null, null, null, DeliveryBasis::of(MeasureKind::WEIGHT, MeasureUnit::T));
+
+        $this->assertEqualsWithDelta(1000.0, (float) $spec->totalWeight(), 0.0000001);
+    }
+
     public function testTheVolumeDerivedFromTheDimensionsIsExpressedInTheConfiguredBase(): void
     {
         $mililiters = new MeasureSystem(MeasureUnit::G, MeasureUnit::ML);

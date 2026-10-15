@@ -25,7 +25,7 @@ use Doctrine\Migrations\AbstractMigration;
  */
 final class Version20261015230000 extends AbstractMigration
 {
-    private const PHYSICAL_UNITS = "'g', 'kg', 'oz', 'lb', 'ml', 'l', 'fl_oz'";
+    private const PHYSICAL_UNITS = "'g', 'kg', 'oz', 'lb', 't', 'ml', 'l', 'fl_oz', 'gal'";
 
     public function getDescription(): string
     {

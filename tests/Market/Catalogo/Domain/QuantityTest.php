@@ -35,6 +35,11 @@ final class QuantityTest extends TestCase
         yield '330 ml son 0,33 l' => [330.0, MeasureUnit::ML, 0.33];
         yield '1 fl oz son 0,029574 l' => [1.0, MeasureUnit::FL_OZ, 0.029574];
         yield '12 unidades quedan en 12' => [12.0, MeasureUnit::UNIT, 12.0];
+        yield '1 t son 1000 kg' => [1.0, MeasureUnit::T, 1000.0];
+        yield '0,5 t son 500 kg' => [0.5, MeasureUnit::T, 500.0];
+        yield '1 gal US son 3,785412 l' => [1.0, MeasureUnit::GAL, 3.785412];
+        yield '3 pares son 6 unidades' => [3.0, MeasureUnit::PAIR, 6.0];
+        yield '2 docenas son 24 unidades' => [2.0, MeasureUnit::DOZEN, 24.0];
     }
 
     /**
@@ -54,6 +59,10 @@ final class QuantityTest extends TestCase
         $this->assertSame(MeasureKind::WEIGHT, MeasureUnit::LB->kind());
         $this->assertSame(MeasureKind::VOLUME, MeasureUnit::FL_OZ->kind());
         $this->assertSame(MeasureKind::COUNT, MeasureUnit::UNIT->kind());
+        $this->assertSame(MeasureKind::WEIGHT, MeasureUnit::T->kind());
+        $this->assertSame(MeasureKind::VOLUME, MeasureUnit::GAL->kind());
+        $this->assertSame(MeasureKind::COUNT, MeasureUnit::PAIR->kind());
+        $this->assertSame(MeasureKind::COUNT, MeasureUnit::DOZEN->kind());
     }
 
     public function testTheStandardSystemStoresKilogramsLitersAndUnits(): void
@@ -106,6 +115,8 @@ final class QuantityTest extends TestCase
         yield 'negativo' => [-1.0, MeasureUnit::KG];
         yield 'tan pequeño que redondea a cero' => [0.0000001, MeasureUnit::G];
         yield 'unidades con decimales' => [2.5, MeasureUnit::UNIT];
+        yield 'pares con decimales' => [1.5, MeasureUnit::PAIR];
+        yield 'docenas con decimales' => [1.5, MeasureUnit::DOZEN];
         yield 'no es un número' => [NAN, MeasureUnit::G];
         yield 'infinito' => [INF, MeasureUnit::G];
     }
