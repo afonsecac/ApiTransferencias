@@ -22,7 +22,7 @@ final class CreateSeller
     }
 
     /**
-     * @param string|null $slug por defecto, derivado del nombre
+     * @param string|null $slug por defecto, derivado del nombre (con -2, -3… si ya está en uso)
      * @param int|null $costCenterId por defecto, el principal de la unidad
      * @throws InvalidSeller
      * @throws SellerOrgUnitInvalid
@@ -30,7 +30,7 @@ final class CreateSeller
      */
     public function __invoke(int $orgUnitId, string $name, ?string $slug = null, ?int $costCenterId = null): SellerDetails
     {
-        $slugValue = $slug !== null && trim($slug) !== '' ? new Slug(trim($slug)) : Slug::fromText($name);
+        $slugValue = $slug !== null && trim($slug) !== '' ? new Slug(trim($slug)) : Slug::free($name, fn (string $candidate): bool => $this->sellers->findBySlug($candidate) !== null);
 
         $unit = $this->orgUnits->find($orgUnitId) ?? throw SellerOrgUnitInvalid::unknownUnit($orgUnitId);
         if (!$unit->isSeller()) {

@@ -21,7 +21,7 @@ final class CreateCategory
     }
 
     /**
-     * @param string|null $slug por defecto, derivado del nombre en español
+     * @param string|null $slug por defecto, derivado del nombre (con -2, -3… si ya está en uso) en español
      * @throws InvalidCategory
      * @throws InvalidSeller si el identificador no es válido
      * @throws CategoryNotFound si el padre no existe
@@ -30,7 +30,7 @@ final class CreateCategory
      */
     public function __invoke(?int $parentId, string $nameEs, ?string $nameEn, ?string $slug = null, int $position = 0): CategoryDetails
     {
-        $slugValue = $slug !== null && trim($slug) !== '' ? new Slug(trim($slug)) : Slug::fromText($nameEs);
+        $slugValue = $slug !== null && trim($slug) !== '' ? new Slug(trim($slug)) : Slug::free($nameEs, fn (string $candidate): bool => $this->categories->findBySlug($candidate) !== null);
 
         if ($parentId !== null && $this->categories->findById($parentId) === null) {
             throw CategoryNotFound::forId($parentId);

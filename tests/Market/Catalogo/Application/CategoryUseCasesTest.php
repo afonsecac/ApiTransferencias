@@ -97,11 +97,11 @@ final class CategoryUseCasesTest extends TestCase
 
     public function testTheSlugIsUnique(): void
     {
-        $this->id('Bebidas');
+        ($this->create())(null, 'Bebidas', null, 'bebidas');
 
         $this->expectException(CategoryAlreadyExists::class);
 
-        $this->id('Bebidas');
+        ($this->create())(null, 'Bebidas', null, 'bebidas');
     }
 
     public function testAnInvalidNameCreatesNothing(): void
@@ -254,5 +254,22 @@ final class CategoryUseCasesTest extends TestCase
         $this->assertSame(['Alimentos'], $names($list(null, false)));
         $this->assertSame(['Bebidas'], $names($list('drinks', null)));
         $this->assertSame(['Alimentos'], $names($list('FOOD', null)));
+    }
+
+    public function testADerivedSlugThatIsTakenGetsTheNextNumber(): void
+    {
+        $first = ($this->create())(null, 'Bebidas', null);
+        $second = ($this->create())(null, 'Bebidas', null);
+
+        $this->assertSame('bebidas', $first->category->slug()->value());
+        $this->assertSame('bebidas-2', $second->category->slug()->value());
+    }
+
+    public function testAnExplicitSlugThatIsTakenIsStillRejected(): void
+    {
+        ($this->create())(null, 'Bebidas', null, 'drinks');
+
+        $this->expectException(\App\Market\Catalogo\Domain\CategoryAlreadyExists::class);
+        ($this->create())(null, 'Otras bebidas', null, 'drinks');
     }
 }

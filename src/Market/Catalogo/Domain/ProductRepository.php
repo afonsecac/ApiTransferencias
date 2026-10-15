@@ -28,5 +28,12 @@ interface ProductRepository
      */
     public function findByIds(array $ids): array;
 
+    /**
+     * Los sku (en mayúsculas) que empiezan por ese prefijo, para proponer el siguiente consecutivo.
+     *
+     * @return list<string>
+     */
+    public function skusStartingWith(string $prefix): array;
+
     public function save(Product $product): void;
 }
