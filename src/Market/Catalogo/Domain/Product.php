@@ -125,6 +125,16 @@ class Product
     #[ORM\Column(name: 'total_volume_ml', type: 'decimal', precision: 16, scale: 3, nullable: true)]
     private ?string $totalVolumeMl = null;
 
+    /** Relevancia en las búsquedas (COMR-269): nivel 0 a 3 y vigencia por días; ver Relevance. */
+    #[ORM\Column(name: 'relevance_level', type: 'smallint', options: ['default' => 0])]
+    private int $relevanceLevel = 0;
+
+    #[ORM\Column(name: 'relevance_from', type: 'date_immutable', nullable: true)]
+    private ?\DateTimeImmutable $relevanceFrom = null;
+
+    #[ORM\Column(name: 'relevance_until', type: 'date_immutable', nullable: true)]
+    private ?\DateTimeImmutable $relevanceUntil = null;
+
     #[ORM\Column(name: 'created_at', type: 'datetime_immutable')]
     private \DateTimeImmutable $createdAt;
 
@@ -211,6 +221,27 @@ class Product
         if ($this->id !== null) {
             $this->touch();
         }
+    }
+
+    public function relevance(): Relevance
+    {
+        return Relevance::of($this->relevanceLevel, $this->relevanceFrom, $this->relevanceUntil);
+    }
+
+    public function setRelevance(Relevance $relevance): void
+    {
+        $this->relevanceLevel = $relevance->level();
+        $this->relevanceFrom = $relevance->from();
+        $this->relevanceUntil = $relevance->until();
+        if ($this->id !== null) {
+            $this->touch();
+        }
+    }
+
+    /** Si su marca de relevancia está en vigor ese día. */
+    public function isRelevantOn(\DateTimeImmutable $moment): bool
+    {
+        return $this->relevance()->isActiveOn($moment);
     }
 
     public function isPublished(): bool
