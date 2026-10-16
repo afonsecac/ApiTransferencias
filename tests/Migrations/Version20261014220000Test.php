@@ -155,6 +155,9 @@ class Version20261014220000Test extends ProviderFunctionalTestCase
         // Las migraciones posteriores se revierten antes: la pantalla de medidas (COMR-281) cuelga de «Catálogo».
         $this->em->getConnection()->executeStatement("DELETE FROM user_permission WHERE item_id IN (SELECT id FROM navigation_item WHERE title = 'menu.apps.market-measure-settings.title')");
         $this->em->getConnection()->executeStatement("DELETE FROM navigation_item WHERE title = 'menu.apps.market-measure-settings.title'");
+        // Y la de provincias y municipios (COMR-286) cuelga de «Organización».
+        $this->em->getConnection()->executeStatement("DELETE FROM user_permission WHERE item_id IN (SELECT id FROM navigation_item WHERE title = 'menu.apps.market-geography.title')");
+        $this->em->getConnection()->executeStatement("DELETE FROM navigation_item WHERE title = 'menu.apps.market-geography.title'");
         $this->runMigration('down');
 
         $this->assertNull($this->item('menu.market.title'));
