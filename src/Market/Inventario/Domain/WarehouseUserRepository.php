@@ -11,5 +11,8 @@ interface WarehouseUserRepository
     /** @return list<WarehouseUser> por orden de alta */
     public function ofWarehouse(int $warehouseId): array;
 
+    /** @return list<WarehouseUser> los vínculos del usuario, activos o no, por orden de alta */
+    public function ofUser(int $userId): array;
+
     public function save(WarehouseUser $link): void;
 }

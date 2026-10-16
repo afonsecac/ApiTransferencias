@@ -33,6 +33,15 @@ security:
                 check_path: app_dashboard_login
             custom_authenticators:
                 - App\Security\DashboardAccessToken
+        # COMR-288: el socio de almacén (rol externo) entra por su propio prefijo y firewall, nunca por el del dashboard.
+        # Se autentica con el mismo JWT que el dashboard; lo que puede ver lo decide el rol y el Voter por almacén.
+        warehouse:
+            lazy: true
+            pattern: ^/warehouse/api
+            provider: app_client_user_provider
+            user_checker: App\Security\DashboardUserChecker
+            custom_authenticators:
+                - App\Security\DashboardAccessToken
         main:
             lazy: true
             provider: app_token_user_provider
@@ -80,6 +89,8 @@ security:
         - { path: '^/api/verify', roles: PUBLIC_ACCESS }
         - { path: '^/api', roles: ROLE_API_USER }
         - { path: '^/dashboard/api', roles: ROLE_SYSTEM_USER }
+        # Socio de almacén (COMR-288): rol externo, fuera de la jerarquía de ROLE_SYSTEM_USER.
+        - { path: '^/warehouse/api', roles: ROLE_MARKET_WAREHOUSE_USER }
         # Denegación por defecto (ADR-001): cualquier ruta que no coincida con una regla de arriba
         # (p. ej. un prefijo nuevo de portal) queda denegada hasta que se declare su regla explícita.
         - { path: '^/', roles: ROLE_DENY_BY_DEFAULT }
@@ -93,6 +104,9 @@ security:
         ROLE_REM_API_USER: ROLE_API_USER
         # Mercado (ADR-001): lo concede ApiTokenAuthenticator a las cuentas con marketEnabled y market.enabled='1'.
         ROLE_MARKET_API_USER: ROLE_API_USER
+        # Socio de almacén (COMR-288): rol EXTERNO, sin padre ni hijos. No hereda de ROLE_SYSTEM_USER (vería el dashboard) ni de
+        # ROLE_API_ADMIN (vería la administración del mercado); lo que ve lo decide el Voter por almacén.
+        ROLE_MARKET_WAREHOUSE_USER: []
         ROLE_COM_API_ADMIN: [ROLE_COM_API_USER]
         ROLE_REM_API_ADMIN: [ROLE_REM_API_USER]
         ROLE_API_ADMIN: [ROLE_API_EDITOR, ROLE_COM_API_ADMIN, ROLE_REM_API_ADMIN, ROLE_SYSTEM_ADMIN]

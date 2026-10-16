@@ -27,6 +27,14 @@ final class DoctrineWarehouseUserRepository implements WarehouseUserRepository
         return $links;
     }
 
+    public function ofUser(int $userId): array
+    {
+        /** @var list<WarehouseUser> $links */
+        $links = $this->em->getRepository(WarehouseUser::class)->findBy(['userId' => $userId], ['id' => 'ASC']);
+
+        return $links;
+    }
+
     public function save(WarehouseUser $link): void
     {
         $this->em->persist($link);
