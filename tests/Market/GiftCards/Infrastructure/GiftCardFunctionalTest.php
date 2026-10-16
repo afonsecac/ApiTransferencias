@@ -6,6 +6,7 @@ namespace App\Tests\Market\GiftCards\Infrastructure;
 
 use App\Market\GiftCards\Application\MarkGiftCardSold;
 use App\Market\GiftCards\Domain\GiftCardActor;
+use App\Market\GiftCards\Domain\GiftCardPinVault;
 use App\Market\GiftCards\Domain\GiftCardRepository;
 use App\Market\GiftCards\Infrastructure\Http\CancelGiftCardDto;
 use App\Market\GiftCards\Infrastructure\Http\GiftCardController;
@@ -57,9 +58,12 @@ final class GiftCardFunctionalTest extends ProviderFunctionalTestCase
         return $this->controller()->issueSingle(new IssueGiftCardDto($product, $value, '2099-12-31', null));
     }
 
-    private function sell(string $serial): void
+    /** La venta es el único camino por el que sale el PIN: se le entrega al comprador. */
+    private function sell(string $serial, string $saleRef = 'venta-1'): string
     {
-        (new MarkGiftCardSold(self::getContainer()->get(GiftCardRepository::class)))($serial, 'AWS Malta', 'venta-1', new GiftCardActor(1, 'sistema'));
+        $container = self::getContainer();
+
+        return (new MarkGiftCardSold($container->get(GiftCardRepository::class), $container->get(GiftCardPinVault::class)))($serial, 'AWS Malta', $saleRef, new GiftCardActor(1, 'sistema'))->pin;
     }
 
     protected function setUp(): void
@@ -75,7 +79,8 @@ final class GiftCardFunctionalTest extends ProviderFunctionalTestCase
         $this->assertSame(Response::HTTP_CREATED, $response->getStatusCode(), (string) $response->getContent());
         $body = $this->body($response);
         $this->assertCount(2, $body['serials']);
-        $this->assertMatchesRegularExpression('/^GC-\d{6}$/', $body['serials'][0]);
+        $this->assertMatchesRegularExpression('/^9\d{15}$/', $body['serials'][0]);
+        $this->assertTrue(\App\Market\GiftCards\Domain\GiftCardNumber::passesLuhn($body['serials'][0]));
         $this->assertMatchesRegularExpression('/^L-\d{4}-\d{2}-\d{4}$/', $body['batch']['code']);
         $row = $this->em->getConnection()->fetchAssociative('SELECT pin_cipher, pin_hash, status, value_minor, currency FROM market_gift_card ORDER BY id LIMIT 1');
         $this->assertStringStartsWith('v1:', $row['pin_cipher'], 'el PIN se guarda cifrado');
@@ -83,27 +88,27 @@ final class GiftCardFunctionalTest extends ProviderFunctionalTestCase
         $this->assertSame(['issued', 2500, 'USD'], [$row['status'], (int) $row['value_minor'], $row['currency']]);
     }
 
-    public function testThePinIsRevealedOnlyOnRequestAndLeavesATrace(): void
+    public function testThePinNeverComesOutOfTheAdministration(): void
     {
         $this->issueSingle($this->digitalProduct());
         $serial = (string) $this->em->getConnection()->fetchOne('SELECT serial FROM market_gift_card LIMIT 1');
 
-        $list = (string) $this->controller()->list(new Request())->getContent();
-        $this->assertStringNotContainsString('pin', strtolower($list));
-
-        $pin = $this->body($this->controller()->pin($serial))['pin'];
-        $this->assertMatchesRegularExpression('/^[A-Z2-9]{4}(-[A-Z2-9]{4}){3}$/', $pin);
-        $events = array_column($this->body($this->controller()->get($serial))['events'], 'type');
-        $this->assertSame(['issued', 'pin_revealed'], $events);
+        $payloads = [(string) $this->controller()->list(new Request())->getContent(), (string) $this->controller()->get($serial)->getContent(), (string) $this->controller()->redemptions()->getContent()];
+        foreach ($payloads as $payload) {
+            $this->assertStringNotContainsString('"pin', strtolower($payload));
+            $this->assertStringNotContainsString('pin_cipher', strtolower($payload));
+        }
+        $routes = array_map(static fn ($r) => $r->getPath(), array_values(self::getContainer()->get('router')->getRouteCollection()->all()));
+        $this->assertEmpty(array_filter($routes, static fn (string $path) => str_contains($path, '/gift-cards') && str_ends_with($path, '/pin')), 'no hay endpoint para ver el PIN');
     }
 
-    public function testASoldCardIsRedeemedByItsPinAndRepeatingTheKeyIsAReplay(): void
+    public function testASoldCardIsRedeemedByThePinTheBuyerWasGivenAndRepeatingTheKeyIsAReplay(): void
     {
         $this->issueSingle($this->digitalProduct());
         $serial = (string) $this->em->getConnection()->fetchOne('SELECT serial FROM market_gift_card LIMIT 1');
-        $pin = $this->body($this->controller()->pin($serial))['pin'];
-        $this->sell($serial);
+        $pin = $this->sell($serial);
 
+        $this->assertMatchesRegularExpression('/^[A-Z2-9]{4}(-[A-Z2-9]{4}){3}$/', $pin);
         $first = $this->controller()->redeem(new RedeemGiftCardDto(strtolower($pin), 'canje-1'));
         $this->assertSame(Response::HTTP_OK, $first->getStatusCode(), (string) $first->getContent());
         $this->assertFalse($this->body($first)['replay']);
@@ -116,14 +121,60 @@ final class GiftCardFunctionalTest extends ProviderFunctionalTestCase
         $this->assertSame(Response::HTTP_CONFLICT, $other->getStatusCode());
         $this->assertSame('GIFT_CARD_ALREADY_REDEEMED', $this->body($other)['error']['code']);
         $types = array_column($this->body($this->controller()->get($serial))['events'], 'type');
-        $this->assertSame(['issued', 'pin_revealed', 'sold', 'redeemed'], $types, 'la repetición no deja otro hecho');
+        $this->assertSame(['issued', 'sold', 'redeemed'], $types, 'la repetición no deja otro hecho');
+    }
+
+    public function testRepeatingTheSameSaleDeliversTheSamePin(): void
+    {
+        $this->issueSingle($this->digitalProduct());
+        $serial = (string) $this->em->getConnection()->fetchOne('SELECT serial FROM market_gift_card LIMIT 1');
+
+        $this->assertSame($this->sell($serial), $this->sell($serial));
+        $this->assertSame(['issued', 'sold'], array_column($this->body($this->controller()->get($serial))['events'], 'type'));
+    }
+
+    public function testTheDetailCarriesTheCostCenterCodeAndTheBatchCode(): void
+    {
+        $this->issueSingle($this->digitalProduct());
+        $serial = (string) $this->em->getConnection()->fetchOne('SELECT serial FROM market_gift_card LIMIT 1');
+
+        $detail = $this->body($this->controller()->get($serial));
+
+        $this->assertNotEmpty($detail['costCenterCode']);
+        $this->assertMatchesRegularExpression('/^L-\d{4}-\d{2}-\d{4}$/', $detail['batchCode']);
+    }
+
+    public function testTheListCarriesTheBatchCodeAndWhetherTheValueIsFixed(): void
+    {
+        $this->issueSingle($this->digitalProduct());
+
+        $row = $this->body($this->controller()->list(new Request()))[0];
+
+        $this->assertMatchesRegularExpression('/^L-\d{4}-\d{2}-\d{4}$/', $row['batchCode']);
+        $this->assertTrue($row['product']['fixed']);
+    }
+
+    public function testTheCardCanBeFoundWithItsNumberTypedLikeACreditCard(): void
+    {
+        $this->issueSingle($this->digitalProduct());
+        $serial = (string) $this->em->getConnection()->fetchOne('SELECT serial FROM market_gift_card LIMIT 1');
+
+        $spaced = trim(chunk_split($serial, 4, ' '));
+        $rows = $this->body($this->controller()->list(new Request(query: ['serial' => $spaced])));
+
+        $this->assertSame([$serial], array_column($rows, 'serial'));
     }
 
     public function testACardThatWasNotSoldCannotBeRedeemed(): void
     {
         $this->issueSingle($this->digitalProduct());
-        $serial = (string) $this->em->getConnection()->fetchOne('SELECT serial FROM market_gift_card LIMIT 1');
-        $pin = $this->body($this->controller()->pin($serial))['pin'];
+        $card = $this->em->getConnection()->fetchAssociative('SELECT id, serial FROM market_gift_card LIMIT 1');
+        // Sin venta nadie conoce su PIN: se prueba con uno cualquiera y con la huella del PIN real vía la venta de otra tarjeta.
+        $this->issueSingle($this->digitalProduct('otra-tarjeta'));
+        $other = (string) $this->em->getConnection()->fetchOne('SELECT serial FROM market_gift_card WHERE id <> :id LIMIT 1', ['id' => $card['id']]);
+        $pin = $this->sell($other);
+        $this->em->getConnection()->executeStatement("UPDATE market_gift_card SET status = 'issued', sold_to = NULL, sale_ref = NULL WHERE serial = :s", ['s' => $other]);
+        $this->em->clear();
 
         $response = $this->controller()->redeem(new RedeemGiftCardDto($pin, 'canje-1'));
 
@@ -201,8 +252,7 @@ final class GiftCardFunctionalTest extends ProviderFunctionalTestCase
     {
         $this->issueSingle($this->digitalProduct());
         $serial = (string) $this->em->getConnection()->fetchOne('SELECT serial FROM market_gift_card LIMIT 1');
-        $pin = $this->body($this->controller()->pin($serial))['pin'];
-        $this->sell($serial);
+        $pin = $this->sell($serial);
         $this->controller()->redeem(new RedeemGiftCardDto($pin, 'canje-1'));
 
         $rows = $this->body($this->controller()->redemptions());
@@ -219,7 +269,7 @@ final class GiftCardFunctionalTest extends ProviderFunctionalTestCase
 
         $this->assertSame(Response::HTTP_CREATED, $response->getStatusCode(), (string) $response->getContent());
         $this->assertSame(5, $this->body($response)['batch']['quantity']);
-        $this->assertSame(['1000', '2000', '3000', '4000', '5000'], $this->em->getConnection()->fetchFirstColumn('SELECT value_minor::text FROM market_gift_card ORDER BY serial'));
+        $this->assertSame(['1000', '2000', '3000', '4000', '5000'], $this->em->getConnection()->fetchFirstColumn('SELECT value_minor::text FROM market_gift_card ORDER BY id'));
         $this->assertSame(['1000', '5000', '1000'], array_values($this->em->getConnection()->fetchNumeric('SELECT value_min_minor::text, value_max_minor::text, step_minor::text FROM market_gift_card_batch')));
     }
 

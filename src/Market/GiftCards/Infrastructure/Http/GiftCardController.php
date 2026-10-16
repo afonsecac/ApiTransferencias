@@ -13,7 +13,6 @@ use App\Market\GiftCards\Application\IssuePlan;
 use App\Market\GiftCards\Application\ListGiftCards;
 use App\Market\GiftCards\Application\ListRedemptions;
 use App\Market\GiftCards\Application\RedeemGiftCard;
-use App\Market\GiftCards\Application\RevealGiftCardPin;
 use App\Market\GiftCards\Domain\GiftCardActor;
 use App\Market\GiftCards\Domain\GiftCardAlreadyRedeemed;
 use App\Market\GiftCards\Domain\GiftCardNotFound;
@@ -31,8 +30,8 @@ use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Http\Attribute\IsGranted;
 
 /**
- * Gift cards propias (COMR-276): emisión por lotes, listado, detalle con traza, PIN (con registro), anulación y canje idempotente.
- * El controlador solo traduce HTTP; el PIN solo sale por su endpoint propio.
+ * Gift cards propias (COMR-276): emisión individual y por rango, listado, detalle con traza, anulación y canje idempotente.
+ * El controlador solo traduce HTTP. El PIN no sale por ningún endpoint de administración: se entrega al comprador en la venta.
  */
 #[AsController]
 #[Route('/market/gift-cards')]
@@ -43,7 +42,6 @@ final class GiftCardController
         private readonly IssueGiftCardBatch $issue,
         private readonly ListGiftCards $list,
         private readonly GetGiftCard $get,
-        private readonly RevealGiftCardPin $reveal,
         private readonly CancelGiftCard $cancel,
         private readonly RedeemGiftCard $redeem,
         private readonly ListRedemptions $redemptions,
@@ -100,7 +98,7 @@ final class GiftCardController
     }
 
     #[Route('', name: 'market_gift_cards_issue_single', methods: ['POST'])]
-    #[DashboardEndpoint(summary: 'Emitir una tarjeta individual de un producto digital (serie y PIN no adivinable cifrado)', tag: 'Market', requestDto: IssueGiftCardDto::class, responseStatusCode: 201)]
+    #[DashboardEndpoint(summary: 'Emitir una tarjeta individual de un producto digital (número de tarjeta con control Luhn y PIN no adivinable cifrado)', tag: 'Market', requestDto: IssueGiftCardDto::class, responseStatusCode: 201)]
     public function issueSingle(IssueGiftCardDto $dto): JsonResponse
     {
         return $this->issued(fn () => ($this->issue)((int) $dto->getProductId(), IssuePlan::single($dto->getValue()), $dto->getExpiresAt(), $dto->getCostCenterId(), $this->actor()));
@@ -130,21 +128,14 @@ final class GiftCardController
         });
     }
 
-    #[Route('/{serial}', name: 'market_gift_cards_get', methods: ['GET'], requirements: ['serial' => 'GC-\d+'])]
-    #[DashboardEndpoint(summary: 'Detalle de una tarjeta con su traza (el PIN no se incluye)', tag: 'Market', responseDto: GiftCardOutDto::class)]
+    #[Route('/{serial}', name: 'market_gift_cards_get', methods: ['GET'], requirements: ['serial' => '\d{16}'])]
+    #[DashboardEndpoint(summary: 'Detalle de una tarjeta con su traza (el PIN nunca se incluye)', tag: 'Market', responseDto: GiftCardOutDto::class)]
     public function get(string $serial): JsonResponse
     {
         return $this->guard(fn () => new JsonResponse(GiftCardOutDto::fromDetails(($this->get)($serial))));
     }
 
-    #[Route('/{serial}/pin', name: 'market_gift_cards_pin', methods: ['POST'], requirements: ['serial' => 'GC-\d+'])]
-    #[DashboardEndpoint(summary: 'Mostrar el PIN de una tarjeta: deja registro de quién y cuándo', tag: 'Market')]
-    public function pin(string $serial): JsonResponse
-    {
-        return $this->guard(fn () => new JsonResponse(['pin' => ($this->reveal)($serial, $this->actor())]));
-    }
-
-    #[Route('/{serial}/cancel', name: 'market_gift_cards_cancel', methods: ['POST'], requirements: ['serial' => 'GC-\d+'])]
+    #[Route('/{serial}/cancel', name: 'market_gift_cards_cancel', methods: ['POST'], requirements: ['serial' => '\d{16}'])]
     #[DashboardEndpoint(summary: 'Anular una tarjeta emitida o activa, con motivo', tag: 'Market', requestDto: CancelGiftCardDto::class, responseDto: GiftCardOutDto::class)]
     public function cancel(string $serial, CancelGiftCardDto $dto): JsonResponse
     {

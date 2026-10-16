@@ -12,7 +12,6 @@ use App\Market\GiftCards\Application\ListGiftCards;
 use App\Market\GiftCards\Application\ListRedemptions;
 use App\Market\GiftCards\Application\MarkGiftCardSold;
 use App\Market\GiftCards\Application\RedeemGiftCard;
-use App\Market\GiftCards\Application\RevealGiftCardPin;
 use App\Market\GiftCards\Domain\GiftCardActor;
 use App\Market\GiftCards\Domain\GiftCardAlreadyRedeemed;
 use App\Market\GiftCards\Domain\GiftCardCostCenter;
@@ -50,12 +49,16 @@ final class GiftCardUseCasesTest extends TestCase
         return (new IssueGiftCardBatch($this->repo, $this->products, $this->vault))($product, $plan ?? IssuePlan::range(null, null, null, 3), $expires, $center, $this->actor, $this->now);
     }
 
-    public function testItIssuesALotWithConsecutiveSerialsAndDifferentPins(): void
+    public function testItIssuesALotWithCreditCardLikeNumbersAndDifferentPins(): void
     {
         $issued = $this->issue();
 
         $this->assertCount(3, $issued->cards);
-        $this->assertSame(['GC-000001', 'GC-000002', 'GC-000003'], array_map(static fn ($c) => $c->serial(), $issued->cards));
+        foreach ($issued->cards as $card) {
+            $this->assertMatchesRegularExpression('/^\d{16}$/', $card->serial());
+            $this->assertTrue(\App\Market\GiftCards\Domain\GiftCardNumber::passesLuhn($card->serial()));
+        }
+        $this->assertCount(3, array_unique(array_map(static fn ($c) => $c->serial(), $issued->cards)));
         $this->assertCount(3, array_unique(array_map(static fn ($c) => $c->pinHash(), $issued->cards)));
         $this->assertSame(2500, $issued->cards[0]->valueMinor());
         $this->assertSame(7, $issued->cards[0]->costCenterId(), 'por defecto, el centro principal del vendedor');
@@ -220,53 +223,79 @@ final class GiftCardUseCasesTest extends TestCase
         $this->assertNull($this->issue(expires: null)->cards[0]->expiresAt());
     }
 
-    public function testTheListFiltersBySerialAndStatusAndShowsEffectiveStatus(): void
+    private function sellFirst(int $quantity = 1, string $saleRef = 'venta-1'): \App\Market\GiftCards\Application\SoldGiftCard
     {
-        $this->issue();
-        (new MarkGiftCardSold($this->repo))('GC-000001', 'AWS Malta', 'venta-1', $this->actor, $this->now);
+        $issued = $this->issue(plan: IssuePlan::range(null, null, null, $quantity));
+
+        return (new MarkGiftCardSold($this->repo, $this->vault))($issued->cards[0]->serial(), 'AWS Malta', $saleRef, $this->actor, $this->now);
+    }
+
+    public function testTheListFiltersByNumberAndStatusAndShowsEffectiveStatus(): void
+    {
+        $issued = $this->issue();
+        $first = $issued->cards[0]->serial();
+        (new MarkGiftCardSold($this->repo, $this->vault))($first, 'AWS Malta', 'venta-1', $this->actor, $this->now);
         $list = new ListGiftCards($this->repo, $this->products);
 
         $this->assertCount(3, $list(null, null, null, null, $this->now));
-        $this->assertSame(['GC-000001'], array_map(static fn ($r) => $r->card->serial(), $list(null, 'active', null, null, $this->now)));
-        $this->assertSame(['GC-000002'], array_map(static fn ($r) => $r->card->serial(), $list(null, null, null, '000002', $this->now)));
+        $this->assertSame([$first], array_map(static fn ($r) => $r->card->serial(), $list(null, 'active', null, null, $this->now)));
+        $this->assertSame([$first], array_map(static fn ($r) => $r->card->serial(), $list(null, null, null, substr($first, 4, 8), $this->now)));
+        $this->assertSame([$first], array_map(static fn ($r) => $r->card->serial(), $list(null, null, null, \App\Market\GiftCards\Domain\GiftCardNumber::format($first), $this->now)), 'también con los espacios de la tarjeta');
         $this->assertCount(3, $list(null, 'expired', null, null, new \DateTimeImmutable('2028-06-01')));
     }
 
-    public function testTheDetailCarriesTheTraceInOrder(): void
+    public function testTheDetailCarriesTheTraceInOrderAndNeverThePin(): void
     {
-        $this->issue(plan: IssuePlan::single(null));
-        (new MarkGiftCardSold($this->repo))('GC-000001', 'AWS Malta', 'venta-1', $this->actor, $this->now);
+        $serial = $this->sellFirst()->card->serial();
 
-        $detail = (new GetGiftCard($this->repo, $this->products))('GC-000001', $this->now);
+        $detail = (new GetGiftCard($this->repo, $this->products))($serial, $this->now);
 
         $this->assertSame(['issued', 'sold'], array_map(static fn ($e) => $e->type(), $detail->events));
         $this->assertSame('Tarjeta de compra 25', $detail->product?->name);
         $this->assertSame(GiftCardStatus::Active, $detail->status);
+        $this->assertStringNotContainsString('AAAA-BBBB', serialize(array_map(static fn ($e) => [$e->type(), $e->detail(), $e->actorName()], $detail->events)));
     }
 
     public function testAnUnknownCardIsNotFound(): void
     {
         $this->expectException(GiftCardNotFound::class);
-        (new GetGiftCard($this->repo, $this->products))('GC-999999', $this->now);
+        (new GetGiftCard($this->repo, $this->products))('4111111111111111', $this->now);
     }
 
-    public function testRevealingThePinReturnsItAndLeavesWhoAndWhen(): void
+    public function testThePinIsHandedOverOnlyBySellingTheCard(): void
     {
-        $this->issue(plan: IssuePlan::single(null));
+        $sold = $this->sellFirst();
 
-        $pin = (new RevealGiftCardPin($this->repo, $this->vault))('GC-000001', new GiftCardActor(3, 'otra.persona'), $this->now);
-
-        $this->assertSame('AAAA-BBBB-CCCC-0001', $pin);
-        $reveal = array_values(array_filter($this->repo->events, static fn ($e) => $e->type() === 'pin_revealed'))[0];
-        $this->assertSame('otra.persona', $reveal->actorName());
+        $this->assertSame('AAAA-BBBB-CCCC-0001', $sold->pin);
+        $this->assertSame(GiftCardStatus::Active, $sold->card->status());
+        $this->assertFalse($sold->replay);
     }
 
-    public function testASaleActivatesTheCardAndAnActiveCardCanBeRedeemedByItsPin(): void
+    public function testRepeatingTheSameSaleDeliversTheSamePinWithoutAnotherEvent(): void
     {
-        $this->issue(plan: IssuePlan::single(null));
-        (new MarkGiftCardSold($this->repo))('GC-000001', 'AWS Malta', 'venta-1', $this->actor, $this->now);
+        $first = $this->sellFirst();
+        $events = count($this->repo->events);
 
-        $result = (new RedeemGiftCard($this->repo, $this->vault))('aaaa-bbbb-cccc-0001', 'canje-1', $this->actor, $this->now);
+        $again = (new MarkGiftCardSold($this->repo, $this->vault))($first->card->serial(), 'AWS Malta', 'venta-1', $this->actor, $this->now);
+
+        $this->assertTrue($again->replay);
+        $this->assertSame($first->pin, $again->pin);
+        $this->assertCount($events, $this->repo->events);
+    }
+
+    public function testASecondDifferentSaleOfTheSameCardIsRejectedAndRevealsNothing(): void
+    {
+        $first = $this->sellFirst();
+
+        $this->expectException(GiftCardTransitionInvalid::class);
+        (new MarkGiftCardSold($this->repo, $this->vault))($first->card->serial(), 'Otro', 'venta-2', $this->actor, $this->now);
+    }
+
+    public function testAnActiveCardIsRedeemedByThePinTheBuyerWasGiven(): void
+    {
+        $sold = $this->sellFirst();
+
+        $result = (new RedeemGiftCard($this->repo, $this->vault))(strtolower($sold->pin), 'canje-1', $this->actor, $this->now);
 
         $this->assertFalse($result->replay);
         $this->assertSame(GiftCardStatus::Redeemed, $result->card->status());
@@ -275,18 +304,17 @@ final class GiftCardUseCasesTest extends TestCase
 
     public function testRedeemingTwiceWithTheSameKeyIsAReplayAndWithAnotherKeyIsRejected(): void
     {
-        $this->issue(plan: IssuePlan::single(null));
-        (new MarkGiftCardSold($this->repo))('GC-000001', 'AWS Malta', 'venta-1', $this->actor, $this->now);
+        $sold = $this->sellFirst();
         $redeem = new RedeemGiftCard($this->repo, $this->vault);
-        $redeem('AAAA-BBBB-CCCC-0001', 'canje-1', $this->actor, $this->now);
+        $redeem($sold->pin, 'canje-1', $this->actor, $this->now);
         $before = count($this->repo->events);
 
-        $replay = $redeem('AAAA-BBBB-CCCC-0001', 'canje-1', $this->actor, $this->now);
+        $replay = $redeem($sold->pin, 'canje-1', $this->actor, $this->now);
         $this->assertTrue($replay->replay);
         $this->assertCount($before, $this->repo->events, 'una repetición no deja otro evento');
 
         $this->expectException(GiftCardAlreadyRedeemed::class);
-        $redeem('AAAA-BBBB-CCCC-0001', 'canje-2', $this->actor, $this->now);
+        $redeem($sold->pin, 'canje-2', $this->actor, $this->now);
     }
 
     public function testAWrongPinIsNotFoundAndANotSoldCardCannotBeRedeemed(): void
@@ -312,9 +340,9 @@ final class GiftCardUseCasesTest extends TestCase
 
     public function testCancellingLeavesAReasonAndATraceEvent(): void
     {
-        $this->issue(plan: IssuePlan::single(null));
+        $serial = $this->issue(plan: IssuePlan::single(null))->cards[0]->serial();
 
-        $card = (new CancelGiftCard($this->repo))('GC-000001', 'Emitida por error', $this->actor, $this->now);
+        $card = (new CancelGiftCard($this->repo))($serial, 'Emitida por error', $this->actor, $this->now);
 
         $this->assertSame(GiftCardStatus::Cancelled, $card->status());
         $this->assertContains('cancelled', array_map(static fn ($e) => $e->type(), $this->repo->events));
@@ -322,16 +350,16 @@ final class GiftCardUseCasesTest extends TestCase
 
     public function testTheRedemptionsListIsNewestFirst(): void
     {
-        $this->issue(plan: IssuePlan::range(null, null, null, 2));
-        $sell = new MarkGiftCardSold($this->repo);
-        $sell('GC-000001', 'A', 'v1', $this->actor, $this->now);
-        $sell('GC-000002', 'B', 'v2', $this->actor, $this->now);
+        $issued = $this->issue(plan: IssuePlan::range(null, null, null, 2));
+        $sell = new MarkGiftCardSold($this->repo, $this->vault);
+        $a = $sell($issued->cards[0]->serial(), 'A', 'v1', $this->actor, $this->now);
+        $b = $sell($issued->cards[1]->serial(), 'B', 'v2', $this->actor, $this->now);
         $redeem = new RedeemGiftCard($this->repo, $this->vault);
-        $redeem('AAAA-BBBB-CCCC-0001', 'c1', $this->actor, $this->now);
-        $redeem('AAAA-BBBB-CCCC-0002', 'c2', $this->actor, $this->now->modify('+1 hour'));
+        $redeem($a->pin, 'c1', $this->actor, $this->now);
+        $redeem($b->pin, 'c2', $this->actor, $this->now->modify('+1 hour'));
 
         $list = (new ListRedemptions($this->repo, $this->products))(50);
 
-        $this->assertSame(['GC-000002', 'GC-000001'], array_map(static fn ($r) => $r->card->serial(), $list));
+        $this->assertSame([$issued->cards[1]->serial(), $issued->cards[0]->serial()], array_map(static fn ($r) => $r->card->serial(), $list));
     }
 }

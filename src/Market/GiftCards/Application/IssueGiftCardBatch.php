@@ -8,6 +8,7 @@ use App\Market\GiftCards\Domain\GiftCard;
 use App\Market\GiftCards\Domain\GiftCardActor;
 use App\Market\GiftCards\Domain\GiftCardBatch;
 use App\Market\GiftCards\Domain\GiftCardEvent;
+use App\Market\GiftCards\Domain\GiftCardNumber;
 use App\Market\GiftCards\Domain\GiftCardPinVault;
 use App\Market\GiftCards\Domain\GiftCardProductInvalid;
 use App\Market\GiftCards\Domain\GiftCardProducts;
@@ -64,9 +65,9 @@ final class IssueGiftCardBatch
             $this->cards->saveBatch($batch);
 
             $issued = [];
-            foreach ($this->cards->nextSerialNumbers($quantity) as $i => $number) {
+            foreach ($this->freshNumbers($quantity) as $i => $number) {
                 $pin = $this->vault->generate();
-                $issued[] = GiftCard::issue((int) $batch->id(), $product->id, sprintf('GC-%06d', $number), $values[$i], $product->currency, $this->vault->encrypt($pin), $this->vault->hash($pin), $expires, $center->id, $now);
+                $issued[] = GiftCard::issue((int) $batch->id(), $product->id, $number, $values[$i], $product->currency, $this->vault->encrypt($pin), $this->vault->hash($pin), $expires, $center->id, $now);
             }
             $this->cards->saveCards($issued);
             foreach ($issued as $card) {
@@ -77,6 +78,27 @@ final class IssueGiftCardBatch
         });
 
         return $issued;
+    }
+
+    /**
+     * Números de tarjeta aleatorios (con su dígito de control) que no existen ya ni se repiten dentro del lote.
+     *
+     * @return list<string>
+     */
+    private function freshNumbers(int $quantity): array
+    {
+        $numbers = [];
+        while (count($numbers) < $quantity) {
+            $candidates = [];
+            for ($i = count($numbers); $i < $quantity; ++$i) {
+                $candidates[] = GiftCardNumber::generate();
+            }
+            $candidates = array_values(array_unique($candidates));
+            $free = array_values(array_diff($candidates, $numbers, $this->cards->takenSerials($candidates)));
+            $numbers = [...$numbers, ...$free];
+        }
+
+        return array_slice($numbers, 0, $quantity);
     }
 
     private function expiry(?string $expiresAt, \DateTimeImmutable $now): ?\DateTimeImmutable

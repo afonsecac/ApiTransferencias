@@ -9,8 +9,12 @@ interface GiftCardRepository
     /** Ejecuta el trabajo en una transacción: o se guarda todo el lote o nada. */
     public function transactional(callable $work): mixed;
 
-    /** @return list<int> números de serie consecutivos y no repetidos */
-    public function nextSerialNumbers(int $count): array;
+    /**
+     * @param list<string> $serials
+     *
+     * @return list<string> los que ya existen (para volver a generarlos)
+     */
+    public function takenSerials(array $serials): array;
 
     public function saveBatch(GiftCardBatch $batch): void;
 
