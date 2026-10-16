@@ -50,9 +50,17 @@ final class StockUseCasesTest extends TestCase
         return new ListStock($this->ledger, $this->warehouses, $this->products);
     }
 
+    /** Cambia lo en mano en `$delta` (el caso de uso recibe el nuevo valor en mano, como el tablero). */
     private function do(int $delta, string $reason = 'count', string $comment = 'Conteo del lunes', int $warehouse = 1, int $product = 40): \App\Market\Inventario\Application\StockLineDetails
     {
-        return ($this->adjust())($warehouse, 'product', $product, $delta, $reason, $comment, null, $this->actor);
+        $current = $this->ledger->find($warehouse, \App\Market\Inventario\Domain\StockItemType::Product, $product)?->onHand() ?? 0;
+
+        return $this->set($current + $delta, $reason, $comment, $warehouse, $product);
+    }
+
+    private function set(int $newOnHand, string $reason = 'count', string $comment = 'Conteo del lunes', int $warehouse = 1, int $product = 40): \App\Market\Inventario\Application\StockLineDetails
+    {
+        return ($this->adjust())($warehouse, 'product', $product, $newOnHand, $reason, $comment, null, $this->actor);
     }
 
     public function testThePositiveAdjustmentOfAMissingLineCreatesItAndRecordsTheMovement(): void
@@ -101,10 +109,44 @@ final class StockUseCasesTest extends TestCase
         }
     }
 
-    public function testRemovingStockFromALineThatDoesNotExistIsRejected(): void
+    public function testTheNewValueCannotBeNegative(): void
     {
+        $this->expectException(InvalidStock::class);
+        $this->set(-1, 'loss', 'No había nada');
+    }
+
+    public function testTheNewOnHandValueIsWhatTheLineEndsWithAndTheMovementRecordsTheDifference(): void
+    {
+        $this->set(120, 'initial', 'Existencia inicial');
+
+        $details = $this->set(116, 'damage', '4 bolsas rotas en el pasillo 3');
+
+        $this->assertSame(116, $details->line->onHand());
+        $movement = $this->ledger->movements[1];
+        $this->assertSame(-4, $movement->quantity());
+        $this->assertSame(116, $movement->onHandAfter());
+    }
+
+    public function testASetValueEqualToTheCurrentOneChangesNothingAndIsRejected(): void
+    {
+        $this->set(10);
+        $before = count($this->ledger->movements);
+
+        try {
+            $this->set(10);
+            $this->fail('debía rechazarse');
+        } catch (InvalidStock) {
+            $this->assertCount($before, $this->ledger->movements);
+        }
+    }
+
+    public function testTheNewValueCannotBeBelowWhatIsReserved(): void
+    {
+        $this->set(120);
+        $this->ledger->find(1, \App\Market\Inventario\Domain\StockItemType::Product, 40)?->reserve(18);
+
         $this->expectException(StockBelowReserved::class);
-        $this->do(-1, 'loss', 'No había nada');
+        $this->set(17);
     }
 
     public function testTheReasonAndTheCommentAreMandatory(): void

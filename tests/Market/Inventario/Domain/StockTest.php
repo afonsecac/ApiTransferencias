@@ -95,10 +95,15 @@ final class StockTest extends TestCase
         $this->assertSame(0, $this->line(5, 3, 4)->available(true));
     }
 
-    public function testItIsLowWhenWhatIsFreeDoesNotExceedTheSafetyStock(): void
+    public function testItIsLowWhenWhatIsAvailableDoesNotExceedTheSafetyStock(): void
     {
-        $this->assertTrue($this->line(8, 3, 5)->isLow());
-        $this->assertFalse($this->line(9, 3, 5)->isLow());
+        // Disponible = en mano − reservado − seguridad (como en el tablero: 16 en mano, 0 reservado, 10 de seguridad → 6, en alerta).
+        $this->assertTrue($this->line(16, 0, 10)->isLow());
+        $this->assertTrue($this->line(25, 5, 10)->isLow(), '10 disponibles igualan la seguridad: en alerta');
+        $this->assertFalse($this->line(26, 5, 10)->isLow(), '11 disponibles ya superan la seguridad');
+        $this->assertFalse($this->line(120, 18, 10)->isLow(), '92 disponibles superan la seguridad');
+        $this->assertFalse($this->line(40, 0, 5)->isLow());
+        $this->assertTrue($this->line(0, 0, 8)->isLow());
         $this->assertTrue($this->line(0, 0, 0)->isLow(), 'sin existencias está bajo mínimos');
     }
 
