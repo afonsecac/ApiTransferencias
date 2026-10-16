@@ -64,6 +64,8 @@ final class WarehousePartnerIsolationFunctionalTest extends ProviderFunctionalTe
             ->setRoles($roles)
             ->setIsActive(true)
             ->setIsCheckValidation(true);
+        // El socio de almacén exige 2FA (COMR-288): sin él no pasaría de la autenticación.
+        $user->setTwoFactorEnabled(in_array('ROLE_MARKET_WAREHOUSE_USER', $roles, true));
         $this->em->persist($user);
         $this->em->flush();
 

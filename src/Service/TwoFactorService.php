@@ -22,6 +22,12 @@ class TwoFactorService
     private const KEY_METHOD   = '2fa.method';
     private const KEY_DEADLINE = '2fa.deadline';
 
+    /**
+     * Roles para los que el 2FA es obligatorio siempre, sea cual sea `2fa.mode` y su fecha límite (COMR-288): el socio de almacén
+     * es una persona externa que opera con datos de la plataforma, así que no se espera a la política global.
+     */
+    public const ALWAYS_TWO_FACTOR_ROLES = ['ROLE_MARKET_WAREHOUSE_USER'];
+
     public function __construct(
         private readonly EntityManagerInterface      $em,
         private readonly SysConfigRepository         $sysConfigRepo,
@@ -294,7 +300,7 @@ class TwoFactorService
 
     public function requiresTwoFactor(User $user): bool
     {
-        if ($user->isTwoFactorEnabled()) {
+        if ($user->isTwoFactorEnabled() || self::isRoleWithMandatoryTwoFactor($user)) {
             return true;
         }
 
@@ -308,6 +314,12 @@ class TwoFactorService
         }
 
         return false;
+    }
+
+    /** El usuario tiene un rol que exige 2FA siempre (el socio de almacén, COMR-288). */
+    public static function isRoleWithMandatoryTwoFactor(User $user): bool
+    {
+        return array_intersect(self::ALWAYS_TWO_FACTOR_ROLES, $user->getRoles()) !== [];
     }
 
     /**
