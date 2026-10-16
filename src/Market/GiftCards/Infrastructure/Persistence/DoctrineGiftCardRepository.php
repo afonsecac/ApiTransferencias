@@ -7,6 +7,7 @@ namespace App\Market\GiftCards\Infrastructure\Persistence;
 use App\Market\GiftCards\Domain\GiftCard;
 use App\Market\GiftCards\Domain\GiftCardBatch;
 use App\Market\GiftCards\Domain\GiftCardEvent;
+use App\Market\GiftCards\Domain\GiftCardNumber;
 use App\Market\GiftCards\Domain\GiftCardRepository;
 use Doctrine\ORM\EntityManagerInterface;
 
@@ -21,14 +22,13 @@ final class DoctrineGiftCardRepository implements GiftCardRepository
         return $this->em->wrapInTransaction($work);
     }
 
-    public function nextSerialNumbers(int $count): array
+    public function takenSerials(array $serials): array
     {
-        $numbers = $this->em->getConnection()->fetchFirstColumn(
-            "SELECT nextval('market_gift_card_serial_seq') FROM generate_series(1, :n)",
-            ['n' => $count],
-        );
+        if ($serials === []) {
+            return [];
+        }
 
-        return array_map('intval', $numbers);
+        return array_map('strval', $this->em->getConnection()->fetchFirstColumn('SELECT serial FROM market_gift_card WHERE serial IN (?)', [$serials], [\Doctrine\DBAL\ArrayParameterType::STRING]));
     }
 
     public function saveBatch(GiftCardBatch $batch): void
@@ -67,7 +67,7 @@ final class DoctrineGiftCardRepository implements GiftCardRepository
 
     public function findBySerial(string $serial): ?GiftCard
     {
-        return $this->em->getRepository(GiftCard::class)->findOneBy(['serial' => strtoupper(trim($serial))]);
+        return $this->em->getRepository(GiftCard::class)->findOneBy(['serial' => GiftCardNumber::normalize($serial)]);
     }
 
     public function findByPinHash(string $hash): ?GiftCard
@@ -85,7 +85,7 @@ final class DoctrineGiftCardRepository implements GiftCardRepository
             $qb->andWhere('c.batchId = :batch')->setParameter('batch', $batchId);
         }
         if ($serialLike !== null) {
-            $qb->andWhere('c.serial LIKE :serial')->setParameter('serial', '%' . addcslashes(strtoupper($serialLike), '%_\\') . '%');
+            $qb->andWhere('c.serial LIKE :serial')->setParameter('serial', '%' . addcslashes(GiftCardNumber::normalize($serialLike), '%_\\') . '%');
         }
 
         /** @var list<GiftCard> $cards */

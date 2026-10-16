@@ -7,8 +7,8 @@ namespace App\Market\GiftCards\Domain;
 use Doctrine\ORM\Mapping as ORM;
 
 /**
- * Gift card propia (COMR-276): una tarjeta digital con serie y PIN, emitida en un lote, que se activa al venderse y se canjea una
- * sola vez. El PIN se guarda cifrado (para mostrarlo con registro) y como huella (para buscar al canjear); nunca en claro.
+ * Gift card propia (COMR-276): una tarjeta digital con número (16 dígitos con control Luhn, como una tarjeta de crédito) y PIN, emitida en un lote, que se activa al venderse y se canjea una
+ * sola vez. El PIN se guarda cifrado (solo para entregárselo al comprador en la venta) y como huella (para buscar al canjear); nunca en claro y la administración no puede verlo.
  *
  * Estados: emitida → activa (vendida) → canjeada; anulada desde emitida o activa; «vencida» se deduce de la caducidad. Canjear
  * dos veces con la misma clave es una repetición inofensiva; con otra clave, un error (idempotencia).
@@ -80,8 +80,8 @@ class GiftCard
 
     public static function issue(int $batchId, int $productId, string $serial, int $valueMinor, string $currency, string $pinCipher, string $pinHash, ?\DateTimeImmutable $expiresAt, int $costCenterId, \DateTimeImmutable $now): self
     {
-        if (preg_match('/^GC-\d{6,}$/', $serial) !== 1) {
-            throw new InvalidGiftCard(sprintf('La serie "%s" no es válida: GC- y al menos seis dígitos.', $serial));
+        if (!GiftCardNumber::isValid($serial)) {
+            throw new InvalidGiftCard(sprintf('El número "%s" no es válido: 16 dígitos con su dígito de control.', $serial));
         }
         if ($valueMinor <= 0 || preg_match('/^[A-Z]{3}$/', $currency) !== 1) {
             throw new InvalidGiftCard('Una tarjeta necesita un valor positivo y su moneda.');
@@ -196,13 +196,25 @@ class GiftCard
         return $this->status;
     }
 
-    /** La venta activa la tarjeta y deja a quién y con qué venta. */
-    public function markSold(string $soldTo, string $saleRef, \DateTimeImmutable $now): void
+    /**
+     * La venta activa la tarjeta y deja a quién y con qué venta. Devuelve verdadero la primera vez y falso si es una repetición de
+     * la misma venta (idempotencia: el flujo de venta puede reintentar y recibir el mismo PIN).
+     *
+     * @throws GiftCardTransitionInvalid con otra venta distinta, o si no está emitida o venció
+     */
+    public function markSold(string $soldTo, string $saleRef, \DateTimeImmutable $now): bool
     {
+        $soldTo = mb_substr(trim($soldTo), 0, 180);
+        $saleRef = mb_substr(trim($saleRef), 0, 80);
+        if ($this->status === GiftCardStatus::Active && $this->saleRef === $saleRef && $this->soldTo === $soldTo && $this->effectiveStatus($now) === GiftCardStatus::Active) {
+            return false;
+        }
         $this->assertStatus(GiftCardStatus::Issued, $now, 'vender');
         $this->status = GiftCardStatus::Active;
-        $this->soldTo = mb_substr(trim($soldTo), 0, 180);
-        $this->saleRef = mb_substr(trim($saleRef), 0, 80);
+        $this->soldTo = $soldTo;
+        $this->saleRef = $saleRef;
+
+        return true;
     }
 
     /**

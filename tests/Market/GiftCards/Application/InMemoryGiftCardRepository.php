@@ -17,7 +17,6 @@ final class InMemoryGiftCardRepository implements GiftCardRepository
     public array $events = [];
     /** @var list<GiftCardBatch> */
     public array $batches = [];
-    private int $serial = 0;
     private int $nextId = 1;
 
     public function transactional(callable $work): mixed
@@ -25,14 +24,9 @@ final class InMemoryGiftCardRepository implements GiftCardRepository
         return $work();
     }
 
-    public function nextSerialNumbers(int $count): array
+    public function takenSerials(array $serials): array
     {
-        $numbers = [];
-        for ($i = 0; $i < $count; ++$i) {
-            $numbers[] = ++$this->serial;
-        }
-
-        return $numbers;
+        return array_values(array_filter($serials, fn (string $serial) => isset($this->cards[$serial])));
     }
 
     public function saveBatch(GiftCardBatch $batch): void
@@ -91,7 +85,7 @@ final class InMemoryGiftCardRepository implements GiftCardRepository
             $this->cards,
             static fn (GiftCard $c) => ($productId === null || $c->productId() === $productId)
                 && ($batchId === null || $c->batchId() === $batchId)
-                && ($serialLike === null || str_contains($c->serial(), strtoupper($serialLike))),
+                && ($serialLike === null || str_contains($c->serial(), $serialLike)),
         ));
     }
 

@@ -22,7 +22,7 @@ final class GiftCardTest extends TestCase
 
     private function card(?string $expires = '2027-12-31'): GiftCard
     {
-        return GiftCard::issue(1, 40, 'GC-000123', 2500, 'USD', 'cipher', 'hash', $expires === null ? null : new \DateTimeImmutable($expires), 7, $this->now);
+        return GiftCard::issue(1, 40, '4111111111111111', 2500, 'USD', 'cipher', 'hash', $expires === null ? null : new \DateTimeImmutable($expires), 7, $this->now);
     }
 
     public function testItIsBornIssuedWithItsValueSerialAndCostCenter(): void
@@ -30,20 +30,26 @@ final class GiftCardTest extends TestCase
         $card = $this->card();
 
         $this->assertSame(GiftCardStatus::Issued, $card->status());
-        $this->assertSame(['GC-000123', 2500, 'USD', 7], [$card->serial(), $card->valueMinor(), $card->currency(), $card->costCenterId()]);
+        $this->assertSame(['4111111111111111', 2500, 'USD', 7], [$card->serial(), $card->valueMinor(), $card->currency(), $card->costCenterId()]);
         $this->assertNull($card->soldTo());
     }
 
-    public function testItRejectsAnInvalidSerialOrValue(): void
+    public function testItRejectsANumberThatIsNotALuhnValid16Digits(): void
     {
-        $this->expectException(InvalidGiftCard::class);
-        GiftCard::issue(1, 40, 'mal', 2500, 'USD', 'c', 'h', null, 7, $this->now);
+        foreach (['mal', 'GC-000123', '411111111111111', '41111111111111111', '4111111111111112'] as $number) {
+            try {
+                GiftCard::issue(1, 40, $number, 2500, 'USD', 'c', 'h', null, 7, $this->now);
+                $this->fail('debía rechazar ' . $number);
+            } catch (InvalidGiftCard) {
+                $this->addToAssertionCount(1);
+            }
+        }
     }
 
     public function testItRejectsAZeroValue(): void
     {
         $this->expectException(InvalidGiftCard::class);
-        GiftCard::issue(1, 40, 'GC-000123', 0, 'USD', 'c', 'h', null, 7, $this->now);
+        GiftCard::issue(1, 40, '4111111111111111', 0, 'USD', 'c', 'h', null, 7, $this->now);
     }
 
     public function testASaleActivatesItAndRecordsToWhomAndWhich(): void
@@ -55,13 +61,22 @@ final class GiftCardTest extends TestCase
         $this->assertSame(['AWS Malta', 'venta-48213'], [$card->soldTo(), $card->saleRef()]);
     }
 
-    public function testItCannotBeSoldTwice(): void
+    public function testItCannotBeSoldTwiceToDifferentSales(): void
     {
         $card = $this->card();
         $card->markSold('A', 'v1', $this->now);
 
         $this->expectException(GiftCardTransitionInvalid::class);
         $card->markSold('B', 'v2', $this->now);
+    }
+
+    public function testRepeatingTheSameSaleIsAHarmlessReplay(): void
+    {
+        $card = $this->card();
+
+        $this->assertTrue($card->markSold('AWS Malta', 'venta-1', $this->now));
+        $this->assertFalse($card->markSold('AWS Malta', 'venta-1', $this->now->modify('+1 minute')));
+        $this->assertSame(GiftCardStatus::Active, $card->status());
     }
 
     public function testAnActiveCardIsRedeemedOnce(): void

@@ -17,7 +17,7 @@ require_once dirname(__DIR__, 2) . '/migrations/Version20261016170000.php';
  */
 class Version20261016170000Test extends ProviderFunctionalTestCase
 {
-    private function seed(string $status = 'issued', ?string $redeemedAt = null, ?string $ref = null, int $value = 2500, string $serial = 'GC-000001', string $hash = 'h1'): int
+    private function seed(string $status = 'issued', ?string $redeemedAt = null, ?string $ref = null, int $value = 2500, string $serial = '4111111111111111', string $hash = 'h1'): int
     {
         $c = $this->em->getConnection();
         $c->executeStatement(<<<'SQL'
@@ -61,7 +61,7 @@ class Version20261016170000Test extends ProviderFunctionalTestCase
         $this->assertSame(1, (int) $this->em->getConnection()->fetchOne("SELECT count(*) FROM market_gift_card WHERE status = 'redeemed'"));
 
         $this->expectException(DbalException::class);
-        $this->seed('redeemed', null, null, serial: 'GC-000002', hash: 'h2');
+        $this->seed('redeemed', null, null, serial: '5500000000000004', hash: 'h2');
     }
 
     public function testTheSerialAndThePinHashAreUnique(): void
@@ -69,7 +69,7 @@ class Version20261016170000Test extends ProviderFunctionalTestCase
         $this->seed();
 
         $this->expectException(DbalException::class);
-        $this->seed(serial: 'GC-000001', hash: 'h-otro');
+        $this->seed(serial: '4111111111111111', hash: 'h-otro');
     }
 
     public function testAnEventCannotBeModifiedNorDeleted(): void
