@@ -3,7 +3,6 @@
 namespace App\State;
 
 use ApiPlatform\Metadata\Operation;
-use ApiPlatform\State\Pagination\ArrayPaginator;
 use ApiPlatform\State\ProviderInterface;
 use App\Entity\Account;
 use App\Entity\CommunicationPackage;
@@ -252,8 +251,8 @@ final class CommunicationPackageCatalogProvider implements ProviderInterface
      * Réplica manual de la paginación estándar de API Platform — este
      * provider bypasea el provider Doctrine (ver docblock de clase), así
      * que la extensión de paginación de la Query nunca llega a intervenir;
-     * hay que envolver el resultado en ArrayPaginator (la misma clase que
-     * usa el core) para que la colección salga con metadata Hydra
+     * hay que envolver el resultado en un paginador (ListPaginator: el ArrayPaginator
+     * del core con las claves de la página renumeradas) para que la colección salga con metadata Hydra
      * (hydra:view, totalItems) igual que cualquier otro endpoint paginado.
      *
      * @param list<CommunicationPackage> $packages
@@ -281,6 +280,6 @@ final class CommunicationPackageCatalogProvider implements ProviderInterface
         $page = max(1, (int) $request->query->get('page', 1));
         $firstResult = ($page - 1) * $itemsPerPage;
 
-        return new ArrayPaginator($packages, $firstResult, $itemsPerPage);
+        return new ListPaginator($packages, $firstResult, $itemsPerPage);
     }
 }

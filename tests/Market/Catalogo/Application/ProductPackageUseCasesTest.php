@@ -16,7 +16,7 @@ use App\Market\Catalogo\Domain\InvalidProduct;
 use App\Market\Catalogo\Domain\ProductNotFound;
 use App\Market\Catalogo\Domain\ProductStatus;
 use App\Market\Catalogo\Domain\Seller;
-use App\Market\Catalogo\Domain\Slug;
+use App\Shared\Domain\Slug;
 use PHPUnit\Framework\TestCase;
 
 /**

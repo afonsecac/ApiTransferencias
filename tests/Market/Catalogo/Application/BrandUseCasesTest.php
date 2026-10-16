@@ -14,7 +14,7 @@ use App\Market\Catalogo\Domain\BrandNotFound;
 use App\Market\Catalogo\Domain\BrandSellerInvalid;
 use App\Market\Catalogo\Domain\InvalidBrand;
 use App\Market\Catalogo\Domain\Seller;
-use App\Market\Catalogo\Domain\Slug;
+use App\Shared\Domain\Slug;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -93,7 +93,7 @@ final class BrandUseCasesTest extends TestCase
             try {
                 ($this->create())((int) $this->garajito->id(), $name, $slug);
                 $this->fail('Debió rechazar los datos');
-            } catch (InvalidBrand|\App\Market\Catalogo\Domain\InvalidSeller) {
+            } catch (InvalidBrand|\App\Shared\Domain\InvalidSlug) {
                 $this->assertSame([], $this->brands->brands);
             }
         }

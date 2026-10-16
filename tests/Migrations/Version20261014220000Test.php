@@ -140,10 +140,10 @@ class Version20261014220000Test extends ProviderFunctionalTestCase
         $this->runMigration();
         $this->runMigration();
 
-        $count = $this->em->getConnection()->fetchOne("SELECT count(*) FROM navigation_item WHERE title LIKE 'menu.market.%'");
+        $count = $this->em->getConnection()->fetchOne("SELECT count(*) FROM navigation_item WHERE title IN ('menu.market.title', 'menu.market.catalog.title', 'menu.market.organization.title')");
         $this->assertSame(3, (int) $count);
         $permissions = $this->em->getConnection()->fetchOne(
-            "SELECT count(*) FROM user_permission up JOIN navigation_item ni ON ni.id = up.item_id WHERE ni.title LIKE 'menu.market.%'"
+            "SELECT count(*) FROM user_permission up JOIN navigation_item ni ON ni.id = up.item_id WHERE ni.title IN ('menu.market.title', 'menu.market.catalog.title', 'menu.market.organization.title')"
         );
         $this->assertSame(3, (int) $permissions);
         $this->assertSame(1, (int) $this->em->getConnection()->fetchOne("SELECT count(*) FROM navigation_item WHERE title = 'menu.apps.market-sellers-brands.title'"));
@@ -155,6 +155,11 @@ class Version20261014220000Test extends ProviderFunctionalTestCase
         // Las migraciones posteriores se revierten antes: la pantalla de medidas (COMR-281) cuelga de «Catálogo».
         $this->em->getConnection()->executeStatement("DELETE FROM user_permission WHERE item_id IN (SELECT id FROM navigation_item WHERE title = 'menu.apps.market-measure-settings.title')");
         $this->em->getConnection()->executeStatement("DELETE FROM navigation_item WHERE title = 'menu.apps.market-measure-settings.title'");
+        // Y las de COMR-286 y COMR-285 (provincias y municipios, almacenes y la sección Operación) cuelgan del grupo.
+        foreach (['menu.apps.market-geography.title', 'menu.apps.market-warehouses.title', 'menu.apps.market-stock.title', 'menu.apps.market-gift-cards.title', 'menu.market.operation.title'] as $title) {
+            $this->em->getConnection()->executeStatement("DELETE FROM user_permission WHERE item_id IN (SELECT id FROM navigation_item WHERE title = '$title')");
+            $this->em->getConnection()->executeStatement("DELETE FROM navigation_item WHERE title = '$title'");
+        }
         $this->runMigration('down');
 
         $this->assertNull($this->item('menu.market.title'));

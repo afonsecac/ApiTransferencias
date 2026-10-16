@@ -109,7 +109,7 @@ final class CategoryUseCasesTest extends TestCase
         try {
             ($this->create())(null, '  ', null);
             $this->fail('Debió rechazar el nombre');
-        } catch (InvalidCategory|\App\Market\Catalogo\Domain\InvalidSeller) {
+        } catch (InvalidCategory|\App\Shared\Domain\InvalidSlug) {
             $this->assertSame([], $this->categories->categories);
         }
     }

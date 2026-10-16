@@ -8,7 +8,7 @@ use App\Market\Catalogo\Domain\Category;
 use App\Market\Catalogo\Domain\CategoryCycle;
 use App\Market\Catalogo\Domain\CategoryDepthExceeded;
 use App\Market\Catalogo\Domain\CategoryTree;
-use App\Market\Catalogo\Domain\Slug;
+use App\Shared\Domain\Slug;
 use PHPUnit\Framework\TestCase;
 
 /**

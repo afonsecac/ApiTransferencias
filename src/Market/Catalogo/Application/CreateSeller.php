@@ -11,7 +11,7 @@ use App\Market\Catalogo\Domain\SellerOrgUnit;
 use App\Market\Catalogo\Domain\SellerOrgUnitInvalid;
 use App\Market\Catalogo\Domain\SellerOrgUnits;
 use App\Market\Catalogo\Domain\SellerRepository;
-use App\Market\Catalogo\Domain\Slug;
+use App\Shared\Domain\Slug;
 
 final class CreateSeller
 {

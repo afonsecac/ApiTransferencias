@@ -6,7 +6,7 @@ namespace App\Tests\Market\Catalogo\Domain;
 
 use App\Market\Catalogo\Domain\Brand;
 use App\Market\Catalogo\Domain\InvalidBrand;
-use App\Market\Catalogo\Domain\Slug;
+use App\Shared\Domain\Slug;
 use PHPUnit\Framework\TestCase;
 
 /**

@@ -27,6 +27,7 @@ class Version20261014160000Test extends ProviderFunctionalTestCase
         $this->db = $this->em->getConnection();
 
         // Base limpia de plataforma: sin vendedor, sin unidad con el tipo «platform» y sin la unidad de Comremit.
+        $this->db->executeStatement('DELETE FROM market_warehouse');
         $this->db->executeStatement('DELETE FROM market_seller');
         $this->db->executeStatement("UPDATE market_org_unit SET types = '[\"buyer\"]'::json WHERE types::jsonb @> '\"platform\"'::jsonb");
         $this->db->executeStatement("UPDATE client SET org_unit_id = NULL WHERE org_unit_id IN (SELECT id FROM market_org_unit WHERE tax_id IN ('B10583565', 'PLATAFORMA'))");

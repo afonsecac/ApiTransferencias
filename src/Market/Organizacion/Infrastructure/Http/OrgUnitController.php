@@ -18,6 +18,7 @@ use App\Market\Organizacion\Domain\InvalidFiscalData;
 use App\Market\Organizacion\Domain\InvalidOrgUnit;
 use App\Market\Organizacion\Domain\OrgUnitAlreadyExists;
 use App\Market\Organizacion\Domain\OrgUnitNotFound;
+use App\Market\Organizacion\Domain\OrgUnitTypeInUse;
 use App\Market\Organizacion\Domain\OrgUnitType;
 use App\OpenApi\Attribute\DashboardEndpoint;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -145,6 +146,8 @@ final class OrgUnitController
             return $this->error('ORG_UNIT_ALREADY_EXISTS', $e->getMessage(), Response::HTTP_CONFLICT);
         } catch (InvalidFiscalData $e) {
             return $this->error('INVALID_FISCAL_DATA', $e->getMessage(), Response::HTTP_UNPROCESSABLE_ENTITY, $e->errors());
+        } catch (OrgUnitTypeInUse $e) {
+            return $this->error('ORG_UNIT_TYPE_IN_USE', $e->getMessage(), Response::HTTP_CONFLICT);
         } catch (InvalidOrgUnit $e) {
             return $this->error('INVALID_ORG_UNIT', $e->getMessage(), Response::HTTP_UNPROCESSABLE_ENTITY);
         }

@@ -6,7 +6,7 @@ namespace App\Tests\Market\Catalogo\Infrastructure;
 
 use App\Market\Catalogo\Domain\Category;
 use App\Market\Catalogo\Domain\CategoryRepository;
-use App\Market\Catalogo\Domain\Slug;
+use App\Shared\Domain\Slug;
 use App\Market\Catalogo\Infrastructure\Http\ChangeProductStatusDto;
 use App\Market\Catalogo\Infrastructure\Http\CreateProductDto;
 use App\Market\Catalogo\Infrastructure\Http\ProductController;

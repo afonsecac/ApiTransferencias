@@ -11,7 +11,7 @@ use App\Market\Catalogo\Domain\BrandSellerInvalid;
 use App\Market\Catalogo\Domain\InvalidBrand;
 use App\Market\Catalogo\Domain\InvalidSeller;
 use App\Market\Catalogo\Domain\SellerRepository;
-use App\Market\Catalogo\Domain\Slug;
+use App\Shared\Domain\Slug;
 
 final class CreateBrand
 {
