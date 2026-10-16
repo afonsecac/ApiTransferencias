@@ -29,19 +29,22 @@ class ApiDocsUiGuardListenerTest extends TestCase
     }
 
     /**
-     * @return iterable<string, array{string, string}>
+     * @return iterable<string, array{string, ?string}>
      */
     public static function htmlRequests(): iterable
     {
         yield 'navegador en /api/docs' => ['/api/docs', 'text/html,application/xhtml+xml,*/*;q=0.8'];
         yield 'navegador con barra final' => ['/api/docs/', 'text/html'];
         yield 'extensión .html' => ['/api/docs.html', 'application/json'];
+        yield 'dashboard: interfaz' => ['/dashboard/api/docs', 'text/html'];
+        yield 'dashboard: con barra final' => ['/dashboard/api/docs/', 'text/html'];
+        yield 'dashboard: sin Accept' => ['/dashboard/api/docs', null];
     }
 
     /**
      * @dataProvider htmlRequests
      */
-    public function testBloqueaLaInterfazWebCuandoEstaDesactivada(string $path, string $accept): void
+    public function testBloqueaLaInterfazWebCuandoEstaDesactivada(string $path, ?string $accept): void
     {
         $listener = new ApiDocsUiGuardListener(false);
 
@@ -53,7 +56,7 @@ class ApiDocsUiGuardListenerTest extends TestCase
     /**
      * @dataProvider htmlRequests
      */
-    public function testDejaPasarLaInterfazWebCuandoEstaActivada(string $path, string $accept): void
+    public function testDejaPasarLaInterfazWebCuandoEstaActivada(string $path, ?string $accept): void
     {
         $listener = new ApiDocsUiGuardListener(true);
 
@@ -73,6 +76,7 @@ class ApiDocsUiGuardListenerTest extends TestCase
         yield 'openapi json' => ['/api/docs.jsonopenapi', 'text/html'];
         yield 'json-ld' => ['/api/docs.jsonld', 'text/html'];
         yield 'json' => ['/api/docs.json', 'text/html'];
+        yield 'dashboard: definición' => ['/dashboard/api/docs.json', 'application/json'];
     }
 
     /**
@@ -93,7 +97,7 @@ class ApiDocsUiGuardListenerTest extends TestCase
 
         $listener($this->event('/api/communication/packages', 'text/html'));
         $listener($this->event('/api/docsx', 'text/html'));
-        $listener($this->event('/dashboard/api/docs', 'text/html'));
+        $listener($this->event('/dashboard/api/docsx', 'text/html'));
 
         $this->addToAssertionCount(1);
     }

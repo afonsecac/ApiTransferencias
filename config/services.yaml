@@ -4,7 +4,7 @@
 # Put parameters here that don't need to change on each machine where the app is deployed
 # https://symfony.com/doc/current/best_practices.html#use-parameters-for-application-configuration
 parameters:
-    # Interfaz web de /api/docs (Swagger UI). En producción se fuerza a 0 en
+    # Interfaz web de /api/docs y /dashboard/api/docs (Swagger UI). En producción se fuerza a 0 en
     # docker-compose.vps.prod.yaml; el JSON de OpenAPI siempre queda disponible.
     env(API_DOCS_UI): '1'
     app.secret: '%env(APP_SECRET)%'
