@@ -156,7 +156,7 @@ class Version20261014220000Test extends ProviderFunctionalTestCase
         $this->em->getConnection()->executeStatement("DELETE FROM user_permission WHERE item_id IN (SELECT id FROM navigation_item WHERE title = 'menu.apps.market-measure-settings.title')");
         $this->em->getConnection()->executeStatement("DELETE FROM navigation_item WHERE title = 'menu.apps.market-measure-settings.title'");
         // Y las de COMR-286 y COMR-285 (provincias y municipios, almacenes y la sección Operación) cuelgan del grupo.
-        foreach (['menu.apps.market-geography.title', 'menu.apps.market-warehouses.title', 'menu.apps.market-stock.title', 'menu.market.operation.title'] as $title) {
+        foreach (['menu.apps.market-geography.title', 'menu.apps.market-warehouses.title', 'menu.apps.market-stock.title', 'menu.apps.market-gift-cards.title', 'menu.market.operation.title'] as $title) {
             $this->em->getConnection()->executeStatement("DELETE FROM user_permission WHERE item_id IN (SELECT id FROM navigation_item WHERE title = '$title')");
             $this->em->getConnection()->executeStatement("DELETE FROM navigation_item WHERE title = '$title'");
         }

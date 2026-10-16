@@ -48,6 +48,12 @@ doctrine:
                 is_bundle: false
                 dir: '%kernel.project_dir%/src/Market/Distribucion/Domain'
                 prefix: 'App\Market\Distribucion\Domain'
+            # ADR-001: el contexto Gift cards (COMR-276).
+            MarketGiftCards:
+                type: attribute
+                is_bundle: false
+                dir: '%kernel.project_dir%/src/Market/GiftCards/Domain'
+                prefix: 'App\Market\GiftCards\Domain'
 
 # Entidades de los contextos nuevos (ADR-001): viven en Domain con atributos de Doctrine\ORM\Mapping.
 # Cada contexto registra aquí su carpeta Domain (en la clave `mappings` de arriba), por ejemplo:

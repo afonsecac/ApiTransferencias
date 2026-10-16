@@ -68,6 +68,8 @@ class Version20261016120000Test extends ProviderFunctionalTestCase
         // La pantalla de stock (COMR-193) cuelga de «Operación»: sus migraciones posteriores se revierten antes.
         $this->em->getConnection()->executeStatement("DELETE FROM user_permission WHERE item_id IN (SELECT id FROM navigation_item WHERE title = 'menu.apps.market-stock.title')");
         $this->em->getConnection()->executeStatement("DELETE FROM navigation_item WHERE title = 'menu.apps.market-stock.title'");
+        $this->em->getConnection()->executeStatement("DELETE FROM user_permission WHERE item_id IN (SELECT id FROM navigation_item WHERE title = 'menu.apps.market-gift-cards.title')");
+        $this->em->getConnection()->executeStatement("DELETE FROM navigation_item WHERE title = 'menu.apps.market-gift-cards.title'");
         $this->migrate('down');
 
         $this->assertSame('menu.market.organization.title', $this->parentOf('menu.apps.market-geography.title'));

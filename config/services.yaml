@@ -99,6 +99,12 @@ services:
     App\Market\Distribucion\Domain\DeliveryWarehouses: '@App\Market\Distribucion\Infrastructure\Persistence\InventarioDeliveryWarehouses'
     App\Market\Distribucion\Domain\DeliveryProducts: '@App\Market\Distribucion\Infrastructure\Persistence\CatalogoDeliveryProducts'
     App\Market\Distribucion\Domain\DeliveryMunicipalities: '@App\Market\Distribucion\Infrastructure\Persistence\GeografiaDeliveryMunicipalities'
+    App\Market\GiftCards\Domain\GiftCardRepository: '@App\Market\GiftCards\Infrastructure\Persistence\DoctrineGiftCardRepository'
+    App\Market\GiftCards\Domain\GiftCardProducts: '@App\Market\GiftCards\Infrastructure\Persistence\CatalogoOrganizacionGiftCardProducts'
+    App\Market\GiftCards\Domain\GiftCardPinVault: '@App\Market\GiftCards\Infrastructure\Persistence\SecretCipherPinVault'
+    App\Market\GiftCards\Infrastructure\Persistence\SecretCipherPinVault:
+        arguments:
+            $appSecret: '%env(APP_SECRET)%'
     App\Market\Catalogo\Domain\SellerRepository: '@App\Market\Catalogo\Infrastructure\Persistence\DoctrineSellerRepository'
     App\Market\Catalogo\Domain\SellerOrgUnits: '@App\Market\Catalogo\Infrastructure\Persistence\OrganizacionSellerOrgUnits'
     App\Market\Catalogo\Domain\ProductRepository: '@App\Market\Catalogo\Infrastructure\Persistence\DoctrineProductRepository'
