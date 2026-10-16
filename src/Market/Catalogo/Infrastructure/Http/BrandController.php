@@ -16,6 +16,7 @@ use App\Market\Catalogo\Domain\BrandSellerInvalid;
 use App\Market\Catalogo\Domain\InvalidBrand;
 use App\Market\Catalogo\Domain\InvalidSeller;
 use App\OpenApi\Attribute\DashboardEndpoint;
+use App\Shared\Domain\InvalidSlug;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -100,7 +101,7 @@ final class BrandController
             return $this->error('BRAND_ALREADY_EXISTS', $e->getMessage(), Response::HTTP_CONFLICT);
         } catch (BrandSellerInvalid $e) {
             return $this->error('BRAND_SELLER_INVALID', $e->getMessage(), Response::HTTP_UNPROCESSABLE_ENTITY);
-        } catch (InvalidBrand|InvalidSeller $e) {
+        } catch (InvalidBrand|InvalidSeller|InvalidSlug $e) {
             return $this->error('INVALID_BRAND', $e->getMessage(), Response::HTTP_UNPROCESSABLE_ENTITY);
         }
     }

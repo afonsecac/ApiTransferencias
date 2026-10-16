@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Market\Catalogo\Domain;
+namespace App\Shared\Domain;
 
 /**
  * Identificador legible y estable de un vendedor: minúsculas ASCII, dígitos y guiones sueltos (máx. 60).
@@ -17,7 +17,7 @@ final readonly class Slug
     public function __construct(string $value)
     {
         if (strlen($value) > self::MAX_LENGTH || preg_match(self::PATTERN, $value) !== 1) {
-            throw new InvalidSeller(sprintf('El identificador "%s" no es válido: minúsculas, números y guiones sueltos, máximo %d.', $value, self::MAX_LENGTH));
+            throw new InvalidSlug(sprintf('El identificador "%s" no es válido: minúsculas, números y guiones sueltos, máximo %d.', $value, self::MAX_LENGTH));
         }
         $this->value = $value;
     }
@@ -36,7 +36,7 @@ final readonly class Slug
      *
      * @param callable(string): bool $taken
      *
-     * @throws InvalidSeller si el texto no da un identificador válido o hay demasiadas colisiones
+     * @throws InvalidSlug si el texto no da un identificador válido o hay demasiadas colisiones
      */
     public static function free(string $text, callable $taken): self
     {
@@ -52,7 +52,7 @@ final readonly class Slug
             }
         }
 
-        throw new InvalidSeller(sprintf('No se encontró un identificador libre para "%s": escribe uno a mano.', $text));
+        throw new InvalidSlug(sprintf('No se encontró un identificador libre para "%s": escribe uno a mano.', $text));
     }
 
     public function value(): string

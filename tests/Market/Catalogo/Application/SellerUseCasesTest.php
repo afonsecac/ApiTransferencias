@@ -17,7 +17,7 @@ use App\Market\Catalogo\Domain\SellerAlreadyExists;
 use App\Market\Catalogo\Domain\SellerCostCenter;
 use App\Market\Catalogo\Domain\SellerNotFound;
 use App\Market\Catalogo\Domain\SellerOrgUnitInvalid;
-use App\Market\Catalogo\Domain\Slug;
+use App\Shared\Domain\Slug;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -141,7 +141,7 @@ final class SellerUseCasesTest extends TestCase
 
     public function testItRejectsAnInvalidName(): void
     {
-        $this->expectException(InvalidSeller::class);
+        $this->expectException(\App\Shared\Domain\InvalidSlug::class);
 
         ($this->create())(7, '  ');
     }

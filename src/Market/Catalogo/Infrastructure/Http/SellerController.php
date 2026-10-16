@@ -16,6 +16,7 @@ use App\Market\Catalogo\Domain\SellerAlreadyExists;
 use App\Market\Catalogo\Domain\SellerNotFound;
 use App\Market\Catalogo\Domain\SellerOrgUnitInvalid;
 use App\OpenApi\Attribute\DashboardEndpoint;
+use App\Shared\Domain\InvalidSlug;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -104,7 +105,7 @@ final class SellerController
             return $this->error('PLATFORM_SELLER_PROTECTED', $e->getMessage(), Response::HTTP_CONFLICT);
         } catch (SellerOrgUnitInvalid $e) {
             return $this->error('SELLER_ORG_UNIT_INVALID', $e->getMessage(), Response::HTTP_UNPROCESSABLE_ENTITY);
-        } catch (InvalidSeller $e) {
+        } catch (InvalidSeller|InvalidSlug $e) {
             return $this->error('INVALID_SELLER', $e->getMessage(), Response::HTTP_UNPROCESSABLE_ENTITY);
         }
     }

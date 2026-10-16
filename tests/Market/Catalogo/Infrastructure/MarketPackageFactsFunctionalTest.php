@@ -12,7 +12,7 @@ use App\Market\Catalogo\Domain\ProductGallery;
 use App\Market\Catalogo\Domain\ProductImageRepository;
 use App\Market\Catalogo\Domain\ProductRepository;
 use App\Market\Catalogo\Domain\Relevance;
-use App\Market\Catalogo\Domain\Slug;
+use App\Shared\Domain\Slug;
 use App\Market\Catalogo\Infrastructure\Http\ChangeProductStatusDto;
 use App\Market\Catalogo\Infrastructure\Http\CreateProductDto;
 use App\Market\Catalogo\Infrastructure\Http\ProductController;

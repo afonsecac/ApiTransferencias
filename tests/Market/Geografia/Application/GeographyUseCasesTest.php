@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Market\Geografia\Application;
 
+use App\Market\Geografia\Application\FindMunicipality;
 use App\Market\Geografia\Application\ListProvinces;
 use App\Market\Geografia\Application\SearchMunicipalities;
 use App\Market\Geografia\Application\SetMunicipalityActive;
@@ -86,5 +87,17 @@ final class GeographyUseCasesTest extends TestCase
     {
         $this->expectException(GeographyNotFound::class);
         (new SetProvinceActive($this->repo))(999, false);
+    }
+
+    public function testItFindsAMunicipalityByIdAndByCode(): void
+    {
+        $id = (int) $this->repo->municipalities('boyeros', null, null)[0]->id();
+        $find = new FindMunicipality($this->repo);
+
+        $this->assertSame('Boyeros', $find->byId($id)?->municipality->name());
+        $this->assertSame('La Habana', $find->byCode('boyeros')?->province->name());
+        $this->assertTrue($find->byCode('boyeros')?->selectable);
+        $this->assertNull($find->byId(999));
+        $this->assertNull($find->byCode('nada'));
     }
 }
