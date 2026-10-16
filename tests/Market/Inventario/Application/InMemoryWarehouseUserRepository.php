@@ -23,6 +23,11 @@ final class InMemoryWarehouseUserRepository implements WarehouseUserRepository
         return array_values(array_filter($this->items, static fn (WarehouseUser $l) => $l->warehouseId() === $warehouseId));
     }
 
+    public function ofUser(int $userId): array
+    {
+        return array_values(array_filter($this->items, static fn (WarehouseUser $l) => $l->userId() === $userId));
+    }
+
     public function save(WarehouseUser $link): void
     {
         if ($link->id() === null) {

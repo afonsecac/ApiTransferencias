@@ -16,5 +16,11 @@ return static function (RoutingConfigurator $routes): void {
         foreach ($directories as $directory) {
             $routes->import($directory . '/', 'attribute')->prefix('/dashboard/api');
         }
+
+        // COMR-288: lo que ve el socio de almacén vive en `Infrastructure/Warehouse`, bajo un prefijo y un firewall propios
+        // (nunca el del dashboard), detrás del rol externo y del Voter por almacén.
+        foreach (glob(dirname(__DIR__, 2) . '/src/' . $area . '/*/Infrastructure/Warehouse', GLOB_ONLYDIR) ?: [] as $directory) {
+            $routes->import($directory . '/', 'attribute')->prefix('/warehouse/api');
+        }
     }
 };

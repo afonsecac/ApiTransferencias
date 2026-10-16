@@ -62,6 +62,15 @@ TDD (sección 12 de `CLAUDE.md`) y pantalla de administración con pruebas (secc
 - Riesgo de sobreingeniería: las capas completas se aplican solo a contextos con reglas de negocio (venta, inventario, entrega, geolocalización); el catálogo puede tener `Application` e `Infrastructure` delgadas.
 - Riesgo de eventos perdidos: se mitiga con el outbox en la misma transacción, consumidores idempotentes, la cola `failed` existente y una tarea de reconciliación.
 
+## Actualización (COMR-288): usuarios externos del socio de almacén
+
+Un tercer prefijo, `/warehouse/api`, para el socio de almacén (decisión B1 de `docs/shop/por-definir.md`: rol por tipo, entidad vinculada, prefijo propio y aislamiento en los servicios):
+
+- **Rol externo** `ROLE_MARKET_WAREHOUSE_USER`, **fuera de la jerarquía** de `ROLE_SYSTEM_USER` y de `ROLE_API_ADMIN` (sin padre ni hijos): no entra en el dashboard ni en la administración del mercado (403).
+- **Firewall y `access_control` propios** para `^/warehouse/api`. Se autentica con el mismo JWT que el dashboard (el inicio de sesión y la activación siguen siendo los de siempre); lo que puede ver lo decide el rol y el Voter.
+- **Controladores** de lo que ve el socio en `src/Market/<Contexto>/Infrastructure/Warehouse`, que se importan solos bajo `/warehouse/api` (`config/routes/contextos_http.php`); los de administración siguen en `Infrastructure/Http` bajo `/dashboard/api`.
+- **Aislamiento por almacén**: `WarehouseAccess` (Application) responde a qué almacenes llega un usuario y con qué permisos, y `WarehouseVoter` (`WAREHOUSE_VIEW`, `_STOCK`, `_ASSEMBLY`, `_TRANSFERS`, `_DELIVERIES`) concede solo con un vínculo **activo con ese almacén** y el permiso correspondiente. Toda ruta del socio con un id de almacén pasa por él (`#[IsGranted(WarehouseVoter::STOCK, subject: 'id')]`).
+
 ## Primer contexto
 
 El catálogo es el primer contexto completo (hito 1) y sirve de ejemplo para el resto.
