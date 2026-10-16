@@ -11,6 +11,7 @@ use App\Market\Inventario\Domain\WarehouseUserPermissions;
 use App\Market\Inventario\Domain\WarehouseUserRepository;
 use App\Service\UserService;
 use App\Tests\Functional\Provider\ProviderFunctionalTestCase;
+use App\Tests\Support\WithJwtSecret;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -23,17 +24,26 @@ use Symfony\Component\HttpFoundation\Response;
  */
 final class WarehousePartnerIsolationFunctionalTest extends ProviderFunctionalTestCase
 {
+    use WithJwtSecret;
+
     private int $warehouseA;
     private int $warehouseB;
     private User $partner;
 
     protected function setUp(): void
     {
+        $this->useLongJwtSecret();
         parent::setUp();
         $this->warehouseA = (int) $this->em->getConnection()->fetchOne('SELECT id FROM market_warehouse WHERE is_main');
         $this->warehouseB = $this->createWarehouse('Almacén de otro socio');
         $this->partner = $this->createUser('socio-a@example.test', ['ROLE_MARKET_WAREHOUSE_USER']);
         $this->link($this->partner, $this->warehouseA, new WarehouseUserPermissions(stock: true));
+    }
+
+    protected function tearDown(): void
+    {
+        parent::tearDown();
+        $this->restoreJwtSecret();
     }
 
     private function createWarehouse(string $name): int
