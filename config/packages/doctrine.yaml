@@ -42,6 +42,12 @@ doctrine:
                 is_bundle: false
                 dir: '%kernel.project_dir%/src/Market/Inventario/Domain'
                 prefix: 'App\Market\Inventario\Domain'
+            # ADR-001: el contexto Distribución (COMR-72).
+            MarketDistribucion:
+                type: attribute
+                is_bundle: false
+                dir: '%kernel.project_dir%/src/Market/Distribucion/Domain'
+                prefix: 'App\Market\Distribucion\Domain'
 
 # Entidades de los contextos nuevos (ADR-001): viven en Domain con atributos de Doctrine\ORM\Mapping.
 # Cada contexto registra aquí su carpeta Domain (en la clave `mappings` de arriba), por ejemplo:
