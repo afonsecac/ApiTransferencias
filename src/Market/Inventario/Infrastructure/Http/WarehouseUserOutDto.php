@@ -7,7 +7,8 @@ namespace App\Market\Inventario\Infrastructure\Http;
 use App\Market\Inventario\Application\WarehouseUserRow;
 
 /**
- * Un usuario del almacén (estructura de presentación, no es de entrada). `status`: invited, active o inactive.
+ * Un usuario del almacén (estructura de presentación, no es de entrada). `status`: invited, active o inactive; `external`: persona
+ * de un socio (COMR-288), no personal de la plataforma.
  */
 class WarehouseUserOutDto
 {
@@ -22,6 +23,7 @@ class WarehouseUserOutDto
         public array $permissions,
         public string $status,
         public bool $twoFactorEnabled,
+        public bool $external,
         public string $createdAt,
     ) {
     }
@@ -38,6 +40,7 @@ class WarehouseUserOutDto
             ['stock' => $p->stock, 'assembly' => $p->assembly, 'transfers' => $p->transfers, 'deliveries' => $p->deliveries],
             $row->status,
             $row->member->twoFactorEnabled ?? false,
+            $row->member->external ?? false,
             $row->link->createdAt()->format(DATE_ATOM),
         );
     }

@@ -31,7 +31,10 @@ class InviteWarehouseUserDto implements IInput
 
     protected ?bool $deliveries;
 
-    public function __construct(?string $email = null, ?string $firstName = null, ?string $lastName = null, ?bool $stock = null, ?bool $assembly = null, ?bool $transfers = null, ?bool $deliveries = null)
+    /** Persona de un socio (rol externo): solo en almacenes de socio. Por defecto, personal de la plataforma. */
+    protected ?bool $external;
+
+    public function __construct(?string $email = null, ?string $firstName = null, ?string $lastName = null, ?bool $stock = null, ?bool $assembly = null, ?bool $transfers = null, ?bool $deliveries = null, ?bool $external = null)
     {
         $this->email = $email;
         $this->firstName = $firstName;
@@ -40,6 +43,17 @@ class InviteWarehouseUserDto implements IInput
         $this->assembly = $assembly;
         $this->transfers = $transfers;
         $this->deliveries = $deliveries;
+        $this->external = $external;
+    }
+
+    public function getExternal(): ?bool
+    {
+        return $this->external;
+    }
+
+    public function setExternal(?bool $external): void
+    {
+        $this->external = $external;
     }
 
     public function getEmail(): ?string
