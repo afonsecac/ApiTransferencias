@@ -10,6 +10,7 @@ use App\Market\GiftCards\Domain\GiftCardRepository;
 use App\Market\GiftCards\Infrastructure\Http\CancelGiftCardDto;
 use App\Market\GiftCards\Infrastructure\Http\GiftCardController;
 use App\Market\GiftCards\Infrastructure\Http\IssueGiftCardBatchDto;
+use App\Market\GiftCards\Infrastructure\Http\IssueGiftCardDto;
 use App\Market\GiftCards\Infrastructure\Http\RedeemGiftCardDto;
 use App\Tests\Functional\Provider\ProviderFunctionalTestCase;
 use Symfony\Component\HttpFoundation\Request;
@@ -46,9 +47,14 @@ final class GiftCardFunctionalTest extends ProviderFunctionalTestCase
         return (int) $this->em->getConnection()->fetchOne('SELECT id FROM market_product WHERE sku = :s', ['s' => $sku]);
     }
 
-    private function issue(int $product, int $quantity = 2, ?string $value = null, ?string $expires = '2099-12-31'): Response
+    private function issue(int $product, int $perValue = 2, ?string $min = null, ?string $max = null, ?string $step = null, ?string $expires = '2099-12-31'): Response
     {
-        return $this->controller()->issue(new IssueGiftCardBatchDto($product, $quantity, $value, $expires, null));
+        return $this->controller()->issue(new IssueGiftCardBatchDto($product, $min, $max, $step, $perValue, $expires, null));
+    }
+
+    private function issueSingle(int $product, ?string $value = null): Response
+    {
+        return $this->controller()->issueSingle(new IssueGiftCardDto($product, $value, '2099-12-31', null));
     }
 
     private function sell(string $serial): void
@@ -79,7 +85,7 @@ final class GiftCardFunctionalTest extends ProviderFunctionalTestCase
 
     public function testThePinIsRevealedOnlyOnRequestAndLeavesATrace(): void
     {
-        $this->issue($this->digitalProduct(), 1);
+        $this->issueSingle($this->digitalProduct());
         $serial = (string) $this->em->getConnection()->fetchOne('SELECT serial FROM market_gift_card LIMIT 1');
 
         $list = (string) $this->controller()->list(new Request())->getContent();
@@ -93,7 +99,7 @@ final class GiftCardFunctionalTest extends ProviderFunctionalTestCase
 
     public function testASoldCardIsRedeemedByItsPinAndRepeatingTheKeyIsAReplay(): void
     {
-        $this->issue($this->digitalProduct(), 1);
+        $this->issueSingle($this->digitalProduct());
         $serial = (string) $this->em->getConnection()->fetchOne('SELECT serial FROM market_gift_card LIMIT 1');
         $pin = $this->body($this->controller()->pin($serial))['pin'];
         $this->sell($serial);
@@ -115,7 +121,7 @@ final class GiftCardFunctionalTest extends ProviderFunctionalTestCase
 
     public function testACardThatWasNotSoldCannotBeRedeemed(): void
     {
-        $this->issue($this->digitalProduct(), 1);
+        $this->issueSingle($this->digitalProduct());
         $serial = (string) $this->em->getConnection()->fetchOne('SELECT serial FROM market_gift_card LIMIT 1');
         $pin = $this->body($this->controller()->pin($serial))['pin'];
 
@@ -134,7 +140,7 @@ final class GiftCardFunctionalTest extends ProviderFunctionalTestCase
 
     public function testAnExpiredCardShowsAsExpired(): void
     {
-        $this->issue($this->digitalProduct(), 1);
+        $this->issueSingle($this->digitalProduct());
         $this->em->getConnection()->executeStatement("UPDATE market_gift_card SET expires_at = '2020-01-01'");
         $this->em->clear();
 
@@ -146,7 +152,7 @@ final class GiftCardFunctionalTest extends ProviderFunctionalTestCase
 
     public function testCancellingNeedsAReasonAndLeavesATrace(): void
     {
-        $this->issue($this->digitalProduct(), 1);
+        $this->issueSingle($this->digitalProduct());
         $serial = (string) $this->em->getConnection()->fetchOne('SELECT serial FROM market_gift_card LIMIT 1');
 
         $response = $this->controller()->cancel($serial, new CancelGiftCardDto('Emitida por error'));
@@ -161,9 +167,9 @@ final class GiftCardFunctionalTest extends ProviderFunctionalTestCase
     {
         $product = $this->digitalProduct('tarjeta-variable', 1000, 10000);
 
-        $this->assertSame(Response::HTTP_UNPROCESSABLE_ENTITY, $this->issue($product, 1)->getStatusCode());
-        $this->assertSame(Response::HTTP_UNPROCESSABLE_ENTITY, $this->issue($product, 1, '150.00')->getStatusCode());
-        $ok = $this->issue($product, 1, '50.00');
+        $this->assertSame(Response::HTTP_UNPROCESSABLE_ENTITY, $this->issueSingle($product)->getStatusCode());
+        $this->assertSame(Response::HTTP_UNPROCESSABLE_ENTITY, $this->issueSingle($product, '150.00')->getStatusCode());
+        $ok = $this->issueSingle($product, '50.00');
         $this->assertSame(Response::HTTP_CREATED, $ok->getStatusCode(), (string) $ok->getContent());
         $this->assertSame(5000, (int) $this->em->getConnection()->fetchOne('SELECT value_minor FROM market_gift_card'));
     }
@@ -176,7 +182,7 @@ final class GiftCardFunctionalTest extends ProviderFunctionalTestCase
         SQL);
         $id = (int) $this->em->getConnection()->fetchOne("SELECT id FROM market_product WHERE sku = 'arroz-gc'");
 
-        $response = $this->issue($id, 1);
+        $response = $this->issueSingle($id);
 
         $this->assertSame(Response::HTTP_UNPROCESSABLE_ENTITY, $response->getStatusCode());
         $this->assertSame('GIFT_CARD_PRODUCT_INVALID', $this->body($response)['error']['code']);
@@ -193,7 +199,7 @@ final class GiftCardFunctionalTest extends ProviderFunctionalTestCase
 
     public function testTheRedemptionsListShowsTheLatest(): void
     {
-        $this->issue($this->digitalProduct(), 1);
+        $this->issueSingle($this->digitalProduct());
         $serial = (string) $this->em->getConnection()->fetchOne('SELECT serial FROM market_gift_card LIMIT 1');
         $pin = $this->body($this->controller()->pin($serial))['pin'];
         $this->sell($serial);
@@ -203,5 +209,36 @@ final class GiftCardFunctionalTest extends ProviderFunctionalTestCase
 
         $this->assertSame([$serial], array_column($rows, 'serial'));
         $this->assertSame('canje-1', $rows[0]['redemptionRef']);
+    }
+
+    public function testABatchByRangeIssuesOneCardPerValueAndRemembersItsRange(): void
+    {
+        $product = $this->digitalProduct('tarjeta-rango', 1000, 10000);
+
+        $response = $this->issue($product, 1, '10.00', '50.00', '10.00');
+
+        $this->assertSame(Response::HTTP_CREATED, $response->getStatusCode(), (string) $response->getContent());
+        $this->assertSame(5, $this->body($response)['batch']['quantity']);
+        $this->assertSame(['1000', '2000', '3000', '4000', '5000'], $this->em->getConnection()->fetchFirstColumn('SELECT value_minor::text FROM market_gift_card ORDER BY serial'));
+        $this->assertSame(['1000', '5000', '1000'], array_values($this->em->getConnection()->fetchNumeric('SELECT value_min_minor::text, value_max_minor::text, step_minor::text FROM market_gift_card_batch')));
+    }
+
+    public function testABadRangeAnswers422AndStoresNothing(): void
+    {
+        $product = $this->digitalProduct('tarjeta-rango-mal', 1000, 10000);
+
+        $response = $this->issue($product, 1, '10.00', '50.00', '0');
+
+        $this->assertSame(Response::HTTP_UNPROCESSABLE_ENTITY, $response->getStatusCode());
+        $this->assertSame('INVALID_GIFT_CARD', $this->body($response)['error']['code']);
+        $this->assertSame(0, (int) $this->em->getConnection()->fetchOne('SELECT count(*) FROM market_gift_card'));
+    }
+
+    public function testABatchOfAFixedProductIssuesThatValue(): void
+    {
+        $response = $this->issue($this->digitalProduct(), 3);
+
+        $this->assertSame(3, $this->body($response)['batch']['quantity']);
+        $this->assertSame(['2500'], array_unique($this->em->getConnection()->fetchFirstColumn('SELECT value_minor::text FROM market_gift_card')));
     }
 }

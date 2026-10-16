@@ -33,10 +33,19 @@ class GiftCardBatch
     #[ORM\Column(name: 'issued_by', type: 'string', length: 180)]
     private string $issuedBy;
 
+    #[ORM\Column(name: 'value_min_minor', type: 'bigint', nullable: true)]
+    private ?int $valueMinMinor;
+
+    #[ORM\Column(name: 'value_max_minor', type: 'bigint', nullable: true)]
+    private ?int $valueMaxMinor;
+
+    #[ORM\Column(name: 'step_minor', type: 'bigint', nullable: true)]
+    private ?int $stepMinor;
+
     #[ORM\Column(name: 'created_at', type: 'datetime_immutable')]
     private \DateTimeImmutable $createdAt;
 
-    private function __construct(int $productId, int $quantity, ?\DateTimeImmutable $expiresAt, int $costCenterId, string $issuedBy, \DateTimeImmutable $at)
+    private function __construct(int $productId, int $quantity, ?\DateTimeImmutable $expiresAt, int $costCenterId, string $issuedBy, \DateTimeImmutable $at, ?int $valueMinMinor, ?int $valueMaxMinor, ?int $stepMinor)
     {
         if ($quantity < 1 || $quantity > self::MAX_QUANTITY) {
             throw new InvalidGiftCard(sprintf('Un lote lleva entre 1 y %d tarjetas.', self::MAX_QUANTITY));
@@ -46,12 +55,16 @@ class GiftCardBatch
         $this->expiresAt = $expiresAt;
         $this->costCenterId = $costCenterId;
         $this->issuedBy = mb_substr($issuedBy, 0, 180);
+        $this->valueMinMinor = $valueMinMinor;
+        $this->valueMaxMinor = $valueMaxMinor;
+        $this->stepMinor = $stepMinor;
         $this->createdAt = $at;
     }
 
-    public static function open(int $productId, int $quantity, ?\DateTimeImmutable $expiresAt, int $costCenterId, string $issuedBy, \DateTimeImmutable $at): self
+    /** Con rango: de `valueMinMinor` a `valueMaxMinor` de `stepMinor` en `stepMinor` (nulos en una emisión sin rango). */
+    public static function open(int $productId, int $quantity, ?\DateTimeImmutable $expiresAt, int $costCenterId, string $issuedBy, \DateTimeImmutable $at, ?int $valueMinMinor = null, ?int $valueMaxMinor = null, ?int $stepMinor = null): self
     {
-        return new self($productId, $quantity, $expiresAt, $costCenterId, $issuedBy, $at);
+        return new self($productId, $quantity, $expiresAt, $costCenterId, $issuedBy, $at, $valueMinMinor, $valueMaxMinor, $stepMinor);
     }
 
     public function id(): ?int
@@ -88,6 +101,21 @@ class GiftCardBatch
     public function issuedBy(): string
     {
         return $this->issuedBy;
+    }
+
+    public function valueMinMinor(): ?int
+    {
+        return $this->valueMinMinor;
+    }
+
+    public function valueMaxMinor(): ?int
+    {
+        return $this->valueMaxMinor;
+    }
+
+    public function stepMinor(): ?int
+    {
+        return $this->stepMinor;
     }
 
     public function createdAt(): \DateTimeImmutable
