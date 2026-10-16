@@ -2,13 +2,13 @@
 
 declare(strict_types=1);
 
-namespace App\Tests\Market\Catalogo\Domain;
+namespace App\Tests\Shared\Domain;
 
-use App\Market\Catalogo\Domain\Slug;
+use App\Shared\Domain\Slug;
 use PHPUnit\Framework\TestCase;
 
 /**
- * @covers \App\Market\Catalogo\Domain\Slug
+ * @covers \App\Shared\Domain\Slug
  */
 final class SlugTest extends TestCase
 {
@@ -45,7 +45,7 @@ final class SlugTest extends TestCase
 
     public function testFreeGivesUpAfterManyCollisions(): void
     {
-        $this->expectException(\App\Market\Catalogo\Domain\InvalidSeller::class);
+        $this->expectException(\App\Shared\Domain\InvalidSlug::class);
 
         Slug::free('Casa Yeya', static fn (string $slug): bool => true);
     }

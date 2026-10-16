@@ -7,7 +7,7 @@ namespace App\Tests\Market\Catalogo\Domain;
 use App\Market\Catalogo\Domain\InvalidSeller;
 use App\Market\Catalogo\Domain\PlatformSellerProtected;
 use App\Market\Catalogo\Domain\Seller;
-use App\Market\Catalogo\Domain\Slug;
+use App\Shared\Domain\Slug;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -112,7 +112,7 @@ final class SellerTest extends TestCase
      */
     public function testAnInvalidSlugIsRejected(string $slug): void
     {
-        $this->expectException(InvalidSeller::class);
+        $this->expectException(\App\Shared\Domain\InvalidSlug::class);
 
         new Slug($slug);
     }
@@ -132,7 +132,7 @@ final class SellerTest extends TestCase
 
     public function testATextWithNothingUsableCannotBecomeASlug(): void
     {
-        $this->expectException(InvalidSeller::class);
+        $this->expectException(\App\Shared\Domain\InvalidSlug::class);
 
         Slug::fromText('¿¡!?');
     }

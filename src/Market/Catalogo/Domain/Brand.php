@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Market\Catalogo\Domain;
 
+use App\Shared\Domain\Slug;
 use Doctrine\ORM\Mapping as ORM;
 
 /**

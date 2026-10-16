@@ -13,7 +13,7 @@ use App\Market\Catalogo\Domain\InvalidMeasureSettings;
 use App\Market\Catalogo\Domain\MeasureSettingsLocked;
 use App\Market\Catalogo\Domain\MeasureUnit;
 use App\Market\Catalogo\Domain\Seller;
-use App\Market\Catalogo\Domain\Slug;
+use App\Shared\Domain\Slug;
 use PHPUnit\Framework\TestCase;
 
 /**

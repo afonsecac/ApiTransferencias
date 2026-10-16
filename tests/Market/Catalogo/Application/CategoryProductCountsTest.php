@@ -10,7 +10,7 @@ use App\Market\Catalogo\Application\ListCategories;
 use App\Market\Catalogo\Application\ProductSpecInput;
 use App\Market\Catalogo\Domain\Category;
 use App\Market\Catalogo\Domain\Seller;
-use App\Market\Catalogo\Domain\Slug;
+use App\Shared\Domain\Slug;
 use PHPUnit\Framework\TestCase;
 
 /**

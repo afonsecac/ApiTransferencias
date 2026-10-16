@@ -12,7 +12,7 @@ use App\Market\Catalogo\Domain\CategoryRepository;
 use App\Market\Catalogo\Domain\CategoryTree;
 use App\Market\Catalogo\Domain\InvalidCategory;
 use App\Market\Catalogo\Domain\InvalidSeller;
-use App\Market\Catalogo\Domain\Slug;
+use App\Shared\Domain\Slug;
 
 final class CreateCategory
 {

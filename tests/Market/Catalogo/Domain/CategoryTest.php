@@ -6,7 +6,7 @@ namespace App\Tests\Market\Catalogo\Domain;
 
 use App\Market\Catalogo\Domain\Category;
 use App\Market\Catalogo\Domain\InvalidCategory;
-use App\Market\Catalogo\Domain\Slug;
+use App\Shared\Domain\Slug;
 use PHPUnit\Framework\TestCase;
 
 /**

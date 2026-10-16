@@ -18,6 +18,7 @@ use App\Market\Catalogo\Domain\CategoryNotFound;
 use App\Market\Catalogo\Domain\InvalidCategory;
 use App\Market\Catalogo\Domain\InvalidSeller;
 use App\OpenApi\Attribute\DashboardEndpoint;
+use App\Shared\Domain\InvalidSlug;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -114,7 +115,7 @@ final class CategoryController
             return $this->error('CATEGORY_DEPTH_EXCEEDED', $e->getMessage(), Response::HTTP_UNPROCESSABLE_ENTITY);
         } catch (CategoryCycle $e) {
             return $this->error('CATEGORY_CYCLE', $e->getMessage(), Response::HTTP_UNPROCESSABLE_ENTITY);
-        } catch (InvalidCategory|InvalidSeller $e) {
+        } catch (InvalidCategory|InvalidSeller|InvalidSlug $e) {
             return $this->error('INVALID_CATEGORY', $e->getMessage(), Response::HTTP_UNPROCESSABLE_ENTITY);
         }
     }
