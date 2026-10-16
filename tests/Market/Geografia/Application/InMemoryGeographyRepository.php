@@ -48,6 +48,17 @@ final class InMemoryGeographyRepository implements GeographyRepository
         return $this->municipalities[$id] ?? null;
     }
 
+    public function findMunicipalityByCode(string $code): ?Municipality
+    {
+        foreach ($this->municipalities as $m) {
+            if ($m->code() === $code) {
+                return $m;
+            }
+        }
+
+        return null;
+    }
+
     public function provinces(): array
     {
         return array_values($this->provinces);

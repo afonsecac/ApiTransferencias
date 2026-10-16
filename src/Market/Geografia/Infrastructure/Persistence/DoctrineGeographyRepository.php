@@ -26,6 +26,11 @@ final class DoctrineGeographyRepository implements GeographyRepository
         return $this->em->find(Municipality::class, $id);
     }
 
+    public function findMunicipalityByCode(string $code): ?Municipality
+    {
+        return $this->em->getRepository(Municipality::class)->findOneBy(['code' => $code]);
+    }
+
     public function provinces(): array
     {
         /** @var list<Province> $provinces */

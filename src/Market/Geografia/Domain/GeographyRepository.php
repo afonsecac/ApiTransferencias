@@ -10,6 +10,8 @@ interface GeographyRepository
 
     public function findMunicipality(int $id): ?Municipality;
 
+    public function findMunicipalityByCode(string $code): ?Municipality;
+
     /** @return list<Province> en orden geográfico estable (por id) */
     public function provinces(): array;
 

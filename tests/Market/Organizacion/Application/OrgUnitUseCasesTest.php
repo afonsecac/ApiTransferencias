@@ -20,6 +20,7 @@ use App\Market\Organizacion\Domain\InvalidFiscalData;
 use App\Market\Organizacion\Domain\InvalidOrgUnit;
 use App\Market\Organizacion\Domain\OrgUnitAlreadyExists;
 use App\Market\Organizacion\Domain\OrgUnitNotFound;
+use App\Market\Organizacion\Domain\OrgUnitTypeInUse;
 use App\Market\Organizacion\Domain\OrgUnitType;
 use PHPUnit\Framework\TestCase;
 
@@ -47,7 +48,7 @@ final class OrgUnitUseCasesTest extends TestCase
         $this->create = new CreateOrgUnit($this->units, new ValidateFiscalData($profiles));
     }
 
-    private function input(string $taxId = 'B12345678', array $fiscalData = ['nif' => 'B12345678'], string $name = 'Distribuidora Sol'): OrgUnitInput
+    private function input(string $taxId = 'B12345678', array $fiscalData = ['nif' => 'B12345678'], string $name = 'Distribuidora Sol', array $types = ['seller']): OrgUnitInput
     {
         return new OrgUnitInput(
             name: $name,
@@ -55,7 +56,7 @@ final class OrgUnitUseCasesTest extends TestCase
             taxId: $taxId,
             address: 'Calle Mayor 1, Madrid',
             billingEmail: 'facturas@sol.example',
-            types: ['seller'],
+            types: $types,
             fiscalData: $fiscalData,
         );
     }
@@ -138,7 +139,7 @@ final class OrgUnitUseCasesTest extends TestCase
     public function testItUpdatesAUnitAndRevalidatesItsFiscalData(): void
     {
         $unit = ($this->create)('ES', $this->input(), $this->centers())->unit;
-        $update = new UpdateOrgUnit($this->units, new ValidateFiscalData(new InMemoryFiscalProfileRepository()));
+        $update = new UpdateOrgUnit($this->units, new ValidateFiscalData(new InMemoryFiscalProfileRepository()), new InMemoryOrgUnitUsage());
         // El genérico acepta cualquier dato: aquí solo se comprueba que se guarda lo nuevo.
         $updated = $update($unit->id(), $this->input(taxId: 'B87654321', fiscalData: ['x' => 1], name: 'Sol y Luna'));
 
@@ -154,14 +155,14 @@ final class OrgUnitUseCasesTest extends TestCase
         $unit = ($this->create)('ES', $this->input(), $this->centers())->unit;
 
         $this->expectException(InvalidFiscalData::class);
-        (new UpdateOrgUnit($this->units, new ValidateFiscalData($profiles)))($unit->id(), $this->input(fiscalData: ['nif' => 'x']));
+        (new UpdateOrgUnit($this->units, new ValidateFiscalData($profiles), new InMemoryOrgUnitUsage()))($unit->id(), $this->input(fiscalData: ['nif' => 'x']));
     }
 
     public function testUpdatingToATaxIdOfAnotherUnitIsRejectedButKeepingItsOwnIsFine(): void
     {
         ($this->create)('ES', $this->input(), $this->centers());
         $second = ($this->create)('ES', $this->input(taxId: 'B22222222', fiscalData: ['nif' => 'B22222222'], name: 'Segunda'), $this->centers())->unit;
-        $update = new UpdateOrgUnit($this->units, new ValidateFiscalData(new InMemoryFiscalProfileRepository()));
+        $update = new UpdateOrgUnit($this->units, new ValidateFiscalData(new InMemoryFiscalProfileRepository()), new InMemoryOrgUnitUsage());
 
         $this->assertSame('Segunda', $update($second->id(), $this->input(taxId: 'B22222222', name: 'Segunda'))->unit->name());
 
@@ -169,11 +170,41 @@ final class OrgUnitUseCasesTest extends TestCase
         $update($second->id(), $this->input(taxId: 'B12345678', name: 'Segunda'));
     }
 
+    public function testRemovingThePartnerTypeFromAUnitWithWarehousesIsRejected(): void
+    {
+        $unit = ($this->create)('ES', $this->input(types: ['seller', 'warehouse_partner']), $this->centers())->unit;
+        $usage = new InMemoryOrgUnitUsage();
+        $usage->warehouses[(int) $unit->id()] = 2;
+        $update = new UpdateOrgUnit($this->units, new ValidateFiscalData(new InMemoryFiscalProfileRepository()), $usage);
+
+        try {
+            $update($unit->id(), $this->input(types: ['seller']));
+            $this->fail('Debía lanzar OrgUnitTypeInUse');
+        } catch (OrgUnitTypeInUse $e) {
+            $this->assertStringContainsString('2', $e->getMessage());
+            $this->assertContains(OrgUnitType::WAREHOUSE_PARTNER, $unit->types(), 'la unidad no se tocó');
+        }
+    }
+
+    public function testRemovingThePartnerTypeIsFineWithoutWarehousesOrWhileThePlatformTypeRemains(): void
+    {
+        $free = ($this->create)('ES', $this->input(types: ['seller', 'warehouse_partner']), $this->centers())->unit;
+        $update = new UpdateOrgUnit($this->units, new ValidateFiscalData(new InMemoryFiscalProfileRepository()), new InMemoryOrgUnitUsage());
+        $this->assertSame([OrgUnitType::SELLER], $update($free->id(), $this->input(types: ['seller']))->unit->types());
+
+        $both = ($this->create)('ES', $this->input(taxId: 'B22222222', fiscalData: ['nif' => 'B22222222'], name: 'Ambos', types: ['platform', 'warehouse_partner']), $this->centers())->unit;
+        $usage = new InMemoryOrgUnitUsage();
+        $usage->warehouses[(int) $both->id()] = 3;
+        $update = new UpdateOrgUnit($this->units, new ValidateFiscalData(new InMemoryFiscalProfileRepository()), $usage);
+        $kept = $update($both->id(), $this->input(taxId: 'B22222222', name: 'Ambos', types: ['platform']));
+        $this->assertSame([OrgUnitType::PLATFORM], $kept->unit->types());
+    }
+
     public function testUpdatingAnUnknownUnitFails(): void
     {
         $this->expectException(OrgUnitNotFound::class);
 
-        (new UpdateOrgUnit($this->units, new ValidateFiscalData(new InMemoryFiscalProfileRepository())))(99, $this->input());
+        (new UpdateOrgUnit($this->units, new ValidateFiscalData(new InMemoryFiscalProfileRepository()), new InMemoryOrgUnitUsage()))(99, $this->input());
     }
 
     public function testItGetsAndListsWithFilters(): void

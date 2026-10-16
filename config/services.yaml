@@ -83,8 +83,13 @@ services:
 
     App\Market\Organizacion\Domain\FiscalProfileRepository: '@App\Market\Organizacion\Infrastructure\Persistence\DoctrineFiscalProfileRepository'
     App\Market\Organizacion\Domain\OrgUnitRepository: '@App\Market\Organizacion\Infrastructure\Persistence\DoctrineOrgUnitRepository'
+    App\Market\Organizacion\Domain\OrgUnitUsage: '@App\Market\Organizacion\Infrastructure\Persistence\InventarioOrgUnitUsage'
     App\Market\Organizacion\Domain\BuyerRegistry: '@App\Market\Organizacion\Infrastructure\Persistence\DoctrineBuyerRegistry'
     App\Market\Geografia\Domain\GeographyRepository: '@App\Market\Geografia\Infrastructure\Persistence\DoctrineGeographyRepository'
+    App\Market\Inventario\Domain\WarehouseRepository: '@App\Market\Inventario\Infrastructure\Persistence\DoctrineWarehouseRepository'
+    App\Market\Inventario\Domain\WarehouseOwners: '@App\Market\Inventario\Infrastructure\Persistence\OrganizacionWarehouseOwners'
+    App\Market\Inventario\Domain\WarehouseMunicipalities: '@App\Market\Inventario\Infrastructure\Persistence\GeografiaWarehouseMunicipalities'
+    App\Market\Inventario\Domain\WarehouseSettings: '@App\Market\Inventario\Infrastructure\Persistence\SysConfigWarehouseSettings'
     App\Market\Catalogo\Domain\SellerRepository: '@App\Market\Catalogo\Infrastructure\Persistence\DoctrineSellerRepository'
     App\Market\Catalogo\Domain\SellerOrgUnits: '@App\Market\Catalogo\Infrastructure\Persistence\OrganizacionSellerOrgUnits'
     App\Market\Catalogo\Domain\ProductRepository: '@App\Market\Catalogo\Infrastructure\Persistence\DoctrineProductRepository'
