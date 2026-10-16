@@ -12,6 +12,7 @@ use App\Market\Inventario\Infrastructure\Http\SetSafetyStockDto;
 use App\Market\Inventario\Infrastructure\Http\StockController;
 use App\Market\Inventario\Infrastructure\Http\WarehouseController;
 use App\Tests\Functional\Provider\ProviderFunctionalTestCase;
+use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
@@ -44,12 +45,12 @@ final class StockFunctionalTest extends ProviderFunctionalTestCase
         return (int) $this->em->getConnection()->fetchOne('SELECT id FROM market_warehouse WHERE is_main');
     }
 
-    private function product(string $sku = 'arroz-stock'): int
+    private function product(string $sku = 'arroz-stock', string $name = 'Arroz 1 kg'): int
     {
         $this->em->getConnection()->executeStatement(<<<'SQL'
             INSERT INTO market_product (sku, seller_id, status, service, subservice, texts, content_base, content_original, content_unit, delivery_kind, delivery_unit, total_weight_base, created_at, updated_at)
             SELECT :sku, id, 'draft', 'Gift Cards', 'Retail', :texts, 1, 1, 'kg', 'weight', 'kg', 1, NOW(), NOW() FROM market_seller WHERE is_platform
-        SQL, ['sku' => $sku, 'texts' => json_encode(['es' => ['name' => 'Arroz 1 kg']])]);
+        SQL, ['sku' => $sku, 'texts' => json_encode(['es' => ['name' => $name]])]);
 
         return (int) $this->em->getConnection()->fetchOne('SELECT id FROM market_product WHERE sku = :s', ['s' => $sku]);
     }
@@ -162,5 +163,70 @@ final class StockFunctionalTest extends ProviderFunctionalTestCase
         $line = self::getContainer()->get(StockLedger::class)->find($w, StockItemType::Product, $p);
 
         $this->assertSame(7, $line?->onHand());
+    }
+
+    public function testItListsTheStockWithTheAvailableAndTheLowFlag(): void
+    {
+        $this->admin();
+        $w = $this->mainWarehouseId();
+        $arroz = $this->product('arroz-list');
+        $aceite = $this->product('aceite-list', 'Aceite 1 L');
+        $this->adjust($w, $arroz, 10);
+        $this->adjust($w, $aceite, 2);
+        $this->controller()->setSafety(new SetSafetyStockDto($w, 'product', $aceite, 5));
+
+        $all = $this->body($this->controller()->list(new Request()));
+        $this->assertCount(2, $all);
+        $byName = array_column($all, null, 'itemId');
+        $this->assertSame([10, 10, false], [$byName[$arroz]['onHand'], $byName[$arroz]['available'], $byName[$arroz]['low']]);
+        $this->assertSame([2, 0, true], [$byName[$aceite]['onHand'], $byName[$aceite]['available'], $byName[$aceite]['low']]);
+        $this->assertTrue($byName[$arroz]['warehouseActive']);
+        $this->assertSame('Almacén principal', $all[0]['warehouse']['name']);
+
+        $low = $this->body($this->controller()->list(new Request(query: ['low' => '1'])));
+        $this->assertSame([$aceite], array_column($low, 'itemId'));
+        $found = $this->body($this->controller()->list(new Request(query: ['q' => 'ARROZ'])));
+        $this->assertSame([$arroz], array_column($found, 'itemId'));
+        $this->assertSame([], $this->body($this->controller()->list(new Request(query: ['type' => 'combo']))));
+    }
+
+    public function testAnInactiveWarehouseShowsItsReservesButNothingAvailable(): void
+    {
+        $this->admin();
+        $conn = $this->em->getConnection();
+        $conn->executeStatement(<<<'SQL'
+            INSERT INTO market_warehouse (slug, name, status, is_main, org_unit_id, cost_center_id, municipality_id, created_at, updated_at)
+            SELECT 'inactivo-stock', 'Inactivo stock', 'inactive', FALSE, org_unit_id, cost_center_id, municipality_id, NOW(), NOW() FROM market_warehouse WHERE is_main
+        SQL);
+        $w = (int) $conn->fetchOne("SELECT id FROM market_warehouse WHERE slug = 'inactivo-stock'");
+        $p = $this->product('sal-inactivo');
+        $this->adjust($w, $p, 9);
+        $conn->executeStatement('UPDATE market_stock_line SET reserved = 4 WHERE warehouse_id = :w', ['w' => $w]);
+        $this->em->clear();
+
+        $row = $this->body($this->controller()->list(new Request(query: ['warehouse' => (string) $w])))[0];
+
+        $this->assertSame([9, 4, 0, false], [$row['onHand'], $row['reserved'], $row['available'], $row['warehouseActive']]);
+        $this->assertSame('inactive', $row['warehouse']['status']);
+    }
+
+    public function testTheMovementsListIsNewestFirstWithWhoWhenAndWhy(): void
+    {
+        $this->admin();
+        $w = $this->mainWarehouseId();
+        $p = $this->product('movs');
+        $this->adjust($w, $p, 10, 'initial', 'Existencia inicial', 'ALB-1');
+        $this->adjust($w, $p, -3, 'damage', 'Cajas mojadas');
+
+        $movements = $this->body($this->controller()->movements(new Request(query: ['warehouse' => (string) $w, 'item' => (string) $p, 'limit' => '10'])));
+
+        $this->assertSame([-3, 10], array_column($movements, 'quantity'));
+        $this->assertSame([7, 10], array_column($movements, 'onHandAfter'));
+        $this->assertSame('damage', $movements[0]['reason']);
+        $this->assertSame('Cajas mojadas', $movements[0]['comment']);
+        $this->assertSame('ALB-1', $movements[1]['reference']);
+        $this->assertSame('Arroz 1 kg', $movements[0]['product']['name']);
+        $this->assertSame('Almacén principal', $movements[0]['warehouse']['name']);
+        $this->assertNotSame('', $movements[0]['actorName']);
     }
 }
