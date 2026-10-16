@@ -8,8 +8,9 @@ use App\DTO\IInput;
 use Symfony\Component\Validator\Constraints as Assert;
 
 /**
- * Body de POST /dashboard/api/market/gift-cards/batches. El valor solo se pide en productos de valor variable (importe con dos
- * decimales); la caducidad es una fecha AAAA-MM-DD posterior a hoy; el centro de costo, por defecto el principal del vendedor.
+ * Body de POST /dashboard/api/market/gift-cards/batches: un lote por rango. Emite `perValue` tarjetas de cada valor desde `min` hasta
+ * `max` de `step` en `step` (con `min` = `max` es un solo valor y no hace falta paso). En un producto de valor fijo no se indican
+ * `min`, `max` ni `step`: solo cuántas tarjetas.
  */
 class IssueGiftCardBatchDto implements IInput
 {
@@ -17,12 +18,18 @@ class IssueGiftCardBatchDto implements IInput
     #[Assert\Positive]
     protected ?int $productId;
 
-    #[Assert\NotNull]
-    #[Assert\Range(min: 1, max: 1000)]
-    protected ?int $quantity;
+    #[Assert\Length(max: 15)]
+    protected ?string $min;
 
     #[Assert\Length(max: 15)]
-    protected ?string $value;
+    protected ?string $max;
+
+    #[Assert\Length(max: 15)]
+    protected ?string $step;
+
+    #[Assert\NotNull]
+    #[Assert\Range(min: 1, max: 1000)]
+    protected ?int $perValue;
 
     #[Assert\Length(max: 10)]
     protected ?string $expiresAt;
@@ -30,11 +37,13 @@ class IssueGiftCardBatchDto implements IInput
     #[Assert\Positive]
     protected ?int $costCenterId;
 
-    public function __construct(?int $productId = null, ?int $quantity = null, ?string $value = null, ?string $expiresAt = null, ?int $costCenterId = null)
+    public function __construct(?int $productId = null, ?string $min = null, ?string $max = null, ?string $step = null, ?int $perValue = 1, ?string $expiresAt = null, ?int $costCenterId = null)
     {
         $this->productId = $productId;
-        $this->quantity = $quantity;
-        $this->value = $value;
+        $this->min = $min;
+        $this->max = $max;
+        $this->step = $step;
+        $this->perValue = $perValue;
         $this->expiresAt = $expiresAt;
         $this->costCenterId = $costCenterId;
     }
@@ -49,24 +58,44 @@ class IssueGiftCardBatchDto implements IInput
         $this->productId = $productId;
     }
 
-    public function getQuantity(): ?int
+    public function getMin(): ?string
     {
-        return $this->quantity;
+        return $this->min;
     }
 
-    public function setQuantity(?int $quantity): void
+    public function setMin(?string $min): void
     {
-        $this->quantity = $quantity;
+        $this->min = $min;
     }
 
-    public function getValue(): ?string
+    public function getMax(): ?string
     {
-        return $this->value;
+        return $this->max;
     }
 
-    public function setValue(?string $value): void
+    public function setMax(?string $max): void
     {
-        $this->value = $value;
+        $this->max = $max;
+    }
+
+    public function getStep(): ?string
+    {
+        return $this->step;
+    }
+
+    public function setStep(?string $step): void
+    {
+        $this->step = $step;
+    }
+
+    public function getPerValue(): ?int
+    {
+        return $this->perValue;
+    }
+
+    public function setPerValue(?int $perValue): void
+    {
+        $this->perValue = $perValue;
     }
 
     public function getExpiresAt(): ?string

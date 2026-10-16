@@ -9,6 +9,7 @@ use App\Market\GiftCards\Application\CancelGiftCard;
 use App\Market\GiftCards\Application\GetGiftCard;
 use App\Market\GiftCards\Application\GiftCardRow;
 use App\Market\GiftCards\Application\IssueGiftCardBatch;
+use App\Market\GiftCards\Application\IssuePlan;
 use App\Market\GiftCards\Application\ListGiftCards;
 use App\Market\GiftCards\Application\ListRedemptions;
 use App\Market\GiftCards\Application\RedeemGiftCard;
@@ -98,18 +99,24 @@ final class GiftCardController
         ]);
     }
 
+    #[Route('', name: 'market_gift_cards_issue_single', methods: ['POST'])]
+    #[DashboardEndpoint(summary: 'Emitir una tarjeta individual de un producto digital (serie y PIN no adivinable cifrado)', tag: 'Market', requestDto: IssueGiftCardDto::class, responseStatusCode: 201)]
+    public function issueSingle(IssueGiftCardDto $dto): JsonResponse
+    {
+        return $this->issued(fn () => ($this->issue)((int) $dto->getProductId(), IssuePlan::single($dto->getValue()), $dto->getExpiresAt(), $dto->getCostCenterId(), $this->actor()));
+    }
+
     #[Route('/batches', name: 'market_gift_cards_issue', methods: ['POST'])]
-    #[DashboardEndpoint(summary: 'Emitir un lote de tarjetas de un producto digital (serie consecutiva, PIN no adivinable y cifrado)', tag: 'Market', requestDto: IssueGiftCardBatchDto::class, responseStatusCode: 201)]
+    #[DashboardEndpoint(summary: 'Emitir un lote por rango: tarjetas de cada valor de min a max de step en step', tag: 'Market', requestDto: IssueGiftCardBatchDto::class, responseStatusCode: 201)]
     public function issue(IssueGiftCardBatchDto $dto): JsonResponse
     {
-        return $this->guard(function () use ($dto): JsonResponse {
-            $issued = ($this->issue)((int) $dto->getProductId(), (int) $dto->getQuantity(), $dto->getValue(), $dto->getExpiresAt(), $dto->getCostCenterId(), $this->actor());
-
-            return new JsonResponse([
-                'batch' => ['id' => $issued->batch->id(), 'code' => $issued->batch->code(), 'quantity' => $issued->batch->quantity()],
-                'serials' => array_map(static fn ($c) => $c->serial(), $issued->cards),
-            ], Response::HTTP_CREATED);
-        });
+        return $this->issued(fn () => ($this->issue)(
+            (int) $dto->getProductId(),
+            IssuePlan::range($dto->getMin(), $dto->getMax(), $dto->getStep(), (int) $dto->getPerValue()),
+            $dto->getExpiresAt(),
+            $dto->getCostCenterId(),
+            $this->actor(),
+        ));
     }
 
     #[Route('/redeem', name: 'market_gift_cards_redeem', methods: ['POST'])]
@@ -145,6 +152,21 @@ final class GiftCardController
             ($this->cancel)($serial, (string) $dto->getReason(), $this->actor());
 
             return new JsonResponse(GiftCardOutDto::fromDetails(($this->get)($serial)));
+        });
+    }
+
+    /**
+     * @param callable(): \App\Market\GiftCards\Application\IssuedBatch $action
+     */
+    private function issued(callable $action): JsonResponse
+    {
+        return $this->guard(function () use ($action): JsonResponse {
+            $issued = $action();
+
+            return new JsonResponse([
+                'batch' => ['id' => $issued->batch->id(), 'code' => $issued->batch->code(), 'quantity' => $issued->batch->quantity()],
+                'serials' => array_map(static fn ($c) => $c->serial(), $issued->cards),
+            ], Response::HTTP_CREATED);
         });
     }
 

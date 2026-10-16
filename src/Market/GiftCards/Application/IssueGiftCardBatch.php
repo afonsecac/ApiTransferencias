@@ -24,43 +24,49 @@ final class IssueGiftCardBatch
     }
 
     /**
-     * Emite un lote de tarjetas de un producto digital con valor: serie consecutiva, PIN no adivinable (cifrado y con huella) y el
-     * centro de costo al que se imputa la emisión (por defecto el principal del vendedor del producto). Un producto de valor fijo
-     * emite siempre ese valor; uno de valor variable pide el valor dentro de su rango. Todo el lote se guarda o nada.
+     * Emite tarjetas de un producto digital con valor, según el plan: una individual o un lote por rango (de `min` a `max` de `step`
+     * en `step`, con las tarjetas que se pidan de cada valor). Serie consecutiva, PIN no adivinable (cifrado y con huella) y el
+     * centro de costo al que se imputa la emisión (por defecto el principal del vendedor del producto). Todo se guarda o nada.
      *
-     * @param string|null $value importe decimal con dos decimales (solo en productos de valor variable)
      * @param string|null $expiresAt fecha `Y-m-d` posterior a hoy, o nada si no caduca
      *
      * @throws GiftCardProductInvalid
      * @throws InvalidGiftCard
      */
-    public function __invoke(int $productId, int $quantity, ?string $value, ?string $expiresAt, ?int $costCenterId, GiftCardActor $actor, ?\DateTimeImmutable $now = null): IssuedBatch
+    public function __invoke(int $productId, IssuePlan $plan, ?string $expiresAt, ?int $costCenterId, GiftCardActor $actor, ?\DateTimeImmutable $now = null): IssuedBatch
     {
         $now ??= new \DateTimeImmutable();
         $product = $this->products->find($productId) ?? throw GiftCardProductInvalid::unknown($productId);
         if (!$product->digital || $product->currency === '') {
             throw GiftCardProductInvalid::notAGiftCard($product->name);
         }
+
+        $values = [];
+        foreach ($plan->denominations($product) as $denomination) {
+            for ($i = 0; $i < $plan->perValue; ++$i) {
+                $values[] = $denomination;
+            }
+        }
+        $quantity = count($values);
         if ($quantity < 1 || $quantity > GiftCardBatch::MAX_QUANTITY) {
             throw new InvalidGiftCard(sprintf('Un lote lleva entre 1 y %d tarjetas.', GiftCardBatch::MAX_QUANTITY));
         }
-
-        $valueMinor = $this->valueMinor($product->fixed, $product->minMinor, $product->maxMinor, $value);
         $expires = $this->expiry($expiresAt, $now);
         $center = $costCenterId === null ? $product->principalCostCenter() : $product->activeCostCenter($costCenterId);
         if ($center === null) {
             throw new InvalidGiftCard('El centro de costo debe ser un centro activo del vendedor del producto.');
         }
+        [$min, $max, $step] = $plan->bounds();
 
         /** @var IssuedBatch $issued */
-        $issued = $this->cards->transactional(function () use ($product, $quantity, $valueMinor, $expires, $center, $actor, $now): IssuedBatch {
-            $batch = GiftCardBatch::open($product->id, $quantity, $expires, $center->id, $actor->name, $now);
+        $issued = $this->cards->transactional(function () use ($product, $values, $quantity, $min, $max, $step, $expires, $center, $actor, $now): IssuedBatch {
+            $batch = GiftCardBatch::open($product->id, $quantity, $expires, $center->id, $actor->name, $now, $min, $max, $step);
             $this->cards->saveBatch($batch);
 
             $issued = [];
-            foreach ($this->cards->nextSerialNumbers($quantity) as $number) {
+            foreach ($this->cards->nextSerialNumbers($quantity) as $i => $number) {
                 $pin = $this->vault->generate();
-                $issued[] = GiftCard::issue((int) $batch->id(), $product->id, sprintf('GC-%06d', $number), $valueMinor, $product->currency, $this->vault->encrypt($pin), $this->vault->hash($pin), $expires, $center->id, $now);
+                $issued[] = GiftCard::issue((int) $batch->id(), $product->id, sprintf('GC-%06d', $number), $values[$i], $product->currency, $this->vault->encrypt($pin), $this->vault->hash($pin), $expires, $center->id, $now);
             }
             $this->cards->saveCards($issued);
             foreach ($issued as $card) {
@@ -71,27 +77,6 @@ final class IssueGiftCardBatch
         });
 
         return $issued;
-    }
-
-    private function valueMinor(bool $fixed, int $minMinor, ?int $maxMinor, ?string $value): int
-    {
-        if ($fixed) {
-            if ($value !== null && $value !== '') {
-                throw new InvalidGiftCard('Una tarjeta de valor fijo emite siempre ese valor: no admite otro.');
-            }
-
-            return $minMinor;
-        }
-        if ($value === null || preg_match('/^\d{1,9}(\.\d{1,2})?$/', trim($value)) !== 1) {
-            throw new InvalidGiftCard('Una tarjeta de valor variable necesita su valor (un importe con hasta dos decimales).');
-        }
-        $parts = explode('.', trim($value));
-        $minor = (int) $parts[0] * 100 + (int) str_pad($parts[1] ?? '', 2, '0');
-        if ($minor < $minMinor || ($maxMinor !== null && $minor > $maxMinor)) {
-            throw new InvalidGiftCard('El valor queda fuera del rango permitido del producto.');
-        }
-
-        return $minor;
     }
 
     private function expiry(?string $expiresAt, \DateTimeImmutable $now): ?\DateTimeImmutable

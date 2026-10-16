@@ -7,6 +7,7 @@ namespace App\Tests\Market\GiftCards\Application;
 use App\Market\GiftCards\Application\CancelGiftCard;
 use App\Market\GiftCards\Application\GetGiftCard;
 use App\Market\GiftCards\Application\IssueGiftCardBatch;
+use App\Market\GiftCards\Application\IssuePlan;
 use App\Market\GiftCards\Application\ListGiftCards;
 use App\Market\GiftCards\Application\ListRedemptions;
 use App\Market\GiftCards\Application\MarkGiftCardSold;
@@ -44,14 +45,14 @@ final class GiftCardUseCasesTest extends TestCase
         $this->now = new \DateTimeImmutable('2026-10-16 12:00:00');
     }
 
-    private function issue(int $product = 40, int $quantity = 3, ?string $value = null, ?string $expires = '2027-12-31', ?int $center = null): \App\Market\GiftCards\Application\IssuedBatch
+    private function issue(int $product = 40, ?IssuePlan $plan = null, ?string $expires = '2027-12-31', ?int $center = null): \App\Market\GiftCards\Application\IssuedBatch
     {
-        return (new IssueGiftCardBatch($this->repo, $this->products, $this->vault))($product, $quantity, $value, $expires, $center, $this->actor, $this->now);
+        return (new IssueGiftCardBatch($this->repo, $this->products, $this->vault))($product, $plan ?? IssuePlan::range(null, null, null, 3), $expires, $center, $this->actor, $this->now);
     }
 
     public function testItIssuesALotWithConsecutiveSerialsAndDifferentPins(): void
     {
-        $issued = $this->issue(quantity: 3);
+        $issued = $this->issue();
 
         $this->assertCount(3, $issued->cards);
         $this->assertSame(['GC-000001', 'GC-000002', 'GC-000003'], array_map(static fn ($c) => $c->serial(), $issued->cards));
@@ -63,7 +64,7 @@ final class GiftCardUseCasesTest extends TestCase
 
     public function testThePinIsNeverStoredInTheClear(): void
     {
-        $card = $this->issue(quantity: 1)->cards[0];
+        $card = $this->issue(plan: IssuePlan::single(null))->cards[0];
 
         $this->assertStringNotContainsString('AAAA-BBBB', $card->pinHash());
         $this->assertSame('AAAA-BBBB-CCCC-0001', $this->vault->decrypt($card->pinCipher()));
@@ -71,19 +72,20 @@ final class GiftCardUseCasesTest extends TestCase
 
     public function testEveryCardOfALotLeavesAnIssuedEvent(): void
     {
-        $this->issue(quantity: 2);
+        $this->issue(plan: IssuePlan::range(null, null, null, 2));
 
         $this->assertCount(2, array_filter($this->repo->events, static fn ($e) => $e->type() === 'issued'));
         $this->assertSame('m.perez', $this->repo->events[0]->actorName());
     }
 
-    public function testARangedProductNeedsAValueInsideItsRange(): void
+    public function testAnIndividualCardOfARangedProductTakesItsOwnValueInsideTheRange(): void
     {
-        $this->assertSame(5000, $this->issue(41, 1, '50.00')->cards[0]->valueMinor());
+        $this->assertSame(5000, $this->issue(41, IssuePlan::single('50.00'))->cards[0]->valueMinor());
+        $this->assertCount(1, $this->issue(41, IssuePlan::single('50.00'))->cards);
 
-        foreach ([null, '5.00', '150.00'] as $value) {
+        foreach ([null, '5.00', '150.00', 'abc'] as $value) {
             try {
-                $this->issue(41, 1, $value);
+                $this->issue(41, IssuePlan::single($value));
                 $this->fail('debía rechazar el valor ' . var_export($value, true));
             } catch (InvalidGiftCard) {
                 $this->addToAssertionCount(1);
@@ -91,10 +93,87 @@ final class GiftCardUseCasesTest extends TestCase
         }
     }
 
+    public function testAnIndividualCardOfAFixedProductTakesTheProductsValue(): void
+    {
+        $this->assertSame(2500, $this->issue(40, IssuePlan::single(null))->cards[0]->valueMinor());
+    }
+
     public function testAFixedProductIgnoresAnyOtherValue(): void
     {
         $this->expectException(InvalidGiftCard::class);
-        $this->issue(40, 1, '30.00');
+        $this->issue(40, IssuePlan::single('30.00'));
+    }
+
+    public function testABatchGoesFromMinToMaxInStepsOneCardPerValue(): void
+    {
+        $issued = $this->issue(41, IssuePlan::range('10.00', '100.00', '10.00', 1));
+
+        $this->assertSame([1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000], array_map(static fn ($c) => $c->valueMinor(), $issued->cards));
+        $this->assertSame(10, $issued->batch->quantity());
+        $this->assertSame([1000, 10000, 1000], [$issued->batch->valueMinMinor(), $issued->batch->valueMaxMinor(), $issued->batch->stepMinor()]);
+    }
+
+    public function testABatchCanIssueSeveralCardsOfEachValue(): void
+    {
+        $issued = $this->issue(41, IssuePlan::range('10.00', '30.00', '10.00', 2));
+
+        $this->assertSame([1000, 1000, 2000, 2000, 3000, 3000], array_map(static fn ($c) => $c->valueMinor(), $issued->cards));
+        $this->assertSame(6, $issued->batch->quantity());
+    }
+
+    public function testTheStepCanHaveCents(): void
+    {
+        $issued = $this->issue(41, IssuePlan::range('10.00', '11.00', '0.50', 1));
+
+        $this->assertSame([1000, 1050, 1100], array_map(static fn ($c) => $c->valueMinor(), $issued->cards));
+    }
+
+    public function testTheLastValueIsNotPastTheMaximum(): void
+    {
+        $issued = $this->issue(41, IssuePlan::range('10.00', '35.00', '10.00', 1));
+
+        $this->assertSame([1000, 2000, 3000], array_map(static fn ($c) => $c->valueMinor(), $issued->cards));
+    }
+
+    public function testMinEqualToMaxIsOneValueAndNeedsNoStep(): void
+    {
+        $issued = $this->issue(41, IssuePlan::range('50.00', '50.00', null, 4));
+
+        $this->assertSame([5000, 5000, 5000, 5000], array_map(static fn ($c) => $c->valueMinor(), $issued->cards));
+    }
+
+    public function testABatchOfAFixedProductIssuesThatValueOnlyAndDoesNotAcceptARange(): void
+    {
+        $this->assertSame([2500, 2500], array_map(static fn ($c) => $c->valueMinor(), $this->issue(40, IssuePlan::range(null, null, null, 2))->cards));
+
+        $this->expectException(InvalidGiftCard::class);
+        $this->issue(40, IssuePlan::range('10.00', '30.00', '10.00', 1));
+    }
+
+    public function testABadRangeIsRejectedAndNothingIsStored(): void
+    {
+        $bad = [
+            'sin mínimo' => IssuePlan::range(null, '100.00', '10.00', 1),
+            'sin máximo' => IssuePlan::range('10.00', null, '10.00', 1),
+            'mínimo mayor que máximo' => IssuePlan::range('100.00', '10.00', '10.00', 1),
+            'sin paso' => IssuePlan::range('10.00', '100.00', null, 1),
+            'paso cero' => IssuePlan::range('10.00', '100.00', '0', 1),
+            'fuera por debajo' => IssuePlan::range('5.00', '50.00', '5.00', 1),
+            'fuera por encima' => IssuePlan::range('10.00', '150.00', '10.00', 1),
+            'valor no numérico' => IssuePlan::range('diez', '100.00', '10.00', 1),
+            'cero por valor' => IssuePlan::range('10.00', '100.00', '10.00', 0),
+            'demasiadas tarjetas' => IssuePlan::range('10.00', '100.00', '0.01', 1),
+            'por valor excesivo' => IssuePlan::range('10.00', '100.00', '10.00', 101),
+        ];
+        foreach ($bad as $name => $plan) {
+            try {
+                $this->issue(41, $plan);
+                $this->fail('debía rechazar: ' . $name);
+            } catch (InvalidGiftCard) {
+                $this->addToAssertionCount(1);
+            }
+        }
+        $this->assertSame([], $this->repo->cards);
     }
 
     public function testOnlyADigitalProductWithAValueCanBeIssued(): void
@@ -113,7 +192,7 @@ final class GiftCardUseCasesTest extends TestCase
     {
         foreach ([[0, '2027-12-31'], [1001, '2027-12-31'], [1, '2026-10-15'], [1, 'no-es-fecha']] as [$quantity, $expires]) {
             try {
-                $this->issue(40, $quantity, null, $expires);
+                $this->issue(40, IssuePlan::range(null, null, null, $quantity), $expires);
                 $this->fail('debía rechazar ' . $quantity . '/' . $expires);
             } catch (InvalidGiftCard) {
                 $this->addToAssertionCount(1);
@@ -143,7 +222,7 @@ final class GiftCardUseCasesTest extends TestCase
 
     public function testTheListFiltersBySerialAndStatusAndShowsEffectiveStatus(): void
     {
-        $this->issue(quantity: 3);
+        $this->issue();
         (new MarkGiftCardSold($this->repo))('GC-000001', 'AWS Malta', 'venta-1', $this->actor, $this->now);
         $list = new ListGiftCards($this->repo, $this->products);
 
@@ -155,7 +234,7 @@ final class GiftCardUseCasesTest extends TestCase
 
     public function testTheDetailCarriesTheTraceInOrder(): void
     {
-        $this->issue(quantity: 1);
+        $this->issue(plan: IssuePlan::single(null));
         (new MarkGiftCardSold($this->repo))('GC-000001', 'AWS Malta', 'venta-1', $this->actor, $this->now);
 
         $detail = (new GetGiftCard($this->repo, $this->products))('GC-000001', $this->now);
@@ -173,7 +252,7 @@ final class GiftCardUseCasesTest extends TestCase
 
     public function testRevealingThePinReturnsItAndLeavesWhoAndWhen(): void
     {
-        $this->issue(quantity: 1);
+        $this->issue(plan: IssuePlan::single(null));
 
         $pin = (new RevealGiftCardPin($this->repo, $this->vault))('GC-000001', new GiftCardActor(3, 'otra.persona'), $this->now);
 
@@ -184,7 +263,7 @@ final class GiftCardUseCasesTest extends TestCase
 
     public function testASaleActivatesTheCardAndAnActiveCardCanBeRedeemedByItsPin(): void
     {
-        $this->issue(quantity: 1);
+        $this->issue(plan: IssuePlan::single(null));
         (new MarkGiftCardSold($this->repo))('GC-000001', 'AWS Malta', 'venta-1', $this->actor, $this->now);
 
         $result = (new RedeemGiftCard($this->repo, $this->vault))('aaaa-bbbb-cccc-0001', 'canje-1', $this->actor, $this->now);
@@ -196,7 +275,7 @@ final class GiftCardUseCasesTest extends TestCase
 
     public function testRedeemingTwiceWithTheSameKeyIsAReplayAndWithAnotherKeyIsRejected(): void
     {
-        $this->issue(quantity: 1);
+        $this->issue(plan: IssuePlan::single(null));
         (new MarkGiftCardSold($this->repo))('GC-000001', 'AWS Malta', 'venta-1', $this->actor, $this->now);
         $redeem = new RedeemGiftCard($this->repo, $this->vault);
         $redeem('AAAA-BBBB-CCCC-0001', 'canje-1', $this->actor, $this->now);
@@ -212,7 +291,7 @@ final class GiftCardUseCasesTest extends TestCase
 
     public function testAWrongPinIsNotFoundAndANotSoldCardCannotBeRedeemed(): void
     {
-        $this->issue(quantity: 1);
+        $this->issue(plan: IssuePlan::single(null));
         $redeem = new RedeemGiftCard($this->repo, $this->vault);
 
         try {
@@ -233,7 +312,7 @@ final class GiftCardUseCasesTest extends TestCase
 
     public function testCancellingLeavesAReasonAndATraceEvent(): void
     {
-        $this->issue(quantity: 1);
+        $this->issue(plan: IssuePlan::single(null));
 
         $card = (new CancelGiftCard($this->repo))('GC-000001', 'Emitida por error', $this->actor, $this->now);
 
@@ -243,7 +322,7 @@ final class GiftCardUseCasesTest extends TestCase
 
     public function testTheRedemptionsListIsNewestFirst(): void
     {
-        $this->issue(quantity: 2);
+        $this->issue(plan: IssuePlan::range(null, null, null, 2));
         $sell = new MarkGiftCardSold($this->repo);
         $sell('GC-000001', 'A', 'v1', $this->actor, $this->now);
         $sell('GC-000002', 'B', 'v2', $this->actor, $this->now);
