@@ -3,7 +3,7 @@
 namespace App\Tests\State;
 
 use ApiPlatform\Metadata\GetCollection;
-use ApiPlatform\State\Pagination\ArrayPaginator;
+use ApiPlatform\State\Pagination\PaginatorInterface;
 use App\Entity\Account;
 use App\Entity\CommunicationPackage;
 use App\Entity\User;
@@ -282,9 +282,26 @@ class CommunicationPackageCatalogProviderTest extends TestCase
         $operation = (new GetCollection())->withPaginationItemsPerPage(2)->withPaginationClientItemsPerPage(true);
         $result = $this->provider->provide($operation, context: $this->requestContext(['page' => '2']));
 
-        $this->assertInstanceOf(ArrayPaginator::class, $result);
+        $this->assertInstanceOf(PaginatorInterface::class, $result);
         $this->assertSame(3.0, $result->getTotalItems());
         $this->assertSame([$packages[2]], array_values(iterator_to_array($result)));
+    }
+
+    public function testEachPageIsAListSoItSerializesAsAJsonArray(): void
+    {
+        $account = $this->createMock(Account::class);
+        $this->security->method('getUser')->willReturn($account);
+
+        $packages = [$this->packageWithId(1, 'A'), $this->packageWithId(2, 'B'), $this->packageWithId(3, 'C')];
+        $offers = array_map(fn (CommunicationPackage $p) => $this->offer($p, 10.0), $packages);
+        $this->catalogResolver->method('catalogFor')->willReturn($offers);
+        $this->bindingRepo->method('findPackageIdsWithBindings')->willReturn([1, 2, 3]);
+
+        $operation = (new GetCollection())->withPaginationItemsPerPage(2)->withPaginationClientItemsPerPage(true);
+        $result = $this->provider->provide($operation, context: $this->requestContext(['page' => '2']));
+
+        // Con las claves del arreglo completo (2) la segunda página saldría como objeto {"2": …} y no como lista.
+        $this->assertSame([0], array_keys(iterator_to_array($result)));
     }
 
     public function testPaginationClampsItemsPerPageToTheDeclaredMaximum(): void
@@ -300,7 +317,7 @@ class CommunicationPackageCatalogProviderTest extends TestCase
         $operation = (new GetCollection())->withPaginationClientItemsPerPage(true)->withPaginationMaximumItemsPerPage(1);
         $result = $this->provider->provide($operation, context: $this->requestContext(['itemsPerPage' => '50']));
 
-        $this->assertInstanceOf(ArrayPaginator::class, $result);
+        $this->assertInstanceOf(PaginatorInterface::class, $result);
         $this->assertSame(1.0, $result->getItemsPerPage());
     }
 
