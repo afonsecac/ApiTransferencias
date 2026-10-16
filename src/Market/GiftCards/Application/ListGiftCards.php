@@ -28,7 +28,11 @@ final class ListGiftCards
         $now ??= new \DateTimeImmutable();
         $cards = $this->cards->search($productId, $batchId, $serial === null || GiftCardNumber::normalize($serial) === '' ? null : GiftCardNumber::normalize($serial));
         $products = $this->products->findMany(array_values(array_unique(array_map(static fn (GiftCard $c) => $c->productId(), $cards))));
-        $rows = array_map(static fn (GiftCard $c) => new GiftCardRow($c, $products[$c->productId()] ?? null, $now), $cards);
+        $batches = [];
+        foreach (array_unique(array_map(static fn (GiftCard $c) => $c->batchId(), $cards)) as $id) {
+            $batches[$id] = $this->cards->findBatch($id);
+        }
+        $rows = array_map(static fn (GiftCard $c) => new GiftCardRow($c, $products[$c->productId()] ?? null, $now, $batches[$c->batchId()] ?? null), $cards);
         if ($status !== null) {
             $rows = array_values(array_filter($rows, static fn (GiftCardRow $r) => $r->status->value === $status));
         }

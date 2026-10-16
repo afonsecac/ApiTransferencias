@@ -144,6 +144,16 @@ final class GiftCardFunctionalTest extends ProviderFunctionalTestCase
         $this->assertMatchesRegularExpression('/^L-\d{4}-\d{2}-\d{4}$/', $detail['batchCode']);
     }
 
+    public function testTheListCarriesTheBatchCodeAndWhetherTheValueIsFixed(): void
+    {
+        $this->issueSingle($this->digitalProduct());
+
+        $row = $this->body($this->controller()->list(new Request()))[0];
+
+        $this->assertMatchesRegularExpression('/^L-\d{4}-\d{2}-\d{4}$/', $row['batchCode']);
+        $this->assertTrue($row['product']['fixed']);
+    }
+
     public function testTheCardCanBeFoundWithItsNumberTypedLikeACreditCard(): void
     {
         $this->issueSingle($this->digitalProduct());
