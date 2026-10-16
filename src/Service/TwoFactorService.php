@@ -26,7 +26,7 @@ class TwoFactorService
      * Roles para los que el 2FA es obligatorio siempre, sea cual sea `2fa.mode` y su fecha límite (COMR-288): el socio de almacén
      * es una persona externa que opera con datos de la plataforma, así que no se espera a la política global.
      */
-    public const ALWAYS_TWO_FACTOR_ROLES = ['ROLE_MARKET_WAREHOUSE_USER'];
+    public const ALWAYS_TWO_FACTOR_ROLES = [\App\Security\ExternalRoles::WAREHOUSE_PARTNER];
 
     public function __construct(
         private readonly EntityManagerInterface      $em,

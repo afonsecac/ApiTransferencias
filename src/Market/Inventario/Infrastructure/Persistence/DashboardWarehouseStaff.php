@@ -11,6 +11,7 @@ use App\Market\Inventario\Domain\InvalidWarehouseUser;
 use App\Market\Inventario\Domain\StaffAlreadyActivated;
 use App\Market\Inventario\Domain\StaffMember;
 use App\Market\Inventario\Domain\WarehouseStaff;
+use App\Security\ExternalRoles;
 use App\Service\UserManagementService;
 use App\Service\UserService;
 use Doctrine\ORM\EntityManagerInterface;
@@ -18,7 +19,7 @@ use Doctrine\ORM\EntityManagerInterface;
 /**
  * Puerto de Inventario hacia los usuarios del dashboard: reutiliza la creación de usuarios y el flujo de activación existentes
  * (el correo de activación sale por el mismo mensaje; la contraseña no se fija aquí). El usuario nuevo queda en la empresa de
- * quien invita: es personal de la plataforma.
+ * quien invita; es personal de la plataforma, o una persona externa de un socio (rol propio, COMR-288) si se pide.
  */
 final class DashboardWarehouseStaff implements WarehouseStaff
 {
@@ -49,7 +50,7 @@ final class DashboardWarehouseStaff implements WarehouseStaff
         return $members;
     }
 
-    public function invite(string $email, string $firstName, string $lastName, ?int $inviterId): StaffMember
+    public function invite(string $email, string $firstName, string $lastName, ?int $inviterId, bool $external = false): StaffMember
     {
         $inviter = $inviterId === null ? null : $this->em->getRepository(User::class)->find($inviterId);
         $companyId = $inviter?->getCompany()?->getId();
@@ -58,7 +59,7 @@ final class DashboardWarehouseStaff implements WarehouseStaff
         }
 
         try {
-            $user = $this->userManagement->create(new CreateUserDto(email: $email, firstName: $firstName, lastName: $lastName), $companyId);
+            $user = $this->userManagement->create(new CreateUserDto(email: $email, firstName: $firstName, lastName: $lastName, role: $external ? ExternalRoles::WAREHOUSE_PARTNER : null), $companyId);
         } catch (MyCurrentException $e) {
             throw new InvalidWarehouseUser($e->getMessage());
         }
@@ -87,6 +88,7 @@ final class DashboardWarehouseStaff implements WarehouseStaff
             trim($user->getFirstName() . ' ' . $user->getLastName()),
             $user->isIsCheckValidation() === true,
             $user->isTwoFactorEnabled(),
+            in_array(ExternalRoles::WAREHOUSE_PARTNER, $user->getRoles(), true),
         );
     }
 }

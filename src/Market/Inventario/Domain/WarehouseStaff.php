@@ -16,8 +16,11 @@ interface WarehouseStaff
      */
     public function findMany(array $ids): array;
 
-    /** Crea el usuario del dashboard y lanza el correo de activación existente (la contraseña no se fija aquí). */
-    public function invite(string $email, string $firstName, string $lastName, ?int $inviterId): StaffMember;
+    /**
+     * Crea el usuario y lanza el correo de activación existente (la contraseña no se fija aquí). Con `$external` es una persona de
+     * un socio de almacén y recibe el rol externo, no uno del dashboard (COMR-288).
+     */
+    public function invite(string $email, string $firstName, string $lastName, ?int $inviterId, bool $external = false): StaffMember;
 
     /** @throws StaffAlreadyActivated si ya activó su cuenta */
     public function resendInvitation(int $userId): void;
