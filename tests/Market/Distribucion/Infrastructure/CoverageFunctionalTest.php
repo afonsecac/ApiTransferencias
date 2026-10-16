@@ -6,6 +6,7 @@ namespace App\Tests\Market\Distribucion\Infrastructure;
 
 use App\Market\Distribucion\Infrastructure\Http\BulkCoverageDto;
 use App\Market\Distribucion\Infrastructure\Http\CoverageController;
+use App\Market\Distribucion\Infrastructure\Http\QuoteDeliveryDto;
 use App\Market\Distribucion\Infrastructure\Http\SetCoverageActiveDto;
 use App\Market\Distribucion\Infrastructure\Http\SetDeliveryCurrencyDto;
 use App\Market\Distribucion\Infrastructure\Http\UpsertCoverageDto;
@@ -253,5 +254,124 @@ final class CoverageFunctionalTest extends ProviderFunctionalTestCase
 
         $this->assertNull($this->body($this->controller()->serving(new Request(query: ['municipality' => (string) $m])))['serving']);
         $this->assertCount(1, $this->body($this->controller()->list($other))['rows']);
+    }
+
+    private function product(string $sku, string $kind, ?string $weightKg, ?string $volumeL, ?array $mm = null): int
+    {
+        $connection = $this->em->getConnection();
+        $connection->executeStatement(<<<'SQL'
+            INSERT INTO market_product (sku, seller_id, status, service, subservice, texts, content_base, content_original, content_unit, delivery_kind, delivery_unit,
+                                        total_weight_base, total_volume_base, length_mm, width_mm, height_mm, created_at, updated_at)
+            SELECT :sku, id, 'draft', 'Gift Cards', 'Retail', :texts, 1, 1, :unit, :kind, :unit, :w, :v, :l, :wd, :h, NOW(), NOW() FROM market_seller WHERE is_platform
+        SQL, [
+            'sku' => $sku,
+            'texts' => json_encode(['es' => ['name' => 'Producto ' . $sku]]),
+            'unit' => $kind === 'weight' ? 'kg' : 'l',
+            'kind' => $kind,
+            'w' => $weightKg,
+            'v' => $volumeL,
+            'l' => $mm[0] ?? null,
+            'wd' => $mm[1] ?? null,
+            'h' => $mm[2] ?? null,
+        ]);
+
+        return (int) $connection->fetchOne('SELECT id FROM market_product WHERE sku = :s', ['s' => $sku]);
+    }
+
+    /** @param array<array<string, mixed>> $lines */
+    private function quote(int $municipalityId, array $lines): Response
+    {
+        return $this->controller()->quote(new QuoteDeliveryDto($municipalityId, $lines));
+    }
+
+    private function habanaCoverage(): int
+    {
+        $w = $this->mainWarehouseId();
+        $this->controller()->upsert($w, $this->municipalityId('boyeros'), $this->dto(perKg: '0.60', perL: '0.45', min: '2.50', max: '12.00'));
+
+        return $this->municipalityId('boyeros');
+    }
+
+    public function testItQuotesAProductWithABoxAtItsVolumetricWeight(): void
+    {
+        $this->admin();
+        $m = $this->habanaCoverage();
+        $id = $this->product('caja-grande', 'weight', '2.400000', null, [400, 400, 300]);
+
+        $response = $this->quote($m, [['productId' => $id, 'quantity' => 1]]);
+
+        $this->assertSame(Response::HTTP_OK, $response->getStatusCode(), (string) $response->getContent());
+        $body = $this->body($response);
+        $this->assertSame('8.000000', $body['lines'][0]['billable']);
+        $this->assertSame('2.400000', $body['lines'][0]['realKg']);
+        $this->assertSame('4.80', $body['total']);
+        $this->assertSame('none', $body['limit']);
+        $this->assertSame($this->mainWarehouseId(), $body['warehouseId']);
+        $this->assertNotNull($body['coverageId']);
+        $this->assertSame('0.6000', $body['rates']['perKg']);
+    }
+
+    public function testItQuotesTheAcceptanceCasesWithRawLoads(): void
+    {
+        $this->admin();
+        $m = $this->habanaCoverage();
+
+        foreach ([[[['kg' => '0.8']], '2.50', 'min'], [[['kg' => '30']], '12.00', 'max'], [[['kg' => '12'], ['liters' => '10']], '11.70', 'none'], [[['liters' => '40']], '12.00', 'max']] as [$lines, $total, $limit]) {
+            $body = $this->body($this->quote($m, $lines));
+            $this->assertSame($total, $body['total']);
+            $this->assertSame($limit, $body['limit']);
+        }
+    }
+
+    public function testAMunicipalityWithoutCoverageAnswers422(): void
+    {
+        $this->admin();
+        $this->habanaCoverage();
+
+        $response = $this->quote($this->municipalityId('playa'), [['kg' => '5']]);
+
+        $this->assertSame(Response::HTTP_UNPROCESSABLE_ENTITY, $response->getStatusCode());
+        $this->assertSame('QUOTE_NO_COVERAGE', $this->body($response)['error']['code']);
+    }
+
+    public function testADigitalProductCannotBeQuoted(): void
+    {
+        $this->admin();
+        $m = $this->habanaCoverage();
+        $this->em->getConnection()->executeStatement(<<<'SQL'
+            INSERT INTO market_product (sku, seller_id, status, service, subservice, texts, value_currency, value_min_minor, value_max_minor, created_at, updated_at)
+            SELECT 'giftcard-1', id, 'draft', 'Gift Cards', 'Retail', '{"es":{"name":"Tarjeta de regalo"}}', 'USD', 2500, NULL, NOW(), NOW() FROM market_seller WHERE is_platform
+        SQL);
+        $id = (int) $this->em->getConnection()->fetchOne("SELECT id FROM market_product WHERE sku = 'giftcard-1'");
+
+        $response = $this->quote($m, [['productId' => $id, 'quantity' => 1]]);
+
+        $this->assertSame(Response::HTTP_UNPROCESSABLE_ENTITY, $response->getStatusCode());
+        $this->assertSame('QUOTE_PRODUCT_INVALID', $this->body($response)['error']['code']);
+    }
+
+    public function testALineWithoutProductNorLoadAnswers422(): void
+    {
+        $this->admin();
+        $m = $this->habanaCoverage();
+
+        $response = $this->quote($m, [['quantity' => 2]]);
+
+        $this->assertSame(Response::HTTP_UNPROCESSABLE_ENTITY, $response->getStatusCode());
+        $this->assertSame('INVALID_QUOTE', $this->body($response)['error']['code']);
+    }
+
+    public function testAWarehouseDeactivatedLaterQuotesNothingNew(): void
+    {
+        $this->admin();
+        $other = $this->activeWarehouse('Cotizador');
+        $m = $this->municipalityId('playa');
+        $this->controller()->upsert($other, $m, $this->dto());
+        self::getContainer()->get(WarehouseController::class)->deactivate($other);
+
+        $response = $this->quote($m, [['kg' => '5']]);
+
+        $this->assertSame(Response::HTTP_UNPROCESSABLE_ENTITY, $response->getStatusCode());
+        $this->assertContains($this->body($response)['error']['code'], ['QUOTE_NO_COVERAGE', 'QUOTE_WAREHOUSE_NOT_ACTIVE']);
     }
 }
