@@ -81,14 +81,14 @@ final class StockController
     }
 
     #[Route('/adjust', name: 'market_stock_adjust', methods: ['POST'])]
-    #[DashboardEndpoint(summary: 'Ajustar el stock con motivo y comentario obligatorios; deja un movimiento inmutable', tag: 'Market', requestDto: AdjustStockDto::class, responseDto: StockLineOutDto::class)]
+    #[DashboardEndpoint(summary: 'Ajustar el stock fijando el nuevo valor en mano, con motivo y comentario obligatorios; deja un movimiento inmutable con la diferencia', tag: 'Market', requestDto: AdjustStockDto::class, responseDto: StockLineOutDto::class)]
     public function adjust(AdjustStockDto $dto): JsonResponse
     {
         return $this->respond(fn () => ($this->adjustStock)(
             (int) $dto->getWarehouseId(),
             $dto->getItemType() ?? 'product',
             (int) $dto->getItemId(),
-            (int) $dto->getDelta(),
+            (int) $dto->getNewOnHand(),
             (string) $dto->getReason(),
             (string) $dto->getComment(),
             $dto->getReference(),

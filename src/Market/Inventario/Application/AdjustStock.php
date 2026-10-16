@@ -27,16 +27,17 @@ final class AdjustStock
     }
 
     /**
-     * Suma o resta existencias con motivo y comentario obligatorios y deja un movimiento inmutable con el usuario y los centros
-     * de costo del propietario (vendedor del producto) y del custodio (dueño del almacén). La primera entrada positiva crea la
-     * línea. No puede dejar lo en mano por debajo de lo reservado.
+     * Fija lo en mano en un NUEVO VALOR (como el tablero: «Nuevo valor en mano»), con motivo y comentario obligatorios, y deja un
+     * movimiento inmutable con la diferencia, el usuario y los centros de costo del propietario (vendedor del producto) y del
+     * custodio (dueño del almacén). La diferencia se calcula con lo que hay en el momento de guardar. El primer valor crea la
+     * línea. No puede dejar lo en mano por debajo de lo reservado ni dejarlo igual.
      *
      * @throws InvalidStock
      * @throws StockWarehouseInvalid un borrador no admite stock
      * @throws StockProductInvalid
      * @throws StockBelowReserved
      */
-    public function __invoke(int $warehouseId, string $itemType, int $itemId, int $delta, string $reason, string $comment, ?string $reference, StockActor $actor): StockLineDetails
+    public function __invoke(int $warehouseId, string $itemType, int $itemId, int $newOnHand, string $reason, string $comment, ?string $reference, StockActor $actor): StockLineDetails
     {
         $type = StockItemType::tryFrom($itemType) ?? throw new InvalidStock(sprintf('El tipo "%s" no es válido: producto o combo.', $itemType));
         if ($type !== StockItemType::Product) {
@@ -53,12 +54,13 @@ final class AdjustStock
             throw StockProductInvalid::digital($product->name);
         }
 
-        $line = $this->ledger->find($warehouseId, $type, $itemId);
-        if ($line === null) {
-            if ($delta <= 0) {
-                throw StockBelowReserved::of(0, $delta, 0);
-            }
-            $line = StockLine::open($warehouseId, $type, $itemId);
+        if ($newOnHand < 0) {
+            throw new InvalidStock('El nuevo valor en mano no puede ser negativo.');
+        }
+        $line = $this->ledger->find($warehouseId, $type, $itemId) ?? StockLine::open($warehouseId, $type, $itemId);
+        $delta = $newOnHand - $line->onHand();
+        if ($delta === 0) {
+            throw new InvalidStock('El nuevo valor es igual al que ya hay en mano: no hay nada que ajustar.');
         }
 
         // Se valida el comentario antes de tocar la línea: un rechazo no deja el stock a medias.

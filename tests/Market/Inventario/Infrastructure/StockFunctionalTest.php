@@ -55,9 +55,40 @@ final class StockFunctionalTest extends ProviderFunctionalTestCase
         return (int) $this->em->getConnection()->fetchOne('SELECT id FROM market_product WHERE sku = :s', ['s' => $sku]);
     }
 
+    /** Cambia lo en mano en `$delta`: la API recibe el nuevo valor en mano, como el tablero. */
     private function adjust(int $warehouse, int $item, int $delta, string $reason = 'count', string $comment = 'Conteo del lunes', ?string $reference = null): Response
     {
-        return $this->controller()->adjust(new AdjustStockDto($warehouse, 'product', $item, $delta, $reason, $comment, $reference));
+        $current = (int) $this->em->getConnection()->fetchOne('SELECT on_hand FROM market_stock_line WHERE warehouse_id = :w AND item_id = :i', ['w' => $warehouse, 'i' => $item]);
+
+        return $this->controller()->adjust(new AdjustStockDto($warehouse, 'product', $item, max(0, $current + $delta), $reason, $comment, $reference));
+    }
+
+    public function testTheApiTakesTheNewOnHandValueAndRecordsTheDifference(): void
+    {
+        $this->admin();
+        $w = $this->mainWarehouseId();
+        $p = $this->product('valor-absoluto');
+        $this->controller()->adjust(new AdjustStockDto($w, 'product', $p, 120, 'initial', 'Existencia inicial', null));
+
+        $response = $this->controller()->adjust(new AdjustStockDto($w, 'product', $p, 116, 'damage', '4 bolsas rotas en el pasillo 3', null));
+
+        $this->assertSame(Response::HTTP_OK, $response->getStatusCode(), (string) $response->getContent());
+        $this->assertSame(116, $this->body($response)['onHand']);
+        $movements = $this->em->getConnection()->fetchFirstColumn('SELECT quantity::text FROM market_stock_movement ORDER BY id');
+        $this->assertSame(['120', '-4'], $movements);
+    }
+
+    public function testSettingTheSameValueAnswers422(): void
+    {
+        $this->admin();
+        $w = $this->mainWarehouseId();
+        $p = $this->product('mismo-valor');
+        $this->controller()->adjust(new AdjustStockDto($w, 'product', $p, 10, 'initial', 'Existencia inicial', null));
+
+        $response = $this->controller()->adjust(new AdjustStockDto($w, 'product', $p, 10, 'count', 'Sin cambios', null));
+
+        $this->assertSame(Response::HTTP_UNPROCESSABLE_ENTITY, $response->getStatusCode());
+        $this->assertSame('INVALID_STOCK', $this->body($response)['error']['code']);
     }
 
     public function testItCreatesTheLineAndRecordsTheMovementWithWhoDidIt(): void

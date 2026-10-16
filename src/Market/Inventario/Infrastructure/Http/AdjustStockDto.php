@@ -8,8 +8,8 @@ use App\DTO\IInput;
 use Symfony\Component\Validator\Constraints as Assert;
 
 /**
- * Body de POST /dashboard/api/market/stock/adjust: suma (cantidad positiva) o resta (negativa) existencias. El motivo y el
- * comentario son obligatorios; la referencia (albarán, pedido…) es opcional.
+ * Body de POST /dashboard/api/market/stock/adjust: el NUEVO valor en mano del artículo en el almacén (el servidor calcula la
+ * diferencia). El motivo y el comentario son obligatorios; la referencia (albarán, pedido…) es opcional.
  */
 class AdjustStockDto implements IInput
 {
@@ -25,9 +25,8 @@ class AdjustStockDto implements IInput
     protected ?int $itemId;
 
     #[Assert\NotNull]
-    #[Assert\NotEqualTo(0)]
-    #[Assert\Range(min: -1000000, max: 1000000)]
-    protected ?int $delta;
+    #[Assert\Range(min: 0, max: 1000000)]
+    protected ?int $newOnHand;
 
     #[Assert\NotBlank]
     #[Assert\Length(max: 20)]
@@ -40,12 +39,12 @@ class AdjustStockDto implements IInput
     #[Assert\Length(max: 80)]
     protected ?string $reference;
 
-    public function __construct(?int $warehouseId = null, ?string $itemType = null, ?int $itemId = null, ?int $delta = null, ?string $reason = null, ?string $comment = null, ?string $reference = null)
+    public function __construct(?int $warehouseId = null, ?string $itemType = null, ?int $itemId = null, ?int $newOnHand = null, ?string $reason = null, ?string $comment = null, ?string $reference = null)
     {
         $this->warehouseId = $warehouseId;
         $this->itemType = $itemType;
         $this->itemId = $itemId;
-        $this->delta = $delta;
+        $this->newOnHand = $newOnHand;
         $this->reason = $reason;
         $this->comment = $comment;
         $this->reference = $reference;
@@ -81,14 +80,14 @@ class AdjustStockDto implements IInput
         $this->itemId = $itemId;
     }
 
-    public function getDelta(): ?int
+    public function getNewOnHand(): ?int
     {
-        return $this->delta;
+        return $this->newOnHand;
     }
 
-    public function setDelta(?int $delta): void
+    public function setNewOnHand(?int $newOnHand): void
     {
-        $this->delta = $delta;
+        $this->newOnHand = $newOnHand;
     }
 
     public function getReason(): ?string

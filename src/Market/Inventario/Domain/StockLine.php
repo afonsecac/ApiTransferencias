@@ -153,10 +153,13 @@ class StockLine
         return $warehouseActive ? max(0, $this->onHand - $this->reserved - $this->safety) : 0;
     }
 
-    /** Lo libre no supera el stock de seguridad. */
+    /**
+     * En alerta: lo disponible (en mano − reservado − seguridad) no supera el stock de seguridad; sin existencias también cuenta.
+     * Como en el tablero: 16 en mano, 0 reservado y 10 de seguridad dejan 6 disponibles, en alerta.
+     */
     public function isLow(): bool
     {
-        return $this->onHand - $this->reserved <= $this->safety;
+        return max(0, $this->onHand - $this->reserved - $this->safety) <= $this->safety;
     }
 
     private function touch(): void
