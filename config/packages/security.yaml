@@ -39,7 +39,7 @@ security:
             lazy: true
             pattern: ^/warehouse/api
             provider: app_client_user_provider
-            user_checker: App\Security\DashboardUserChecker
+            user_checker: App\Security\WarehousePartnerUserChecker
             custom_authenticators:
                 - App\Security\DashboardAccessToken
         main:
