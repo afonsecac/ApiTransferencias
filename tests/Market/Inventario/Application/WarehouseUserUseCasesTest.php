@@ -24,12 +24,19 @@ final class WarehouseUserUseCasesTest extends TestCase
     private InMemoryWarehouseRepository $warehouses;
     private InMemoryWarehouseUserRepository $links;
     private FakeWarehouseStaff $staff;
+    private FakeWarehouseOwners $owners;
 
     protected function setUp(): void
     {
         $this->warehouses = new InMemoryWarehouseRepository();
         $this->warehouses->save(Warehouse::main(new Slug('principal'), 'Principal', 1, 20, 11));
         $this->warehouses->save(Warehouse::main(new Slug('otro'), 'Otro', 1, 20, 11));
+        $partner = Warehouse::draft(new Slug('socio'), 'Almacén del socio');
+        $partner->assignOwner(30, 301);
+        $this->warehouses->save($partner); // id 3, de un socio
+        $this->owners = new FakeWarehouseOwners();
+        $this->owners->add(1, 'Plataforma', ['platform'], 11);
+        $this->owners->add(30, 'Socio SL', ['warehouse_partner'], 301);
         $this->links = new InMemoryWarehouseUserRepository();
         $this->staff = new FakeWarehouseStaff();
         $this->staff->add(5, 'ana@x.test');
@@ -38,7 +45,7 @@ final class WarehouseUserUseCasesTest extends TestCase
 
     private function invite(): InviteWarehouseUser
     {
-        return new InviteWarehouseUser($this->warehouses, $this->links, $this->staff);
+        return new InviteWarehouseUser($this->warehouses, $this->links, $this->staff, $this->owners);
     }
 
     private function list(): ListWarehouseUsers
@@ -166,5 +173,65 @@ final class WarehouseUserUseCasesTest extends TestCase
 
         $this->expectException(StaffAlreadyActivated::class);
         $resend(1, 5);
+    }
+
+    public function testAnExternalPersonIsCreatedWithTheExternalRoleInAPartnerWarehouse(): void
+    {
+        $row = ($this->invite())(3, 'socio@x.test', 'Luis', 'Gómez', $this->perms(), 9, true);
+
+        $this->assertTrue($this->staff->lastInviteExternal);
+        $this->assertTrue($row->member?->external);
+        $this->assertSame('invited', $row->status);
+    }
+
+    public function testExternalPeopleAreNotInvitedToTheWarehouseOfThePlatform(): void
+    {
+        try {
+            ($this->invite())(1, 'socio@x.test', 'Luis', 'Gómez', $this->perms(), 9, true);
+            $this->fail('Debió rechazar la persona externa en un almacén de la plataforma');
+        } catch (InvalidWarehouseUser) {
+            $this->assertSame(0, $this->staff->invitations, 'no se crea la cuenta');
+            $this->assertSame([], $this->links->items);
+        }
+    }
+
+    public function testAnExistingDashboardUserCannotBeInvitedAsAnExternalPerson(): void
+    {
+        try {
+            ($this->invite())(3, 'ana@x.test', null, null, $this->perms(), 9, true);
+            $this->fail('Un usuario del dashboard no se convierte en persona externa');
+        } catch (InvalidWarehouseUser) {
+            $this->assertSame([], $this->links->items);
+        }
+    }
+
+    public function testAnExistingExternalPersonIsLinkedToAPartnerWarehouseWithoutANewAccount(): void
+    {
+        $this->staff->add(8, 'externo@x.test', external: true);
+
+        $row = ($this->invite())(3, 'externo@x.test', null, null, $this->perms(deliveries: true), 9, true);
+
+        $this->assertSame(0, $this->staff->invitations);
+        $this->assertSame(8, $row->link->userId());
+    }
+
+    public function testAnExternalPersonIsNeverLinkedToTheWarehouseOfThePlatform(): void
+    {
+        $this->staff->add(8, 'externo@x.test', external: true);
+
+        try {
+            ($this->invite())(1, 'externo@x.test', null, null, $this->perms(), 9);
+            $this->fail('Una persona externa solo se vincula a almacenes de socio');
+        } catch (InvalidWarehouseUser) {
+            $this->assertNull($this->links->find(8, 1));
+        }
+    }
+
+    public function testStaffInvitedWithoutTheFlagKeepsBeingStaff(): void
+    {
+        $row = ($this->invite())(3, 'nuevo@x.test', 'Luis', 'Gómez', $this->perms(), 9);
+
+        $this->assertFalse($this->staff->lastInviteExternal);
+        $this->assertFalse($row->member?->external);
     }
 }

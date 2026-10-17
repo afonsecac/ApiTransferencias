@@ -69,6 +69,7 @@ final class WarehouseUserController
                 $dto->getLastName(),
                 new WarehouseUserPermissions((bool) $dto->getStock(), (bool) $dto->getAssembly(), (bool) $dto->getTransfers(), (bool) $dto->getDeliveries()),
                 $user instanceof User ? $user->getId() : null,
+                (bool) $dto->getExternal(),
             )),
             Response::HTTP_CREATED,
         ));

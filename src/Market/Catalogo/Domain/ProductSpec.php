@@ -14,9 +14,13 @@ namespace App\Market\Catalogo\Domain;
  * - Las dimensiones son las del producto, o las de una unidad si es por conteo; con ellas el volumen se deriva (COMR-104).
  * - Un producto lleva contenido o valor, no los dos: con valor (una gift card, COMR-276) es digital y no lleva nada de lo físico.
  * - La clasificación (servicio, subservicio y área) es obligatoria y dice de qué tipo es; no hay un campo de tipo aparte.
+ * - Los atributos libres (color, sabor, talla…) son opcionales y valen para cualquier producto, físico o digital (COMR-284).
  */
 final readonly class ProductSpec
 {
+    /** Los atributos libres del producto (color, sabor, talla…); vacíos si no tiene (COMR-284). */
+    public ProductAttributes $attributes;
+
     public function __construct(
         public ProductTexts $texts,
         public Classification $classification,
@@ -29,7 +33,9 @@ final readonly class ProductSpec
         public ?ProductValue $value = null,
         /** Las unidades base con que se calculan los totales; sin él, las estándar (kilogramos y litros). */
         public ?MeasureSystem $measures = null,
+        ?ProductAttributes $attributes = null,
     ) {
+        $this->attributes = $attributes ?? ProductAttributes::empty();
         if ($barcode !== null && preg_match('/^[0-9]{8,14}$/', $barcode) !== 1) {
             throw new InvalidProduct('El código de barras son entre 8 y 14 dígitos.');
         }

@@ -5,7 +5,14 @@ declare(strict_types=1);
 namespace App\Tests\Market\Inventario\Infrastructure;
 
 use App\Entity\User;
+use App\Market\Inventario\Infrastructure\Http\CreateWarehouseDto;
 use App\Market\Inventario\Infrastructure\Http\InviteWarehouseUserDto;
+use App\Market\Inventario\Infrastructure\Http\UpdateWarehouseDto;
+use App\Market\Inventario\Infrastructure\Http\WarehouseController;
+use App\Market\Organizacion\Infrastructure\Http\CostCenterDto;
+use App\Market\Organizacion\Infrastructure\Http\CreateOrgUnitDto;
+use App\Market\Organizacion\Infrastructure\Http\OrgUnitController;
+use App\Security\ExternalRoles;
 use App\Market\Inventario\Infrastructure\Http\SetWarehouseUserActiveDto;
 use App\Market\Inventario\Infrastructure\Http\WarehouseUserController;
 use App\Market\Inventario\Infrastructure\Http\WarehouseUserPermissionsDto;
@@ -49,9 +56,9 @@ final class WarehouseUserFunctionalTest extends ProviderFunctionalTestCase
         return (int) $this->em->getConnection()->fetchOne('SELECT id FROM market_warehouse WHERE is_main');
     }
 
-    private function invite(string $email, ?string $first = 'Luis', ?string $last = 'Gómez', bool $stock = true, bool $deliveries = false, ?int $warehouse = null): Response
+    private function invite(string $email, ?string $first = 'Luis', ?string $last = 'Gómez', bool $stock = true, bool $deliveries = false, ?int $warehouse = null, bool $external = false): Response
     {
-        return $this->controller()->invite($warehouse ?? $this->mainWarehouseId(), new InviteWarehouseUserDto($email, $first, $last, $stock, null, null, $deliveries));
+        return $this->controller()->invite($warehouse ?? $this->mainWarehouseId(), new InviteWarehouseUserDto($email, $first, $last, $stock, null, null, $deliveries, $external));
     }
 
     public function testInvitingANewPersonCreatesTheAccountAndLeavesThemInvited(): void
@@ -177,5 +184,62 @@ final class WarehouseUserFunctionalTest extends ProviderFunctionalTestCase
     public function testAnUnknownWarehouseAnswers404(): void
     {
         $this->assertSame(Response::HTTP_NOT_FOUND, $this->controller()->list(999999)->getStatusCode());
+    }
+
+    /** Un almacén de un socio: unidad con el tipo `warehouse_partner` como dueña. */
+    private function partnerWarehouseId(): int
+    {
+        $unit = json_decode((string) self::getContainer()->get(OrgUnitController::class)->create(new CreateOrgUnitDto(
+            countryCode: 'PA',
+            name: 'Socio externo',
+            legalName: 'Socio externo SA',
+            taxId: 'EXT-1',
+            address: 'Calle 50, Ciudad de Panamá',
+            billingEmail: 'billing@socio.example',
+            types: ['warehouse_partner'],
+            fiscalData: ['ruc' => 'EXT-1', 'dv' => '12'],
+            costCenters: [new CostCenterDto('PRINCIPAL', 'Principal', true)],
+        ))->getContent(), true, flags: JSON_THROW_ON_ERROR)['id'];
+        $warehouses = self::getContainer()->get(WarehouseController::class);
+        $id = $this->body($warehouses->create(new CreateWarehouseDto('Almacén del socio externo')))['id'];
+        $warehouses->update($id, new UpdateWarehouseDto('Almacén del socio externo', null, null, $unit, null, false, false, false));
+
+        return $id;
+    }
+
+    public function testInvitingAnExternalPersonCreatesAnAccountWithTheExternalRoleAndNoDashboardRole(): void
+    {
+        $warehouse = $this->partnerWarehouseId();
+
+        $response = $this->controller()->invite($warehouse, new InviteWarehouseUserDto('persona-socio@example.test', 'Rosa', 'Díaz', true, null, null, null, true));
+
+        $this->assertSame(Response::HTTP_CREATED, $response->getStatusCode(), (string) $response->getContent());
+        $body = $this->body($response);
+        $this->assertSame('invited', $body['status']);
+        $this->assertTrue($body['external']);
+        $user = $this->em->getRepository(User::class)->findOneBy(['email' => 'persona-socio@example.test']);
+        $this->assertContains(ExternalRoles::WAREHOUSE_PARTNER, $user->getRoles());
+        $this->assertNotContains('ROLE_SYSTEM_USER', $user->getRoles());
+        $this->assertNotContains('ROLE_API_ADMIN', $user->getRoles());
+    }
+
+    public function testExternalPeopleAreNotInvitedToTheMainWarehouseOfThePlatform(): void
+    {
+        $before = (int) $this->em->getConnection()->fetchOne('SELECT count(*) FROM "user"');
+
+        $response = $this->invite('externo-en-principal@example.test', external: true);
+
+        $this->assertSame(Response::HTTP_UNPROCESSABLE_ENTITY, $response->getStatusCode(), (string) $response->getContent());
+        $this->assertSame($before, (int) $this->em->getConnection()->fetchOne('SELECT count(*) FROM "user"'), 'no se crea la cuenta');
+    }
+
+    public function testADashboardUserIsNeverTurnedIntoAnExternalPerson(): void
+    {
+        $warehouse = $this->partnerWarehouseId();
+
+        $response = $this->controller()->invite($warehouse, new InviteWarehouseUserDto($this->admin->getEmail(), null, null, true, null, null, null, true));
+
+        $this->assertSame(Response::HTTP_UNPROCESSABLE_ENTITY, $response->getStatusCode(), (string) $response->getContent());
+        $this->assertContains('ROLE_SUPER_ADMIN', $this->em->getRepository(User::class)->find($this->admin->getId())->getRoles());
     }
 }

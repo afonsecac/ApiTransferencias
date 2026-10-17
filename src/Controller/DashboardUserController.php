@@ -38,6 +38,7 @@ class DashboardUserController extends AbstractController
         'ROLE_SYSTEM_SHOW'    => 20,
         'ROLE_API_USER'       => 15,
         'ROLE_SYSTEM_USER'    => 10,
+        'ROLE_MARKET_WAREHOUSE_USER' => 5,
         'ROLE_USER'           => 0,
     ];
 
