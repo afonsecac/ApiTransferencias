@@ -13,6 +13,7 @@ use App\Market\Catalogo\Domain\InvalidProduct;
 use App\Market\Catalogo\Domain\MeasureKind;
 use App\Market\Catalogo\Domain\MeasureSystem;
 use App\Market\Catalogo\Domain\MeasureUnit;
+use App\Market\Catalogo\Domain\ProductAttributes;
 use App\Market\Catalogo\Domain\ProductSpec;
 use App\Market\Catalogo\Domain\ProductTexts;
 use App\Market\Catalogo\Domain\ProductValue;
@@ -52,6 +53,12 @@ final readonly class ProductSpecInput
         public array $categoryIds = [],
         /** La unidad en que se escribieron las dimensiones (mm, cm, m, in, ft); las medidas siempre llegan en milímetros. */
         public ?string $dimensionsUnit = null,
+        /**
+         * Los atributos libres (color, sabor, talla…, COMR-284): `['name' => ['es' => …, 'en' => …], 'value' => ['es' => …, 'en' => …]]`.
+         *
+         * @var array<mixed>
+         */
+        public array $attributes = [],
     ) {
     }
 
@@ -75,6 +82,7 @@ final readonly class ProductSpecInput
             $this->barcode === null || trim($this->barcode) === '' ? null : trim($this->barcode),
             $this->value(),
             $system,
+            ProductAttributes::fromArray($this->attributes),
         );
     }
 

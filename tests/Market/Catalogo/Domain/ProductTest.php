@@ -11,6 +11,7 @@ use App\Market\Catalogo\Domain\InvalidProductTransition;
 use App\Market\Catalogo\Domain\MeasureKind;
 use App\Market\Catalogo\Domain\MeasureUnit;
 use App\Market\Catalogo\Domain\Product;
+use App\Market\Catalogo\Domain\ProductAttributes;
 use App\Market\Catalogo\Domain\ProductSpec;
 use App\Market\Catalogo\Domain\ProductStatus;
 use App\Market\Catalogo\Domain\ProductTexts;
@@ -219,5 +220,47 @@ final class ProductTest extends TestCase
         $product->setRelevance(Relevance::none());
 
         $this->assertFalse($product->isRelevantOn(new \DateTimeImmutable('2026-10-15')));
+    }
+
+    private function specWithAttributes(ProductAttributes $attributes): ProductSpec
+    {
+        return new ProductSpec(
+            ProductTexts::fromArray(['es' => ['name' => 'Refresco de cola']]),
+            Classification::of('Gift Cards', 'Retail', 'Supermarket'),
+            Quantity::of(500, MeasureUnit::G),
+            null,
+            null,
+            null,
+            DeliveryBasis::of(MeasureKind::WEIGHT, MeasureUnit::G),
+            attributes: $attributes,
+        );
+    }
+
+    public function testAProductHasNoAttributesByDefault(): void
+    {
+        $this->assertTrue($this->product()->spec()->attributes->isEmpty());
+    }
+
+    public function testTheAttributesAreStoredAndRebuiltWithTheSpec(): void
+    {
+        $attributes = ProductAttributes::fromArray([
+            ['name' => ['es' => 'Color', 'en' => 'Colour'], 'value' => ['es' => 'Rojo', 'en' => 'Red']],
+            ['name' => ['es' => 'Talla'], 'value' => ['es' => 'M']],
+        ]);
+
+        $product = Product::create(new Sku('x'), 1, $this->specWithAttributes($attributes), null, [5]);
+
+        $this->assertEquals($attributes, $product->spec()->attributes);
+    }
+
+    public function testUpdatingReplacesTheAttributesAndCanClearThem(): void
+    {
+        $product = Product::create(new Sku('x'), 1, $this->specWithAttributes(ProductAttributes::fromArray([['name' => ['es' => 'Color'], 'value' => ['es' => 'Rojo']]])), null, [5]);
+
+        $product->update($this->specWithAttributes(ProductAttributes::fromArray([['name' => ['es' => 'Sabor'], 'value' => ['es' => 'Limón']]])));
+        $this->assertSame([['name' => ['es' => 'Sabor'], 'value' => ['es' => 'Limón']]], $product->spec()->attributes->all());
+
+        $product->update($this->specWithAttributes(ProductAttributes::empty()));
+        $this->assertTrue($product->spec()->attributes->isEmpty());
     }
 }

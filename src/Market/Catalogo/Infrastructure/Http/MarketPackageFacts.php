@@ -97,6 +97,7 @@ final class MarketPackageFacts implements MarketPackageEnricher
             'barcode' => $spec->barcode,
             'brand' => $details->brand?->name(),
             'categories' => array_values($details->categoryPaths),
+            'attributes' => $spec->attributes->all(),
             'images' => array_map(fn (ProductImage $image): array => $this->image($image), $images),
             'relevance' => $this->relevance($product->relevance(), $now),
         ];

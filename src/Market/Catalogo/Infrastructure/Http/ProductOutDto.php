@@ -57,6 +57,8 @@ class ProductOutDto
         public string $updatedAt,
         public ?array $image = null,
         public ?array $measureBase = null,
+        /** Los atributos libres (color, sabor, talla…): nombre y valor por idioma. @var list<array{name: array<string, string>, value: array<string, string>}> */
+        public array $attributes = [],
     ) {
     }
 
@@ -123,6 +125,7 @@ class ProductOutDto
             $product->updatedAt()->format(DATE_ATOM),
             $urls === null || $details->referenceImage === null ? null : $urls->for($details->referenceImage->file()),
             ['weight' => $measures->weightBase->value, 'volume' => $measures->volumeBase->value],
+            $spec->attributes->forLanguage($language),
         );
     }
 

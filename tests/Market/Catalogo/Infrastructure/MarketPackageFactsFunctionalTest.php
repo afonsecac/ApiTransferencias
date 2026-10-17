@@ -40,7 +40,8 @@ final class MarketPackageFactsFunctionalTest extends ProviderFunctionalTestCase
     }
 
     /** Un producto de 1 kg, ya publicado y ofrecido como paquete a 12.50 USD; devuelve su paquete con el precio resuelto. */
-    private function offered(string $sku = 'ARR-001'): CommunicationPackage
+    /** @param list<array{name: array<string, string>, value: array<string, string>}> $attributes */
+    private function offered(string $sku = 'ARR-001', array $attributes = []): CommunicationPackage
     {
         $this->authenticateAsAdmin($this->createAdminUser());
         $category = Category::create(new Slug('cat-' . strtolower($sku)), null, 'Alimentos', null);
@@ -57,6 +58,7 @@ final class MarketPackageFactsFunctionalTest extends ProviderFunctionalTestCase
             contentUnit: 'kg',
             deliveryKind: 'weight',
             deliveryUnit: 'kg',
+            attributes: $attributes,
         ))->getContent(), true);
         $products->changeStatus($created['id'], new ChangeProductStatusDto('published'));
         self::getContainer()->get(ProductPackageController::class)->publish($created['id'], new PublishProductPackageDto('12.50', 'USD'));
@@ -92,9 +94,21 @@ final class MarketPackageFactsFunctionalTest extends ProviderFunctionalTestCase
     {
         $market = $this->market($this->offered());
 
-        foreach (['volume', 'unitWeight', 'unitVolume', 'dimensions', 'brand', 'relevance', 'images', 'barcode'] as $absent) {
+        foreach (['volume', 'unitWeight', 'unitVolume', 'dimensions', 'brand', 'relevance', 'images', 'barcode', 'attributes'] as $absent) {
             $this->assertArrayNotHasKey($absent, $market);
         }
+    }
+
+    public function testTheAttributesComeWithTheirTextInEveryLanguage(): void
+    {
+        $attributes = [
+            ['name' => ['es' => 'Presentación', 'en' => 'Packaging'], 'value' => ['es' => 'Bolsa', 'en' => 'Bag']],
+            ['name' => ['es' => 'Origen'], 'value' => ['es' => 'España']],
+        ];
+
+        $market = $this->market($this->offered('ARR-ATTR', $attributes));
+
+        $this->assertSame($attributes, $market['attributes']);
     }
 
     public function testRelevanceAppearsOnlyWhileItIsInForce(): void
