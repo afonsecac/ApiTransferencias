@@ -6,6 +6,7 @@ namespace App\Market\Catalogo\Infrastructure\Http;
 
 use App\DTO\IInput;
 use App\Market\Catalogo\Domain\Classification;
+use App\Market\Catalogo\Domain\ProductAttributes;
 use Symfony\Component\Validator\Constraints as Assert;
 
 /**
@@ -100,8 +101,23 @@ abstract class ProductSpecDto implements IInput
     protected ?array $categoryIds;
 
     /**
+     * Los atributos libres del producto (color, sabor, talla…, COMR-284): pares nombre-valor, cada uno con su texto por idioma (el
+     * español es obligatorio). Las reglas finas (longitudes, repetidos, idiomas) las valida el dominio.
+     *
+     * @var list<array{name: array<string, string>, value: array<string, string>}>|null
+     */
+    #[Assert\Type('array')]
+    #[Assert\Count(max: ProductAttributes::MAX_ATTRIBUTES)]
+    #[Assert\All([new Assert\Collection(
+        fields: ['name' => [new Assert\NotNull(), new Assert\Type('array')], 'value' => [new Assert\NotNull(), new Assert\Type('array')]],
+        allowExtraFields: false,
+    )])]
+    protected ?array $attributes;
+
+    /**
      * @param array<string, array{name?: string|null, description?: string|null}>|null $texts
      * @param list<int>|null $categoryIds
+     * @param list<array{name: array<string, string>, value: array<string, string>}>|null $attributes
      */
     public function __construct(
         ?array $texts = null,
@@ -126,7 +142,9 @@ abstract class ProductSpecDto implements IInput
         ?int $brandId = null,
         ?array $categoryIds = null,
         ?string $dimensionsUnit = null,
+        ?array $attributes = null,
     ) {
+        $this->attributes = $attributes;
         $this->dimensionsUnit = $dimensionsUnit;
         $this->brandId = $brandId;
         $this->categoryIds = $categoryIds;
@@ -149,6 +167,18 @@ abstract class ProductSpecDto implements IInput
         $this->valueCurrency = $valueCurrency;
         $this->valueMin = $valueMin;
         $this->valueMax = $valueMax;
+    }
+
+    /** @return list<array{name: array<string, string>, value: array<string, string>}>|null */
+    public function getAttributes(): ?array
+    {
+        return $this->attributes;
+    }
+
+    /** @param list<array{name: array<string, string>, value: array<string, string>}>|null $attributes */
+    public function setAttributes(?array $attributes): void
+    {
+        $this->attributes = $attributes;
     }
 
     public function getTexts(): ?array

@@ -790,4 +790,84 @@ final class ProductFunctionalTest extends ProviderFunctionalTestCase
         $this->assertNull($items['SIN-FOTO']);
         $this->assertSame($items['CON-FOTO'], $detail['image']);
     }
+
+    /** @return list<array{name: array<string, string>, value: array<string, string>}> */
+    private function sampleAttributes(): array
+    {
+        return [
+            ['name' => ['es' => 'Color', 'en' => 'Colour'], 'value' => ['es' => 'Rojo', 'en' => 'Red']],
+            ['name' => ['es' => 'Talla'], 'value' => ['es' => 'M']],
+        ];
+    }
+
+    public function testTheAttributesAreSavedReturnedAndSurviveAPersistenceRoundTrip(): void
+    {
+        $this->admin();
+
+        $created = $this->controller()->create($this->createDto('ATTR-1', ['attributes' => $this->sampleAttributes()]));
+
+        $this->assertSame(Response::HTTP_CREATED, $created->getStatusCode(), (string) $created->getContent());
+        $this->assertSame($this->sampleAttributes(), $this->body($created)['attributes']);
+        $this->em->clear();
+        $stored = $this->repository()->findById($this->body($created)['id']);
+        $this->assertSame($this->sampleAttributes(), $stored?->spec()->attributes->all());
+    }
+
+    public function testAProductWithoutAttributesReturnsAnEmptyList(): void
+    {
+        $this->admin();
+
+        $created = $this->body($this->controller()->create($this->createDto('ATTR-2')));
+
+        $this->assertSame([], $created['attributes']);
+    }
+
+    public function testUpdatingReplacesTheAttributesAndAnEmptyListClearsThem(): void
+    {
+        $this->admin();
+        $id = $this->body($this->controller()->create($this->createDto('ATTR-3', ['attributes' => $this->sampleAttributes()])))['id'];
+        $update = static fn (array $attributes) => new UpdateProductDto(
+            texts: ['es' => ['name' => 'Cola']],
+            service: 'Gift Cards',
+            subservice: 'Retail',
+            contentValue: 330.0,
+            contentUnit: 'g',
+            deliveryKind: 'weight',
+            deliveryUnit: 'g',
+            attributes: $attributes,
+        );
+
+        $replaced = $this->body($this->controller()->update($id, $update([['name' => ['es' => 'Sabor'], 'value' => ['es' => 'Limón']]])));
+        $cleared = $this->body($this->controller()->update($id, $update([])));
+
+        $this->assertSame([['name' => ['es' => 'Sabor'], 'value' => ['es' => 'Limón']]], $replaced['attributes']);
+        $this->assertSame([], $cleared['attributes']);
+    }
+
+    public function testWithALanguageTheAttributesComeInThatLanguageWithSpanishAsFallback(): void
+    {
+        $this->admin();
+        $id = $this->body($this->controller()->create($this->createDto('ATTR-4', ['attributes' => $this->sampleAttributes()])))['id'];
+
+        $english = $this->body($this->controller()->get($id, new Request(['lang' => 'en'])))['attributes'];
+
+        $this->assertSame([['name' => ['en' => 'Colour'], 'value' => ['en' => 'Red']], ['name' => ['es' => 'Talla'], 'value' => ['es' => 'M']]], $english);
+    }
+
+    public function testInvalidAttributesAnswerUnprocessableEntityAndCreateNothing(): void
+    {
+        $this->admin();
+        $before = $this->repository()->findBySku('ATTR-5');
+
+        foreach ([
+            [['name' => ['es' => 'Color'], 'value' => ['es' => 'Rojo']], ['name' => ['es' => 'color'], 'value' => ['es' => 'Azul']]],
+            [['name' => ['es' => 'Color'], 'value' => ['en' => 'Red']]],
+        ] as $bad) {
+            $response = $this->controller()->create($this->createDto('ATTR-5', ['attributes' => $bad]));
+
+            $this->assertSame(Response::HTTP_UNPROCESSABLE_ENTITY, $response->getStatusCode(), (string) $response->getContent());
+        }
+        $this->assertNull($before);
+        $this->assertNull($this->repository()->findBySku('ATTR-5'));
+    }
 }

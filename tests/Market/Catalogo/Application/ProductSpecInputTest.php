@@ -192,4 +192,31 @@ final class ProductSpecInputTest extends TestCase
 
         $this->withValue($overrides)->toSpec();
     }
+
+    public function testItCarriesTheAttributesToTheSpec(): void
+    {
+        $spec = $this->input(['attributes' => [['name' => ['es' => 'Color', 'en' => 'Colour'], 'value' => ['es' => 'Rojo', 'en' => 'Red']]]])->toSpec();
+
+        $this->assertSame([['name' => ['es' => 'Color', 'en' => 'Colour'], 'value' => ['es' => 'Rojo', 'en' => 'Red']]], $spec->attributes->all());
+    }
+
+    public function testWithoutAttributesTheSpecHasNone(): void
+    {
+        $this->assertTrue($this->input()->toSpec()->attributes->isEmpty());
+    }
+
+    public function testInvalidAttributesAreRejectedAsAnInvalidProduct(): void
+    {
+        $this->expectException(InvalidProduct::class);
+
+        $this->input(['attributes' => [['name' => ['es' => 'Color'], 'value' => ['en' => 'Red']]]])->toSpec();
+    }
+
+    public function testADigitalProductCanAlsoHaveAttributes(): void
+    {
+        $spec = $this->withValue(['attributes' => [['name' => ['es' => 'Marca'], 'value' => ['es' => 'Visa']]]])->toSpec();
+
+        $this->assertFalse($spec->attributes->isEmpty());
+        $this->assertTrue($spec->isDigital());
+    }
 }

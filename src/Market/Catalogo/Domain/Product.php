@@ -63,6 +63,10 @@ class Product
     #[ORM\Column(type: 'json')]
     private array $texts = [];
 
+    /** @var list<array{name: array<string, string>, value: array<string, string>}> los atributos libres (COMR-284) */
+    #[ORM\Column(type: 'json')]
+    private array $attributes = [];
+
     #[ORM\Column(name: 'content_base', type: 'decimal', precision: 17, scale: 6, nullable: true)]
     private ?string $contentBase = null;
 
@@ -287,6 +291,8 @@ class Product
                 null,
                 null,
                 $this->value(),
+                null,
+                ProductAttributes::fromArray($this->attributes),
             );
         }
 
@@ -299,6 +305,9 @@ class Product
             $this->lengthMm === null ? null : Dimensions::of((float) $this->lengthMm, (float) $this->widthMm, (float) $this->heightMm, DimensionUnit::from($this->dimensionsUnit)),
             DeliveryBasis::of(MeasureKind::from((string) $this->deliveryKind), MeasureUnit::from((string) $this->deliveryUnit)),
             $this->barcode,
+            null,
+            null,
+            ProductAttributes::fromArray($this->attributes),
         );
     }
 
@@ -348,6 +357,7 @@ class Product
     private function apply(ProductSpec $spec): void
     {
         $this->texts = $spec->texts->all();
+        $this->attributes = $spec->attributes->all();
         $this->service = $spec->classification->service();
         $this->subservice = $spec->classification->subservice();
         $this->area = $spec->classification->area();

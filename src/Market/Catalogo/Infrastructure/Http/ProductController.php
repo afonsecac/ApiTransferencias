@@ -156,6 +156,7 @@ final class ProductController
             $dto->getBrandId(),
             $dto->getCategoryIds() ?? [],
             $dto->getDimensionsUnit(),
+            $dto->getAttributes() ?? [],
         );
     }
 
